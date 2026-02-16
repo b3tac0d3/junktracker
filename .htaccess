@@ -1,0 +1,16 @@
+RewriteEngine On
+
+# Block access to application internals and dotfiles
+RewriteRule ^(app|core|config|routes|layout|vendor|storage)/ - [F,L]
+RewriteRule ^\. - [F,L]
+
+# Serve existing files and directories directly
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
+
+# Map /assets/* to /public/assets/*
+RewriteRule ^assets/(.*)$ public/assets/$1 [L]
+
+# Route all other requests through the front controller
+RewriteRule ^ index.php [QSA,L]

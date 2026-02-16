@@ -1,0 +1,31 @@
+<?php
+    $name = trim(($user['first_name'] ?? '') . ' ' . ($user['last_name'] ?? ''));
+?>
+<div class="container-fluid px-4">
+    <div class="d-flex flex-wrap align-items-center justify-content-between mt-4 mb-3 gap-3">
+        <div>
+            <h1 class="mb-1">Edit User</h1>
+            <ol class="breadcrumb mb-0">
+                <li class="breadcrumb-item"><a href="<?= url('/') ?>">Dashboard</a></li>
+                <li class="breadcrumb-item"><a href="<?= url('/users') ?>">Users</a></li>
+                <li class="breadcrumb-item active"><?= e($name !== '' ? $name : ('#' . ($user['id'] ?? ''))) ?></li>
+            </ol>
+        </div>
+        <div class="d-flex gap-2">
+            <a class="btn btn-outline-secondary" href="<?= url('/users/' . ($user['id'] ?? '')) ?>">Back to User</a>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-header">
+            <i class="fas fa-user-pen me-1"></i>
+            Edit User
+        </div>
+        <div class="card-body">
+            <?php if ($error = flash('error')): ?>
+                <div class="alert alert-danger"><?= e($error) ?></div>
+            <?php endif; ?>
+            <?php require __DIR__ . '/_form.php'; ?>
+        </div>
+    </div>
+</div>

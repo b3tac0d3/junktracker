@@ -1,0 +1,172 @@
+<?php
+
+declare(strict_types=1);
+
+use Core\Router;
+use App\Controllers\HomeController;
+use App\Controllers\AuthController;
+use App\Controllers\ErrorController;
+use App\Controllers\PagesController;
+use App\Controllers\UsersController;
+use App\Controllers\JobsController;
+use App\Controllers\ExpensesController;
+use App\Controllers\SalesController;
+use App\Controllers\TasksController;
+use App\Controllers\EmployeesController;
+use App\Controllers\TimeTrackingController;
+use App\Controllers\ClientsController;
+use App\Controllers\ProspectsController;
+use App\Controllers\CompaniesController;
+use App\Controllers\EstatesController;
+use App\Controllers\DisposalLocationsController;
+use App\Controllers\ExpenseCategoriesController;
+
+$router = new Router();
+
+$router->get('/', [HomeController::class, 'index']);
+$router->get('/login', [AuthController::class, 'login']);
+$router->post('/login', [AuthController::class, 'authenticate']);
+$router->get('/register', [AuthController::class, 'register']);
+$router->get('/forgot-password', [AuthController::class, 'forgot']);
+$router->post('/logout', [AuthController::class, 'logout']);
+
+$router->get('/charts', [PagesController::class, 'charts']);
+$router->get('/tables', [PagesController::class, 'tables']);
+
+$router->get('/jobs', [JobsController::class, 'index']);
+$router->get('/jobs/new', [JobsController::class, 'create']);
+$router->post('/jobs/new', [JobsController::class, 'store']);
+$router->get('/expenses', [ExpensesController::class, 'index']);
+$router->get('/expenses/lookup/jobs', [ExpensesController::class, 'jobLookup']);
+$router->get('/expenses/new', [ExpensesController::class, 'create']);
+$router->post('/expenses/new', [ExpensesController::class, 'store']);
+$router->get('/tasks', [TasksController::class, 'index']);
+$router->get('/tasks/lookup/links', [TasksController::class, 'linkLookup']);
+$router->get('/tasks/new', [TasksController::class, 'create']);
+$router->post('/tasks/new', [TasksController::class, 'store']);
+$router->get('/tasks/{id}/edit', [TasksController::class, 'edit']);
+$router->post('/tasks/{id}/edit', [TasksController::class, 'update']);
+$router->post('/tasks/{id}/delete', [TasksController::class, 'delete']);
+$router->get('/tasks/{id}', [TasksController::class, 'show']);
+$router->get('/employees', [EmployeesController::class, 'index']);
+$router->get('/employees/new', [EmployeesController::class, 'create']);
+$router->post('/employees/new', [EmployeesController::class, 'store']);
+$router->get('/employees/{id}/edit', [EmployeesController::class, 'edit']);
+$router->post('/employees/{id}/edit', [EmployeesController::class, 'update']);
+$router->get('/employees/{id}', [EmployeesController::class, 'show']);
+$router->get('/time-tracking', [TimeTrackingController::class, 'index']);
+$router->get('/time-tracking/lookup/employees', [TimeTrackingController::class, 'employeeLookup']);
+$router->get('/time-tracking/lookup/jobs', [TimeTrackingController::class, 'jobLookup']);
+$router->get('/time-tracking/new', [TimeTrackingController::class, 'create']);
+$router->post('/time-tracking/new', [TimeTrackingController::class, 'store']);
+$router->get('/time-tracking/{id}/edit', [TimeTrackingController::class, 'edit']);
+$router->post('/time-tracking/{id}/edit', [TimeTrackingController::class, 'update']);
+$router->post('/time-tracking/{id}/delete', [TimeTrackingController::class, 'delete']);
+$router->get('/time-tracking/{id}', [TimeTrackingController::class, 'show']);
+$router->get('/sales', [SalesController::class, 'index']);
+$router->get('/sales/new', [SalesController::class, 'create']);
+$router->post('/sales/new', [SalesController::class, 'store']);
+$router->get('/sales/lookup/jobs', [SalesController::class, 'jobLookup']);
+$router->get('/sales/lookup/scrap-yards', [SalesController::class, 'scrapYardLookup']);
+$router->get('/sales/{id}/edit', [SalesController::class, 'edit']);
+$router->post('/sales/{id}/edit', [SalesController::class, 'update']);
+$router->post('/sales/{id}/delete', [SalesController::class, 'delete']);
+$router->get('/sales/{id}', [SalesController::class, 'show']);
+$router->get('/jobs/lookup/owners', [JobsController::class, 'ownerLookup']);
+$router->get('/jobs/lookup/contacts', [JobsController::class, 'contactLookup']);
+$router->get('/jobs/{id}', [JobsController::class, 'show']);
+$router->get('/jobs/{id}/edit', [JobsController::class, 'edit']);
+$router->post('/jobs/{id}/edit', [JobsController::class, 'update']);
+
+$router->get('/jobs/{id}/actions/new', [JobsController::class, 'actionCreate']);
+$router->post('/jobs/{id}/actions/new', [JobsController::class, 'actionStore']);
+$router->get('/jobs/{id}/actions/{actionId}/edit', [JobsController::class, 'actionEdit']);
+$router->post('/jobs/{id}/actions/{actionId}/edit', [JobsController::class, 'actionUpdate']);
+$router->post('/jobs/{id}/actions/{actionId}/delete', [JobsController::class, 'actionDelete']);
+
+$router->get('/jobs/{id}/disposals/new', [JobsController::class, 'disposalCreate']);
+$router->post('/jobs/{id}/disposals/new', [JobsController::class, 'disposalStore']);
+$router->get('/jobs/{id}/disposals/{disposalId}/edit', [JobsController::class, 'disposalEdit']);
+$router->post('/jobs/{id}/disposals/{disposalId}/edit', [JobsController::class, 'disposalUpdate']);
+$router->post('/jobs/{id}/disposals/{disposalId}/delete', [JobsController::class, 'disposalDelete']);
+
+$router->get('/jobs/{id}/expenses/new', [JobsController::class, 'expenseCreate']);
+$router->post('/jobs/{id}/expenses/new', [JobsController::class, 'expenseStore']);
+$router->get('/jobs/{id}/expenses/{expenseId}/edit', [JobsController::class, 'expenseEdit']);
+$router->post('/jobs/{id}/expenses/{expenseId}/edit', [JobsController::class, 'expenseUpdate']);
+$router->post('/jobs/{id}/expenses/{expenseId}/delete', [JobsController::class, 'expenseDelete']);
+
+$router->get('/jobs/{id}/billing/new', [JobsController::class, 'billingCreate']);
+$router->post('/jobs/{id}/billing/new', [JobsController::class, 'billingStore']);
+$router->get('/jobs/{id}/billing/{billingId}/edit', [JobsController::class, 'billingEdit']);
+$router->post('/jobs/{id}/billing/{billingId}/edit', [JobsController::class, 'billingUpdate']);
+$router->post('/jobs/{id}/billing/{billingId}/delete', [JobsController::class, 'billingDelete']);
+$router->post('/jobs/{id}/mark-paid', [JobsController::class, 'markPaid']);
+$router->post('/jobs/{id}/delete', [JobsController::class, 'delete']);
+
+$router->get('/users', [UsersController::class, 'index']);
+$router->get('/users/new', [UsersController::class, 'create']);
+$router->get('/users/{id}/edit', [UsersController::class, 'edit']);
+$router->get('/users/{id}', [UsersController::class, 'show']);
+$router->post('/users', [UsersController::class, 'store']);
+$router->post('/users/{id}', [UsersController::class, 'update']);
+$router->post('/users/{id}/deactivate', [UsersController::class, 'deactivate']);
+
+$router->get('/clients', [ClientsController::class, 'index']);
+$router->get('/clients/lookup', [ClientsController::class, 'lookup']);
+$router->get('/clients/duplicate-check', [ClientsController::class, 'duplicateCheck']);
+$router->post('/clients/quick-create', [ClientsController::class, 'quickCreate']);
+$router->get('/clients/new', [ClientsController::class, 'create']);
+$router->post('/clients/new', [ClientsController::class, 'store']);
+$router->get('/clients/{id}/edit', [ClientsController::class, 'edit']);
+$router->post('/clients/{id}/edit', [ClientsController::class, 'update']);
+$router->post('/clients/{id}/deactivate', [ClientsController::class, 'deactivate']);
+$router->get('/clients/{id}', [ClientsController::class, 'show']);
+
+$router->get('/prospects', [ProspectsController::class, 'index']);
+$router->get('/prospects/lookup/clients', [ProspectsController::class, 'clientLookup']);
+$router->get('/prospects/{id}/convert', [ProspectsController::class, 'convert']);
+$router->get('/prospects/new', [ProspectsController::class, 'create']);
+$router->post('/prospects/new', [ProspectsController::class, 'store']);
+$router->get('/prospects/{id}/edit', [ProspectsController::class, 'edit']);
+$router->post('/prospects/{id}/edit', [ProspectsController::class, 'update']);
+$router->post('/prospects/{id}/delete', [ProspectsController::class, 'delete']);
+$router->get('/prospects/{id}', [ProspectsController::class, 'show']);
+
+$router->get('/companies', [CompaniesController::class, 'index']);
+$router->get('/companies/lookup', [CompaniesController::class, 'lookup']);
+$router->post('/companies/quick-create', [CompaniesController::class, 'quickCreate']);
+$router->get('/companies/new', [CompaniesController::class, 'create']);
+$router->post('/companies/new', [CompaniesController::class, 'store']);
+$router->get('/companies/{id}/edit', [CompaniesController::class, 'edit']);
+$router->post('/companies/{id}/edit', [CompaniesController::class, 'update']);
+$router->post('/companies/{id}/delete', [CompaniesController::class, 'delete']);
+$router->get('/companies/{id}', [CompaniesController::class, 'show']);
+
+$router->get('/estates', [EstatesController::class, 'index']);
+$router->get('/estates/lookup', [EstatesController::class, 'lookup']);
+$router->get('/estates/new', [EstatesController::class, 'create']);
+$router->post('/estates/new', [EstatesController::class, 'store']);
+$router->get('/estates/{id}/edit', [EstatesController::class, 'edit']);
+$router->post('/estates/{id}/edit', [EstatesController::class, 'update']);
+$router->get('/estates/{id}', [EstatesController::class, 'show']);
+
+$router->get('/admin/disposal-locations', [DisposalLocationsController::class, 'index']);
+$router->get('/admin/disposal-locations/new', [DisposalLocationsController::class, 'create']);
+$router->post('/admin/disposal-locations/new', [DisposalLocationsController::class, 'store']);
+$router->get('/admin/disposal-locations/{id}/edit', [DisposalLocationsController::class, 'edit']);
+$router->post('/admin/disposal-locations/{id}/edit', [DisposalLocationsController::class, 'update']);
+$router->post('/admin/disposal-locations/{id}/delete', [DisposalLocationsController::class, 'delete']);
+
+$router->get('/admin/expense-categories', [ExpenseCategoriesController::class, 'index']);
+$router->get('/admin/expense-categories/new', [ExpenseCategoriesController::class, 'create']);
+$router->post('/admin/expense-categories/new', [ExpenseCategoriesController::class, 'store']);
+$router->get('/admin/expense-categories/{id}/edit', [ExpenseCategoriesController::class, 'edit']);
+$router->post('/admin/expense-categories/{id}/edit', [ExpenseCategoriesController::class, 'update']);
+$router->post('/admin/expense-categories/{id}/delete', [ExpenseCategoriesController::class, 'delete']);
+
+$router->get('/401', [ErrorController::class, 'unauthorized']);
+$router->get('/404', [ErrorController::class, 'notFound']);
+$router->get('/500', [ErrorController::class, 'serverError']);
+
+return $router;

@@ -1,0 +1,120 @@
+<?php
+    $job = $job ?? [];
+    $isEdit = !empty($job['id']);
+    $statusValue = (string) old('job_status', $job['job_status'] ?? 'pending');
+    $ownerType = (string) old('job_owner_type', $job['resolved_owner_type'] ?? (isset($job['estate_id']) && !empty($job['estate_id']) ? 'estate' : 'client'));
+    $ownerId = (string) old('job_owner_id', (string) ($job['resolved_owner_id'] ?? ''));
+    $ownerSearch = (string) old('job_owner_search', $job['owner_display_name'] ?? '');
+    $contactClientId = (string) old('contact_client_id', (string) ($job['resolved_contact_client_id'] ?? ($job['client_id'] ?? '')));
+    $contactSearch = (string) old('contact_search', $job['contact_display_name'] ?? '');
+    $sourceProspectId = (string) old('source_prospect_id', (string) ($job['source_prospect_id'] ?? ''));
+    $cancelUrl = $isEdit
+        ? url('/jobs/' . ($job['id'] ?? ''))
+        : ($sourceProspectId !== '' ? url('/prospects/' . $sourceProspectId) : url('/jobs'));
+?>
+<form method="post" action="<?= url($isEdit ? '/jobs/' . ($job['id'] ?? '') . '/edit' : '/jobs/new') ?>">
+    <?= csrf_field() ?>
+    <?php if (!$isEdit && $sourceProspectId !== ''): ?>
+        <input type="hidden" name="source_prospect_id" value="<?= e($sourceProspectId) ?>" />
+    <?php endif; ?>
+    <input type="hidden" id="owner_lookup_url" value="<?= e(url('/jobs/lookup/owners')) ?>" />
+    <input type="hidden" id="contact_lookup_url" value="<?= e(url('/jobs/lookup/contacts')) ?>" />
+    <div class="row g-3">
+        <div class="col-md-4">
+            <label class="form-label" for="name">Job Name</label>
+            <input class="form-control" id="name" name="name" type="text" value="<?= e((string) old('name', $job['name'] ?? '')) ?>" required />
+        </div>
+        <div class="col-md-3">
+            <label class="form-label" for="job_status">Status</label>
+            <select class="form-select" id="job_status" name="job_status">
+                <option value="pending" <?= $statusValue === 'pending' ? 'selected' : '' ?>>Pending</option>
+                <option value="active" <?= $statusValue === 'active' ? 'selected' : '' ?>>Active</option>
+                <option value="complete" <?= $statusValue === 'complete' ? 'selected' : '' ?>>Complete</option>
+                <option value="cancelled" <?= $statusValue === 'cancelled' ? 'selected' : '' ?>>Cancelled</option>
+            </select>
+        </div>
+        <div class="col-md-5 position-relative">
+            <label class="form-label" for="job_owner_search">Job Owner</label>
+            <input class="form-control" id="job_owner_search" name="job_owner_search" type="text" autocomplete="off" value="<?= e($ownerSearch) ?>" placeholder="Search clients, estates, companies..." required />
+            <input type="hidden" id="job_owner_type" name="job_owner_type" value="<?= e($ownerType) ?>" />
+            <input type="hidden" id="job_owner_id" name="job_owner_id" value="<?= e($ownerId) ?>" />
+            <div id="jobOwnerResults" class="list-group position-absolute w-100 shadow-sm d-none" style="z-index: 1080; top: 100%;"></div>
+            <div class="form-text">Search clients, estates, or companies.</div>
+        </div>
+        <div class="col-md-6 position-relative">
+            <label class="form-label" for="contact_search">Contact</label>
+            <input class="form-control" id="contact_search" name="contact_search" type="text" autocomplete="off" value="<?= e($contactSearch) ?>" placeholder="Search clients..." required />
+            <input type="hidden" id="contact_client_id" name="contact_client_id" value="<?= e($contactClientId) ?>" />
+            <div id="contactResults" class="list-group position-absolute w-100 shadow-sm d-none" style="z-index: 1080; top: 100%;"></div>
+            <div class="form-text">Contacts are selected from clients only.</div>
+        </div>
+        <div class="col-md-3">
+            <label class="form-label" for="quote_date">Quote Date</label>
+            <input class="form-control" id="quote_date" name="quote_date" type="datetime-local" value="<?= e((string) old('quote_date', format_datetime_local($job['quote_date'] ?? null))) ?>" />
+        </div>
+        <div class="col-md-3">
+            <label class="form-label" for="scheduled_date">Scheduled Date</label>
+            <input class="form-control" id="scheduled_date" name="scheduled_date" type="datetime-local" value="<?= e((string) old('scheduled_date', format_datetime_local($job['scheduled_date'] ?? null))) ?>" />
+        </div>
+        <div class="col-md-3">
+            <label class="form-label" for="start_date">Start Date</label>
+            <input class="form-control" id="start_date" name="start_date" type="datetime-local" value="<?= e((string) old('start_date', format_datetime_local($job['start_date'] ?? null))) ?>" />
+        </div>
+        <div class="col-md-3">
+            <label class="form-label" for="end_date">End Date</label>
+            <input class="form-control" id="end_date" name="end_date" type="datetime-local" value="<?= e((string) old('end_date', format_datetime_local($job['end_date'] ?? null))) ?>" />
+        </div>
+        <div class="col-md-3">
+            <label class="form-label" for="billed_date">Billed Date</label>
+            <input class="form-control" id="billed_date" name="billed_date" type="datetime-local" value="<?= e((string) old('billed_date', format_datetime_local($job['billed_date'] ?? null))) ?>" />
+        </div>
+        <div class="col-md-3">
+            <label class="form-label" for="paid_date">Paid Date</label>
+            <input class="form-control" id="paid_date" name="paid_date" type="datetime-local" value="<?= e((string) old('paid_date', format_datetime_local($job['paid_date'] ?? null))) ?>" />
+        </div>
+        <div class="col-md-6">
+            <label class="form-label" for="address_1">Address</label>
+            <input class="form-control" id="address_1" name="address_1" type="text" value="<?= e((string) old('address_1', $job['address_1'] ?? '')) ?>" />
+        </div>
+        <div class="col-md-6">
+            <label class="form-label" for="address_2">Address 2</label>
+            <input class="form-control" id="address_2" name="address_2" type="text" value="<?= e((string) old('address_2', $job['address_2'] ?? '')) ?>" />
+        </div>
+        <div class="col-md-4">
+            <label class="form-label" for="city">City</label>
+            <input class="form-control" id="city" name="city" type="text" value="<?= e((string) old('city', $job['city'] ?? '')) ?>" />
+        </div>
+        <div class="col-md-4">
+            <label class="form-label" for="state">State</label>
+            <input class="form-control" id="state" name="state" type="text" value="<?= e((string) old('state', $job['state'] ?? '')) ?>" />
+        </div>
+        <div class="col-md-4">
+            <label class="form-label" for="zip">Zip</label>
+            <input class="form-control" id="zip" name="zip" type="text" value="<?= e((string) old('zip', $job['zip'] ?? '')) ?>" />
+        </div>
+        <div class="col-md-6">
+            <label class="form-label" for="phone">Phone</label>
+            <input class="form-control" id="phone" name="phone" type="text" value="<?= e((string) old('phone', $job['phone'] ?? '')) ?>" />
+        </div>
+        <div class="col-md-6">
+            <label class="form-label" for="email">Email</label>
+            <input class="form-control" id="email" name="email" type="email" value="<?= e((string) old('email', $job['email'] ?? '')) ?>" />
+        </div>
+        <div class="col-md-6">
+            <label class="form-label" for="total_quote">Total Quote</label>
+            <input class="form-control" id="total_quote" name="total_quote" type="number" step="0.01" value="<?= e((string) old('total_quote', (string) ($job['total_quote'] ?? ''))) ?>" />
+        </div>
+        <div class="col-md-6">
+            <label class="form-label" for="total_billed">Total Billed</label>
+            <input class="form-control" id="total_billed" name="total_billed" type="number" step="0.01" value="<?= e((string) old('total_billed', (string) ($job['total_billed'] ?? ''))) ?>" />
+        </div>
+        <div class="col-12">
+            <label class="form-label" for="note">Notes</label>
+            <textarea class="form-control" id="note" name="note" rows="4"><?= e((string) old('note', $job['note'] ?? '')) ?></textarea>
+        </div>
+    </div>
+    <div class="mt-4 d-flex gap-2">
+        <button class="btn btn-primary" type="submit">Save Job</button>
+        <a class="btn btn-outline-secondary" href="<?= $cancelUrl ?>">Cancel</a>
+    </div>
+</form>
