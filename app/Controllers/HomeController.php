@@ -4,23 +4,18 @@ declare(strict_types=1);
 
 namespace App\Controllers;
 
+use App\Models\Dashboard;
 use Core\Controller;
 
 final class HomeController extends Controller
 {
     public function index(): void
     {
-        $pageScripts = implode("\n", [
-            '<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.8.0/Chart.min.js" crossorigin="anonymous"></script>',
-            '<script src="' . asset('demo/chart-area-demo.js') . '"></script>',
-            '<script src="' . asset('demo/chart-bar-demo.js') . '"></script>',
-            '<script src="https://cdn.jsdelivr.net/npm/simple-datatables@7.1.2/dist/umd/simple-datatables.min.js" crossorigin="anonymous"></script>',
-            '<script src="' . asset('js/datatables-simple-demo.js') . '"></script>',
-        ]);
+        $overview = Dashboard::overview();
 
         $this->render('home/index', [
             'pageTitle' => 'Dashboard',
-            'pageScripts' => $pageScripts,
+            'overview' => $overview,
         ]);
     }
 }

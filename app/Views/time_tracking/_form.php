@@ -56,6 +56,11 @@
 
     $employeeSearch = (string) old('employee_search', $defaultEmployeeSearch);
     $jobSearch = (string) old('job_search', $defaultJobSearch);
+    $entryHasNonJob = !empty($entry['id']) && (
+        ($entry['job_id'] ?? null) === null
+        || (string) ($entry['job_id'] ?? '') === '0'
+    );
+    $nonJobTime = old('non_job_time', $entryHasNonJob ? '1' : '0') === '1';
 
     $workDate = (string) old('work_date', (string) ($entry['work_date'] ?? ''));
     $startTime = $normalizeTime(old('start_time', $entry['start_time'] ?? ''));
@@ -99,10 +104,17 @@
                 placeholder="Search job by name, id, city..."
                 autocomplete="off"
                 value="<?= e($jobSearch) ?>"
-                required
             />
             <input type="hidden" id="job_id" name="job_id" value="<?= e($jobId) ?>" />
             <div id="time_job_suggestions" class="list-group position-absolute w-100 d-none" style="z-index: 1049;"></div>
+        </div>
+
+        <div class="col-12">
+            <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" role="switch" id="non_job_time" name="non_job_time" value="1" <?= $nonJobTime ? 'checked' : '' ?> />
+                <label class="form-check-label" for="non_job_time">Non-Job Time</label>
+            </div>
+            <div class="small text-muted">Use this for shop/admin/other time that is not tied to a job.</div>
         </div>
 
         <div class="col-md-3">
@@ -142,7 +154,10 @@
     </div>
 
     <div class="mt-4 d-flex gap-2">
-        <button class="btn btn-primary" type="submit"><?= !empty($entry['id']) ? 'Update Time Entry' : 'Save Time Entry' ?></button>
+        <button class="btn btn-primary" type="submit" name="entry_mode" value="save"><?= !empty($entry['id']) ? 'Update Time Entry' : 'Save Time Entry' ?></button>
+        <?php if (empty($entry['id'])): ?>
+            <button class="btn btn-success" type="submit" name="entry_mode" value="punch_in_now">Punch In Now</button>
+        <?php endif; ?>
         <a class="btn btn-outline-secondary" href="<?= url($cancelUrl) ?>">Cancel</a>
     </div>
 </form>

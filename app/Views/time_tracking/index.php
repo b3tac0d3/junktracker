@@ -40,10 +40,16 @@
                 <li class="breadcrumb-item active">Time Tracking</li>
             </ol>
         </div>
-        <a class="btn btn-primary" href="<?= url('/time-tracking/new') ?>">
-            <i class="fas fa-plus me-1"></i>
-            Add Time Entry
-        </a>
+        <div class="d-flex gap-2">
+            <a class="btn btn-outline-primary" href="<?= url('/time-tracking/open') ?>">
+                <i class="fas fa-user-clock me-1"></i>
+                Currently Punched In
+            </a>
+            <a class="btn btn-primary" href="<?= url('/time-tracking/new') ?>">
+                <i class="fas fa-plus me-1"></i>
+                Add Time Entry
+            </a>
+        </div>
     </div>
 
     <?php if ($success = flash('success')): ?>
@@ -125,6 +131,7 @@
                         <label class="form-label">Job</label>
                         <select class="form-select" name="job_id">
                             <option value="">All</option>
+                            <option value="0" <?= (string) ($filters['job_id'] ?? '') === '0' ? 'selected' : '' ?>>Non-Job Time</option>
                             <?php foreach ($jobs as $job): ?>
                                 <?php $id = (string) ((int) ($job['id'] ?? 0)); ?>
                                 <option value="<?= e($id) ?>" <?= (string) ($filters['job_id'] ?? '') === $id ? 'selected' : '' ?>>
@@ -202,7 +209,7 @@
                                             <?= e((string) ($entry['job_name'] ?? ('Job #' . $jobId))) ?>
                                         </a>
                                     <?php else: ?>
-                                        —
+                                        <span class="badge bg-secondary">Non-Job Time</span>
                                     <?php endif; ?>
                                 </td>
                                 <td>

@@ -7,6 +7,7 @@ namespace App\Controllers;
 use App\Models\Job;
 use App\Models\TimeEntry;
 use Core\Controller;
+use Throwable;
 
 final class TimeTrackingController extends Controller
 {
@@ -43,6 +44,30 @@ final class TimeTrackingController extends Controller
             'entries' => TimeEntry::filter($filters),
             'summary' => $summary,
             'byEmployee' => TimeEntry::summaryByEmployee($filters),
+            'employees' => TimeEntry::employees(),
+            'jobs' => TimeEntry::jobs(),
+            'pageScripts' => $pageScripts,
+        ]);
+    }
+
+    public function open(): void
+    {
+        $filters = [
+            'q' => trim((string) ($_GET['q'] ?? '')),
+            'employee_id' => $this->toIntOrNull($_GET['employee_id'] ?? null),
+            'job_id' => $this->toIntOrNull($_GET['job_id'] ?? null),
+        ];
+
+        $pageScripts = implode("\n", [
+            '<script src="https://cdn.jsdelivr.net/npm/simple-datatables@7.1.2/dist/umd/simple-datatables.min.js" crossorigin="anonymous"></script>',
+            '<script src="' . asset('js/time-open-table.js') . '"></script>',
+        ]);
+
+        $this->render('time_tracking/open', [
+            'pageTitle' => 'Currently Punched In',
+            'filters' => $filters,
+            'entries' => TimeEntry::openEntries($filters),
+            'summary' => TimeEntry::openSummary($filters),
             'employees' => TimeEntry::employees(),
             'jobs' => TimeEntry::jobs(),
             'pageScripts' => $pageScripts,
@@ -89,9 +114,14 @@ final class TimeTrackingController extends Controller
             redirect('/time-tracking/new');
         }
 
+        $entryMode = (string) ($_POST['entry_mode'] ?? 'save');
+        if (!in_array($entryMode, ['save', 'punch_in_now'], true)) {
+            $entryMode = 'save';
+        }
+
         $employees = TimeEntry::employees();
         $jobs = TimeEntry::jobs();
-        $data = $this->collectFormData($_POST, $employees, $jobs);
+        $data = $this->collectFormData($_POST, $employees, $jobs, $entryMode);
         $errors = $data['errors'];
         $returnTo = (string) $data['return_to'];
         $jobId = $data['job_id'] !== null ? (int) $data['job_id'] : null;
@@ -99,34 +129,96 @@ final class TimeTrackingController extends Controller
         if (!empty($errors)) {
             flash('error', implode(' ', $errors));
             flash_old($_POST);
-            redirect('/time-tracking/new' . ($jobId !== null ? '?job_id=' . $jobId : ''));
+            $query = ($jobId !== null && $jobId > 0) ? '?job_id=' . $jobId : '';
+            redirect('/time-tracking/new' . $query);
         }
 
-        $entryId = TimeEntry::create([
-            'employee_id' => (int) $data['employee_id'],
-            'job_id' => (int) $data['job_id'],
-            'work_date' => $data['work_date'],
-            'start_time' => $data['start_time'],
-            'end_time' => $data['end_time'],
-            'minutes_worked' => $data['minutes_worked'],
-            'pay_rate' => $data['pay_rate'],
-            'total_paid' => $data['total_paid'],
-            'note' => $data['note'],
-        ], auth_user_id());
+        if ($entryMode === 'punch_in_now') {
+            $employeeId = (int) $data['employee_id'];
+            $openEntry = TimeEntry::findOpenForEmployee($employeeId);
+            if ($openEntry) {
+                $openJobId = (int) ($openEntry['job_id'] ?? 0);
+                $openJobLabel = $this->resolveJobLabel($openJobId, (string) ($openEntry['job_name'] ?? ''));
+                flash('error', 'This employee is already punched in on ' . $openJobLabel . '.');
+                flash_old($_POST);
+                $query = ($jobId !== null && $jobId > 0) ? '?job_id=' . $jobId : '';
+                redirect('/time-tracking/new' . $query);
+            }
+
+            $nowDate = date('Y-m-d');
+            $nowTime = date('H:i:s');
+            $payRate = $data['pay_rate'] !== null
+                ? (float) $data['pay_rate']
+                : (TimeEntry::employeeRate($employeeId) ?? 0.0);
+
+            try {
+                $entryId = TimeEntry::create([
+                    'employee_id' => $employeeId,
+                    'job_id' => $jobId,
+                    'work_date' => $nowDate,
+                    'start_time' => $nowTime,
+                    'end_time' => null,
+                    'minutes_worked' => null,
+                    'pay_rate' => $payRate,
+                    'total_paid' => null,
+                    'note' => $data['note'],
+                ], auth_user_id());
+            } catch (Throwable) {
+                flash('error', 'Unable to punch in with the selected values. Please verify employee/job selection.');
+                flash_old($_POST);
+                $query = ($jobId !== null && $jobId > 0) ? '?job_id=' . $jobId : '';
+                redirect('/time-tracking/new' . $query);
+            }
+
+            if (($jobId ?? 0) > 0) {
+                Job::createAction((int) $jobId, [
+                    'action_type' => 'time_punched_in',
+                    'action_at' => $nowDate . ' ' . $nowTime,
+                    'amount' => null,
+                    'ref_table' => 'employee_time_entries',
+                    'ref_id' => $entryId,
+                    'note' => 'Employee punched in from Time Tracking.',
+                ], auth_user_id());
+            }
+
+            flash('success', 'Employee punched in on ' . $this->resolveJobLabel((int) ($jobId ?? 0), '') . '.');
+            redirect($returnTo);
+        }
+
+        try {
+            $entryId = TimeEntry::create([
+                'employee_id' => (int) $data['employee_id'],
+                'job_id' => $data['job_id'],
+                'work_date' => $data['work_date'],
+                'start_time' => $data['start_time'],
+                'end_time' => $data['end_time'],
+                'minutes_worked' => $data['minutes_worked'],
+                'pay_rate' => $data['pay_rate'],
+                'total_paid' => $data['total_paid'],
+                'note' => $data['note'],
+            ], auth_user_id());
+        } catch (Throwable) {
+            flash('error', 'Unable to save time entry with the selected values. Please verify employee/job selection.');
+            flash_old($_POST);
+            $query = ($jobId !== null && $jobId > 0) ? '?job_id=' . $jobId : '';
+            redirect('/time-tracking/new' . $query);
+        }
 
         $jobActionAt = date('Y-m-d H:i:s');
         if ($data['work_date'] !== null) {
             $jobActionAt = $data['work_date'] . ' ' . ($data['start_time'] ?? '12:00:00');
         }
 
-        Job::createAction((int) $data['job_id'], [
-            'action_type' => 'time_entry_added',
-            'action_at' => $jobActionAt,
-            'amount' => $data['total_paid'],
-            'ref_table' => 'employee_time_entries',
-            'ref_id' => $entryId,
-            'note' => 'Time entry added (' . $this->formatMinutes((int) $data['minutes_worked']) . ').',
-        ], auth_user_id());
+        if (($jobId ?? 0) > 0) {
+            Job::createAction((int) $jobId, [
+                'action_type' => 'time_entry_added',
+                'action_at' => $jobActionAt,
+                'amount' => $data['total_paid'],
+                'ref_table' => 'employee_time_entries',
+                'ref_id' => $entryId,
+                'note' => 'Time entry added (' . $this->formatMinutes((int) $data['minutes_worked']) . ').',
+            ], auth_user_id());
+        }
 
         flash('success', 'Time entry added.');
         redirect($returnTo);
@@ -219,7 +311,7 @@ final class TimeTrackingController extends Controller
 
         $employees = TimeEntry::employees();
         $jobs = TimeEntry::jobs();
-        $data = $this->collectFormData($_POST, $employees, $jobs);
+        $data = $this->collectFormData($_POST, $employees, $jobs, 'save');
         $errors = $data['errors'];
         $returnTo = (string) $data['return_to'];
         $jobId = $data['job_id'] !== null ? (int) $data['job_id'] : null;
@@ -227,32 +319,105 @@ final class TimeTrackingController extends Controller
         if (!empty($errors)) {
             flash('error', implode(' ', $errors));
             flash_old($_POST);
-            redirect('/time-tracking/' . $id . '/edit' . ($jobId !== null ? '?job_id=' . $jobId : ''));
+            $query = ($jobId !== null && $jobId > 0) ? '?job_id=' . $jobId : '';
+            redirect('/time-tracking/' . $id . '/edit' . $query);
         }
 
-        TimeEntry::update($id, [
-            'employee_id' => (int) $data['employee_id'],
-            'job_id' => (int) $data['job_id'],
-            'work_date' => $data['work_date'],
-            'start_time' => $data['start_time'],
-            'end_time' => $data['end_time'],
-            'minutes_worked' => $data['minutes_worked'],
-            'pay_rate' => $data['pay_rate'],
-            'total_paid' => $data['total_paid'],
-            'note' => $data['note'],
-        ], auth_user_id());
+        try {
+            TimeEntry::update($id, [
+                'employee_id' => (int) $data['employee_id'],
+                'job_id' => $data['job_id'],
+                'work_date' => $data['work_date'],
+                'start_time' => $data['start_time'],
+                'end_time' => $data['end_time'],
+                'minutes_worked' => $data['minutes_worked'],
+                'pay_rate' => $data['pay_rate'],
+                'total_paid' => $data['total_paid'],
+                'note' => $data['note'],
+            ], auth_user_id());
+        } catch (Throwable) {
+            flash('error', 'Unable to update time entry with the selected values. Please verify employee/job selection.');
+            flash_old($_POST);
+            $query = ($jobId !== null && $jobId > 0) ? '?job_id=' . $jobId : '';
+            redirect('/time-tracking/' . $id . '/edit' . $query);
+        }
 
-        Job::createAction((int) $data['job_id'], [
-            'action_type' => 'time_entry_updated',
-            'action_at' => date('Y-m-d H:i:s'),
-            'amount' => $data['total_paid'],
-            'ref_table' => 'employee_time_entries',
-            'ref_id' => $id,
-            'note' => 'Time entry updated (' . $this->formatMinutes((int) $data['minutes_worked']) . ').',
-        ], auth_user_id());
+        if (($jobId ?? 0) > 0) {
+            Job::createAction((int) $jobId, [
+                'action_type' => 'time_entry_updated',
+                'action_at' => date('Y-m-d H:i:s'),
+                'amount' => $data['total_paid'],
+                'ref_table' => 'employee_time_entries',
+                'ref_id' => $id,
+                'note' => 'Time entry updated (' . $this->formatMinutes((int) $data['minutes_worked']) . ').',
+            ], auth_user_id());
+        }
 
         flash('success', 'Time entry updated.');
         redirect('/time-tracking/' . $id . '?return_to=' . urlencode($returnTo));
+    }
+
+    public function punchOut(array $params): void
+    {
+        $id = isset($params['id']) ? (int) $params['id'] : 0;
+        if ($id <= 0) {
+            redirect('/time-tracking/open');
+        }
+
+        $entry = TimeEntry::findById($id);
+        if (!$entry) {
+            $this->renderNotFound();
+            return;
+        }
+
+        $returnTo = $this->sanitizeReturnTo($_POST['return_to'] ?? null, isset($entry['job_id']) ? (int) $entry['job_id'] : null);
+
+        if (!verify_csrf($_POST['csrf_token'] ?? null)) {
+            flash('error', 'Your session expired. Please try again.');
+            redirect($returnTo);
+        }
+
+        if (
+            !empty($entry['deleted_at'])
+            || (int) ($entry['active'] ?? 1) !== 1
+            || empty($entry['start_time'])
+            || !empty($entry['end_time'])
+        ) {
+            flash('error', 'This time entry is not available for punch out.');
+            redirect($returnTo);
+        }
+
+        $minutesWorked = $this->calculateOpenMinutes(
+            (string) ($entry['work_date'] ?? date('Y-m-d')),
+            (string) ($entry['start_time'] ?? date('H:i:s'))
+        );
+        $payRate = isset($entry['pay_rate']) && $entry['pay_rate'] !== null
+            ? (float) $entry['pay_rate']
+            : (TimeEntry::employeeRate((int) ($entry['employee_id'] ?? 0)) ?? 0.0);
+        $totalPaid = round(($payRate * $minutesWorked) / 60, 2);
+
+        TimeEntry::punchOut($id, [
+            'end_time' => date('H:i:s'),
+            'minutes_worked' => $minutesWorked,
+            'pay_rate' => $payRate,
+            'total_paid' => $totalPaid,
+        ], auth_user_id());
+
+        $jobId = isset($entry['job_id']) ? (int) $entry['job_id'] : 0;
+        if ($jobId > 0) {
+            Job::createAction($jobId, [
+                'action_type' => 'time_punched_out',
+                'action_at' => date('Y-m-d H:i:s'),
+                'amount' => $totalPaid,
+                'ref_table' => 'employee_time_entries',
+                'ref_id' => $id,
+                'note' => 'Employee punched out (' . $this->formatMinutes($minutesWorked) . ').',
+            ], auth_user_id());
+        }
+
+        $employeeName = trim((string) ($entry['employee_name'] ?? ('Employee #' . (string) ($entry['employee_id'] ?? ''))));
+        flash('success', $employeeName . ' punched out.');
+        redirect($returnTo);
     }
 
     public function delete(array $params): void
@@ -328,10 +493,12 @@ final class TimeTrackingController extends Controller
         return '/time-tracking';
     }
 
-    private function collectFormData(array $source, array $employees, array $jobs): array
+    private function collectFormData(array $source, array $employees, array $jobs, string $entryMode = 'save'): array
     {
+        $isPunchInNow = $entryMode === 'punch_in_now';
+        $nonJobTime = $this->isTruthy($source['non_job_time'] ?? null);
         $employeeId = $this->toIntOrNull($source['employee_id'] ?? null);
-        $jobId = $this->toIntOrNull($source['job_id'] ?? null);
+        $jobId = $nonJobTime ? null : $this->toIntOrNull($source['job_id'] ?? null);
         $workDate = $this->toDateOrNull($source['work_date'] ?? null);
         $startTime = $this->toTimeOrNull($source['start_time'] ?? null);
         $endTime = $this->toTimeOrNull($source['end_time'] ?? null);
@@ -345,25 +512,25 @@ final class TimeTrackingController extends Controller
         if ($employeeId === null || !$this->optionExists($employeeId, $employees)) {
             $errors[] = 'Select a valid employee.';
         }
-        if ($jobId === null || !$this->optionExists($jobId, $jobs)) {
+        if (!$nonJobTime && ($jobId === null || !$this->optionExists($jobId, $jobs))) {
             $errors[] = 'Select a valid job.';
         }
-        if ($workDate === null) {
+        if (!$isPunchInNow && $workDate === null) {
             $errors[] = 'Work date is required.';
         }
-        if (($startTime === null) !== ($endTime === null)) {
+        if (!$isPunchInNow && ($startTime === null) !== ($endTime === null)) {
             $errors[] = 'Provide both start and end time, or leave both blank.';
         }
-        if ($minutesWorked !== null && $minutesWorked <= 0) {
+        if (!$isPunchInNow && $minutesWorked !== null && $minutesWorked <= 0) {
             $errors[] = 'Minutes worked must be greater than zero.';
         }
-        if ($minutesWorked === null && $startTime !== null && $endTime !== null) {
+        if (!$isPunchInNow && $minutesWorked === null && $startTime !== null && $endTime !== null) {
             $minutesWorked = $this->minutesBetween($startTime, $endTime);
             if ($minutesWorked <= 0) {
                 $errors[] = 'End time must be after start time.';
             }
         }
-        if ($minutesWorked === null && $startTime === null && $endTime === null) {
+        if (!$isPunchInNow && $minutesWorked === null && $startTime === null && $endTime === null) {
             $errors[] = 'Provide minutes worked or a start/end time.';
         }
         if ($payRate !== null && $payRate < 0) {
@@ -376,7 +543,7 @@ final class TimeTrackingController extends Controller
         if ($payRate === null && $employeeId !== null) {
             $payRate = TimeEntry::employeeRate($employeeId) ?? 0.0;
         }
-        if ($totalPaid === null && $minutesWorked !== null) {
+        if (!$isPunchInNow && $totalPaid === null && $minutesWorked !== null) {
             $totalPaid = round(((float) $payRate * (float) $minutesWorked) / 60, 2);
         }
 
@@ -384,6 +551,7 @@ final class TimeTrackingController extends Controller
             'errors' => $errors,
             'employee_id' => $employeeId,
             'job_id' => $jobId,
+            'non_job_time' => $nonJobTime,
             'work_date' => $workDate,
             'start_time' => $startTime,
             'end_time' => $endTime,
@@ -419,6 +587,17 @@ final class TimeTrackingController extends Controller
         }
 
         return (int) floor(($end - $start) / 60);
+    }
+
+    private function calculateOpenMinutes(string $workDate, string $startTime): int
+    {
+        $start = strtotime($workDate . ' ' . $startTime);
+        if ($start === false) {
+            return 0;
+        }
+
+        $minutes = (int) floor((time() - $start) / 60);
+        return $minutes > 0 ? $minutes : 0;
     }
 
     private function formatMinutes(int $minutes): string
@@ -473,6 +652,30 @@ final class TimeTrackingController extends Controller
         }
 
         return is_numeric($raw) ? (float) $raw : null;
+    }
+
+    private function isTruthy(mixed $value): bool
+    {
+        if (is_bool($value)) {
+            return $value;
+        }
+
+        $raw = strtolower(trim((string) ($value ?? '')));
+        return in_array($raw, ['1', 'true', 'on', 'yes'], true);
+    }
+
+    private function resolveJobLabel(int $jobId, string $jobName = ''): string
+    {
+        if ($jobId <= 0) {
+            return 'Non-Job Time';
+        }
+
+        $name = trim($jobName);
+        if ($name !== '') {
+            return $name;
+        }
+
+        return 'Job #' . $jobId;
     }
 
     private function renderNotFound(): void

@@ -198,6 +198,26 @@ final class JobsController extends Controller
             return;
         }
 
+        $crewEmployees = Job::crewMembers($id);
+        $openEntriesForJob = TimeEntry::openEntriesForJob($id);
+        $openByEmployee = [];
+        foreach ($openEntriesForJob as $entry) {
+            $employeeId = (int) ($entry['employee_id'] ?? 0);
+            if ($employeeId > 0) {
+                $openByEmployee[$employeeId] = $entry;
+            }
+        }
+
+        $employeeIds = array_map(static fn (array $employee): int => (int) ($employee['employee_id'] ?? 0), $crewEmployees);
+        $openEntriesElsewhere = TimeEntry::openEntriesOutsideJob($id, $employeeIds);
+        $openElsewhereByEmployee = [];
+        foreach ($openEntriesElsewhere as $entry) {
+            $employeeId = (int) ($entry['employee_id'] ?? 0);
+            if ($employeeId > 0 && !isset($openElsewhereByEmployee[$employeeId])) {
+                $openElsewhereByEmployee[$employeeId] = $entry;
+            }
+        }
+
         $this->render('jobs/show', [
             'pageTitle' => 'Job Details',
             'job' => $job,
@@ -208,7 +228,145 @@ final class JobsController extends Controller
             'billingEntries' => Job::billingEntries($id),
             'timeEntries' => TimeEntry::forJob($id),
             'timeSummary' => TimeEntry::summaryForJob($id),
+            'crewEmployees' => $crewEmployees,
+            'openByEmployee' => $openByEmployee,
+            'openElsewhereByEmployee' => $openElsewhereByEmployee,
+            'pageScripts' => '<script src="' . asset('js/job-crew-lookup.js') . '"></script>',
         ]);
+    }
+
+    public function punchIn(array $params): void
+    {
+        $jobId = isset($params['id']) ? (int) $params['id'] : 0;
+        $job = $this->findJobOr404($jobId);
+        if (!$job) {
+            return;
+        }
+
+        if (!$this->checkCsrf('/jobs/' . $jobId)) {
+            return;
+        }
+
+        $employeeId = $this->toIntOrNull($_POST['employee_id'] ?? null);
+        if ($employeeId === null || $employeeId <= 0) {
+            flash('error', 'Select a valid employee.');
+            redirect('/jobs/' . $jobId);
+        }
+
+        if (!Job::isCrewMember($jobId, $employeeId)) {
+            flash('error', 'Employee must be added to the crew before punch in.');
+            redirect('/jobs/' . $jobId);
+        }
+
+        $openEntry = TimeEntry::findOpenForEmployee($employeeId);
+        if ($openEntry) {
+            $openJobId = (int) ($openEntry['job_id'] ?? 0);
+            if ($openJobId === $jobId) {
+                flash('error', 'This employee is already punched in on this job.');
+                redirect('/jobs/' . $jobId);
+            }
+
+            flash('error', 'This employee is currently punched in on job #' . $openJobId . '.');
+            redirect('/jobs/' . $jobId);
+        }
+
+        $employee = null;
+        foreach (Job::crewMembers($jobId) as $candidate) {
+            if ((int) ($candidate['employee_id'] ?? 0) === $employeeId) {
+                $employee = $candidate;
+                break;
+            }
+        }
+
+        $payRate = isset($employee['pay_rate']) && $employee['pay_rate'] !== null
+            ? (float) $employee['pay_rate']
+            : (TimeEntry::employeeRate($employeeId) ?? 0.0);
+
+        $entryId = TimeEntry::create([
+            'employee_id' => $employeeId,
+            'job_id' => $jobId,
+            'work_date' => date('Y-m-d'),
+            'start_time' => date('H:i:s'),
+            'end_time' => null,
+            'minutes_worked' => null,
+            'pay_rate' => $payRate,
+            'total_paid' => null,
+            'note' => null,
+        ], $this->actorId());
+
+        $employeeName = trim((string) (($employee['employee_name'] ?? '') !== '' ? $employee['employee_name'] : ('Employee #' . $employeeId)));
+        $this->logJobAction(
+            $jobId,
+            'time_punched_in',
+            $employeeName . ' punched in.',
+            null,
+            'employee_time_entries',
+            $entryId
+        );
+
+        flash('success', $employeeName . ' punched in.');
+        redirect('/jobs/' . $jobId);
+    }
+
+    public function punchOut(array $params): void
+    {
+        $jobId = isset($params['id']) ? (int) $params['id'] : 0;
+        $job = $this->findJobOr404($jobId);
+        if (!$job) {
+            return;
+        }
+
+        if (!$this->checkCsrf('/jobs/' . $jobId)) {
+            return;
+        }
+
+        $entryId = $this->toIntOrNull($_POST['time_entry_id'] ?? null);
+        if ($entryId === null || $entryId <= 0) {
+            flash('error', 'Invalid time entry.');
+            redirect('/jobs/' . $jobId);
+        }
+
+        $entry = TimeEntry::findById($entryId);
+        if (
+            !$entry
+            || (int) ($entry['job_id'] ?? 0) !== $jobId
+            || !empty($entry['deleted_at'])
+            || (int) ($entry['active'] ?? 1) !== 1
+            || empty($entry['start_time'])
+            || !empty($entry['end_time'])
+        ) {
+            flash('error', 'This time entry is not available for punch out.');
+            redirect('/jobs/' . $jobId);
+        }
+
+        $minutesWorked = $this->calculateOpenMinutes(
+            (string) ($entry['work_date'] ?? date('Y-m-d')),
+            (string) ($entry['start_time'] ?? date('H:i:s'))
+        );
+        $payRate = isset($entry['pay_rate']) && $entry['pay_rate'] !== null
+            ? (float) $entry['pay_rate']
+            : (TimeEntry::employeeRate((int) ($entry['employee_id'] ?? 0)) ?? 0.0);
+        $totalPaid = round(($payRate * $minutesWorked) / 60, 2);
+
+        TimeEntry::punchOut($entryId, [
+            'end_time' => date('H:i:s'),
+            'minutes_worked' => $minutesWorked,
+            'pay_rate' => $payRate,
+            'total_paid' => $totalPaid,
+        ], $this->actorId());
+
+        $employeeName = trim((string) ($entry['employee_name'] ?? ('Employee #' . (string) ($entry['employee_id'] ?? ''))));
+        $this->logJobAction(
+            $jobId,
+            'time_punched_out',
+            $employeeName . ' punched out (' . $this->formatDuration($minutesWorked) . ').',
+            $totalPaid,
+            'employee_time_entries',
+            $entryId
+        );
+
+        flash('success', $employeeName . ' punched out.');
+        redirect('/jobs/' . $jobId);
     }
 
     public function edit(array $params): void
@@ -244,6 +402,111 @@ final class JobsController extends Controller
 
         header('Content-Type: application/json; charset=utf-8');
         echo json_encode($results);
+    }
+
+    public function crewLookup(array $params): void
+    {
+        $jobId = isset($params['id']) ? (int) $params['id'] : 0;
+        if ($jobId <= 0) {
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode([]);
+            return;
+        }
+
+        $term = trim((string) ($_GET['q'] ?? ''));
+        $results = Job::searchCrewCandidates($jobId, $term);
+
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode($results);
+    }
+
+    public function crewAdd(array $params): void
+    {
+        $jobId = isset($params['id']) ? (int) $params['id'] : 0;
+        $job = $this->findJobOr404($jobId);
+        if (!$job) {
+            return;
+        }
+
+        if (!$this->checkCsrf('/jobs/' . $jobId)) {
+            return;
+        }
+
+        $employeeId = $this->toIntOrNull($_POST['employee_id'] ?? null);
+        if ($employeeId === null || $employeeId <= 0) {
+            flash('error', 'Select an employee to add.');
+            redirect('/jobs/' . $jobId);
+        }
+
+        $isAlreadyCrew = Job::isCrewMember($jobId, $employeeId);
+        if ($isAlreadyCrew) {
+            flash('error', 'Employee is already on this crew.');
+            redirect('/jobs/' . $jobId);
+        }
+
+        $activeEmployees = TimeEntry::employees();
+        $isActiveEmployee = false;
+        foreach ($activeEmployees as $candidate) {
+            if ((int) ($candidate['id'] ?? 0) === $employeeId) {
+                $isActiveEmployee = true;
+                break;
+            }
+        }
+        if (!$isActiveEmployee) {
+            flash('error', 'Selected employee is not active.');
+            redirect('/jobs/' . $jobId);
+        }
+
+        Job::addCrewMember($jobId, $employeeId, $this->actorId());
+
+        $crew = Job::crewMembers($jobId);
+        $employeeName = 'Employee #' . $employeeId;
+        foreach ($crew as $member) {
+            if ((int) ($member['employee_id'] ?? 0) === $employeeId) {
+                $employeeName = (string) ($member['employee_name'] ?? $employeeName);
+                break;
+            }
+        }
+
+        $this->logJobAction($jobId, 'crew_member_added', $employeeName . ' added to crew.', null, 'employees', $employeeId);
+        flash('success', $employeeName . ' added to crew.');
+        redirect('/jobs/' . $jobId);
+    }
+
+    public function crewRemove(array $params): void
+    {
+        $jobId = isset($params['id']) ? (int) $params['id'] : 0;
+        $employeeId = isset($params['employeeId']) ? (int) $params['employeeId'] : 0;
+
+        $job = $this->findJobOr404($jobId);
+        if (!$job) {
+            return;
+        }
+
+        if (!$this->checkCsrf('/jobs/' . $jobId)) {
+            return;
+        }
+
+        if ($employeeId <= 0) {
+            flash('error', 'Invalid crew member.');
+            redirect('/jobs/' . $jobId);
+        }
+
+        if (TimeEntry::findOpenForEmployee($employeeId)) {
+            flash('error', 'Employee must be punched out before removal from crew.');
+            redirect('/jobs/' . $jobId);
+        }
+
+        if (!Job::isCrewMember($jobId, $employeeId)) {
+            flash('error', 'Employee is not on this crew.');
+            redirect('/jobs/' . $jobId);
+        }
+
+        Job::removeCrewMember($jobId, $employeeId, $this->actorId());
+
+        $this->logJobAction($jobId, 'crew_member_removed', 'Employee #' . $employeeId . ' removed from crew.', null, 'employees', $employeeId);
+        flash('success', 'Crew member removed.');
+        redirect('/jobs/' . $jobId);
     }
 
     public function update(array $params): void
@@ -1080,6 +1343,34 @@ final class JobsController extends Controller
         flash('error', 'Your session expired. Please try again.');
         redirect($redirectPath);
         return false;
+    }
+
+    private function calculateOpenMinutes(string $workDate, string $startTime): int
+    {
+        $start = strtotime($workDate . ' ' . $startTime);
+        $now = time();
+        if ($start === false) {
+            return 1;
+        }
+
+        if ($now < $start) {
+            $now += 86400;
+        }
+
+        $minutes = (int) floor(($now - $start) / 60);
+        return max(1, $minutes);
+    }
+
+    private function formatDuration(int $minutes): string
+    {
+        if ($minutes <= 0) {
+            return '0h 00m';
+        }
+
+        $hours = intdiv($minutes, 60);
+        $remaining = $minutes % 60;
+
+        return $hours . 'h ' . str_pad((string) $remaining, 2, '0', STR_PAD_LEFT) . 'm';
     }
 
     private function toDateTimeOrNull(mixed $value): ?string

@@ -1,9 +1,42 @@
 window.addEventListener('DOMContentLoaded', () => {
+    const nonJobToggle = document.getElementById('non_job_time');
+    const jobInput = document.getElementById('job_search');
+    const jobHidden = document.getElementById('job_id');
+    const jobSuggestions = document.getElementById('time_job_suggestions');
     const startInput = document.getElementById('start_time');
     const endInput = document.getElementById('end_time');
     const minutesInput = document.getElementById('minutes_worked');
     const payRateInput = document.getElementById('pay_rate');
     const totalPaidInput = document.getElementById('total_paid');
+
+    const syncNonJobState = () => {
+        if (!nonJobToggle || !jobInput || !jobHidden) {
+            return;
+        }
+
+        if (nonJobToggle.checked) {
+            jobHidden.value = '0';
+            jobInput.value = '';
+            jobInput.required = false;
+            jobInput.disabled = true;
+            if (jobSuggestions) {
+                jobSuggestions.classList.add('d-none');
+                jobSuggestions.innerHTML = '';
+            }
+            return;
+        }
+
+        if (jobHidden.value === '0') {
+            jobHidden.value = '';
+        }
+        jobInput.required = true;
+        jobInput.disabled = false;
+    };
+
+    if (nonJobToggle) {
+        nonJobToggle.addEventListener('change', syncNonJobState);
+        syncNonJobState();
+    }
 
     if (!minutesInput || !payRateInput || !totalPaidInput) {
         return;

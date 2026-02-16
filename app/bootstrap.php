@@ -10,6 +10,11 @@ define('VIEW_PATH', APP_PATH . '/Views');
 
 require APP_PATH . '/helpers.php';
 
+$timezone = (string) config('app.timezone', 'UTC');
+if ($timezone === '' || date_default_timezone_set($timezone) === false) {
+    date_default_timezone_set('UTC');
+}
+
 spl_autoload_register(function (string $class): void {
     $prefixes = [
         'App\\' => APP_PATH . '/',

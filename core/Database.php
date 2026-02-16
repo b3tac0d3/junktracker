@@ -4,8 +4,11 @@ declare(strict_types=1);
 
 namespace Core;
 
+use DateTimeImmutable;
+use DateTimeZone;
 use PDO;
 use PDOException;
+use Throwable;
 
 final class Database
 {
@@ -42,6 +45,22 @@ final class Database
             throw new PDOException('Database connection failed: ' . $exception->getMessage());
         }
 
+        $timezone = (string) config('app.timezone', 'UTC');
+        $offset = self::timezoneOffset($timezone);
+        if ($offset !== null) {
+            self::$connection->exec('SET time_zone = ' . self::$connection->quote($offset));
+        }
+
         return self::$connection;
+    }
+
+    private static function timezoneOffset(string $timezone): ?string
+    {
+        try {
+            $zone = new DateTimeZone($timezone);
+            return (new DateTimeImmutable('now', $zone))->format('P');
+        } catch (Throwable) {
+            return null;
+        }
     }
 }

@@ -21,6 +21,7 @@
 
     $jobId = (int) ($entry['job_id'] ?? 0);
     $employeeId = (int) ($entry['employee_id'] ?? 0);
+    $isOpen = $isActive && !empty($entry['start_time']) && empty($entry['end_time']);
 ?>
 <div class="container-fluid px-4">
     <div class="d-flex flex-wrap align-items-center justify-content-between mt-4 mb-3 gap-3">
@@ -34,6 +35,13 @@
         </div>
         <div class="d-flex gap-2">
             <?php if ($isActive): ?>
+                <?php if ($isOpen): ?>
+                    <form method="post" action="<?= url('/time-tracking/' . ($entry['id'] ?? '') . '/punch-out') ?>">
+                        <?= csrf_field() ?>
+                        <input type="hidden" name="return_to" value="<?= e($returnTo) ?>" />
+                        <button class="btn btn-danger" type="submit">Punch Out</button>
+                    </form>
+                <?php endif; ?>
                 <button class="btn btn-danger" type="button" data-bs-toggle="modal" data-bs-target="#deleteTimeEntryModal">
                     <i class="fas fa-trash"></i>
                 </button>
@@ -99,7 +107,7 @@
                                 <?= e((string) ($entry['job_name'] ?? ('Job #' . $jobId))) ?>
                             </a>
                         <?php else: ?>
-                            —
+                            <span class="badge bg-secondary">Non-Job Time</span>
                         <?php endif; ?>
                     </div>
                 </div>

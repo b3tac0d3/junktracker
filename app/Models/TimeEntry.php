@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Models;
 
 use Core\Database;
+use Throwable;
 
 final class TimeEntry
 {
@@ -30,7 +31,10 @@ final class TimeEntry
                        e.created_at,
                        e.updated_at,
                        COALESCE(NULLIF(TRIM(CONCAT_WS(\' \', emp.first_name, emp.last_name)), \'\'), CONCAT(\'Employee #\', emp.id)) AS employee_name,
-                       COALESCE(NULLIF(j.name, \'\'), CONCAT(\'Job #\', j.id)) AS job_name,
+                       CASE
+                           WHEN COALESCE(e.job_id, 0) = 0 THEN \'Non-Job Time\'
+                           ELSE COALESCE(NULLIF(j.name, \'\'), CONCAT(\'Job #\', j.id))
+                       END AS job_name,
                        ' . $paidExpr . ' AS paid_calc
                 FROM employee_time_entries e
                 LEFT JOIN employees emp ON emp.id = e.employee_id
@@ -42,6 +46,102 @@ final class TimeEntry
         $stmt->execute($params);
 
         return $stmt->fetchAll();
+    }
+
+    public static function openEntries(array $filters = []): array
+    {
+        self::ensureTable();
+
+        [$whereSql, $params] = self::buildOpenWhere($filters);
+
+        $sql = 'SELECT e.id,
+                       e.employee_id,
+                       e.job_id,
+                       e.work_date,
+                       e.start_time,
+                       e.pay_rate,
+                       e.note,
+                       COALESCE(NULLIF(TRIM(CONCAT_WS(\' \', emp.first_name, emp.last_name)), \'\'), CONCAT(\'Employee #\', emp.id)) AS employee_name,
+                       CASE
+                           WHEN COALESCE(e.job_id, 0) = 0 THEN \'Non-Job Time\'
+                           ELSE COALESCE(NULLIF(j.name, \'\'), CONCAT(\'Job #\', j.id))
+                       END AS job_name,
+                       GREATEST(
+                           TIMESTAMPDIFF(
+                               MINUTE,
+                               STR_TO_DATE(CONCAT(e.work_date, \' \', e.start_time), \'%Y-%m-%d %H:%i:%s\'),
+                               NOW()
+                           ),
+                           0
+                       ) AS open_minutes,
+                       ROUND(
+                           COALESCE(e.pay_rate, 0) * GREATEST(
+                               TIMESTAMPDIFF(
+                                   MINUTE,
+                                   STR_TO_DATE(CONCAT(e.work_date, \' \', e.start_time), \'%Y-%m-%d %H:%i:%s\'),
+                                   NOW()
+                               ),
+                               0
+                           ) / 60,
+                           2
+                       ) AS open_paid
+                FROM employee_time_entries e
+                LEFT JOIN employees emp ON emp.id = e.employee_id
+                LEFT JOIN jobs j ON j.id = e.job_id
+                WHERE ' . $whereSql . '
+                ORDER BY e.start_time ASC, e.id ASC';
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute($params);
+
+        return $stmt->fetchAll();
+    }
+
+    public static function openSummary(array $filters = []): array
+    {
+        self::ensureTable();
+
+        [$whereSql, $params] = self::buildOpenWhere($filters);
+
+        $sql = 'SELECT
+                    COUNT(*) AS active_count,
+                    COALESCE(SUM(
+                        GREATEST(
+                            TIMESTAMPDIFF(
+                                MINUTE,
+                                STR_TO_DATE(CONCAT(e.work_date, \' \', e.start_time), \'%Y-%m-%d %H:%i:%s\'),
+                                NOW()
+                            ),
+                            0
+                        )
+                    ), 0) AS total_open_minutes,
+                    COALESCE(SUM(
+                        ROUND(
+                            COALESCE(e.pay_rate, 0) * GREATEST(
+                                TIMESTAMPDIFF(
+                                    MINUTE,
+                                    STR_TO_DATE(CONCAT(e.work_date, \' \', e.start_time), \'%Y-%m-%d %H:%i:%s\'),
+                                    NOW()
+                                ),
+                                0
+                            ) / 60,
+                            2
+                        )
+                    ), 0) AS total_open_paid
+                FROM employee_time_entries e
+                LEFT JOIN employees emp ON emp.id = e.employee_id
+                LEFT JOIN jobs j ON j.id = e.job_id
+                WHERE ' . $whereSql;
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute($params);
+        $row = $stmt->fetch();
+
+        return $row ?: [
+            'active_count' => 0,
+            'total_open_minutes' => 0,
+            'total_open_paid' => 0,
+        ];
     }
 
     public static function summary(array $filters): array
@@ -290,7 +390,10 @@ final class TimeEntry
                        e.created_at,
                        e.updated_at,
                        COALESCE(NULLIF(TRIM(CONCAT_WS(\' \', emp.first_name, emp.last_name)), \'\'), CONCAT(\'Employee #\', emp.id)) AS employee_name,
-                       COALESCE(NULLIF(j.name, \'\'), CONCAT(\'Job #\', j.id)) AS job_name,
+                       CASE
+                           WHEN COALESCE(e.job_id, 0) = 0 THEN \'Non-Job Time\'
+                           ELSE COALESCE(NULLIF(j.name, \'\'), CONCAT(\'Job #\', j.id))
+                       END AS job_name,
                        ' . $paidExpr . ' AS paid_calc
                 FROM employee_time_entries e
                 LEFT JOIN employees emp ON emp.id = e.employee_id
@@ -374,6 +477,162 @@ final class TimeEntry
                 WHERE id = :id
                   AND deleted_at IS NULL
                   AND COALESCE(active, 1) = 1';
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute($params);
+    }
+
+    public static function findOpenForEmployee(int $employeeId): ?array
+    {
+        self::ensureTable();
+
+        if ($employeeId <= 0) {
+            return null;
+        }
+
+        $sql = 'SELECT e.id,
+                       e.employee_id,
+                       e.job_id,
+                       e.work_date,
+                       e.start_time,
+                       CASE
+                           WHEN COALESCE(e.job_id, 0) = 0 THEN \'Non-Job Time\'
+                           ELSE COALESCE(NULLIF(j.name, \'\'), CONCAT(\'Job #\', j.id))
+                       END AS job_name
+                FROM employee_time_entries e
+                LEFT JOIN jobs j ON j.id = e.job_id
+                WHERE e.employee_id = :employee_id
+                  AND e.deleted_at IS NULL
+                  AND COALESCE(e.active, 1) = 1
+                  AND e.start_time IS NOT NULL
+                  AND e.end_time IS NULL
+                ORDER BY e.id DESC
+                LIMIT 1';
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute(['employee_id' => $employeeId]);
+        $row = $stmt->fetch();
+
+        return $row ?: null;
+    }
+
+    public static function openEntriesForJob(int $jobId): array
+    {
+        self::ensureTable();
+
+        if ($jobId <= 0) {
+            return [];
+        }
+
+        $sql = 'SELECT e.id,
+                       e.employee_id,
+                       e.job_id,
+                       e.work_date,
+                       e.start_time,
+                       e.note,
+                       COALESCE(NULLIF(TRIM(CONCAT_WS(\' \', emp.first_name, emp.last_name)), \'\'), CONCAT(\'Employee #\', emp.id)) AS employee_name,
+                       GREATEST(
+                           TIMESTAMPDIFF(
+                               MINUTE,
+                               STR_TO_DATE(CONCAT(e.work_date, \' \', e.start_time), \'%Y-%m-%d %H:%i:%s\'),
+                               NOW()
+                           ),
+                           0
+                       ) AS open_minutes
+                FROM employee_time_entries e
+                LEFT JOIN employees emp ON emp.id = e.employee_id
+                WHERE e.job_id = :job_id
+                  AND e.deleted_at IS NULL
+                  AND COALESCE(e.active, 1) = 1
+                  AND e.start_time IS NOT NULL
+                  AND e.end_time IS NULL
+                ORDER BY e.start_time ASC, e.id ASC';
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute(['job_id' => $jobId]);
+
+        return $stmt->fetchAll();
+    }
+
+    public static function openEntriesOutsideJob(int $jobId, array $employeeIds): array
+    {
+        self::ensureTable();
+
+        if ($jobId <= 0 || empty($employeeIds)) {
+            return [];
+        }
+
+        $employeeIds = array_values(array_filter(array_map(static fn (mixed $id): int => (int) $id, $employeeIds), static fn (int $id): bool => $id > 0));
+        if (empty($employeeIds)) {
+            return [];
+        }
+
+        $placeholders = implode(', ', array_fill(0, count($employeeIds), '?'));
+        $sql = 'SELECT e.id,
+                       e.employee_id,
+                       e.job_id,
+                       e.work_date,
+                       e.start_time,
+                       CASE
+                           WHEN COALESCE(e.job_id, 0) = 0 THEN \'Non-Job Time\'
+                           ELSE COALESCE(NULLIF(j.name, \'\'), CONCAT(\'Job #\', j.id))
+                       END AS job_name
+                FROM employee_time_entries e
+                LEFT JOIN jobs j ON j.id = e.job_id
+                WHERE e.job_id <> ?
+                  AND e.employee_id IN (' . $placeholders . ')
+                  AND e.deleted_at IS NULL
+                  AND COALESCE(e.active, 1) = 1
+                  AND e.start_time IS NOT NULL
+                  AND e.end_time IS NULL
+                ORDER BY e.id DESC';
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute(array_merge([$jobId], $employeeIds));
+
+        return $stmt->fetchAll();
+    }
+
+    public static function punchOut(int $id, array $data, ?int $actorId = null): void
+    {
+        self::ensureTable();
+
+        if ($id <= 0) {
+            return;
+        }
+
+        $sets = [
+            'end_time = :end_time',
+            'minutes_worked = :minutes_worked',
+            'pay_rate = :pay_rate',
+            'total_paid = :total_paid',
+            'updated_at = NOW()',
+        ];
+        $params = [
+            'id' => $id,
+            'end_time' => $data['end_time'],
+            'minutes_worked' => $data['minutes_worked'],
+            'pay_rate' => $data['pay_rate'],
+            'total_paid' => $data['total_paid'],
+        ];
+
+        if (array_key_exists('note', $data)) {
+            $sets[] = 'note = :note';
+            $params['note'] = $data['note'];
+        }
+
+        if ($actorId !== null && Schema::hasColumn('employee_time_entries', 'updated_by')) {
+            $sets[] = 'updated_by = :updated_by';
+            $params['updated_by'] = $actorId;
+        }
+
+        $sql = 'UPDATE employee_time_entries
+                SET ' . implode(', ', $sets) . '
+                WHERE id = :id
+                  AND deleted_at IS NULL
+                  AND COALESCE(active, 1) = 1
+                  AND start_time IS NOT NULL
+                  AND end_time IS NULL';
 
         $stmt = Database::connection()->prepare($sql);
         $stmt->execute($params);
@@ -526,7 +785,8 @@ final class TimeEntry
                         OR CAST(e.minutes_worked AS CHAR) LIKE :q
                         OR emp.first_name LIKE :q
                         OR emp.last_name LIKE :q
-                        OR j.name LIKE :q)';
+                        OR j.name LIKE :q
+                        OR (COALESCE(e.job_id, 0) = 0 AND \'Non-Job Time\' LIKE :q))';
             $params['q'] = '%' . $query . '%';
         }
 
@@ -536,10 +796,14 @@ final class TimeEntry
             $params['employee_id'] = $employeeId;
         }
 
-        $jobId = isset($filters['job_id']) ? (int) $filters['job_id'] : 0;
-        if ($jobId > 0) {
-            $where[] = 'e.job_id = :job_id';
-            $params['job_id'] = $jobId;
+        if (array_key_exists('job_id', $filters) && $filters['job_id'] !== null) {
+            $jobId = (int) $filters['job_id'];
+            if ($jobId > 0) {
+                $where[] = 'e.job_id = :job_id';
+                $params['job_id'] = $jobId;
+            } elseif ($jobId === 0) {
+                $where[] = 'COALESCE(e.job_id, 0) = 0';
+            }
         }
 
         $startDate = trim((string) ($filters['start_date'] ?? ''));
@@ -561,6 +825,46 @@ final class TimeEntry
         return [implode(' AND ', $where), $params];
     }
 
+    private static function buildOpenWhere(array $filters): array
+    {
+        $where = [
+            'e.deleted_at IS NULL',
+            'COALESCE(e.active, 1) = 1',
+            'e.start_time IS NOT NULL',
+            'e.end_time IS NULL',
+        ];
+        $params = [];
+
+        $query = trim((string) ($filters['q'] ?? ''));
+        if ($query !== '') {
+            $where[] = '(CAST(e.id AS CHAR) LIKE :q
+                        OR emp.first_name LIKE :q
+                        OR emp.last_name LIKE :q
+                        OR j.name LIKE :q
+                        OR CAST(e.job_id AS CHAR) LIKE :q
+                        OR (COALESCE(e.job_id, 0) = 0 AND \'Non-Job Time\' LIKE :q))';
+            $params['q'] = '%' . $query . '%';
+        }
+
+        $employeeId = isset($filters['employee_id']) ? (int) $filters['employee_id'] : 0;
+        if ($employeeId > 0) {
+            $where[] = 'e.employee_id = :employee_id';
+            $params['employee_id'] = $employeeId;
+        }
+
+        if (array_key_exists('job_id', $filters) && $filters['job_id'] !== null) {
+            $jobId = (int) $filters['job_id'];
+            if ($jobId > 0) {
+                $where[] = 'e.job_id = :job_id';
+                $params['job_id'] = $jobId;
+            } elseif ($jobId === 0) {
+                $where[] = 'COALESCE(e.job_id, 0) = 0';
+            }
+        }
+
+        return [implode(' AND ', $where), $params];
+    }
+
     private static function paidExpression(string $alias): string
     {
         return 'COALESCE(' . $alias . '.total_paid, ROUND(COALESCE(' . $alias . '.pay_rate, 0) * COALESCE(' . $alias . '.minutes_worked, 0) / 60, 2), 0)';
@@ -577,7 +881,7 @@ final class TimeEntry
             'CREATE TABLE IF NOT EXISTS employee_time_entries (
                 id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
                 employee_id BIGINT UNSIGNED NOT NULL,
-                job_id BIGINT UNSIGNED NOT NULL,
+                job_id BIGINT UNSIGNED NULL,
                 work_date DATE NOT NULL,
                 start_time TIME NULL,
                 end_time TIME NULL,
@@ -595,6 +899,26 @@ final class TimeEntry
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci'
         );
 
+        self::ensureNullableJobId();
         $ensured = true;
+    }
+
+    private static function ensureNullableJobId(): void
+    {
+        static $checked = false;
+        if ($checked) {
+            return;
+        }
+        $checked = true;
+
+        if (!Schema::hasColumn('employee_time_entries', 'job_id')) {
+            return;
+        }
+
+        try {
+            Database::connection()->exec('ALTER TABLE employee_time_entries MODIFY job_id BIGINT UNSIGNED NULL');
+        } catch (Throwable) {
+            // Keep runtime resilient when table is managed externally.
+        }
     }
 }

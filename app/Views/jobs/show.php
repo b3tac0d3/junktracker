@@ -19,6 +19,9 @@
     $timeTotalMinutes = (int) ($timeSummary['total_minutes'] ?? 0);
     $timeTotalPaid = (float) ($timeSummary['total_paid'] ?? 0);
     $timeEntryCount = (int) ($timeSummary['entry_count'] ?? 0);
+    $crewEmployees = $crewEmployees ?? [];
+    $openByEmployee = $openByEmployee ?? [];
+    $openElsewhereByEmployee = $openElsewhereByEmployee ?? [];
     $isDeleted = !empty($job['deleted_at']) || (isset($job['active']) && (int) $job['active'] === 0);
 
     $formatTime = static function (?string $value): string {
@@ -28,6 +31,16 @@
 
         $time = strtotime($value);
         return $time === false ? $value : date('g:i A', $time);
+    };
+
+    $formatMinutes = static function (int $minutes): string {
+        if ($minutes <= 0) {
+            return '0h 00m';
+        }
+
+        $hours = intdiv($minutes, 60);
+        $remaining = $minutes % 60;
+        return $hours . 'h ' . str_pad((string) $remaining, 2, '0', STR_PAD_LEFT) . 'm';
     };
 ?>
 <div class="container-fluid px-4">
@@ -378,6 +391,137 @@
                             </tbody>
                         </table>
                     </div>
+                </div>
+            </div>
+
+            <div class="card mb-4">
+                <div class="card-header">
+                    <i class="fas fa-user-clock me-1"></i>
+                    Crew Punch
+                </div>
+                <div class="card-body">
+                    <input type="hidden" id="job_crew_lookup_url" value="<?= e(url('/jobs/' . ($job['id'] ?? '') . '/crew/lookup')) ?>" />
+                    <form class="mb-3" method="post" action="<?= url('/jobs/' . ($job['id'] ?? '') . '/crew/add') ?>">
+                        <?= csrf_field() ?>
+                        <div class="row g-2 align-items-end">
+                            <div class="col-12 col-lg-9 position-relative">
+                                <label class="form-label mb-1">Add Crew Member</label>
+                                <input
+                                    class="form-control"
+                                    id="job_crew_search"
+                                    name="crew_search"
+                                    type="text"
+                                    placeholder="Search employee by name, email, phone..."
+                                    autocomplete="off"
+                                />
+                                <input type="hidden" id="job_crew_employee_id" name="employee_id" />
+                                <div id="job_crew_suggestions" class="list-group position-absolute w-100 d-none" style="z-index: 1050;"></div>
+                            </div>
+                            <div class="col-12 col-lg-3">
+                                <button class="btn btn-primary w-100" type="submit">
+                                    <i class="fas fa-user-plus me-1"></i>
+                                    Add To Crew
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+
+                    <?php if (empty($crewEmployees)): ?>
+                        <div class="text-muted">No crew members added yet.</div>
+                    <?php else: ?>
+                        <div class="table-responsive">
+                            <table class="table table-striped table-hover align-middle mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Employee</th>
+                                        <th>Status</th>
+                                        <th>Elapsed</th>
+                                        <th class="text-end">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php foreach ($crewEmployees as $employee): ?>
+                                        <?php
+                                            $employeeId = (int) ($employee['employee_id'] ?? 0);
+                                            $employeeName = (string) ($employee['employee_name'] ?? ('Employee #' . $employeeId));
+                                            $currentOpen = $employeeId > 0 ? ($openByEmployee[$employeeId] ?? null) : null;
+                                            $otherOpen = $employeeId > 0 ? ($openElsewhereByEmployee[$employeeId] ?? null) : null;
+                                        ?>
+                                        <tr>
+                                            <td>
+                                                <div class="fw-semibold"><?= e($employeeName) ?></div>
+                                                <?php if (!empty($employee['phone']) || !empty($employee['email'])): ?>
+                                                    <small class="text-muted">
+                                                        <?= e(!empty($employee['phone']) ? format_phone((string) $employee['phone']) : '') ?>
+                                                        <?php if (!empty($employee['phone']) && !empty($employee['email'])): ?> • <?php endif; ?>
+                                                        <?= e((string) (!empty($employee['email']) ? $employee['email'] : '')) ?>
+                                                    </small>
+                                                <?php endif; ?>
+                                            </td>
+                                            <td>
+                                                <?php if ($currentOpen): ?>
+                                                    <span class="badge bg-success">On Clock</span>
+                                                    <span class="small text-muted ms-2">
+                                                        since <?= e($formatTime((string) ($currentOpen['start_time'] ?? ''))) ?>
+                                                    </span>
+                                                <?php elseif ($otherOpen): ?>
+                                                    <span class="badge bg-warning text-dark"><?= !empty($otherOpen['job_id']) ? 'On Other Job' : 'On Non-Job Time' ?></span>
+                                                    <?php if (!empty($otherOpen['job_id'])): ?>
+                                                        <a class="small text-decoration-none ms-2" href="<?= url('/jobs/' . (int) $otherOpen['job_id']) ?>">
+                                                            View Job #<?= e((string) $otherOpen['job_id']) ?>
+                                                        </a>
+                                                    <?php endif; ?>
+                                                <?php else: ?>
+                                                    <span class="badge bg-secondary">Punched Out</span>
+                                                <?php endif; ?>
+                                            </td>
+                                            <td>
+                                                <?php if ($currentOpen): ?>
+                                                    <?= e($formatMinutes((int) ($currentOpen['open_minutes'] ?? 0))) ?>
+                                                <?php else: ?>
+                                                    —
+                                                <?php endif; ?>
+                                            </td>
+                                            <td class="text-end">
+                                                <?php if (!$currentOpen && !$otherOpen): ?>
+                                                    <form class="d-inline" method="post" action="<?= url('/jobs/' . ($job['id'] ?? '') . '/crew/' . $employeeId . '/remove') ?>">
+                                                        <?= csrf_field() ?>
+                                                        <button class="btn btn-sm btn-outline-danger" type="submit" title="Remove from crew" aria-label="Remove from crew">
+                                                            <i class="fas fa-user-minus"></i>
+                                                        </button>
+                                                    </form>
+                                                <?php endif; ?>
+                                                <?php if ($currentOpen): ?>
+                                                    <form class="d-inline" method="post" action="<?= url('/jobs/' . ($job['id'] ?? '') . '/time/punch-out') ?>">
+                                                        <?= csrf_field() ?>
+                                                        <input type="hidden" name="time_entry_id" value="<?= e((string) ($currentOpen['id'] ?? '')) ?>" />
+                                                        <button class="btn btn-sm btn-danger" type="submit">
+                                                            <i class="fas fa-stop-circle me-1"></i>
+                                                            Punch Out
+                                                        </button>
+                                                    </form>
+                                                <?php elseif ($otherOpen): ?>
+                                                    <button class="btn btn-sm btn-outline-secondary" type="button" disabled>
+                                                        <i class="fas fa-lock me-1"></i>
+                                                        Busy
+                                                    </button>
+                                                <?php else: ?>
+                                                    <form class="d-inline" method="post" action="<?= url('/jobs/' . ($job['id'] ?? '') . '/time/punch-in') ?>">
+                                                        <?= csrf_field() ?>
+                                                        <input type="hidden" name="employee_id" value="<?= e((string) $employeeId) ?>" />
+                                                        <button class="btn btn-sm btn-success" type="submit">
+                                                            <i class="fas fa-play-circle me-1"></i>
+                                                            Punch In
+                                                        </button>
+                                                    </form>
+                                                <?php endif; ?>
+                                            </td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    <?php endif; ?>
                 </div>
             </div>
             <div class="card mb-4">

@@ -1170,6 +1170,190 @@ final class Job
         return $stmt->fetchAll();
     }
 
+    public static function crewMembers(int $jobId): array
+    {
+        self::ensureCrewTable();
+
+        $sql = 'SELECT jc.id,
+                       jc.job_id,
+                       jc.employee_id,
+                       COALESCE(NULLIF(TRIM(CONCAT_WS(\' \', e.first_name, e.last_name)), \'\'), CONCAT(\'Employee #\', e.id)) AS employee_name,
+                       e.email,
+                       e.phone
+                FROM job_crew jc
+                INNER JOIN employees e ON e.id = jc.employee_id
+                WHERE jc.job_id = :job_id
+                  AND jc.deleted_at IS NULL
+                  AND COALESCE(jc.active, 1) = 1
+                  AND e.deleted_at IS NULL
+                  AND COALESCE(e.active, 1) = 1
+                ORDER BY employee_name ASC';
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute(['job_id' => $jobId]);
+
+        return $stmt->fetchAll();
+    }
+
+    public static function searchCrewCandidates(int $jobId, string $term, int $limit = 10): array
+    {
+        self::ensureCrewTable();
+
+        $term = trim($term);
+        if ($jobId <= 0 || $term === '') {
+            return [];
+        }
+
+        $limit = max(1, min($limit, 25));
+
+        $sql = 'SELECT e.id,
+                       COALESCE(NULLIF(TRIM(CONCAT_WS(\' \', e.first_name, e.last_name)), \'\'), CONCAT(\'Employee #\', e.id)) AS name,
+                       e.email,
+                       e.phone
+                FROM employees e
+                WHERE e.deleted_at IS NULL
+                  AND COALESCE(e.active, 1) = 1
+                  AND (
+                        e.first_name LIKE :term
+                        OR e.last_name LIKE :term
+                        OR CONCAT_WS(\' \', e.first_name, e.last_name) LIKE :term
+                        OR e.email LIKE :term
+                        OR e.phone LIKE :term
+                        OR CAST(e.id AS CHAR) LIKE :term
+                      )
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM job_crew jc
+                      WHERE jc.job_id = :job_id
+                        AND jc.employee_id = e.id
+                        AND jc.deleted_at IS NULL
+                        AND COALESCE(jc.active, 1) = 1
+                  )
+                ORDER BY name ASC
+                LIMIT ' . $limit;
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute([
+            'job_id' => $jobId,
+            'term' => '%' . $term . '%',
+        ]);
+
+        return $stmt->fetchAll();
+    }
+
+    public static function isCrewMember(int $jobId, int $employeeId): bool
+    {
+        self::ensureCrewTable();
+
+        if ($jobId <= 0 || $employeeId <= 0) {
+            return false;
+        }
+
+        $sql = 'SELECT 1
+                FROM job_crew
+                WHERE job_id = :job_id
+                  AND employee_id = :employee_id
+                  AND deleted_at IS NULL
+                  AND COALESCE(active, 1) = 1
+                LIMIT 1';
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute([
+            'job_id' => $jobId,
+            'employee_id' => $employeeId,
+        ]);
+
+        return (bool) $stmt->fetchColumn();
+    }
+
+    public static function addCrewMember(int $jobId, int $employeeId, ?int $actorId = null): void
+    {
+        self::ensureCrewTable();
+
+        $updateSets = [
+            'active = 1',
+            'deleted_at = NULL',
+            'updated_at = NOW()',
+        ];
+        $updateParams = [
+            'job_id' => $jobId,
+            'employee_id' => $employeeId,
+        ];
+        if ($actorId !== null && Schema::hasColumn('job_crew', 'updated_by')) {
+            $updateSets[] = 'updated_by = :updated_by';
+            $updateParams['updated_by'] = $actorId;
+        }
+
+        $updateSql = 'UPDATE job_crew
+                      SET ' . implode(', ', $updateSets) . '
+                      WHERE job_id = :job_id
+                        AND employee_id = :employee_id';
+        $updateStmt = Database::connection()->prepare($updateSql);
+        $updateStmt->execute($updateParams);
+
+        if ($updateStmt->rowCount() > 0) {
+            return;
+        }
+
+        $columns = ['job_id', 'employee_id', 'active', 'created_at', 'updated_at'];
+        $values = [':job_id', ':employee_id', '1', 'NOW()', 'NOW()'];
+        $params = [
+            'job_id' => $jobId,
+            'employee_id' => $employeeId,
+        ];
+
+        if ($actorId !== null && Schema::hasColumn('job_crew', 'created_by')) {
+            $columns[] = 'created_by';
+            $values[] = ':created_by';
+            $params['created_by'] = $actorId;
+        }
+        if ($actorId !== null && Schema::hasColumn('job_crew', 'updated_by')) {
+            $columns[] = 'updated_by';
+            $values[] = ':updated_by';
+            $params['updated_by'] = $actorId;
+        }
+
+        $sql = 'INSERT INTO job_crew (' . implode(', ', $columns) . ')
+                VALUES (' . implode(', ', $values) . ')';
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute($params);
+    }
+
+    public static function removeCrewMember(int $jobId, int $employeeId, ?int $actorId = null): void
+    {
+        self::ensureCrewTable();
+
+        $sets = [
+            'active = 0',
+            'deleted_at = COALESCE(deleted_at, NOW())',
+            'updated_at = NOW()',
+        ];
+        $params = [
+            'job_id' => $jobId,
+            'employee_id' => $employeeId,
+        ];
+
+        if ($actorId !== null && Schema::hasColumn('job_crew', 'updated_by')) {
+            $sets[] = 'updated_by = :updated_by';
+            $params['updated_by'] = $actorId;
+        }
+        if ($actorId !== null && Schema::hasColumn('job_crew', 'deleted_by')) {
+            $sets[] = 'deleted_by = COALESCE(deleted_by, :deleted_by)';
+            $params['deleted_by'] = $actorId;
+        }
+
+        $sql = 'UPDATE job_crew
+                SET ' . implode(', ', $sets) . '
+                WHERE job_id = :job_id
+                  AND employee_id = :employee_id
+                  AND deleted_at IS NULL
+                  AND COALESCE(active, 1) = 1';
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute($params);
+    }
+
     public static function summary(int $jobId): array
     {
         $sql = 'SELECT
@@ -1203,5 +1387,30 @@ final class Job
             'disposal_total' => 0,
             'action_count' => 0,
         ];
+    }
+
+    private static function ensureCrewTable(): void
+    {
+        static $ensured = false;
+        if ($ensured) {
+            return;
+        }
+
+        Database::connection()->exec(
+            'CREATE TABLE IF NOT EXISTS job_crew (
+                id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+                job_id BIGINT UNSIGNED NOT NULL,
+                employee_id BIGINT UNSIGNED NOT NULL,
+                active TINYINT(1) NOT NULL DEFAULT 1,
+                deleted_at DATETIME NULL,
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                PRIMARY KEY (id),
+                UNIQUE KEY uniq_job_crew_member (job_id, employee_id),
+                KEY idx_job_crew_employee (employee_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci'
+        );
+
+        $ensured = true;
     }
 }
