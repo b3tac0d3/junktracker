@@ -44,6 +44,15 @@ final class GlobalSearch
 
         self::appendSection(
             $sections,
+            'consignors',
+            'Consignors',
+            'fas fa-handshake',
+            self::mapConsignors(self::safe(static fn (): array => Consignor::search($query, 'active'))),
+            $limitPerType
+        );
+
+        self::appendSection(
+            $sections,
             'companies',
             'Companies',
             'fas fa-building',
@@ -272,6 +281,41 @@ final class GlobalSearch
                 'title' => $title,
                 'meta' => self::joinMeta($location, trim((string) ($row['phone'] ?? ''))),
                 'url' => '/companies/' . $id,
+            ];
+        }
+
+        return $items;
+    }
+
+    private static function mapConsignors(array $rows): array
+    {
+        $items = [];
+        foreach ($rows as $row) {
+            $id = (int) ($row['id'] ?? 0);
+            if ($id <= 0) {
+                continue;
+            }
+
+            $title = trim((string) ($row['display_name'] ?? ''));
+            if ($title === '') {
+                $title = 'Consignor #' . $id;
+            }
+
+            $location = self::joinMeta(trim((string) ($row['city'] ?? '')), trim((string) ($row['state'] ?? '')));
+            $estimate = isset($row['inventory_estimate_amount']) && $row['inventory_estimate_amount'] !== null
+                ? ('$' . number_format((float) $row['inventory_estimate_amount'], 2))
+                : '';
+            $consignorNumber = trim((string) ($row['consignor_number'] ?? ''));
+            $schedule = trim((string) ($row['payment_schedule'] ?? ''));
+            $nextDue = trim((string) ($row['next_payment_due_date'] ?? ''));
+            $scheduleText = $schedule !== '' ? ('Schedule: ' . ucfirst($schedule)) : '';
+            $dueText = $nextDue !== '' ? ('Next Due: ' . $nextDue) : '';
+            $numberText = $consignorNumber !== '' ? ('#: ' . $consignorNumber) : '';
+
+            $items[] = [
+                'title' => $title,
+                'meta' => self::joinMeta(trim((string) ($row['phone'] ?? '')), trim((string) ($row['email'] ?? '')), $location, $numberText, $scheduleText, $dueText, $estimate !== '' ? 'Est: ' . $estimate : ''),
+                'url' => '/consignors/' . $id,
             ];
         }
 

@@ -8,6 +8,8 @@
         default => 'bg-warning text-dark',
     };
     $isActive = empty($task['deleted_at']);
+    $isCompleted = $status === 'closed';
+    $returnTo = '/tasks/' . (string) ($task['id'] ?? '');
 ?>
 <div class="container-fluid px-4">
     <div class="d-flex flex-wrap align-items-center justify-content-between mt-4 mb-3 gap-3">
@@ -20,6 +22,17 @@
             </ol>
         </div>
         <div class="d-flex gap-2">
+            <?php if ($isActive): ?>
+                <form method="post" action="<?= url('/tasks/' . ($task['id'] ?? '') . '/toggle-complete') ?>">
+                    <?= csrf_field() ?>
+                    <input type="hidden" name="return_to" value="<?= e($returnTo) ?>" />
+                    <input type="hidden" name="is_completed" value="<?= $isCompleted ? '0' : '1' ?>" />
+                    <button class="btn <?= $isCompleted ? 'btn-outline-success' : 'btn-success' ?>" type="submit">
+                        <i class="fas fa-check-circle me-1"></i>
+                        <?= $isCompleted ? 'Mark Active' : 'Mark Complete' ?>
+                    </button>
+                </form>
+            <?php endif; ?>
             <?php if ($isActive): ?>
                 <button class="btn btn-danger" type="button" data-bs-toggle="modal" data-bs-target="#deleteTaskModal">
                     <i class="fas fa-trash me-1"></i>
@@ -48,9 +61,9 @@
         </div>
         <div class="card-body">
             <div class="row g-3">
-                <div class="col-md-8">
+                <div class="col-md-6">
                     <div class="text-muted small">Title</div>
-                    <div class="fw-semibold"><?= e((string) ($task['title'] ?? '')) ?></div>
+                    <div class="fw-semibold <?= $isCompleted ? 'text-muted text-decoration-line-through' : '' ?>"><?= e((string) ($task['title'] ?? '')) ?></div>
                 </div>
                 <div class="col-md-2">
                     <div class="text-muted small">Status</div>
@@ -59,6 +72,28 @@
                 <div class="col-md-2">
                     <div class="text-muted small">Priority</div>
                     <div class="fw-semibold"><?= e((string) ($task['importance'] ?? '3')) ?></div>
+                </div>
+                <div class="col-md-2">
+                    <div class="text-muted small">Completed</div>
+                    <div class="fw-semibold">
+                        <?php if ($isActive): ?>
+                            <form method="post" action="<?= url('/tasks/' . ($task['id'] ?? '') . '/toggle-complete') ?>">
+                                <?= csrf_field() ?>
+                                <input type="hidden" name="return_to" value="<?= e($returnTo) ?>" />
+                                <input type="hidden" name="is_completed" value="0" />
+                                <input
+                                    class="form-check-input"
+                                    type="checkbox"
+                                    name="is_completed"
+                                    value="1"
+                                    <?= $isCompleted ? 'checked' : '' ?>
+                                    onchange="this.form.submit()"
+                                />
+                            </form>
+                        <?php else: ?>
+                            <?= $isCompleted ? 'Yes' : 'No' ?>
+                        <?php endif; ?>
+                    </div>
                 </div>
 
                 <div class="col-md-4">

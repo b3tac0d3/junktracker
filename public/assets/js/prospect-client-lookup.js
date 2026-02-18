@@ -23,6 +23,8 @@ window.addEventListener('DOMContentLoaded', () => {
         return;
     }
     const clientCreateUrl = clientCreateInput ? (clientCreateInput.value || '') : '';
+    const form = clientInput.closest('form');
+    const csrfInput = form ? form.querySelector('input[name="csrf_token"]') : null;
     const modal = window.bootstrap && modalEl ? new window.bootstrap.Modal(modalEl) : null;
     const canQuickCreate = Boolean(
         clientCreateUrl
@@ -209,7 +211,6 @@ window.addEventListener('DOMContentLoaded', () => {
         errorBox.classList.add('d-none');
         errorBox.textContent = '';
 
-        const csrfInput = document.querySelector('input[name="csrf_token"]');
         const csrfToken = csrfInput ? csrfInput.value : '';
 
         const originalLabel = saveBtn.textContent;
@@ -235,8 +236,10 @@ window.addEventListener('DOMContentLoaded', () => {
             });
 
             const result = await response.json();
-            if (result && result.csrf_token && csrfInput) {
-                csrfInput.value = result.csrf_token;
+            if (result && result.csrf_token) {
+                document.querySelectorAll('input[name="csrf_token"]').forEach((input) => {
+                    input.value = result.csrf_token;
+                });
             }
             if (!response.ok || !result || !result.ok || !result.client) {
                 const message = result && result.message ? result.message : 'Unable to save client.';

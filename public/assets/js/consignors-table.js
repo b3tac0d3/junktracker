@@ -1,5 +1,5 @@
 window.addEventListener('DOMContentLoaded', () => {
-    const table = document.querySelector('#tasksTable');
+    const table = document.querySelector('#consignorsTable');
     if (!table || typeof simpleDatatables === 'undefined') {
         return;
     }
@@ -9,7 +9,7 @@ window.addEventListener('DOMContentLoaded', () => {
         perPage: 25,
         perPageSelect: [10, 25, 50, 100],
         columns: [
-            { select: 1, sort: 'desc' },
+            { select: 0, sort: 'desc' },
         ],
     });
 
@@ -34,7 +34,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
             row.style.cursor = 'pointer';
             row.addEventListener('click', (event) => {
-                if (event.target.closest('a, button, input, label')) {
+                if (event.target.closest('a, button, input, label, form')) {
                     return;
                 }
                 window.location.href = href;

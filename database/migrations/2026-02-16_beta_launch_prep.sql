@@ -49,3 +49,251 @@ CREATE TABLE IF NOT EXISTS job_crew (
     UNIQUE KEY uniq_job_crew_member (job_id, employee_id),
     KEY idx_job_crew_employee (employee_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 3) User action log for settings/activity screens
+CREATE TABLE IF NOT EXISTS user_actions (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    user_id BIGINT UNSIGNED NOT NULL,
+    action_key VARCHAR(80) NOT NULL,
+    entity_table VARCHAR(80) DEFAULT NULL,
+    entity_id BIGINT UNSIGNED DEFAULT NULL,
+    summary VARCHAR(255) NOT NULL,
+    details TEXT DEFAULT NULL,
+    ip_address VARCHAR(45) DEFAULT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY idx_user_actions_user_created (user_id, created_at),
+    KEY idx_user_actions_entity (entity_table, entity_id),
+    KEY idx_user_actions_action_key (action_key),
+    CONSTRAINT fk_user_actions_user
+        FOREIGN KEY (user_id) REFERENCES users (id)
+        ON UPDATE CASCADE
+        ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 4) Client contacts log
+CREATE TABLE IF NOT EXISTS client_contacts (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    client_id BIGINT UNSIGNED NOT NULL,
+    link_type VARCHAR(30) NOT NULL DEFAULT 'general',
+    link_id BIGINT UNSIGNED NULL,
+    contact_method VARCHAR(20) NOT NULL DEFAULT 'call',
+    direction VARCHAR(10) NOT NULL DEFAULT 'outbound',
+    subject VARCHAR(150) NULL,
+    notes TEXT NULL,
+    contacted_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    follow_up_at DATETIME NULL,
+    created_by BIGINT UNSIGNED NULL,
+    updated_by BIGINT UNSIGNED NULL,
+    deleted_by BIGINT UNSIGNED NULL,
+    active TINYINT(1) NOT NULL DEFAULT 1,
+    deleted_at DATETIME NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY idx_client_contacts_client_date (client_id, contacted_at),
+    KEY idx_client_contacts_link (link_type, link_id),
+    KEY idx_client_contacts_method (contact_method),
+    KEY idx_client_contacts_active (active, deleted_at),
+    KEY idx_client_contacts_created_by (created_by),
+    KEY idx_client_contacts_updated_by (updated_by),
+    KEY idx_client_contacts_deleted_by (deleted_by),
+    CONSTRAINT fk_client_contacts_client
+        FOREIGN KEY (client_id) REFERENCES clients(id)
+        ON UPDATE CASCADE ON DELETE RESTRICT,
+    CONSTRAINT fk_client_contacts_created_by
+        FOREIGN KEY (created_by) REFERENCES users(id)
+        ON UPDATE CASCADE ON DELETE SET NULL,
+    CONSTRAINT fk_client_contacts_updated_by
+        FOREIGN KEY (updated_by) REFERENCES users(id)
+        ON UPDATE CASCADE ON DELETE SET NULL,
+    CONSTRAINT fk_client_contacts_deleted_by
+        FOREIGN KEY (deleted_by) REFERENCES users(id)
+        ON UPDATE CASCADE ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 5) Consignors + contracts + payouts + contacts
+CREATE TABLE IF NOT EXISTS consignors (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    first_name VARCHAR(80) NULL,
+    last_name VARCHAR(80) NULL,
+    business_name VARCHAR(150) NULL,
+    phone VARCHAR(30) NULL,
+    email VARCHAR(255) NULL,
+    address_1 VARCHAR(150) NULL,
+    address_2 VARCHAR(150) NULL,
+    city VARCHAR(80) NULL,
+    state VARCHAR(2) NULL,
+    zip VARCHAR(12) NULL,
+    consignor_number VARCHAR(40) NULL,
+    consignment_start_date DATE NULL,
+    consignment_end_date DATE NULL,
+    payment_schedule VARCHAR(20) NULL,
+    next_payment_due_date DATE NULL,
+    inventory_estimate_amount DECIMAL(12,2) NULL,
+    inventory_description TEXT NULL,
+    note TEXT NULL,
+    active TINYINT(1) NOT NULL DEFAULT 1,
+    deleted_at DATETIME NULL,
+    created_by BIGINT UNSIGNED NULL,
+    updated_by BIGINT UNSIGNED NULL,
+    deleted_by BIGINT UNSIGNED NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uniq_consignors_number (consignor_number),
+    KEY idx_consignors_name (last_name, first_name, business_name),
+    KEY idx_consignors_active (active, deleted_at),
+    KEY idx_consignors_next_payment_due (next_payment_due_date),
+    KEY idx_consignors_created_by (created_by),
+    KEY idx_consignors_updated_by (updated_by),
+    KEY idx_consignors_deleted_by (deleted_by),
+    CONSTRAINT fk_consignors_created_by
+        FOREIGN KEY (created_by) REFERENCES users(id)
+        ON UPDATE CASCADE ON DELETE SET NULL,
+    CONSTRAINT fk_consignors_updated_by
+        FOREIGN KEY (updated_by) REFERENCES users(id)
+        ON UPDATE CASCADE ON DELETE SET NULL,
+    CONSTRAINT fk_consignors_deleted_by
+        FOREIGN KEY (deleted_by) REFERENCES users(id)
+        ON UPDATE CASCADE ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+ALTER TABLE consignors
+    ADD COLUMN IF NOT EXISTS consignor_number VARCHAR(40) NULL AFTER zip,
+    ADD COLUMN IF NOT EXISTS consignment_start_date DATE NULL AFTER consignor_number,
+    ADD COLUMN IF NOT EXISTS consignment_end_date DATE NULL AFTER consignment_start_date,
+    ADD COLUMN IF NOT EXISTS payment_schedule VARCHAR(20) NULL AFTER consignment_end_date,
+    ADD COLUMN IF NOT EXISTS next_payment_due_date DATE NULL AFTER payment_schedule;
+
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_consignors_number ON consignors (consignor_number);
+CREATE INDEX IF NOT EXISTS idx_consignors_next_payment_due ON consignors (next_payment_due_date);
+
+CREATE TABLE IF NOT EXISTS consignor_contacts (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    consignor_id BIGINT UNSIGNED NOT NULL,
+    link_type VARCHAR(30) NOT NULL DEFAULT 'general',
+    link_id BIGINT UNSIGNED NULL,
+    contact_method VARCHAR(20) NOT NULL DEFAULT 'call',
+    direction VARCHAR(10) NOT NULL DEFAULT 'outbound',
+    subject VARCHAR(150) NULL,
+    notes TEXT NULL,
+    contacted_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    follow_up_at DATETIME NULL,
+    active TINYINT(1) NOT NULL DEFAULT 1,
+    deleted_at DATETIME NULL,
+    created_by BIGINT UNSIGNED NULL,
+    updated_by BIGINT UNSIGNED NULL,
+    deleted_by BIGINT UNSIGNED NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY idx_consignor_contacts_consignor_date (consignor_id, contacted_at),
+    KEY idx_consignor_contacts_link (link_type, link_id),
+    KEY idx_consignor_contacts_active (active, deleted_at),
+    KEY idx_consignor_contacts_created_by (created_by),
+    KEY idx_consignor_contacts_updated_by (updated_by),
+    KEY idx_consignor_contacts_deleted_by (deleted_by),
+    CONSTRAINT fk_consignor_contacts_consignor
+        FOREIGN KEY (consignor_id) REFERENCES consignors(id)
+        ON UPDATE CASCADE ON DELETE RESTRICT,
+    CONSTRAINT fk_consignor_contacts_created_by
+        FOREIGN KEY (created_by) REFERENCES users(id)
+        ON UPDATE CASCADE ON DELETE SET NULL,
+    CONSTRAINT fk_consignor_contacts_updated_by
+        FOREIGN KEY (updated_by) REFERENCES users(id)
+        ON UPDATE CASCADE ON DELETE SET NULL,
+    CONSTRAINT fk_consignor_contacts_deleted_by
+        FOREIGN KEY (deleted_by) REFERENCES users(id)
+        ON UPDATE CASCADE ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS consignor_contracts (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    consignor_id BIGINT UNSIGNED NOT NULL,
+    contract_title VARCHAR(150) NOT NULL,
+    original_file_name VARCHAR(255) NOT NULL,
+    stored_file_name VARCHAR(255) NOT NULL,
+    storage_path VARCHAR(500) NOT NULL,
+    mime_type VARCHAR(120) NULL,
+    file_size BIGINT UNSIGNED NULL,
+    contract_signed_at DATE NULL,
+    expires_at DATE NULL,
+    notes TEXT NULL,
+    active TINYINT(1) NOT NULL DEFAULT 1,
+    deleted_at DATETIME NULL,
+    created_by BIGINT UNSIGNED NULL,
+    updated_by BIGINT UNSIGNED NULL,
+    deleted_by BIGINT UNSIGNED NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY idx_consignor_contracts_consignor (consignor_id),
+    KEY idx_consignor_contracts_active (active, deleted_at),
+    KEY idx_consignor_contracts_created_by (created_by),
+    KEY idx_consignor_contracts_updated_by (updated_by),
+    KEY idx_consignor_contracts_deleted_by (deleted_by),
+    CONSTRAINT fk_consignor_contracts_consignor
+        FOREIGN KEY (consignor_id) REFERENCES consignors(id)
+        ON UPDATE CASCADE ON DELETE RESTRICT,
+    CONSTRAINT fk_consignor_contracts_created_by
+        FOREIGN KEY (created_by) REFERENCES users(id)
+        ON UPDATE CASCADE ON DELETE SET NULL,
+    CONSTRAINT fk_consignor_contracts_updated_by
+        FOREIGN KEY (updated_by) REFERENCES users(id)
+        ON UPDATE CASCADE ON DELETE SET NULL,
+    CONSTRAINT fk_consignor_contracts_deleted_by
+        FOREIGN KEY (deleted_by) REFERENCES users(id)
+        ON UPDATE CASCADE ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS consignor_payouts (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    consignor_id BIGINT UNSIGNED NOT NULL,
+    payout_date DATE NOT NULL,
+    amount DECIMAL(12,2) NOT NULL,
+    estimate_amount DECIMAL(12,2) NULL,
+    payout_method VARCHAR(30) NOT NULL DEFAULT 'other',
+    reference_no VARCHAR(80) NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'paid',
+    notes TEXT NULL,
+    active TINYINT(1) NOT NULL DEFAULT 1,
+    deleted_at DATETIME NULL,
+    created_by BIGINT UNSIGNED NULL,
+    updated_by BIGINT UNSIGNED NULL,
+    deleted_by BIGINT UNSIGNED NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY idx_consignor_payouts_consignor_date (consignor_id, payout_date),
+    KEY idx_consignor_payouts_status (status),
+    KEY idx_consignor_payouts_active (active, deleted_at),
+    KEY idx_consignor_payouts_created_by (created_by),
+    KEY idx_consignor_payouts_updated_by (updated_by),
+    KEY idx_consignor_payouts_deleted_by (deleted_by),
+    CONSTRAINT fk_consignor_payouts_consignor
+        FOREIGN KEY (consignor_id) REFERENCES consignors(id)
+        ON UPDATE CASCADE ON DELETE RESTRICT,
+    CONSTRAINT fk_consignor_payouts_created_by
+        FOREIGN KEY (created_by) REFERENCES users(id)
+        ON UPDATE CASCADE ON DELETE SET NULL,
+    CONSTRAINT fk_consignor_payouts_updated_by
+        FOREIGN KEY (updated_by) REFERENCES users(id)
+        ON UPDATE CASCADE ON DELETE SET NULL,
+    CONSTRAINT fk_consignor_payouts_deleted_by
+        FOREIGN KEY (deleted_by) REFERENCES users(id)
+        ON UPDATE CASCADE ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 6) User auth hardening: invite-password + email 2FA columns
+ALTER TABLE users
+    ADD COLUMN IF NOT EXISTS password_setup_token_hash VARCHAR(255) NULL AFTER password_hash,
+    ADD COLUMN IF NOT EXISTS password_setup_expires_at DATETIME NULL AFTER password_setup_token_hash,
+    ADD COLUMN IF NOT EXISTS password_setup_sent_at DATETIME NULL AFTER password_setup_expires_at,
+    ADD COLUMN IF NOT EXISTS password_setup_used_at DATETIME NULL AFTER password_setup_sent_at,
+    ADD COLUMN IF NOT EXISTS two_factor_code_hash VARCHAR(255) NULL AFTER password_setup_used_at,
+    ADD COLUMN IF NOT EXISTS two_factor_expires_at DATETIME NULL AFTER two_factor_code_hash,
+    ADD COLUMN IF NOT EXISTS two_factor_sent_at DATETIME NULL AFTER two_factor_expires_at,
+    ADD COLUMN IF NOT EXISTS last_2fa_at DATETIME NULL AFTER two_factor_sent_at;
+
+CREATE INDEX IF NOT EXISTS idx_users_password_setup_expires ON users (password_setup_expires_at);

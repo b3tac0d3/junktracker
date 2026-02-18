@@ -8,6 +8,12 @@
     $payRate = $employee['hourly_rate'] ?? ($employee['wage_rate'] ?? null);
     $isActive = empty($employee['deleted_at']) && !empty($employee['active']);
     $laborSummary = $laborSummary ?? [];
+    $openClockEntry = $openClockEntry ?? null;
+    $openClockElapsed = $openClockElapsed ?? null;
+    $openClockSince = '—';
+    if (!empty($openClockEntry['work_date']) && !empty($openClockEntry['start_time'])) {
+        $openClockSince = format_datetime((string) $openClockEntry['work_date'] . ' ' . (string) $openClockEntry['start_time']);
+    }
 ?>
 <div class="container-fluid px-4">
     <div class="d-flex flex-wrap align-items-center justify-content-between mt-4 mb-3 gap-3">
@@ -34,6 +40,80 @@
     <?php if ($error = flash('error')): ?>
         <div class="alert alert-danger"><?= e($error) ?></div>
     <?php endif; ?>
+
+    <div class="card mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div>
+                <i class="fas fa-user-clock me-1"></i>
+                Punch Clock
+            </div>
+            <?php if ($openClockEntry): ?>
+                <span class="badge bg-success">Punched In</span>
+            <?php else: ?>
+                <span class="badge bg-secondary">Punched Out</span>
+            <?php endif; ?>
+        </div>
+        <div class="card-body">
+            <?php if (!$isActive): ?>
+                <div class="text-muted">Inactive employees cannot be punched in or out.</div>
+            <?php elseif ($openClockEntry): ?>
+                <?php $openJobId = (int) ($openClockEntry['job_id'] ?? 0); ?>
+                <div class="row g-3 align-items-end">
+                    <div class="col-md-4">
+                        <div class="text-muted small">Current Job</div>
+                        <div class="fw-semibold">
+                            <?php if ($openJobId > 0): ?>
+                                <a class="text-decoration-none" href="<?= url('/jobs/' . $openJobId) ?>">
+                                    <?= e((string) ($openClockEntry['job_name'] ?? ('Job #' . $openJobId))) ?>
+                                </a>
+                            <?php else: ?>
+                                <span class="badge bg-secondary">Non-Job Time</span>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="text-muted small">Since</div>
+                        <div class="fw-semibold"><?= e($openClockSince) ?></div>
+                    </div>
+                    <div class="col-md-2">
+                        <div class="text-muted small">Elapsed</div>
+                        <div class="fw-semibold"><?= e((string) ($openClockElapsed ?? '—')) ?></div>
+                    </div>
+                    <div class="col-md-2 text-md-end">
+                        <form method="post" action="<?= url('/employees/' . ((int) ($employee['id'] ?? 0)) . '/punch-out') ?>">
+                            <?= csrf_field() ?>
+                            <button class="btn btn-danger w-100" type="submit">Punch Out</button>
+                        </form>
+                    </div>
+                </div>
+            <?php else: ?>
+                <form method="post" action="<?= url('/employees/' . ((int) ($employee['id'] ?? 0)) . '/punch-in') ?>" id="employeeQuickPunchForm">
+                    <?= csrf_field() ?>
+                    <input type="hidden" id="employee_punch_job_lookup_url" value="<?= e(url('/time-tracking/lookup/jobs')) ?>" />
+                    <div class="row g-3 align-items-end">
+                        <div class="col-md-10 position-relative">
+                            <label class="form-label" for="employee_punch_job_search">Job</label>
+                            <input
+                                class="form-control"
+                                id="employee_punch_job_search"
+                                name="job_search"
+                                type="text"
+                                placeholder="Search job by name, id, city..."
+                                autocomplete="off"
+                                required
+                            />
+                            <input type="hidden" id="employee_punch_job_id" name="job_id" value="" />
+                            <div id="employee_punch_job_suggestions" class="list-group position-absolute w-100 d-none" style="z-index: 1049;"></div>
+                        </div>
+                        <div class="col-md-2">
+                            <button class="btn btn-success w-100" type="submit">Punch In</button>
+                        </div>
+                    </div>
+                    <div class="form-text">Quick punch in: select a job from suggestions, then submit.</div>
+                </form>
+            <?php endif; ?>
+        </div>
+    </div>
 
     <div class="card mb-4">
         <div class="card-header">

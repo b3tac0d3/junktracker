@@ -13,6 +13,18 @@ function base_url(string $path = ''): string
     return $base . $path;
 }
 
+function absolute_url(string $path = ''): string
+{
+    $configured = trim((string) config('app.url', ''));
+    if ($configured !== '') {
+        return rtrim($configured, '/') . '/' . ltrim($path, '/');
+    }
+
+    $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+    $host = (string) ($_SERVER['HTTP_HOST'] ?? 'localhost');
+    return $scheme . '://' . $host . base_url($path);
+}
+
 function url(string $path = ''): string
 {
     return base_url($path);
@@ -126,6 +138,43 @@ function auth_user_id(): ?int
 
     $id = isset($user['id']) ? (int) $user['id'] : 0;
     return $id > 0 ? $id : null;
+}
+
+function log_user_action(string $actionKey, ?string $entityTable = null, ?int $entityId = null, ?string $summary = null, ?string $details = null): void
+{
+    $userId = auth_user_id();
+    if ($userId === null) {
+        return;
+    }
+
+    $normalizedActionKey = trim($actionKey);
+    if ($normalizedActionKey === '') {
+        $normalizedActionKey = 'event';
+    }
+
+    $summaryText = trim((string) ($summary ?? ''));
+    if ($summaryText === '') {
+        $summaryText = ucwords(str_replace('_', ' ', $normalizedActionKey));
+    }
+
+    $ip = trim((string) ($_SERVER['REMOTE_ADDR'] ?? ''));
+    if ($ip === '') {
+        $ip = null;
+    }
+
+    try {
+        \App\Models\UserAction::create([
+            'user_id' => $userId,
+            'action_key' => $normalizedActionKey,
+            'entity_table' => $entityTable,
+            'entity_id' => $entityId,
+            'summary' => $summaryText,
+            'details' => $details,
+            'ip_address' => $ip,
+        ]);
+    } catch (\Throwable) {
+        // Logging should never break the user flow.
+    }
 }
 
 function is_authenticated(): bool
@@ -255,6 +304,71 @@ function remember_login(array $user, bool $remember): void
     ]);
 }
 
+function set_two_factor_trust_cookie(array $user, int $days = 30): void
+{
+    $userId = (int) ($user['id'] ?? 0);
+    $passwordHash = (string) ($user['password_hash'] ?? '');
+    if ($userId <= 0 || $passwordHash === '') {
+        return;
+    }
+
+    $expiresAt = time() + max(1, $days) * 86400;
+    $signature = hash_hmac('sha256', $userId . '|' . $passwordHash . '|' . $expiresAt, app_key());
+    $payload = base64_encode($userId . ':' . $expiresAt . ':' . $signature);
+
+    $secure = !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
+    setcookie('trusted_2fa', $payload, [
+        'expires' => $expiresAt,
+        'path' => '/',
+        'secure' => $secure,
+        'httponly' => true,
+        'samesite' => 'Lax',
+    ]);
+}
+
+function clear_two_factor_trust_cookie(): void
+{
+    $secure = !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
+    setcookie('trusted_2fa', '', [
+        'expires' => time() - 3600,
+        'path' => '/',
+        'secure' => $secure,
+        'httponly' => true,
+        'samesite' => 'Lax',
+    ]);
+}
+
+function has_valid_two_factor_trust_cookie(array $user): bool
+{
+    $payload = (string) ($_COOKIE['trusted_2fa'] ?? '');
+    if ($payload === '') {
+        return false;
+    }
+
+    $decoded = base64_decode($payload, true);
+    if ($decoded === false || substr_count($decoded, ':') !== 2) {
+        return false;
+    }
+
+    [$id, $expiresAt, $signature] = explode(':', $decoded, 3);
+    if (!ctype_digit($id) || !ctype_digit($expiresAt)) {
+        return false;
+    }
+
+    $userId = (int) ($user['id'] ?? 0);
+    $passwordHash = (string) ($user['password_hash'] ?? '');
+    if ($userId <= 0 || $passwordHash === '' || $userId !== (int) $id) {
+        return false;
+    }
+
+    if ((int) $expiresAt < time()) {
+        return false;
+    }
+
+    $expected = hash_hmac('sha256', $id . '|' . $passwordHash . '|' . $expiresAt, app_key());
+    return hash_equals($expected, $signature);
+}
+
 function clear_remember_cookie(): void
 {
     $secure = !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
@@ -287,6 +401,11 @@ function attempt_remember_login(): void
 
     $user = \App\Models\User::findByIdWithPassword((int) $id);
     if (!$user || (int) ($user['is_active'] ?? 0) !== 1) {
+        clear_remember_cookie();
+        return;
+    }
+
+    if (!has_valid_two_factor_trust_cookie($user)) {
         clear_remember_cookie();
         return;
     }

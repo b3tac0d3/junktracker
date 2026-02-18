@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Models\Client;
+use App\Models\ClientContact;
 use App\Models\Company;
+use App\Models\Task;
 use Core\Controller;
 
 final class ClientsController extends Controller
@@ -53,6 +55,12 @@ final class ClientsController extends Controller
             'pageTitle' => 'Client Details',
             'client' => $client,
             'companies' => Client::linkedCompanies($id),
+            'tasks' => Task::forLinkedRecord('client', $id),
+            'contacts' => ClientContact::filter([
+                'client_id' => $id,
+                'record_status' => 'all',
+                'q' => '',
+            ]),
         ]);
     }
 

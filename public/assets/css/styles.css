@@ -11241,3 +11241,154 @@ body {
   font-size: 0.75rem;
   border-radius: 0.375rem !important;
 }
+
+/* JunkTracker visual refresh */
+:root {
+  --jt-blue: #2563eb;
+  --jt-cyan: #0ea5e9;
+  --jt-teal: #14b8a6;
+  --jt-green: #22c55e;
+  --jt-orange: #f59e0b;
+  --jt-slate: #1e293b;
+  --jt-soft-border: #dbe7fb;
+  --jt-soft-fill: #f2f7ff;
+}
+
+body {
+  background: linear-gradient(180deg, #f3f8ff 0%, #eef5ff 220px, #f5f8fd 100%);
+}
+
+.sb-topnav.navbar {
+  background: #212529 !important;
+}
+
+.sb-sidenav-dark {
+  background: #212529;
+}
+
+.sb-sidenav-dark .sb-sidenav-menu .nav-link {
+  border-radius: 0.55rem;
+  margin: 0.15rem 0.5rem;
+  padding-left: 0.7rem;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.sb-sidenav-dark .sb-sidenav-menu .nav-link:hover {
+  background-color: rgba(255, 255, 255, 0.09);
+}
+
+.sb-sidenav-dark .sb-sidenav-menu .nav .sb-sidenav-menu-nested .nav-link {
+  margin-left: 0.25rem;
+}
+
+.sb-sidenav-dark .sb-sidenav-footer {
+  background: #343a40;
+  color: rgba(255, 255, 255, 0.85);
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.sb-sidenav-dark .sb-sidenav-footer .small {
+  color: rgba(255, 255, 255, 0.55);
+}
+
+#layoutSidenav_content {
+  background: transparent;
+}
+
+main .card {
+  border: 1px solid var(--jt-soft-border);
+  border-radius: 0.8rem;
+  overflow: hidden;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05);
+}
+
+main .card .card-header {
+  background: linear-gradient(90deg, #eaf2ff 0%, #edf8ff 100%);
+  border-bottom: 1px solid #d3e3fb;
+  color: #183e6b;
+  font-weight: 700;
+}
+
+main .card .card-header i {
+  color: var(--jt-blue);
+}
+
+.table > :not(caption) > * > * {
+  padding: 0.75rem 0.7rem;
+}
+
+.table > thead > tr > th,
+main table thead th {
+  background: #f5f7fb;
+  color: #243447;
+  border-bottom: 1px solid #d8e1ee;
+  border-top: 1px solid #d8e1ee;
+  font-weight: 700;
+}
+
+.datatable-table > thead > tr > th {
+  background: #f5f7fb;
+  color: #243447;
+  border-bottom: 1px solid #d8e1ee;
+}
+
+.table-striped > tbody > tr:nth-of-type(odd) > * {
+  background-color: #f8fbff;
+}
+
+.table-hover > tbody > tr:hover > * {
+  background-color: #eaf3ff;
+}
+
+.btn {
+  border-radius: 0.6rem;
+  font-weight: 600;
+}
+
+.btn-primary {
+  border-color: #1d4ed8;
+  background: linear-gradient(90deg, #2563eb 0%, #0ea5e9 100%);
+}
+
+.btn-primary:hover,
+.btn-primary:focus {
+  border-color: #1e40af;
+  background: linear-gradient(90deg, #1d4ed8 0%, #0284c7 100%);
+}
+
+.btn-success {
+  border-color: #15803d;
+  background: linear-gradient(90deg, #16a34a 0%, #14b8a6 100%);
+}
+
+.btn-warning {
+  color: #1f2937;
+  border-color: #d97706;
+  background: linear-gradient(90deg, #fbbf24 0%, #f59e0b 100%);
+}
+
+.btn-danger {
+  border-color: #b91c1c;
+  background: linear-gradient(90deg, #ef4444 0%, #dc2626 100%);
+}
+
+.form-control,
+.form-select {
+  border-color: #cfdbef;
+  border-radius: 0.55rem;
+}
+
+.form-control:focus,
+.form-select:focus {
+  border-color: #60a5fa;
+  box-shadow: 0 0 0 0.2rem rgba(37, 99, 235, 0.15);
+}
+
+.badge {
+  border-radius: 999px;
+  padding: 0.4em 0.7em;
+}
+
+.breadcrumb-item.active {
+  color: #3b5d8d;
+}

@@ -19,6 +19,9 @@ if ($base !== '' && $base !== '/' && str_starts_with($path, $base)) {
 $path = $path === '' ? '/' : $path;
 $publicPaths = [
     '/login',
+    '/login/2fa',
+    '/login/2fa/resend',
+    '/set-password',
     '/register',
     '/forgot-password',
 ];

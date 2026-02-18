@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Models\Client;
+use App\Models\ClientContact;
 use App\Models\Prospect;
+use App\Models\Task;
 use Core\Controller;
 
 final class ProspectsController extends Controller
@@ -59,6 +61,10 @@ final class ProspectsController extends Controller
             'pageTitle' => 'Prospect Details',
             'prospect' => $prospect,
             'priorityLabels' => $this->priorityLabels(),
+            'contacts' => ClientContact::forProspect(
+                $id,
+                isset($prospect['client_id']) ? (int) $prospect['client_id'] : null
+            ),
         ]);
     }
 
@@ -94,6 +100,7 @@ final class ProspectsController extends Controller
         }
 
         $prospectId = Prospect::create($data, auth_user_id());
+        $this->queueFollowUpTask($prospectId, $data, auth_user_id());
         flash('success', 'Prospect added.');
         redirect('/prospects/' . $prospectId);
     }
@@ -152,6 +159,12 @@ final class ProspectsController extends Controller
         }
 
         Prospect::update($id, $data, auth_user_id());
+        $createdById = isset($prospect['created_by']) && is_numeric((string) $prospect['created_by'])
+            ? (int) $prospect['created_by']
+            : auth_user_id();
+        if (!empty($data['follow_up_on'])) {
+            $this->queueFollowUpTask($id, $data, $createdById);
+        }
         flash('success', 'Prospect updated.');
         redirect('/prospects/' . $id);
     }
@@ -304,6 +317,51 @@ final class ProspectsController extends Controller
         }
 
         return date('Y-m-d', $timestamp);
+    }
+
+    private function queueFollowUpTask(int $prospectId, array $prospectData, ?int $assignedUserId): void
+    {
+        if ($prospectId <= 0 || $assignedUserId === null || $assignedUserId <= 0) {
+            return;
+        }
+
+        $followUpOn = (string) ($prospectData['follow_up_on'] ?? '');
+        if ($followUpOn === '') {
+            return;
+        }
+
+        $nextStep = trim((string) ($prospectData['next_step'] ?? ''));
+        $note = trim((string) ($prospectData['note'] ?? ''));
+        $bodyLines = ['Auto-created from prospect follow-up date.'];
+        if ($nextStep !== '') {
+            $bodyLines[] = 'Next step: ' . ucwords(str_replace('_', ' ', $nextStep));
+        }
+        if ($note !== '') {
+            $bodyLines[] = '';
+            $bodyLines[] = $note;
+        }
+
+        $dueAt = $followUpOn . ' 09:00:00';
+        $importance = isset($prospectData['priority_rating']) ? (int) $prospectData['priority_rating'] : 3;
+        $importance = max(1, min(5, $importance));
+        $body = implode("\n", $bodyLines);
+
+        if (Task::syncOpenProspectFollowUpTask($prospectId, $assignedUserId, $body, $dueAt, $importance, auth_user_id())) {
+            return;
+        }
+
+        Task::create([
+            'title' => Task::AUTO_PROSPECT_FOLLOW_UP_TITLE,
+            'body' => $body,
+            'link_type' => 'prospect',
+            'link_id' => $prospectId,
+            'assigned_user_id' => $assignedUserId,
+            'importance' => $importance,
+            'status' => 'open',
+            'outcome' => '',
+            'due_at' => $dueAt,
+            'completed_at' => null,
+        ], auth_user_id());
     }
 
     private function renderNotFound(): void

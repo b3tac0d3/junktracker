@@ -55,9 +55,11 @@ final class TasksController extends Controller
 
     public function create(): void
     {
+        $task = $this->prefillTask();
+
         $this->render('tasks/create', [
             'pageTitle' => 'Add Task',
-            'task' => null,
+            'task' => $task,
             'users' => Task::users(),
             'statusOptions' => Task::STATUSES,
             'linkTypes' => Task::LINK_TYPES,
@@ -197,6 +199,36 @@ final class TasksController extends Controller
         redirect('/tasks');
     }
 
+    public function toggleComplete(array $params): void
+    {
+        $id = isset($params['id']) ? (int) $params['id'] : 0;
+        if ($id <= 0) {
+            redirect('/tasks');
+        }
+
+        if (!verify_csrf($_POST['csrf_token'] ?? null)) {
+            flash('error', 'Your session expired. Please try again.');
+            redirect($this->resolveReturnPath('/tasks/' . $id));
+        }
+
+        $task = Task::findById($id);
+        if (!$task) {
+            $this->renderNotFound();
+            return;
+        }
+
+        if (!empty($task['deleted_at'])) {
+            flash('error', 'Deleted tasks cannot be updated.');
+            redirect($this->resolveReturnPath('/tasks/' . $id));
+        }
+
+        $isCompleted = $this->toIntOrNull($_POST['is_completed'] ?? null) === 1;
+        Task::setCompletion($id, $isCompleted, auth_user_id());
+
+        flash('success', $isCompleted ? 'Task marked complete.' : 'Task marked active.');
+        redirect($this->resolveReturnPath('/tasks/' . $id));
+    }
+
     public function linkLookup(): void
     {
         $type = (string) ($_GET['type'] ?? 'general');
@@ -320,6 +352,53 @@ final class TasksController extends Controller
         }
 
         return date('Y-m-d H:i:s', $time);
+    }
+
+    private function prefillTask(): ?array
+    {
+        $linkType = trim((string) ($_GET['link_type'] ?? ''));
+        $linkType = in_array($linkType, Task::LINK_TYPES, true) ? $linkType : 'general';
+
+        $linkId = $this->toIntOrNull($_GET['link_id'] ?? null);
+        if ($linkType === 'general' || $linkId === null || $linkId <= 0) {
+            return null;
+        }
+
+        if (!Task::linkExists($linkType, $linkId)) {
+            return null;
+        }
+
+        $link = Task::resolveLink($linkType, $linkId);
+        if ($link === null) {
+            return null;
+        }
+
+        return [
+            'link_type' => $linkType,
+            'link_id' => $linkId,
+            'link_label' => $link['label'] ?? '',
+            'assigned_user_id' => auth_user_id(),
+            'status' => 'open',
+            'importance' => 3,
+        ];
+    }
+
+    private function resolveReturnPath(string $fallback): string
+    {
+        $returnTo = trim((string) ($_POST['return_to'] ?? ''));
+        if ($returnTo === '') {
+            return $fallback;
+        }
+
+        if (preg_match('#^https?://#i', $returnTo)) {
+            return $fallback;
+        }
+
+        if (!str_starts_with($returnTo, '/') || str_starts_with($returnTo, '//')) {
+            return $fallback;
+        }
+
+        return $returnTo;
     }
 
     private function renderNotFound(): void

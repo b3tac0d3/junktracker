@@ -10,6 +10,7 @@ final class Task
 {
     public const STATUSES = ['open', 'in_progress', 'closed'];
     public const LINK_TYPES = ['general', 'client', 'estate', 'company', 'employee', 'job', 'expense', 'prospect', 'sale'];
+    public const AUTO_PROSPECT_FOLLOW_UP_TITLE = 'Prospect Follow-Up';
 
     public static function filter(array $filters): array
     {
@@ -78,6 +79,48 @@ final class Task
             'closed_count' => 0,
             'overdue_count' => 0,
         ];
+    }
+
+    public static function forLinkedRecord(string $linkType, int $linkId): array
+    {
+        self::ensureTable();
+
+        $linkType = self::normalizeLinkType($linkType);
+        if ($linkType === 'general' || $linkType === 'all' || $linkId <= 0) {
+            return [];
+        }
+
+        $assignedNameSql = self::userLabelSql('ua');
+
+        $sql = 'SELECT t.id,
+                       t.title,
+                       t.link_type,
+                       t.link_id,
+                       t.assigned_user_id,
+                       t.importance,
+                       t.status,
+                       t.due_at,
+                       t.completed_at,
+                       t.created_at,
+                       t.updated_at,
+                       ' . $assignedNameSql . ' AS assigned_user_name
+                FROM todos t
+                LEFT JOIN users ua ON ua.id = t.assigned_user_id
+                WHERE t.link_type = :link_type
+                  AND t.link_id = :link_id
+                  AND t.deleted_at IS NULL
+                ORDER BY CASE WHEN t.status = \'closed\' THEN 1 ELSE 0 END,
+                         COALESCE(t.due_at, \'9999-12-31 23:59:59\') ASC,
+                         t.id DESC';
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute([
+            'link_type' => $linkType,
+            'link_id' => $linkId,
+        ]);
+
+        $rows = $stmt->fetchAll();
+        return self::attachLinkData($rows);
     }
 
     public static function findById(int $id): ?array
@@ -253,6 +296,38 @@ final class Task
         $stmt->execute($params);
     }
 
+    public static function setCompletion(int $id, bool $completed, ?int $actorId = null): void
+    {
+        self::ensureTable();
+
+        $sets = [
+            'status = :status',
+            'updated_at = NOW()',
+        ];
+        $params = [
+            'id' => $id,
+            'status' => $completed ? 'closed' : 'open',
+        ];
+
+        if ($completed) {
+            $sets[] = 'completed_at = COALESCE(completed_at, NOW())';
+        } else {
+            $sets[] = 'completed_at = NULL';
+        }
+
+        if ($actorId !== null && Schema::hasColumn('todos', 'updated_by')) {
+            $sets[] = 'updated_by = :updated_by';
+            $params['updated_by'] = $actorId;
+        }
+
+        $sql = 'UPDATE todos
+                SET ' . implode(', ', $sets) . '
+                WHERE id = :id';
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute($params);
+    }
+
     public static function softDelete(int $id, ?int $actorId = null): void
     {
         self::ensureTable();
@@ -402,6 +477,53 @@ final class Task
             'sale' => 'Sale',
             default => 'General',
         };
+    }
+
+    public static function syncOpenProspectFollowUpTask(
+        int $prospectId,
+        int $assignedUserId,
+        string $body,
+        string $dueAt,
+        int $importance,
+        ?int $actorId = null
+    ): bool {
+        self::ensureTable();
+
+        if ($prospectId <= 0 || $assignedUserId <= 0) {
+            return false;
+        }
+
+        $sql = 'UPDATE todos
+                SET body = :body,
+                    due_at = :due_at,
+                    importance = :importance,
+                    updated_at = NOW()';
+        $params = [
+            'body' => $body,
+            'due_at' => $dueAt,
+            'importance' => max(1, min(5, $importance)),
+            'link_type' => 'prospect',
+            'link_id' => $prospectId,
+            'assigned_user_id' => $assignedUserId,
+            'title' => self::AUTO_PROSPECT_FOLLOW_UP_TITLE,
+        ];
+
+        if ($actorId !== null && Schema::hasColumn('todos', 'updated_by')) {
+            $sql .= ', updated_by = :updated_by';
+            $params['updated_by'] = $actorId;
+        }
+
+        $sql .= ' WHERE link_type = :link_type
+                  AND link_id = :link_id
+                  AND assigned_user_id = :assigned_user_id
+                  AND title = :title
+                  AND deleted_at IS NULL
+                  AND status IN (\'open\', \'in_progress\')';
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute($params);
+
+        return $stmt->rowCount() > 0;
     }
 
     private static function buildWhere(array $filters): array

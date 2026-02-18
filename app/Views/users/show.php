@@ -16,6 +16,10 @@
                 <i class="fas fa-pen me-1"></i>
                 Edit User
             </a>
+            <a class="btn btn-info text-white" href="<?= url('/users/' . ($user['id'] ?? '') . '/activity') ?>">
+                <i class="fas fa-clock-rotate-left me-1"></i>
+                Activity Log
+            </a>
             <?php if (!empty($user['is_active'])): ?>
                 <button class="btn btn-danger" type="button" data-bs-toggle="modal" data-bs-target="#deactivateUserModal">
                     <i class="fas fa-user-slash me-1"></i>

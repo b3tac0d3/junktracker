@@ -16,6 +16,12 @@
     $pendingJobs = is_array($jobPipeline['pending'] ?? null) ? $jobPipeline['pending'] : [];
     $activeJobs = is_array($jobPipeline['active'] ?? null) ? $jobPipeline['active'] : [];
     $tasks = is_array($overview['tasks'] ?? null) ? $overview['tasks'] : [];
+    $tasksOutstanding = is_array($overview['tasks_outstanding'] ?? null) ? $overview['tasks_outstanding'] : [];
+    $overdueTasks = is_array($tasksOutstanding['overdue'] ?? null) ? $tasksOutstanding['overdue'] : [];
+    $upcomingTasks = is_array($tasksOutstanding['upcoming'] ?? null) ? $tasksOutstanding['upcoming'] : [];
+    $consignorPayments = is_array($overview['consignor_payments'] ?? null) ? $overview['consignor_payments'] : [];
+    $consignorPaymentRows = is_array($consignorPayments['rows'] ?? null) ? $consignorPayments['rows'] : [];
+    $consignorPaymentSummary = is_array($consignorPayments['summary'] ?? null) ? $consignorPayments['summary'] : [];
 
     $money = static fn (mixed $value): string => '$' . number_format((float) ($value ?? 0), 2);
     $minutes = static function (mixed $value): string {
@@ -203,9 +209,154 @@
                 </div>
             </div>
         </div>
+        <div class="col-md-6 col-xl-3">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body">
+                    <div class="text-uppercase small text-muted">Consignor Payments Due</div>
+                    <div class="h4 mb-0 text-primary"><?= e((string) ((int) ($consignorPaymentSummary['due_now_count'] ?? 0))) ?></div>
+                    <div class="small text-muted">Upcoming: <?= e((string) ((int) ($consignorPaymentSummary['upcoming_count'] ?? 0))) ?></div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <div class="row g-3 mb-4">
+        <div class="col-12">
+            <div class="card h-100">
+                <div class="card-header d-flex align-items-center justify-content-between">
+                    <div><i class="fas fa-list-check me-1"></i>Outstanding Tasks</div>
+                    <a class="small text-decoration-none" href="<?= url('/tasks') ?>">Open Tasks</a>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Bucket</th>
+                                    <th>Task</th>
+                                    <th>Linked</th>
+                                    <th>Assigned</th>
+                                    <th>Due</th>
+                                    <th>Priority</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php if (empty($overdueTasks) && empty($upcomingTasks)): ?>
+                                    <tr>
+                                        <td colspan="6" class="text-muted">No overdue or upcoming tasks.</td>
+                                    </tr>
+                                <?php else: ?>
+                                    <?php foreach ($overdueTasks as $taskRow): ?>
+                                        <?php $taskId = (int) ($taskRow['id'] ?? 0); ?>
+                                        <tr>
+                                            <td><span class="badge bg-danger">Overdue</span></td>
+                                            <td>
+                                                <a class="text-decoration-none" href="<?= url('/tasks/' . $taskId) ?>">
+                                                    <?= e((string) (($taskRow['title'] ?? '') !== '' ? $taskRow['title'] : ('Task #' . $taskId))) ?>
+                                                </a>
+                                            </td>
+                                            <td>
+                                                <?php if (!empty($taskRow['link_url'])): ?>
+                                                    <a class="text-decoration-none" href="<?= url((string) $taskRow['link_url']) ?>">
+                                                        <?= e((string) ($taskRow['link_label'] ?? '—')) ?>
+                                                    </a>
+                                                <?php else: ?>
+                                                    <?= e((string) ($taskRow['link_label'] ?? '—')) ?>
+                                                <?php endif; ?>
+                                            </td>
+                                            <td><?= e((string) (($taskRow['assigned_user_name'] ?? '') !== '' ? $taskRow['assigned_user_name'] : 'Unassigned')) ?></td>
+                                            <td class="text-danger fw-semibold"><?= e(format_datetime($taskRow['due_at'] ?? null)) ?></td>
+                                            <td><?= e((string) ($taskRow['importance'] ?? '—')) ?></td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                    <?php foreach ($upcomingTasks as $taskRow): ?>
+                                        <?php $taskId = (int) ($taskRow['id'] ?? 0); ?>
+                                        <tr>
+                                            <td><span class="badge bg-warning text-dark">Upcoming</span></td>
+                                            <td>
+                                                <a class="text-decoration-none" href="<?= url('/tasks/' . $taskId) ?>">
+                                                    <?= e((string) (($taskRow['title'] ?? '') !== '' ? $taskRow['title'] : ('Task #' . $taskId))) ?>
+                                                </a>
+                                            </td>
+                                            <td>
+                                                <?php if (!empty($taskRow['link_url'])): ?>
+                                                    <a class="text-decoration-none" href="<?= url((string) $taskRow['link_url']) ?>">
+                                                        <?= e((string) ($taskRow['link_label'] ?? '—')) ?>
+                                                    </a>
+                                                <?php else: ?>
+                                                    <?= e((string) ($taskRow['link_label'] ?? '—')) ?>
+                                                <?php endif; ?>
+                                            </td>
+                                            <td><?= e((string) (($taskRow['assigned_user_name'] ?? '') !== '' ? $taskRow['assigned_user_name'] : 'Unassigned')) ?></td>
+                                            <td><?= e(format_datetime($taskRow['due_at'] ?? null)) ?></td>
+                                            <td><?= e((string) ($taskRow['importance'] ?? '—')) ?></td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                <?php endif; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-12">
+            <div class="card h-100">
+                <div class="card-header d-flex align-items-center justify-content-between">
+                    <div><i class="fas fa-handshake me-1"></i>Consignor Payment Schedule</div>
+                    <a class="small text-decoration-none" href="<?= url('/consignors') ?>">Open Consignors</a>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Consignor</th>
+                                    <th>#</th>
+                                    <th>Schedule</th>
+                                    <th>Next Due</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php if (empty($consignorPaymentRows)): ?>
+                                    <tr>
+                                        <td colspan="4" class="text-muted">No consignor payment due dates set.</td>
+                                    </tr>
+                                <?php else: ?>
+                                    <?php foreach ($consignorPaymentRows as $row): ?>
+                                        <?php
+                                            $consignorId = (int) ($row['id'] ?? 0);
+                                            $name = trim((string) ($row['business_name'] ?? ''));
+                                            if ($name === '') {
+                                                $name = trim((string) ($row['first_name'] ?? '') . ' ' . (string) ($row['last_name'] ?? ''));
+                                            }
+                                            if ($name === '') {
+                                                $name = 'Consignor #' . $consignorId;
+                                            }
+                                            $dueDate = (string) ($row['next_payment_due_date'] ?? '');
+                                            $dueClass = '';
+                                            if ($dueDate !== '' && strtotime($dueDate) !== false && strtotime($dueDate) <= strtotime(date('Y-m-d'))) {
+                                                $dueClass = 'text-danger fw-semibold';
+                                            }
+                                        ?>
+                                        <tr>
+                                            <td>
+                                                <a class="text-decoration-none" href="<?= url('/consignors/' . $consignorId) ?>">
+                                                    <?= e($name) ?>
+                                                </a>
+                                            </td>
+                                            <td><?= e((string) (($row['consignor_number'] ?? '') !== '' ? $row['consignor_number'] : '—')) ?></td>
+                                            <td><?= e((string) (($row['payment_schedule'] ?? '') !== '' ? ucfirst((string) $row['payment_schedule']) : '—')) ?></td>
+                                            <td class="<?= e($dueClass) ?>"><?= e(format_date($row['next_payment_due_date'] ?? null)) ?></td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                <?php endif; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <div class="col-12">
             <div class="card h-100">
                 <div class="card-header d-flex align-items-center justify-content-between">

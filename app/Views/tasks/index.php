@@ -6,6 +6,11 @@
     $statusOptions = $statusOptions ?? ['open', 'in_progress', 'closed'];
     $linkTypes = $linkTypes ?? ['general'];
     $linkTypeLabels = $linkTypeLabels ?? [];
+    $returnTo = '/tasks';
+    $queryString = (string) ($_SERVER['QUERY_STRING'] ?? '');
+    if ($queryString !== '') {
+        $returnTo .= '?' . $queryString;
+    }
 ?>
 <div class="container-fluid px-4">
     <div class="d-flex flex-wrap align-items-center justify-content-between mt-4 mb-3 gap-3">
@@ -16,10 +21,23 @@
                 <li class="breadcrumb-item active">Tasks</li>
             </ol>
         </div>
-        <a class="btn btn-primary" href="<?= url('/tasks/new') ?>">
-            <i class="fas fa-plus me-1"></i>
-            Add Task
-        </a>
+        <div class="d-flex gap-2">
+            <?php if (($filters['status'] ?? 'all') === 'closed'): ?>
+                <a class="btn btn-outline-secondary" href="<?= url('/tasks') ?>">
+                    <i class="fas fa-list-check me-1"></i>
+                    View Active
+                </a>
+            <?php else: ?>
+                <a class="btn btn-outline-success" href="<?= url('/tasks?status=closed') ?>">
+                    <i class="fas fa-check-circle me-1"></i>
+                    View Completed
+                </a>
+            <?php endif; ?>
+            <a class="btn btn-primary" href="<?= url('/tasks/new') ?>">
+                <i class="fas fa-plus me-1"></i>
+                Add Task
+            </a>
+        </div>
     </div>
 
     <?php if ($success = flash('success')): ?>
@@ -162,6 +180,7 @@
                 <table id="tasksTable">
                     <thead>
                         <tr>
+                            <th>Done</th>
                             <th>ID</th>
                             <th>Task</th>
                             <th>Linked To</th>
@@ -183,9 +202,25 @@
                                 };
                             ?>
                             <tr data-href="<?= $rowHref ?>" style="cursor: pointer;">
+                                <td data-href="<?= $rowHref ?>">
+                                    <form method="post" action="<?= url('/tasks/' . (string) ($task['id'] ?? '') . '/toggle-complete') ?>">
+                                        <?= csrf_field() ?>
+                                        <input type="hidden" name="return_to" value="<?= e($returnTo) ?>" />
+                                        <input type="hidden" name="is_completed" value="0" />
+                                        <input
+                                            class="form-check-input"
+                                            type="checkbox"
+                                            name="is_completed"
+                                            value="1"
+                                            <?= $status === 'closed' ? 'checked' : '' ?>
+                                            onchange="this.form.submit()"
+                                            aria-label="Toggle task completion"
+                                        />
+                                    </form>
+                                </td>
                                 <td data-href="<?= $rowHref ?>"><?= e((string) ($task['id'] ?? '')) ?></td>
                                 <td>
-                                    <a class="text-decoration-none fw-semibold" href="<?= $rowHref ?>">
+                                    <a class="text-decoration-none fw-semibold <?= $status === 'closed' ? 'text-muted text-decoration-line-through' : '' ?>" href="<?= $rowHref ?>">
                                         <?= e((string) ($task['title'] ?? '')) ?>
                                     </a>
                                 </td>

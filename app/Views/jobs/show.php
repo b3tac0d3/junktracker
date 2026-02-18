@@ -22,7 +22,9 @@
     $crewEmployees = $crewEmployees ?? [];
     $openByEmployee = $openByEmployee ?? [];
     $openElsewhereByEmployee = $openElsewhereByEmployee ?? [];
+    $tasks = $tasks ?? [];
     $isDeleted = !empty($job['deleted_at']) || (isset($job['active']) && (int) $job['active'] === 0);
+    $jobPath = '/jobs/' . (string) ($job['id'] ?? '');
 
     $formatTime = static function (?string $value): string {
         if ($value === null || $value === '') {
@@ -688,6 +690,69 @@
                             <div class="text-muted small">Action Entries</div>
                             <div class="fw-semibold"><?= e((string) $actionCount) ?></div>
                         </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card mb-4">
+                <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+                    <div>
+                        <i class="fas fa-list-check me-1"></i>
+                        Tasks
+                    </div>
+                    <a class="btn btn-sm btn-primary" href="<?= url('/tasks/new?link_type=job&link_id=' . ($job['id'] ?? '')) ?>">
+                        <i class="fas fa-plus me-1"></i>
+                        Add Task
+                    </a>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-sm table-striped align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Done</th>
+                                    <th>Task</th>
+                                    <th>Due</th>
+                                    <th>Assigned</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php if (empty($tasks)): ?>
+                                    <tr>
+                                        <td colspan="4" class="text-muted">No tasks linked to this job.</td>
+                                    </tr>
+                                <?php else: ?>
+                                    <?php foreach ($tasks as $task): ?>
+                                        <?php $isCompleted = (string) ($task['status'] ?? '') === 'closed'; ?>
+                                        <tr>
+                                            <td>
+                                                <form method="post" action="<?= url('/tasks/' . (string) ($task['id'] ?? '') . '/toggle-complete') ?>">
+                                                    <?= csrf_field() ?>
+                                                    <input type="hidden" name="return_to" value="<?= e($jobPath) ?>" />
+                                                    <input type="hidden" name="is_completed" value="0" />
+                                                    <input
+                                                        class="form-check-input"
+                                                        type="checkbox"
+                                                        name="is_completed"
+                                                        value="1"
+                                                        <?= $isCompleted ? 'checked' : '' ?>
+                                                        onchange="this.form.submit()"
+                                                    />
+                                                </form>
+                                            </td>
+                                            <td>
+                                                <a class="text-decoration-none <?= $isCompleted ? 'text-muted text-decoration-line-through' : '' ?>" href="<?= url('/tasks/' . (string) ($task['id'] ?? '')) ?>">
+                                                    <?= e((string) ($task['title'] ?? 'Task')) ?>
+                                                </a>
+                                                <div class="small text-muted text-capitalize"><?= e(ucwords(str_replace('_', ' ', (string) ($task['status'] ?? 'open')))) ?></div>
+                                            </td>
+                                            <td><?= e(format_datetime($task['due_at'] ?? null)) ?></td>
+                                            <td><?= e((string) (($task['assigned_user_name'] ?? '') !== '' ? $task['assigned_user_name'] : 'Unassigned')) ?></td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                <?php endif; ?>
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             </div>

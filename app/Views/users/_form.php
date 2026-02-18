@@ -35,14 +35,23 @@
                 <option value="0" <?= $activeValue === 0 ? 'selected' : '' ?>>Inactive</option>
             </select>
         </div>
-        <div class="col-md-6">
-            <label class="form-label" for="password">Password <?= $isEdit ? '(leave blank to keep)' : '' ?></label>
-            <input class="form-control" id="password" name="password" type="password" />
-        </div>
-        <div class="col-md-6">
-            <label class="form-label" for="password_confirm">Confirm Password</label>
-            <input class="form-control" id="password_confirm" name="password_confirm" type="password" />
-        </div>
+        <?php if ($isEdit): ?>
+            <div class="col-md-6">
+                <label class="form-label" for="password">Password (leave blank to keep)</label>
+                <input class="form-control" id="password" name="password" type="password" />
+            </div>
+            <div class="col-md-6">
+                <label class="form-label" for="password_confirm">Confirm Password</label>
+                <input class="form-control" id="password_confirm" name="password_confirm" type="password" />
+            </div>
+        <?php else: ?>
+            <div class="col-12">
+                <div class="alert alert-info mb-0">
+                    An invite email will be sent so the user can set their password.
+                    The setup link expires in 72 hours.
+                </div>
+            </div>
+        <?php endif; ?>
     </div>
     <div class="mt-4 d-flex gap-2">
         <button class="btn btn-primary" type="submit">Save User</button>

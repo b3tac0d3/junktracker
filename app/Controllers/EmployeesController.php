@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Models\Employee;
+use App\Models\Job;
 use App\Models\TimeEntry;
 use Core\Controller;
 
@@ -70,11 +71,162 @@ final class EmployeesController extends Controller
             ],
         ];
 
+        $openClockEntry = TimeEntry::findOpenForEmployee($id);
+        $openClockElapsed = null;
+        if ($openClockEntry && isset($openClockEntry['work_date'], $openClockEntry['start_time'])) {
+            $openClockElapsed = $this->formatDuration($this->calculateOpenMinutes(
+                (string) $openClockEntry['work_date'],
+                (string) $openClockEntry['start_time']
+            ));
+        }
+
+        $pageScripts = '<script src="' . asset('js/employee-punch-form.js') . '"></script>';
+
         $this->render('employees/show', [
             'pageTitle' => 'Employee Details',
             'employee' => $employee,
             'laborSummary' => $laborSummary,
+            'openClockEntry' => $openClockEntry,
+            'openClockElapsed' => $openClockElapsed,
+            'pageScripts' => $pageScripts,
         ]);
+    }
+
+    public function punchIn(array $params): void
+    {
+        $id = isset($params['id']) ? (int) $params['id'] : 0;
+        if ($id <= 0) {
+            redirect('/employees');
+        }
+
+        $employee = Employee::findById($id);
+        if (!$employee) {
+            $this->renderNotFound();
+            return;
+        }
+
+        if (!verify_csrf($_POST['csrf_token'] ?? null)) {
+            flash('error', 'Your session expired. Please try again.');
+            redirect('/employees/' . $id);
+        }
+
+        if (!empty($employee['deleted_at']) || (int) ($employee['active'] ?? 1) !== 1) {
+            flash('error', 'Inactive employees cannot be punched in.');
+            redirect('/employees/' . $id);
+        }
+
+        $openEntry = TimeEntry::findOpenForEmployee($id);
+        if ($openEntry) {
+            $openJobId = (int) ($openEntry['job_id'] ?? 0);
+            $openJobLabel = $openJobId > 0
+                ? ('Job #' . $openJobId)
+                : 'Non-Job Time';
+            flash('error', 'This employee is already punched in on ' . $openJobLabel . '.');
+            redirect('/employees/' . $id);
+        }
+
+        $jobId = $this->toIntOrNull($_POST['job_id'] ?? null);
+        if ($jobId === null || $jobId <= 0 || !$this->jobExists($jobId)) {
+            flash('error', 'Select a valid job before punching in.');
+            redirect('/employees/' . $id);
+        }
+
+        $payRate = TimeEntry::employeeRate($id) ?? 0.0;
+        $entryId = TimeEntry::create([
+            'employee_id' => $id,
+            'job_id' => $jobId,
+            'work_date' => date('Y-m-d'),
+            'start_time' => date('H:i:s'),
+            'end_time' => null,
+            'minutes_worked' => null,
+            'pay_rate' => $payRate,
+            'total_paid' => null,
+            'note' => null,
+        ], auth_user_id());
+
+        $employeeName = $this->employeeDisplayName($employee, $id);
+        Job::createAction($jobId, [
+            'action_type' => 'time_punched_in',
+            'action_at' => date('Y-m-d H:i:s'),
+            'amount' => null,
+            'ref_table' => 'employee_time_entries',
+            'ref_id' => $entryId,
+            'note' => $employeeName . ' punched in from employee details.',
+        ], auth_user_id());
+        log_user_action('time_punched_in', 'employee_time_entries', $entryId, $employeeName . ' punched in on job #' . $jobId . '.');
+
+        flash('success', $employeeName . ' punched in.');
+        redirect('/employees/' . $id);
+    }
+
+    public function punchOut(array $params): void
+    {
+        $id = isset($params['id']) ? (int) $params['id'] : 0;
+        if ($id <= 0) {
+            redirect('/employees');
+        }
+
+        $employee = Employee::findById($id);
+        if (!$employee) {
+            $this->renderNotFound();
+            return;
+        }
+
+        if (!verify_csrf($_POST['csrf_token'] ?? null)) {
+            flash('error', 'Your session expired. Please try again.');
+            redirect('/employees/' . $id);
+        }
+
+        $entry = TimeEntry::findOpenForEmployee($id);
+        if (
+            !$entry
+            || empty($entry['start_time'])
+            || !empty($entry['end_time'])
+            || !empty($entry['deleted_at'])
+            || (int) ($entry['active'] ?? 1) !== 1
+        ) {
+            flash('error', 'This employee is not currently punched in.');
+            redirect('/employees/' . $id);
+        }
+
+        $entryId = (int) ($entry['id'] ?? 0);
+        if ($entryId <= 0) {
+            flash('error', 'Unable to locate the active time entry.');
+            redirect('/employees/' . $id);
+        }
+
+        $minutesWorked = $this->calculateOpenMinutes(
+            (string) ($entry['work_date'] ?? date('Y-m-d')),
+            (string) ($entry['start_time'] ?? date('H:i:s'))
+        );
+        $payRate = isset($entry['pay_rate']) && $entry['pay_rate'] !== null
+            ? (float) $entry['pay_rate']
+            : (TimeEntry::employeeRate($id) ?? 0.0);
+        $totalPaid = round(($payRate * $minutesWorked) / 60, 2);
+
+        TimeEntry::punchOut($entryId, [
+            'end_time' => date('H:i:s'),
+            'minutes_worked' => $minutesWorked,
+            'pay_rate' => $payRate,
+            'total_paid' => $totalPaid,
+        ], auth_user_id());
+
+        $employeeName = $this->employeeDisplayName($employee, $id);
+        $jobId = (int) ($entry['job_id'] ?? 0);
+        if ($jobId > 0) {
+            Job::createAction($jobId, [
+                'action_type' => 'time_punched_out',
+                'action_at' => date('Y-m-d H:i:s'),
+                'amount' => $totalPaid,
+                'ref_table' => 'employee_time_entries',
+                'ref_id' => $entryId,
+                'note' => $employeeName . ' punched out (' . $this->formatDuration($minutesWorked) . ').',
+            ], auth_user_id());
+        }
+        log_user_action('time_punched_out', 'employee_time_entries', $entryId, $employeeName . ' punched out.');
+
+        flash('success', $employeeName . ' punched out.');
+        redirect('/employees/' . $id);
     }
 
     public function create(): void
@@ -228,6 +380,60 @@ final class EmployeesController extends Controller
         }
 
         return is_numeric($raw) ? (float) $raw : null;
+    }
+
+    private function toIntOrNull(mixed $value): ?int
+    {
+        $raw = trim((string) ($value ?? ''));
+        if ($raw === '' || !ctype_digit($raw)) {
+            return null;
+        }
+
+        return (int) $raw;
+    }
+
+    private function jobExists(int $jobId): bool
+    {
+        if ($jobId <= 0) {
+            return false;
+        }
+
+        foreach (TimeEntry::jobs() as $job) {
+            if ((int) ($job['id'] ?? 0) === $jobId) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function calculateOpenMinutes(string $workDate, string $startTime): int
+    {
+        $start = strtotime($workDate . ' ' . $startTime);
+        if ($start === false) {
+            return 0;
+        }
+
+        $minutes = (int) floor((time() - $start) / 60);
+        return $minutes > 0 ? $minutes : 0;
+    }
+
+    private function formatDuration(int $minutes): string
+    {
+        if ($minutes <= 0) {
+            return '0h 00m';
+        }
+
+        $hours = intdiv($minutes, 60);
+        $remaining = $minutes % 60;
+
+        return $hours . 'h ' . str_pad((string) $remaining, 2, '0', STR_PAD_LEFT) . 'm';
+    }
+
+    private function employeeDisplayName(array $employee, int $id): string
+    {
+        $name = trim(((string) ($employee['first_name'] ?? '')) . ' ' . ((string) ($employee['last_name'] ?? '')));
+        return $name !== '' ? $name : ('Employee #' . $id);
     }
 
     private function renderNotFound(): void

@@ -21,6 +21,8 @@ final class Dashboard
         $expenses = self::expenseSummary($mtdStart, $ytdStart, $today);
         $onClock = self::onClockSummary();
         $tasks = self::taskSummary();
+        $outstandingTasks = self::outstandingTasks(8, 8);
+        $consignorPayments = self::consignorPaymentsDue(10);
 
         $grossMtd = (float) ($sales['gross_mtd'] ?? 0) + (float) ($jobsGross['gross_mtd'] ?? 0);
         $grossYtd = (float) ($sales['gross_ytd'] ?? 0) + (float) ($jobsGross['gross_ytd'] ?? 0);
@@ -52,6 +54,8 @@ final class Dashboard
                 'active' => self::jobsByStatus('active', 10),
             ],
             'tasks' => $tasks,
+            'tasks_outstanding' => $outstandingTasks,
+            'consignor_payments' => $consignorPayments,
         ];
     }
 
@@ -264,6 +268,53 @@ final class Dashboard
         ]);
     }
 
+    private static function outstandingTasks(int $overdueLimit, int $upcomingLimit): array
+    {
+        return self::safe(static function () use ($overdueLimit, $upcomingLimit): array {
+            $fetch = static function (bool $overdue, int $limit): array {
+                $sql = 'SELECT t.id,
+                               t.title,
+                               t.link_type,
+                               t.link_id,
+                               t.assigned_user_id,
+                               t.importance,
+                               t.status,
+                               t.due_at,
+                               COALESCE(NULLIF(TRIM(CONCAT_WS(\' \', u.first_name, u.last_name)), \'\'), CONCAT(\'User #\', u.id)) AS assigned_user_name
+                        FROM todos t
+                        LEFT JOIN users u ON u.id = t.assigned_user_id
+                        WHERE t.deleted_at IS NULL
+                          AND t.status IN (\'open\', \'in_progress\')
+                          AND t.due_at IS NOT NULL
+                          AND ' . ($overdue ? 't.due_at < NOW()' : 't.due_at >= NOW()') . '
+                        ORDER BY t.due_at ASC, t.importance DESC, t.id DESC
+                        LIMIT ' . max(1, min($limit, 25));
+
+                $stmt = Database::connection()->query($sql);
+                $rows = $stmt->fetchAll();
+
+                foreach ($rows as &$row) {
+                    $linkType = (string) ($row['link_type'] ?? 'general');
+                    $linkId = isset($row['link_id']) ? (int) $row['link_id'] : null;
+                    $link = Task::resolveLink($linkType, $linkId);
+                    $row['link_label'] = $link['label'] ?? '—';
+                    $row['link_url'] = $link['url'] ?? null;
+                }
+                unset($row);
+
+                return $rows;
+            };
+
+            return [
+                'overdue' => $fetch(true, $overdueLimit),
+                'upcoming' => $fetch(false, $upcomingLimit),
+            ];
+        }, [
+            'overdue' => [],
+            'upcoming' => [],
+        ]);
+    }
+
     private static function upcomingProspects(int $limit): array
     {
         return self::safe(static function () use ($limit): array {
@@ -324,6 +375,47 @@ final class Dashboard
             $stmt->execute(['status' => $status]);
             return $stmt->fetchAll();
         }, []);
+    }
+
+    private static function consignorPaymentsDue(int $limit): array
+    {
+        return self::safe(static function () use ($limit): array {
+            Consignor::ensureSchema();
+
+            $capped = max(1, min($limit, 25));
+            $sql = 'SELECT c.id,
+                           c.consignor_number,
+                           c.first_name,
+                           c.last_name,
+                           c.business_name,
+                           c.payment_schedule,
+                           c.next_payment_due_date
+                    FROM consignors c
+                    WHERE c.deleted_at IS NULL
+                      AND COALESCE(c.active, 1) = 1
+                      AND c.next_payment_due_date IS NOT NULL
+                    ORDER BY c.next_payment_due_date ASC, c.id DESC
+                    LIMIT ' . $capped;
+
+            $rows = Database::connection()->query($sql)->fetchAll();
+
+            $countSql = 'SELECT
+                            COALESCE(SUM(CASE WHEN c.next_payment_due_date <= CURDATE() THEN 1 ELSE 0 END), 0) AS due_now_count,
+                            COALESCE(SUM(CASE WHEN c.next_payment_due_date > CURDATE() THEN 1 ELSE 0 END), 0) AS upcoming_count
+                         FROM consignors c
+                         WHERE c.deleted_at IS NULL
+                           AND COALESCE(c.active, 1) = 1
+                           AND c.next_payment_due_date IS NOT NULL';
+            $summary = Database::connection()->query($countSql)->fetch();
+
+            return [
+                'rows' => $rows,
+                'summary' => $summary ?: ['due_now_count' => 0, 'upcoming_count' => 0],
+            ];
+        }, [
+            'rows' => [],
+            'summary' => ['due_now_count' => 0, 'upcoming_count' => 0],
+        ]);
     }
 
     private static function safe(callable $callback, array $fallback): array

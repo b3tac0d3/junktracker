@@ -6,6 +6,8 @@ namespace App\Controllers;
 
 use Core\Controller;
 use App\Models\User;
+use App\Models\UserAction;
+use App\Support\Mailer;
 
 final class UsersController extends Controller
 {
@@ -77,7 +79,22 @@ final class UsersController extends Controller
             redirect('/users/new');
         }
 
+        $data['password'] = '';
+        $data['password_confirm'] = '';
         $userId = User::create($data, auth_user_id());
+        $inviteSent = $this->sendSetupInvite($userId, $data['email'], trim($data['first_name'] . ' ' . $data['last_name']));
+        $fullName = trim($data['first_name'] . ' ' . $data['last_name']);
+        log_user_action(
+            'user_created',
+            'users',
+            $userId,
+            'Created user #' . $userId . ' (' . ($fullName !== '' ? $fullName : $data['email']) . ').'
+        );
+        if ($inviteSent) {
+            flash('success', 'User created and setup email sent.');
+        } else {
+            flash('error', 'User created, but setup email could not be sent. Check mail settings/logs.');
+        }
         redirect('/users/' . $userId);
     }
 
@@ -94,7 +111,7 @@ final class UsersController extends Controller
         }
 
         $data = $this->collectFormData();
-        $errors = $this->validate($data, false);
+        $errors = $this->validate($data, false, $id);
 
         if (!empty($errors)) {
             flash('error', implode(' ', $errors));
@@ -103,6 +120,7 @@ final class UsersController extends Controller
         }
 
         User::update($id, $data, auth_user_id());
+        log_user_action('user_updated', 'users', $id, 'Updated user #' . $id . '.');
         redirect('/users/' . $id);
     }
 
@@ -118,6 +136,7 @@ final class UsersController extends Controller
         }
 
         User::deactivate($id, auth_user_id());
+        log_user_action('user_deactivated', 'users', $id, 'Deactivated user #' . $id . '.');
         redirect('/users/' . $id);
     }
 
@@ -142,6 +161,26 @@ final class UsersController extends Controller
         clear_old();
     }
 
+    public function myActivity(): void
+    {
+        $userId = auth_user_id();
+        if ($userId === null) {
+            redirect('/login');
+        }
+
+        $this->renderActivity($userId, true);
+    }
+
+    public function activity(array $params): void
+    {
+        $id = isset($params['id']) ? (int) $params['id'] : 0;
+        if ($id <= 0) {
+            redirect('/users');
+        }
+
+        $this->renderActivity($id, false);
+    }
+
     private function collectFormData(): array
     {
         return [
@@ -155,7 +194,7 @@ final class UsersController extends Controller
         ];
     }
 
-    private function validate(array $data, bool $isCreate): array
+    private function validate(array $data, bool $isCreate, ?int $userId = null): array
     {
         $errors = [];
 
@@ -164,14 +203,77 @@ final class UsersController extends Controller
         }
         if ($data['email'] === '' || !filter_var($data['email'], FILTER_VALIDATE_EMAIL)) {
             $errors[] = 'A valid email is required.';
-        }
-        if ($isCreate && $data['password'] === '') {
-            $errors[] = 'Password is required.';
+        } elseif (User::emailInUse($data['email'], $userId)) {
+            $errors[] = 'That email is already in use.';
         }
         if ($data['password'] !== '' && $data['password'] !== $data['password_confirm']) {
             $errors[] = 'Password confirmation does not match.';
         }
+        if ($data['password'] !== '' && strlen($data['password']) < 8) {
+            $errors[] = 'Password must be at least 8 characters.';
+        }
 
         return $errors;
+    }
+
+    private function sendSetupInvite(int $userId, string $email, string $displayName): bool
+    {
+        if ($userId <= 0 || trim($email) === '') {
+            return false;
+        }
+
+        try {
+            $token = bin2hex(random_bytes(32));
+        } catch (\Throwable) {
+            return false;
+        }
+        User::issuePasswordSetupToken($userId, $token, 72, auth_user_id());
+
+        $name = trim($displayName);
+        if ($name === '') {
+            $name = 'there';
+        }
+
+        $link = absolute_url('/set-password?token=' . urlencode($token));
+        $subject = 'Set your JunkTracker password';
+        $body = "Hi {$name},\n\n"
+            . "Your JunkTracker account has been created.\n"
+            . "Use this link to set your password (expires in 72 hours):\n{$link}\n\n"
+            . "If you did not expect this, please contact your administrator.\n";
+
+        return Mailer::send($email, $subject, $body);
+    }
+
+    private function renderActivity(int $userId, bool $isOwn): void
+    {
+        $user = User::findById($userId);
+        if (!$user) {
+            http_response_code(404);
+            if (class_exists('App\\Controllers\\ErrorController')) {
+                (new \App\Controllers\ErrorController())->notFound();
+                return;
+            }
+
+            echo '404 Not Found';
+            return;
+        }
+
+        $query = trim((string) ($_GET['q'] ?? ''));
+        $actions = UserAction::forUser($userId, $query);
+
+        $pageScripts = implode("\n", [
+            '<script src="https://cdn.jsdelivr.net/npm/simple-datatables@7.1.2/dist/umd/simple-datatables.min.js" crossorigin="anonymous"></script>',
+            '<script src="' . asset('js/user-activity-table.js') . '"></script>',
+        ]);
+
+        $this->render('users/activity', [
+            'pageTitle' => $isOwn ? 'My Activity Log' : 'User Activity Log',
+            'user' => $user,
+            'actions' => $actions,
+            'query' => $query,
+            'isOwnActivity' => $isOwn,
+            'isLogReady' => UserAction::isAvailable(),
+            'pageScripts' => $pageScripts,
+        ]);
     }
 }

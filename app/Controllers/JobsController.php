@@ -9,6 +9,7 @@ use App\Models\Client;
 use App\Models\ExpenseCategory;
 use App\Models\Job;
 use App\Models\Prospect;
+use App\Models\Task;
 use App\Models\TimeEntry;
 
 final class JobsController extends Controller
@@ -163,6 +164,12 @@ final class JobsController extends Controller
 
         $jobId = Job::create($data, $this->actorId());
         $this->logJobAction($jobId, 'job_created', 'Job created.');
+        log_user_action(
+            'job_created',
+            'jobs',
+            $jobId,
+            'Created job #' . $jobId . ' (' . $data['name'] . ').'
+        );
         if (!empty($data['quote_date'])) {
             $this->logJobAction($jobId, 'quote_done', 'Quote date has been set.');
         }
@@ -228,6 +235,7 @@ final class JobsController extends Controller
             'billingEntries' => Job::billingEntries($id),
             'timeEntries' => TimeEntry::forJob($id),
             'timeSummary' => TimeEntry::summaryForJob($id),
+            'tasks' => Task::forLinkedRecord('job', $id),
             'crewEmployees' => $crewEmployees,
             'openByEmployee' => $openByEmployee,
             'openElsewhereByEmployee' => $openElsewhereByEmployee,
@@ -650,6 +658,13 @@ final class JobsController extends Controller
             $changeLabels[] = 'details';
         }
         $this->logJobAction($id, 'job_updated', 'Updated: ' . implode(', ', $changeLabels) . '.');
+        log_user_action(
+            'job_updated',
+            'jobs',
+            $id,
+            'Updated job #' . $id . '.',
+            'Fields changed: ' . implode(', ', $changeLabels) . '.'
+        );
         flash('success', 'Job details updated.');
         redirect('/jobs/' . $id);
     }
@@ -667,6 +682,7 @@ final class JobsController extends Controller
 
         Job::softDelete($id, $this->actorId());
         $this->logJobAction($id, 'job_deleted', 'Job was marked deleted.');
+        log_user_action('job_deleted', 'jobs', $id, 'Deleted job #' . $id . '.');
         flash('success', 'Job deleted.');
         redirect('/jobs/' . $id);
     }

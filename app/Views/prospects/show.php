@@ -17,6 +17,7 @@
         default => 'bg-warning text-dark',
     };
     $isActive = empty($prospect['deleted_at']) && !empty($prospect['active']);
+    $contacts = $contacts ?? [];
 ?>
 <div class="container-fluid px-4">
     <div class="d-flex flex-wrap align-items-center justify-content-between mt-4 mb-3 gap-3">
@@ -29,6 +30,10 @@
             </ol>
         </div>
         <div class="d-flex gap-2">
+            <a class="btn btn-primary" href="<?= url('/client-contacts/new?prospect_id=' . ($prospect['id'] ?? '')) ?>">
+                <i class="fas fa-phone me-1"></i>
+                Log Contact
+            </a>
             <?php if ($isActive && $status !== 'converted'): ?>
                 <a class="btn btn-success" href="<?= url('/prospects/' . ($prospect['id'] ?? '') . '/convert') ?>">
                     <i class="fas fa-briefcase me-1"></i>
@@ -106,6 +111,72 @@
                     <div class="text-muted small">Notes</div>
                     <div class="fw-semibold" style="white-space: pre-wrap;"><?= e((string) (($prospect['note'] ?? '') !== '' ? $prospect['note'] : '—')) ?></div>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+            <div>
+                <i class="fas fa-address-book me-1"></i>
+                Contact History
+            </div>
+            <a class="btn btn-sm btn-primary" href="<?= url('/client-contacts/new?prospect_id=' . ($prospect['id'] ?? '')) ?>">
+                <i class="fas fa-plus me-1"></i>
+                Log Contact
+            </a>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-striped table-hover align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Method</th>
+                            <th>Direction</th>
+                            <th>Subject</th>
+                            <th>Notes</th>
+                            <th>Linked</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php if (empty($contacts)): ?>
+                            <tr>
+                                <td colspan="6" class="text-muted">No contact history yet.</td>
+                            </tr>
+                        <?php else: ?>
+                            <?php foreach ($contacts as $contact): ?>
+                                <?php $contactUrl = url('/client-contacts/' . (string) ($contact['id'] ?? '')); ?>
+                                <tr>
+                                    <td>
+                                        <a class="text-decoration-none" href="<?= $contactUrl ?>">
+                                            <?= e(format_datetime($contact['contacted_at'] ?? null)) ?>
+                                        </a>
+                                    </td>
+                                    <td class="text-capitalize"><?= e(ucwords(str_replace('_', ' ', (string) ($contact['contact_method'] ?? '')))) ?></td>
+                                    <td class="text-capitalize"><?= e((string) ($contact['direction'] ?? '')) ?></td>
+                                    <td>
+                                        <a class="text-decoration-none" href="<?= $contactUrl ?>">
+                                            <?= e((string) (($contact['subject'] ?? '') !== '' ? $contact['subject'] : '—')) ?>
+                                        </a>
+                                    </td>
+                                    <td style="white-space: pre-wrap; max-width: 420px;">
+                                        <?= e((string) (($contact['notes'] ?? '') !== '' ? $contact['notes'] : '—')) ?>
+                                    </td>
+                                    <td>
+                                        <?php if (!empty($contact['link_url'])): ?>
+                                            <a class="text-decoration-none" href="<?= url((string) $contact['link_url']) ?>">
+                                                <?= e((string) ($contact['link_label'] ?? '—')) ?>
+                                            </a>
+                                        <?php else: ?>
+                                            <?= e((string) ($contact['link_label'] ?? '—')) ?>
+                                        <?php endif; ?>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                        <?php endif; ?>
+                    </tbody>
+                </table>
             </div>
         </div>
     </div>

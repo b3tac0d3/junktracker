@@ -38,8 +38,8 @@
                 <li class="nav-item dropdown">
                     <a class="nav-link dropdown-toggle" id="navbarDropdown" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false"><i class="fas fa-user fa-fw"></i></a>
                     <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="navbarDropdown">
-                        <li><a class="dropdown-item" href="#!">Settings</a></li>
-                        <li><a class="dropdown-item" href="#!">Activity Log</a></li>
+                        <li><a class="dropdown-item" href="<?= url('/settings') ?>">Settings</a></li>
+                        <li><a class="dropdown-item" href="<?= url('/activity-log') ?>">Activity Log</a></li>
                         <li><hr class="dropdown-divider" /></li>
                         <li>
                             <form method="post" action="<?= url('/logout') ?>">
@@ -79,9 +79,11 @@
                             </a>
                                 <div class="collapse" id="collapseLayouts" aria-labelledby="headingOne" data-bs-parent="#sidenavAccordion">
                                     <nav class="sb-sidenav-menu-nested nav">
-                                        <a class="nav-link" href="<?= url('/clients') ?>"><i class="fas fa-user me-1"></i>Clients</a>
                                         <a class="nav-link" href="<?= url('/companies') ?>"><i class="fas fa-building me-1"></i>Companies</a>
                                         <a class="nav-link" href="<?= url('/estates') ?>"><i class="fas fa-house me-1"></i>Estates</a>
+                                        <a class="nav-link" href="<?= url('/clients') ?>"><i class="fas fa-user me-1"></i>Clients</a>
+                                        <a class="nav-link" href="<?= url('/client-contacts') ?>"><i class="fas fa-phone me-1"></i>Client Contacts</a>
+                                        <a class="nav-link" href="<?= url('/consignors') ?>"><i class="fas fa-handshake me-1"></i>Consignors</a>
                                     </nav>
                                 </div>
                             <a class="nav-link collapsed" href="#" data-bs-toggle="collapse" data-bs-target="#collapseLayouts1" aria-expanded="false" aria-controls="collapseLayouts1">
