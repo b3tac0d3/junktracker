@@ -84,7 +84,7 @@ final class EmployeesController extends Controller
             ));
         }
 
-        $pageScripts = '<script src="' . asset('js/employee-punch-form.js') . '"></script>';
+        $pageScripts = '<script src="' . asset('js/employee-punch-form.js') . '?v=' . rawurlencode((string) config('app.version', '')) . '"></script>';
 
         $this->render('employees/show', [
             'pageTitle' => 'Employee Details',
@@ -132,9 +132,12 @@ final class EmployeesController extends Controller
         }
 
         $jobId = $this->toIntOrNull($_POST['job_id'] ?? null);
-        if ($jobId === null || $jobId <= 0 || !$this->jobExists($jobId)) {
+        if ($jobId !== null && $jobId > 0 && !$this->jobExists($jobId)) {
             flash('error', 'Select a valid job before punching in.');
             redirect('/employees/' . $id);
+        }
+        if ($jobId !== null && $jobId <= 0) {
+            $jobId = null;
         }
 
         $payRate = TimeEntry::employeeRate($id) ?? 0.0;
@@ -151,15 +154,18 @@ final class EmployeesController extends Controller
         ], auth_user_id());
 
         $employeeName = $this->employeeDisplayName($employee, $id);
-        Job::createAction($jobId, [
-            'action_type' => 'time_punched_in',
-            'action_at' => date('Y-m-d H:i:s'),
-            'amount' => null,
-            'ref_table' => 'employee_time_entries',
-            'ref_id' => $entryId,
-            'note' => $employeeName . ' punched in from employee details.',
-        ], auth_user_id());
-        log_user_action('time_punched_in', 'employee_time_entries', $entryId, $employeeName . ' punched in on job #' . $jobId . '.');
+        if (($jobId ?? 0) > 0) {
+            Job::createAction((int) $jobId, [
+                'action_type' => 'time_punched_in',
+                'action_at' => date('Y-m-d H:i:s'),
+                'amount' => null,
+                'ref_table' => 'employee_time_entries',
+                'ref_id' => $entryId,
+                'note' => $employeeName . ' punched in from employee details.',
+            ], auth_user_id());
+        }
+        $jobLabel = ($jobId ?? 0) > 0 ? ('job #' . $jobId) : 'non-job time';
+        log_user_action('time_punched_in', 'employee_time_entries', $entryId, $employeeName . ' punched in on ' . $jobLabel . '.');
 
         flash('success', $employeeName . ' punched in.');
         redirect('/employees/' . $id);

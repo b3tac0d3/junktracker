@@ -1,5 +1,21 @@
 <?php
     $statusOptions = is_array($statusOptions ?? null) ? $statusOptions : ['pending', 'active', 'complete', 'cancelled'];
+    $savedPresets = is_array($savedPresets ?? null) ? $savedPresets : [];
+    $selectedPresetId = isset($selectedPresetId) ? (int) $selectedPresetId : 0;
+    $filterPresetModule = (string) ($filterPresetModule ?? 'jobs');
+    $currentFilters = [
+        'q' => (string) ($filters['q'] ?? ''),
+        'status' => (string) ($filters['status'] ?? 'all'),
+        'record_status' => (string) ($filters['record_status'] ?? 'active'),
+        'billing_state' => (string) ($filters['billing_state'] ?? 'all'),
+        'start_date' => (string) ($filters['start_date'] ?? ''),
+        'end_date' => (string) ($filters['end_date'] ?? ''),
+    ];
+    $exportParams = array_merge($currentFilters, ['preset_id' => $selectedPresetId > 0 ? (string) $selectedPresetId : '', 'export' => 'csv']);
+    $exportParams = array_filter($exportParams, static fn (mixed $value): bool => (string) $value !== '');
+    $currentPath = '/jobs';
+    $currentQuery = (string) ($_SERVER['QUERY_STRING'] ?? '');
+    $currentReturnTo = $currentPath . ($currentQuery !== '' ? '?' . $currentQuery : '');
 ?>
 <div class="container-fluid px-4">
     <div class="d-flex flex-wrap align-items-center justify-content-between mt-4 mb-3 gap-3">
@@ -18,7 +34,62 @@
 
     <div class="card mb-4">
         <div class="card-body">
+            <div class="row g-2 align-items-end">
+                <div class="col-12 col-lg-5">
+                    <form method="get" action="<?= url('/jobs') ?>">
+                        <label class="form-label">Saved Filters</label>
+                        <div class="input-group">
+                            <select class="form-select" name="preset_id">
+                                <option value="">Choose preset...</option>
+                                <?php foreach ($savedPresets as $preset): ?>
+                                    <?php $presetId = (int) ($preset['id'] ?? 0); ?>
+                                    <option value="<?= e((string) $presetId) ?>" <?= $selectedPresetId === $presetId ? 'selected' : '' ?>>
+                                        <?= e((string) ($preset['preset_name'] ?? ('Preset #' . $presetId))) ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                            <button class="btn btn-outline-primary" type="submit">Load</button>
+                            <a class="btn btn-outline-secondary" href="<?= url('/jobs') ?>">Reset</a>
+                        </div>
+                    </form>
+                </div>
+                <div class="col-12 col-lg-4">
+                    <form method="post" action="<?= url('/filter-presets/save') ?>">
+                        <?= csrf_field() ?>
+                        <input type="hidden" name="module_key" value="<?= e($filterPresetModule) ?>" />
+                        <input type="hidden" name="return_to" value="<?= e($currentReturnTo) ?>" />
+                        <input type="hidden" name="filters_json" value='<?= e((string) json_encode($currentFilters)) ?>' />
+                        <label class="form-label">Save Current Filters</label>
+                        <div class="input-group">
+                            <input class="form-control" type="text" name="preset_name" placeholder="Preset name..." />
+                            <button class="btn btn-outline-success" type="submit">Save</button>
+                        </div>
+                    </form>
+                </div>
+                <div class="col-12 col-lg-3 d-flex gap-2 justify-content-lg-end">
+                    <?php if ($selectedPresetId > 0): ?>
+                        <form method="post" action="<?= url('/filter-presets/' . $selectedPresetId . '/delete') ?>" onsubmit="return confirm('Delete this preset?');">
+                            <?= csrf_field() ?>
+                            <input type="hidden" name="module_key" value="<?= e($filterPresetModule) ?>" />
+                            <input type="hidden" name="return_to" value="<?= e('/jobs') ?>" />
+                            <button class="btn btn-outline-danger" type="submit">Delete Preset</button>
+                        </form>
+                    <?php endif; ?>
+                    <a class="btn btn-outline-primary" href="<?= url('/jobs?' . http_build_query($exportParams)) ?>">
+                        <i class="fas fa-file-csv me-1"></i>
+                        Export CSV
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-body">
             <form method="get" action="<?= url('/jobs') ?>">
+                <?php if ($selectedPresetId > 0): ?>
+                    <input type="hidden" name="preset_id" value="<?= e((string) $selectedPresetId) ?>" />
+                <?php endif; ?>
                 <div class="row g-2 align-items-end">
                     <div class="col-12 col-lg-4">
                         <label class="form-label">Search</label>
@@ -44,6 +115,14 @@
                             <option value="active" <?= ($filters['record_status'] ?? 'active') === 'active' ? 'selected' : '' ?>>Active</option>
                             <option value="deleted" <?= ($filters['record_status'] ?? '') === 'deleted' ? 'selected' : '' ?>>Deleted</option>
                             <option value="all" <?= ($filters['record_status'] ?? '') === 'all' ? 'selected' : '' ?>>All</option>
+                        </select>
+                    </div>
+                    <div class="col-12 col-lg-2">
+                        <label class="form-label">Billing</label>
+                        <select class="form-select" name="billing_state">
+                            <option value="all" <?= ($filters['billing_state'] ?? 'all') === 'all' ? 'selected' : '' ?>>All</option>
+                            <option value="billed" <?= ($filters['billing_state'] ?? '') === 'billed' ? 'selected' : '' ?>>Billed</option>
+                            <option value="unbilled" <?= ($filters['billing_state'] ?? '') === 'unbilled' ? 'selected' : '' ?>>Unbilled</option>
                         </select>
                     </div>
                     <div class="col-12 col-lg-2">
@@ -79,6 +158,7 @@
                         <th>Status</th>
                         <th>Scheduled</th>
                         <th>Quote</th>
+                        <th>Last Activity</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -108,6 +188,7 @@
                             <td><span class="badge <?= $statusClass ?> text-uppercase"><?= e($status) ?></span></td>
                             <td><?= e(format_datetime($job['scheduled_date'] ?? null)) ?></td>
                             <td><?= isset($job['total_quote']) ? e('$' . number_format((float) $job['total_quote'], 2)) : '—' ?></td>
+                            <td><?= e(format_datetime($job['last_activity_at'] ?? null)) ?></td>
                         </tr>
                     <?php endforeach; ?>
                 </tbody>

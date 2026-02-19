@@ -11,6 +11,7 @@ use App\Models\Job;
 use App\Models\Prospect;
 use App\Models\Task;
 use App\Models\TimeEntry;
+use App\Models\UserFilterPreset;
 
 final class JobsController extends Controller
 {
@@ -22,13 +23,47 @@ final class JobsController extends Controller
     {
         require_permission('jobs', 'view');
 
+        $moduleKey = 'jobs';
+        $userId = auth_user_id() ?? 0;
+        $savedPresets = $userId > 0 ? UserFilterPreset::forUser($userId, $moduleKey) : [];
+        $selectedPresetId = $this->toIntOrNull($_GET['preset_id'] ?? null);
+        $presetFilters = [];
+        if ($selectedPresetId !== null && $selectedPresetId > 0 && $userId > 0) {
+            $preset = UserFilterPreset::findForUser($selectedPresetId, $userId, $moduleKey);
+            if ($preset) {
+                $presetFilters = is_array($preset['filters'] ?? null) ? $preset['filters'] : [];
+            } else {
+                $selectedPresetId = null;
+            }
+        }
+
         $filters = [
-            'q' => trim($_GET['q'] ?? ''),
-            'status' => $_GET['status'] ?? 'all',
-            'record_status' => $_GET['record_status'] ?? 'active',
-            'start_date' => trim($_GET['start_date'] ?? ''),
-            'end_date' => trim($_GET['end_date'] ?? ''),
+            'q' => trim((string) ($presetFilters['q'] ?? '')),
+            'status' => (string) ($presetFilters['status'] ?? 'all'),
+            'record_status' => (string) ($presetFilters['record_status'] ?? 'active'),
+            'billing_state' => (string) ($presetFilters['billing_state'] ?? 'all'),
+            'start_date' => trim((string) ($presetFilters['start_date'] ?? '')),
+            'end_date' => trim((string) ($presetFilters['end_date'] ?? '')),
         ];
+
+        if (array_key_exists('q', $_GET)) {
+            $filters['q'] = trim((string) ($_GET['q'] ?? ''));
+        }
+        if (array_key_exists('status', $_GET)) {
+            $filters['status'] = (string) ($_GET['status'] ?? 'all');
+        }
+        if (array_key_exists('record_status', $_GET)) {
+            $filters['record_status'] = (string) ($_GET['record_status'] ?? 'active');
+        }
+        if (array_key_exists('billing_state', $_GET)) {
+            $filters['billing_state'] = (string) ($_GET['billing_state'] ?? 'all');
+        }
+        if (array_key_exists('start_date', $_GET)) {
+            $filters['start_date'] = trim((string) ($_GET['start_date'] ?? ''));
+        }
+        if (array_key_exists('end_date', $_GET)) {
+            $filters['end_date'] = trim((string) ($_GET['end_date'] ?? ''));
+        }
 
         $statusOptions = $this->jobStatuses();
         if (!in_array($filters['status'], array_merge(['all'], $statusOptions), true)) {
@@ -37,8 +72,15 @@ final class JobsController extends Controller
         if (!in_array($filters['record_status'], ['active', 'deleted', 'all'], true)) {
             $filters['record_status'] = 'active';
         }
+        if (!in_array($filters['billing_state'], ['all', 'billed', 'unbilled'], true)) {
+            $filters['billing_state'] = 'all';
+        }
 
         $jobs = Job::filter($filters);
+        if ((string) ($_GET['export'] ?? '') === 'csv') {
+            $this->downloadIndexCsv($jobs);
+            return;
+        }
 
         $pageScripts = implode("\n", [
             '<script src="https://cdn.jsdelivr.net/npm/simple-datatables@7.1.2/dist/umd/simple-datatables.min.js" crossorigin="anonymous"></script>',
@@ -50,6 +92,9 @@ final class JobsController extends Controller
             'jobs' => $jobs,
             'filters' => $filters,
             'statusOptions' => $statusOptions,
+            'savedPresets' => $savedPresets,
+            'selectedPresetId' => $selectedPresetId,
+            'filterPresetModule' => $moduleKey,
             'pageScripts' => $pageScripts,
         ]);
     }
@@ -150,6 +195,7 @@ final class JobsController extends Controller
             'total_quote' => $this->toDecimalOrNull($_POST['total_quote'] ?? null),
             'total_billed' => $this->toDecimalOrNull($_POST['total_billed'] ?? null),
         ];
+        $ignoreDuplicateWarning = isset($_POST['ignore_duplicate_warning']) && (string) $_POST['ignore_duplicate_warning'] === '1';
 
         $errors = [];
         if ($data['name'] === '') {
@@ -163,6 +209,14 @@ final class JobsController extends Controller
         }
         if ($data['client_id'] === null || $data['client_id'] <= 0) {
             $errors[] = 'A client contact is required.';
+        }
+        $duplicateMatches = Job::findPotentialDuplicates($data, null, 5);
+        if (!$ignoreDuplicateWarning && !empty($duplicateMatches)) {
+            $topIds = array_map(
+                static fn (array $row): string => '#' . (int) ($row['id'] ?? 0),
+                array_slice($duplicateMatches, 0, 3)
+            );
+            $errors[] = 'Potential duplicate job found (' . implode(', ', $topIds) . '). Check "Ignore duplicate warning" if this is intentional.';
         }
 
         if (!empty($errors)) {
@@ -271,25 +325,25 @@ final class JobsController extends Controller
 
         $employeeId = $this->toIntOrNull($_POST['employee_id'] ?? null);
         if ($employeeId === null || $employeeId <= 0) {
-            flash('error', 'Select a valid employee.');
-            redirect($this->jobCrewRedirectPath($jobId));
+            $this->respondActionError('Select a valid employee.', $this->jobCrewRedirectPath($jobId));
+            return;
         }
 
         if (!Job::isCrewMember($jobId, $employeeId)) {
-            flash('error', 'Employee must be added to the crew before punch in.');
-            redirect($this->jobCrewRedirectPath($jobId));
+            $this->respondActionError('Employee must be added to the crew before punch in.', $this->jobCrewRedirectPath($jobId));
+            return;
         }
 
         $openEntry = TimeEntry::findOpenForEmployee($employeeId);
         if ($openEntry) {
             $openJobId = (int) ($openEntry['job_id'] ?? 0);
             if ($openJobId === $jobId) {
-                flash('error', 'This employee is already punched in on this job.');
-                redirect($this->jobCrewRedirectPath($jobId));
+                $this->respondActionError('This employee is already punched in on this job.', $this->jobCrewRedirectPath($jobId));
+                return;
             }
 
-            flash('error', 'This employee is currently punched in on job #' . $openJobId . '.');
-            redirect($this->jobCrewRedirectPath($jobId));
+            $this->respondActionError('This employee is currently punched in on job #' . $openJobId . '.', $this->jobCrewRedirectPath($jobId));
+            return;
         }
 
         $employee = null;
@@ -317,8 +371,8 @@ final class JobsController extends Controller
                 'note' => null,
             ], $this->actorId());
         } catch (\Throwable) {
-            flash('error', 'Punch in failed on server. Please refresh and try again.');
-            redirect($this->jobCrewRedirectPath($jobId));
+            $this->respondActionError('Punch in failed on server. Please refresh and try again.', $this->jobCrewRedirectPath($jobId), 500);
+            return;
         }
 
         $employeeName = trim((string) (($employee['employee_name'] ?? '') !== '' ? $employee['employee_name'] : ('Employee #' . $employeeId)));
@@ -331,8 +385,18 @@ final class JobsController extends Controller
             $entryId
         );
 
-        flash('success', $employeeName . ' punched in.');
-        redirect($this->jobCrewRedirectPath($jobId));
+        $this->respondActionSuccess(
+            $employeeName . ' punched in.',
+            $this->jobCrewRedirectPath($jobId),
+            [
+                'action' => 'punched_in',
+                'employee_id' => $employeeId,
+                'job_id' => $jobId,
+                'entry_id' => $entryId,
+                'since_label' => $this->formatTimeLabel(date('H:i:s')),
+                'elapsed_label' => '0h 00m',
+            ]
+        );
     }
 
     public function punchOut(array $params): void
@@ -349,8 +413,8 @@ final class JobsController extends Controller
 
         $entryId = $this->toIntOrNull($_POST['time_entry_id'] ?? null);
         if ($entryId === null || $entryId <= 0) {
-            flash('error', 'Invalid time entry.');
-            redirect($this->jobCrewRedirectPath($jobId));
+            $this->respondActionError('Invalid time entry.', $this->jobCrewRedirectPath($jobId));
+            return;
         }
 
         $entry = TimeEntry::findById($entryId);
@@ -362,8 +426,8 @@ final class JobsController extends Controller
             || empty($entry['start_time'])
             || !empty($entry['end_time'])
         ) {
-            flash('error', 'This time entry is not available for punch out.');
-            redirect($this->jobCrewRedirectPath($jobId));
+            $this->respondActionError('This time entry is not available for punch out.', $this->jobCrewRedirectPath($jobId));
+            return;
         }
 
         $minutesWorked = $this->calculateOpenMinutes(
@@ -383,8 +447,8 @@ final class JobsController extends Controller
                 'total_paid' => $totalPaid,
             ], $this->actorId());
         } catch (\Throwable) {
-            flash('error', 'Punch out failed on server. Please refresh and try again.');
-            redirect($this->jobCrewRedirectPath($jobId));
+            $this->respondActionError('Punch out failed on server. Please refresh and try again.', $this->jobCrewRedirectPath($jobId), 500);
+            return;
         }
 
         $employeeName = trim((string) ($entry['employee_name'] ?? ('Employee #' . (string) ($entry['employee_id'] ?? ''))));
@@ -397,8 +461,15 @@ final class JobsController extends Controller
             $entryId
         );
 
-        flash('success', $employeeName . ' punched out.');
-        redirect($this->jobCrewRedirectPath($jobId));
+        $this->respondActionSuccess(
+            $employeeName . ' punched out.',
+            $this->jobCrewRedirectPath($jobId),
+            [
+                'action' => 'punched_out',
+                'employee_id' => (int) ($entry['employee_id'] ?? 0),
+                'job_id' => $jobId,
+            ]
+        );
     }
 
     public function edit(array $params): void
@@ -625,6 +696,7 @@ final class JobsController extends Controller
             'total_quote' => $this->toDecimalOrNull($_POST['total_quote'] ?? null),
             'total_billed' => $this->toDecimalOrNull($_POST['total_billed'] ?? null),
         ];
+        $ignoreDuplicateWarning = isset($_POST['ignore_duplicate_warning']) && (string) $_POST['ignore_duplicate_warning'] === '1';
 
         $errors = [];
         if ($data['name'] === '') {
@@ -638,6 +710,14 @@ final class JobsController extends Controller
         }
         if ($data['client_id'] === null || $data['client_id'] <= 0) {
             $errors[] = 'A client contact is required.';
+        }
+        $duplicateMatches = Job::findPotentialDuplicates($data, $id, 5);
+        if (!$ignoreDuplicateWarning && !empty($duplicateMatches)) {
+            $topIds = array_map(
+                static fn (array $row): string => '#' . (int) ($row['id'] ?? 0),
+                array_slice($duplicateMatches, 0, 3)
+            );
+            $errors[] = 'Potential duplicate job found (' . implode(', ', $topIds) . '). Check "Ignore duplicate warning" if this is intentional.';
         }
 
         if (!empty($errors)) {
@@ -1385,9 +1465,56 @@ final class JobsController extends Controller
             return true;
         }
 
-        flash('error', 'Your session expired. Please try again.');
+        $message = 'Your session expired. Please try again.';
+        if (expects_json_response()) {
+            json_response([
+                'ok' => false,
+                'message' => $message,
+            ], 419);
+            return false;
+        }
+
+        flash('error', $message);
         redirect($redirectPath);
         return false;
+    }
+
+    private function respondActionError(string $message, string $redirectPath, int $statusCode = 422): void
+    {
+        if (expects_json_response()) {
+            json_response([
+                'ok' => false,
+                'message' => $message,
+            ], $statusCode);
+            return;
+        }
+
+        flash('error', $message);
+        redirect($redirectPath);
+    }
+
+    private function respondActionSuccess(string $message, string $redirectPath, array $payload = []): void
+    {
+        if (expects_json_response()) {
+            json_response(array_merge([
+                'ok' => true,
+                'message' => $message,
+            ], $payload));
+            return;
+        }
+
+        flash('success', $message);
+        redirect($redirectPath);
+    }
+
+    private function formatTimeLabel(string $value): string
+    {
+        $timestamp = strtotime($value);
+        if ($timestamp === false) {
+            return $value;
+        }
+
+        return date('g:i A', $timestamp);
     }
 
     private function jobCrewRedirectPath(int $jobId): string
@@ -1454,6 +1581,34 @@ final class JobsController extends Controller
         }
 
         return array_values(array_unique($values));
+    }
+
+    private function downloadIndexCsv(array $jobs): void
+    {
+        $rows = [];
+        foreach ($jobs as $job) {
+            $clientName = trim((string) (($job['first_name'] ?? '') . ' ' . ($job['last_name'] ?? '')));
+            if ($clientName === '') {
+                $clientName = (string) ($job['business_name'] ?? '');
+            }
+
+            $rows[] = [
+                (string) ($job['id'] ?? ''),
+                (string) ($job['name'] ?? ''),
+                $clientName,
+                trim((string) ($job['city'] ?? '') . ((string) ($job['state'] ?? '') !== '' ? ', ' . (string) $job['state'] : '')),
+                (string) ($job['job_status'] ?? ''),
+                format_datetime($job['scheduled_date'] ?? null),
+                isset($job['total_quote']) ? number_format((float) $job['total_quote'], 2) : '',
+                format_datetime($job['last_activity_at'] ?? null),
+            ];
+        }
+
+        stream_csv_download(
+            'jobs-' . date('Ymd-His') . '.csv',
+            ['ID', 'Job', 'Client', 'City/State', 'Status', 'Scheduled', 'Quote', 'Last Activity'],
+            $rows
+        );
     }
 
     private function toDateTimeOrNull(mixed $value): ?string

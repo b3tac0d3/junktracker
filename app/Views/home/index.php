@@ -19,6 +19,10 @@
     $tasksOutstanding = is_array($overview['tasks_outstanding'] ?? null) ? $overview['tasks_outstanding'] : [];
     $overdueTasks = is_array($tasksOutstanding['overdue'] ?? null) ? $tasksOutstanding['overdue'] : [];
     $upcomingTasks = is_array($tasksOutstanding['upcoming'] ?? null) ? $tasksOutstanding['upcoming'] : [];
+    $completedUnbilled = is_array($overview['completed_unbilled_jobs'] ?? null) ? $overview['completed_unbilled_jobs'] : [];
+    $completedUnbilledRows = is_array($completedUnbilled['rows'] ?? null) ? $completedUnbilled['rows'] : [];
+    $completedUnbilledSummary = is_array($completedUnbilled['summary'] ?? null) ? $completedUnbilled['summary'] : [];
+    $alertQueue = is_array($overview['alert_queue'] ?? null) ? $overview['alert_queue'] : [];
     $consignorPayments = is_array($overview['consignor_payments'] ?? null) ? $overview['consignor_payments'] : [];
     $consignorPaymentRows = is_array($consignorPayments['rows'] ?? null) ? $consignorPayments['rows'] : [];
     $consignorPaymentSummary = is_array($consignorPayments['summary'] ?? null) ? $consignorPayments['summary'] : [];
@@ -34,6 +38,14 @@
     $tasksOpenUrl = url('/tasks?status=open');
     $tasksOverdueUrl = url('/tasks?status=overdue');
     $consignorsUrl = url('/consignors');
+    $selfPunch = is_array($selfPunch ?? null) ? $selfPunch : [];
+    $selfEmployee = is_array($selfPunch['employee'] ?? null) ? $selfPunch['employee'] : null;
+    $selfOpenEntry = is_array($selfPunch['open_entry'] ?? null) ? $selfPunch['open_entry'] : null;
+    $selfCanManage = !empty($selfPunch['can_manage']);
+    $selfCanPunchIn = !empty($selfPunch['can_punch_in']);
+    $selfCanPunchOut = !empty($selfPunch['can_punch_out']);
+    $selfOpenLabel = trim((string) ($selfPunch['open_label'] ?? ''));
+    $selfMessage = trim((string) ($selfPunch['message'] ?? ''));
 
     $money = static fn (mixed $value): string => '$' . number_format((float) ($value ?? 0), 2);
     $minutes = static function (mixed $value): string {
@@ -59,6 +71,64 @@
             YTD: <?= e(format_date($period['ytd_start'] ?? null)) ?> - <?= e(format_date($period['today'] ?? null)) ?>
         </div>
     </div>
+
+    <?php if ($selfCanManage): ?>
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-body d-flex flex-wrap align-items-center justify-content-between gap-3">
+                <div>
+                    <div class="text-uppercase small text-muted">My Punch Clock</div>
+                    <?php if ($selfEmployee): ?>
+                        <div class="fw-semibold">
+                            <?= e((string) ($selfEmployee['name'] ?? 'Employee')) ?>
+                            <?php if ($selfOpenEntry): ?>
+                                <span class="badge bg-success ms-2">Punched In</span>
+                            <?php else: ?>
+                                <span class="badge bg-secondary ms-2">Punched Out</span>
+                            <?php endif; ?>
+                        </div>
+                        <?php if ($selfOpenEntry): ?>
+                            <div class="small text-muted">
+                                On: <?= e($selfOpenLabel !== '' ? $selfOpenLabel : 'Non-Job Time') ?>
+                                &nbsp;•&nbsp;
+                                Since: <?= e(format_datetime((string) ($selfOpenEntry['work_date'] ?? '') . ' ' . (string) ($selfOpenEntry['start_time'] ?? ''))) ?>
+                            </div>
+                        <?php else: ?>
+                            <div class="small text-muted">Punch in quickly as Non-Job Time, or open Time Tracking to punch into a job.</div>
+                        <?php endif; ?>
+                    <?php else: ?>
+                        <div class="fw-semibold text-danger"><?= e($selfMessage !== '' ? $selfMessage : 'No linked employee profile found.') ?></div>
+                        <div class="small text-muted">Set employee email to match your login (or add an employee profile).</div>
+                    <?php endif; ?>
+                </div>
+                <div class="d-flex flex-wrap gap-2">
+                    <?php if ($selfCanPunchOut && $selfEmployee): ?>
+                        <form method="post" action="<?= url('/dashboard/punch-out') ?>">
+                            <?= csrf_field() ?>
+                            <button class="btn btn-danger" type="submit">
+                                <i class="fas fa-stop-circle me-1"></i>
+                                Punch Me Out
+                            </button>
+                        </form>
+                    <?php elseif ($selfCanPunchIn && $selfEmployee): ?>
+                        <form method="post" action="<?= url('/dashboard/punch-in') ?>">
+                            <?= csrf_field() ?>
+                            <button class="btn btn-success" type="submit">
+                                <i class="fas fa-play-circle me-1"></i>
+                                Punch Me In
+                            </button>
+                        </form>
+                    <?php endif; ?>
+
+                    <?php if ($selfEmployee): ?>
+                        <a class="btn btn-outline-secondary" href="<?= url('/time-tracking/new') ?>">
+                            <i class="fas fa-clock me-1"></i>
+                            Time Tracking
+                        </a>
+                    <?php endif; ?>
+                </div>
+            </div>
+        </div>
+    <?php endif; ?>
 
     <div class="row g-3 mb-4">
         <div class="col-md-6 col-xl-3">
@@ -128,6 +198,31 @@
                     <a class="small text-white text-decoration-none" href="<?= url('/time-tracking/open') ?>">Open Punch Clock <i class="fas fa-angle-right ms-1"></i></a>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-header d-flex align-items-center justify-content-between">
+            <div><i class="fas fa-triangle-exclamation me-1"></i>Alert Queue</div>
+            <div class="d-flex gap-2 flex-wrap">
+                <a class="badge text-bg-danger text-decoration-none" href="<?= url('/tasks?status=overdue') ?>">Overdue Tasks: <?= e((string) ((int) ($tasks['overdue_count'] ?? 0))) ?></a>
+                <a class="badge text-bg-warning text-decoration-none" href="<?= url('/jobs?status=complete&billing_state=unbilled') ?>">Completed Unbilled Jobs: <?= e((string) ((int) ($completedUnbilledSummary['count_total'] ?? 0))) ?></a>
+                <a class="badge text-bg-primary text-decoration-none" href="<?= url('/consignors') ?>">Consignor Payments Due: <?= e((string) ((int) ($consignorPaymentSummary['due_now_count'] ?? 0))) ?></a>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <?php if (empty($alertQueue)): ?>
+                <div class="p-3 text-muted">No active alerts right now.</div>
+            <?php else: ?>
+                <div class="list-group list-group-flush">
+                    <?php foreach ($alertQueue as $alert): ?>
+                        <a class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" href="<?= url((string) ($alert['url'] ?? '/')) ?>">
+                            <span class="fw-semibold"><?= e((string) ($alert['label'] ?? 'Alert')) ?></span>
+                            <span class="small text-muted"><?= e((string) ($alert['meta'] ?? '')) ?></span>
+                        </a>
+                    <?php endforeach; ?>
+                </div>
+            <?php endif; ?>
         </div>
     </div>
 
@@ -272,9 +367,9 @@
                                 <?php else: ?>
                                     <?php foreach ($overdueTasks as $taskRow): ?>
                                         <?php $taskId = (int) ($taskRow['id'] ?? 0); ?>
-                                        <tr>
+                                        <tr data-task-id="<?= e((string) $taskId) ?>">
                                             <td>
-                                                <form method="post" action="<?= url('/tasks/' . $taskId . '/toggle-complete') ?>">
+                                                <form method="post" action="<?= url('/tasks/' . $taskId . '/toggle-complete') ?>" class="js-task-toggle-form">
                                                     <?= csrf_field() ?>
                                                     <input type="hidden" name="return_to" value="/" />
                                                     <input type="hidden" name="is_completed" value="0" />
@@ -283,7 +378,7 @@
                                             </td>
                                             <td><span class="badge bg-danger">Overdue</span></td>
                                             <td>
-                                                <a class="text-decoration-none" href="<?= url('/tasks/' . $taskId) ?>">
+                                                <a class="text-decoration-none js-task-title" href="<?= url('/tasks/' . $taskId) ?>">
                                                     <?= e((string) (($taskRow['title'] ?? '') !== '' ? $taskRow['title'] : ('Task #' . $taskId))) ?>
                                                 </a>
                                             </td>
@@ -303,9 +398,9 @@
                                     <?php endforeach; ?>
                                     <?php foreach ($upcomingTasks as $taskRow): ?>
                                         <?php $taskId = (int) ($taskRow['id'] ?? 0); ?>
-                                        <tr>
+                                        <tr data-task-id="<?= e((string) $taskId) ?>">
                                             <td>
-                                                <form method="post" action="<?= url('/tasks/' . $taskId . '/toggle-complete') ?>">
+                                                <form method="post" action="<?= url('/tasks/' . $taskId . '/toggle-complete') ?>" class="js-task-toggle-form">
                                                     <?= csrf_field() ?>
                                                     <input type="hidden" name="return_to" value="/" />
                                                     <input type="hidden" name="is_completed" value="0" />
@@ -314,7 +409,7 @@
                                             </td>
                                             <td><span class="badge bg-warning text-dark">Upcoming</span></td>
                                             <td>
-                                                <a class="text-decoration-none" href="<?= url('/tasks/' . $taskId) ?>">
+                                                <a class="text-decoration-none js-task-title" href="<?= url('/tasks/' . $taskId) ?>">
                                                     <?= e((string) (($taskRow['title'] ?? '') !== '' ? $taskRow['title'] : ('Task #' . $taskId))) ?>
                                                 </a>
                                             </td>

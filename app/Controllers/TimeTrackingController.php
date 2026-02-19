@@ -6,6 +6,7 @@ namespace App\Controllers;
 
 use App\Models\Job;
 use App\Models\TimeEntry;
+use App\Models\UserFilterPreset;
 use Core\Controller;
 use Throwable;
 
@@ -15,14 +16,47 @@ final class TimeTrackingController extends Controller
     {
         $this->authorize('view');
 
+        $moduleKey = 'time_tracking';
+        $userId = auth_user_id() ?? 0;
+        $savedPresets = $userId > 0 ? UserFilterPreset::forUser($userId, $moduleKey) : [];
+        $selectedPresetId = $this->toIntOrNull($_GET['preset_id'] ?? null);
+        $presetFilters = [];
+        if ($selectedPresetId !== null && $selectedPresetId > 0 && $userId > 0) {
+            $preset = UserFilterPreset::findForUser($selectedPresetId, $userId, $moduleKey);
+            if ($preset) {
+                $presetFilters = is_array($preset['filters'] ?? null) ? $preset['filters'] : [];
+            } else {
+                $selectedPresetId = null;
+            }
+        }
+
         $filters = [
-            'q' => trim((string) ($_GET['q'] ?? '')),
-            'employee_id' => $this->toIntOrNull($_GET['employee_id'] ?? null),
-            'job_id' => $this->toIntOrNull($_GET['job_id'] ?? null),
-            'start_date' => trim((string) ($_GET['start_date'] ?? '')),
-            'end_date' => trim((string) ($_GET['end_date'] ?? '')),
-            'record_status' => (string) ($_GET['record_status'] ?? 'active'),
+            'q' => trim((string) ($presetFilters['q'] ?? '')),
+            'employee_id' => $this->toIntOrNull($presetFilters['employee_id'] ?? null),
+            'job_id' => $this->toIntOrNull($presetFilters['job_id'] ?? null),
+            'start_date' => trim((string) ($presetFilters['start_date'] ?? '')),
+            'end_date' => trim((string) ($presetFilters['end_date'] ?? '')),
+            'record_status' => (string) ($presetFilters['record_status'] ?? 'active'),
         ];
+
+        if (array_key_exists('q', $_GET)) {
+            $filters['q'] = trim((string) ($_GET['q'] ?? ''));
+        }
+        if (array_key_exists('employee_id', $_GET)) {
+            $filters['employee_id'] = $this->toIntOrNull($_GET['employee_id'] ?? null);
+        }
+        if (array_key_exists('job_id', $_GET)) {
+            $filters['job_id'] = $this->toIntOrNull($_GET['job_id'] ?? null);
+        }
+        if (array_key_exists('start_date', $_GET)) {
+            $filters['start_date'] = trim((string) ($_GET['start_date'] ?? ''));
+        }
+        if (array_key_exists('end_date', $_GET)) {
+            $filters['end_date'] = trim((string) ($_GET['end_date'] ?? ''));
+        }
+        if (array_key_exists('record_status', $_GET)) {
+            $filters['record_status'] = (string) ($_GET['record_status'] ?? 'active');
+        }
 
         if ($filters['start_date'] === '' && $filters['end_date'] === '') {
             $filters['start_date'] = date('Y-m-01');
@@ -31,6 +65,12 @@ final class TimeTrackingController extends Controller
 
         if (!in_array($filters['record_status'], ['active', 'deleted', 'all'], true)) {
             $filters['record_status'] = 'active';
+        }
+
+        $entries = TimeEntry::filter($filters);
+        if ((string) ($_GET['export'] ?? '') === 'csv') {
+            $this->downloadIndexCsv($entries);
+            return;
         }
 
         $pageScripts = implode("\n", [
@@ -43,11 +83,14 @@ final class TimeTrackingController extends Controller
         $this->render('time_tracking/index', [
             'pageTitle' => 'Time Tracking',
             'filters' => $filters,
-            'entries' => TimeEntry::filter($filters),
+            'entries' => $entries,
             'summary' => $summary,
             'byEmployee' => TimeEntry::summaryByEmployee($filters),
             'employees' => TimeEntry::employees(),
             'jobs' => TimeEntry::jobs(),
+            'savedPresets' => $savedPresets,
+            'selectedPresetId' => $selectedPresetId,
+            'filterPresetModule' => $moduleKey,
             'pageScripts' => $pageScripts,
         ]);
     }
@@ -735,5 +778,31 @@ final class TimeTrackingController extends Controller
         }
 
         echo '404 Not Found';
+    }
+
+    private function downloadIndexCsv(array $entries): void
+    {
+        $rows = [];
+        foreach ($entries as $entry) {
+            $minutes = (int) ($entry['minutes_worked'] ?? 0);
+            $rows[] = [
+                format_date($entry['work_date'] ?? null),
+                (string) ($entry['job_name'] ?? ''),
+                (string) ($entry['employee_name'] ?? ''),
+                (string) ($entry['start_time'] ?? ''),
+                (string) ($entry['end_time'] ?? ''),
+                number_format($minutes / 60, 2),
+                number_format((float) ($entry['pay_rate'] ?? 0), 2),
+                number_format((float) ($entry['paid_calc'] ?? 0), 2),
+                (string) ($entry['note'] ?? ''),
+                format_datetime($entry['updated_at'] ?? null),
+            ];
+        }
+
+        stream_csv_download(
+            'time-tracking-' . date('Ymd-His') . '.csv',
+            ['Date', 'Job', 'Employee', 'Start', 'End', 'Hours', 'Rate', 'Owed', 'Note', 'Last Activity'],
+            $rows
+        );
     }
 }

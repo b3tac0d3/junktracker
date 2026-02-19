@@ -55,7 +55,7 @@
                         <th>Email</th>
                         <th>Role</th>
                         <th>Status</th>
-                        <th>Created</th>
+                        <th>Last Activity</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -77,7 +77,7 @@
                                     <span class="badge bg-secondary">Inactive</span>
                                 <?php endif; ?>
                             </td>
-                            <td><?= e(format_datetime($user['created_at'] ?? null)) ?></td>
+                            <td><?= e(format_datetime($user['last_activity_at'] ?? null)) ?></td>
                         </tr>
                     <?php endforeach; ?>
                 </tbody>

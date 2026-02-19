@@ -22,6 +22,8 @@ final class Job
                        j.quote_date,
                        j.total_quote,
                        j.total_billed,
+                       j.updated_at,
+                       COALESCE(j.updated_at, j.scheduled_date, j.quote_date, j.created_at) AS last_activity_at,
                        c.first_name,
                        c.last_name,
                        c.business_name
@@ -39,6 +41,14 @@ final class Job
         if (!empty($filters['status']) && $filters['status'] !== 'all') {
             $where[] = 'j.job_status = :status';
             $params['status'] = $filters['status'];
+        }
+
+        if (!empty($filters['billing_state']) && $filters['billing_state'] !== 'all') {
+            if ($filters['billing_state'] === 'billed') {
+                $where[] = '(j.billed_date IS NOT NULL OR COALESCE(j.total_billed, 0) > 0)';
+            } elseif ($filters['billing_state'] === 'unbilled') {
+                $where[] = '(j.billed_date IS NULL AND COALESCE(j.total_billed, 0) <= 0)';
+            }
         }
 
         if (!empty($filters['record_status']) && $filters['record_status'] !== 'all') {
@@ -69,6 +79,149 @@ final class Job
         $stmt->execute($params);
 
         return $stmt->fetchAll();
+    }
+
+    public static function findPotentialDuplicates(array $data, ?int $excludeId = null, int $limit = 8): array
+    {
+        $name = strtolower(trim((string) ($data['name'] ?? '')));
+        $address1 = strtolower(trim((string) ($data['address_1'] ?? '')));
+        $city = strtolower(trim((string) ($data['city'] ?? '')));
+        $state = strtolower(trim((string) ($data['state'] ?? '')));
+        $zip = self::normalizeZip((string) ($data['zip'] ?? ''));
+        $phone = self::normalizePhone((string) ($data['phone'] ?? ''));
+
+        $hasName = $name !== '';
+        $hasPhone = strlen($phone) >= 7;
+        $hasAddress = $address1 !== '';
+
+        if (!$hasName && !$hasPhone && !$hasAddress) {
+            return [];
+        }
+
+        $limit = max(1, min($limit, 25));
+        $phoneExpression = "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(j.phone, ''), '(', ''), ')', ''), '-', ''), ' ', ''), '.', ''), '+', ''), '/', '')";
+
+        $where = ['j.deleted_at IS NULL', 'COALESCE(j.active, 1) = 1'];
+        $matchClauses = [];
+        $params = [];
+
+        if ($excludeId !== null && $excludeId > 0) {
+            $where[] = 'j.id <> :exclude_id';
+            $params['exclude_id'] = $excludeId;
+        }
+        if ($hasName) {
+            $matchClauses[] = 'LOWER(TRIM(COALESCE(j.name, ""))) = :name_exact';
+            $params['name_exact'] = $name;
+        }
+        if ($hasPhone) {
+            $matchClauses[] = 'RIGHT(' . $phoneExpression . ', ' . strlen($phone) . ') = :phone_exact';
+            $params['phone_exact'] = $phone;
+        }
+        if ($hasAddress) {
+            $matchClauses[] = 'LOWER(TRIM(COALESCE(j.address_1, ""))) = :address_exact';
+            $params['address_exact'] = $address1;
+        }
+
+        if (empty($matchClauses)) {
+            return [];
+        }
+
+        $where[] = '(' . implode(' OR ', $matchClauses) . ')';
+
+        $sql = 'SELECT j.id,
+                       j.name,
+                       j.address_1,
+                       j.city,
+                       j.state,
+                       j.zip,
+                       j.phone,
+                       j.job_status,
+                       j.scheduled_date,
+                       j.updated_at,
+                       COALESCE(
+                           NULLIF(c.business_name, \'\'),
+                           NULLIF(TRIM(CONCAT_WS(\' \', c.first_name, c.last_name)), \'\'),
+                           CONCAT(\'Client #\', c.id)
+                       ) AS client_name
+                FROM jobs j
+                LEFT JOIN clients c ON c.id = j.client_id
+                WHERE ' . implode(' AND ', $where) . '
+                ORDER BY COALESCE(j.updated_at, j.created_at) DESC, j.id DESC
+                LIMIT ' . $limit;
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute($params);
+        $rows = $stmt->fetchAll();
+        if (empty($rows)) {
+            return [];
+        }
+
+        $matches = [];
+        foreach ($rows as $row) {
+            $rowName = strtolower(trim((string) ($row['name'] ?? '')));
+            $rowAddress = strtolower(trim((string) ($row['address_1'] ?? '')));
+            $rowCity = strtolower(trim((string) ($row['city'] ?? '')));
+            $rowState = strtolower(trim((string) ($row['state'] ?? '')));
+            $rowZip = self::normalizeZip((string) ($row['zip'] ?? ''));
+            $rowPhone = self::normalizePhone((string) ($row['phone'] ?? ''));
+
+            $nameMatch = $hasName && $rowName !== '' && $rowName === $name;
+            $phoneMatch = $hasPhone && $rowPhone !== '' && str_ends_with($rowPhone, $phone);
+            $addressMatch = $hasAddress && $rowAddress !== '' && $rowAddress === $address1;
+            $zipMatch = $zip !== '' && $rowZip !== '' && $rowZip === $zip;
+            $locationMatch = $city !== '' && $state !== '' && $rowCity === $city && $rowState === $state;
+
+            $score = 0;
+            $reasons = [];
+            if ($nameMatch) {
+                $score += 40;
+                $reasons[] = 'Name match';
+            }
+            if ($phoneMatch) {
+                $score += 35;
+                $reasons[] = 'Phone match';
+            }
+            if ($addressMatch) {
+                $score += 30;
+                $reasons[] = 'Address match';
+            }
+            if ($zipMatch) {
+                $score += 15;
+                $reasons[] = 'ZIP match';
+            }
+            if ($locationMatch) {
+                $score += 10;
+                $reasons[] = 'City/State match';
+            }
+            if ($addressMatch && $zipMatch) {
+                $score += 15;
+            }
+
+            if ($score <= 0) {
+                continue;
+            }
+
+            $matches[] = [
+                'id' => (int) ($row['id'] ?? 0),
+                'name' => (string) ($row['name'] ?? ''),
+                'client_name' => (string) ($row['client_name'] ?? ''),
+                'job_status' => (string) ($row['job_status'] ?? ''),
+                'scheduled_date' => (string) ($row['scheduled_date'] ?? ''),
+                'match_score' => $score,
+                'match_reasons' => $reasons,
+            ];
+        }
+
+        usort($matches, static function (array $a, array $b): int {
+            $scoreCompare = (int) ($b['match_score'] ?? 0) <=> (int) ($a['match_score'] ?? 0);
+            if ($scoreCompare !== 0) {
+                return $scoreCompare;
+            }
+
+            return (int) ($b['id'] ?? 0) <=> (int) ($a['id'] ?? 0);
+        });
+
+        return array_values($matches);
     }
 
     public static function lookupForSales(string $term, int $limit = 10): array
@@ -956,14 +1109,16 @@ final class Job
         return $expense ?: null;
     }
 
-    public static function createExpense(int $jobId, array $data, ?int $actorId = null): int
+    public static function createExpense(?int $jobId, array $data, ?int $actorId = null): int
     {
         self::ensureExpenseCategoryColumn();
+
+        $normalizedJobId = ($jobId !== null && $jobId > 0) ? $jobId : null;
 
         $columns = ['job_id', 'disposal_location_id', 'expense_category_id', 'category', 'description', 'amount', 'expense_date', 'is_active', 'created_at'];
         $values = [':job_id', ':disposal_location_id', ':expense_category_id', ':category', ':description', ':amount', ':expense_date', '1', 'NOW()'];
         $params = [
-            'job_id' => $jobId,
+            'job_id' => $normalizedJobId,
             'disposal_location_id' => $data['disposal_location_id'],
             'expense_category_id' => $data['expense_category_id'],
             'category' => $data['category'],
@@ -1520,5 +1675,21 @@ final class Job
         );
 
         $ensured = true;
+    }
+
+    private static function normalizePhone(string $value): string
+    {
+        $digits = preg_replace('/\\D+/', '', trim($value));
+        return $digits ?? '';
+    }
+
+    private static function normalizeZip(string $value): string
+    {
+        $digits = preg_replace('/\\D+/', '', trim($value));
+        if ($digits === null || $digits === '') {
+            return '';
+        }
+
+        return substr($digits, 0, 5);
     }
 }

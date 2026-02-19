@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use Core\Controller;
+use App\Models\Employee;
 use App\Models\User;
 use App\Models\UserAction;
 use App\Models\UserLoginRecord;
@@ -45,6 +46,15 @@ final class UsersController extends Controller
         $id = isset($params['id']) ? (int) $params['id'] : 0;
         $user = $id > 0 ? User::findById($id) : null;
         $lastLogin = $id > 0 ? UserLoginRecord::latestForUser($id) : null;
+        $canManageEmployeeLink = has_role(2);
+        $employeeLinkSupported = Employee::supportsUserLinking();
+        $linkedEmployee = ($canManageEmployeeLink && $employeeLinkSupported && $id > 0)
+            ? Employee::linkedToUser($id)
+            : null;
+        $viewer = auth_user();
+        $viewerRole = (int) ($viewer['role'] ?? 0);
+        $viewerId = auth_user_id();
+        $canDeactivate = !($viewerId !== null && $viewerId === $id && $viewerRole !== 99);
 
         if (!$user) {
             http_response_code(404);
@@ -54,11 +64,150 @@ final class UsersController extends Controller
             }
         }
 
+        $pageScripts = '';
+        if ($canManageEmployeeLink && $employeeLinkSupported) {
+            $pageScripts = '<script src="' . asset('js/user-employee-link.js') . '"></script>';
+        }
+
         $this->render('users/show', [
             'pageTitle' => 'User Details',
             'user' => $user,
             'lastLogin' => $lastLogin,
+            'canManageEmployeeLink' => $canManageEmployeeLink,
+            'employeeLinkSupported' => $employeeLinkSupported,
+            'linkedEmployee' => $linkedEmployee,
+            'canDeactivate' => $canDeactivate,
+            'pageScripts' => $pageScripts,
         ]);
+    }
+
+    public function employeeLookup(): void
+    {
+        $this->authorizeEmployeeLinking();
+
+        if (!Employee::supportsUserLinking()) {
+            json_response([]);
+            return;
+        }
+
+        $term = trim((string) ($_GET['q'] ?? ''));
+        $rows = Employee::lookupForUserLink($term);
+        $payload = array_map(static function (array $row): array {
+            return [
+                'id' => (int) ($row['id'] ?? 0),
+                'name' => trim((string) ($row['name'] ?? '')),
+                'email' => trim((string) ($row['email'] ?? '')),
+                'phone' => trim((string) ($row['phone'] ?? '')),
+                'linked_user_id' => isset($row['user_id']) && $row['user_id'] !== null ? (int) $row['user_id'] : null,
+                'linked_user_name' => trim((string) ($row['linked_user_name'] ?? '')),
+            ];
+        }, $rows);
+
+        json_response($payload);
+    }
+
+    public function linkEmployee(array $params): void
+    {
+        $this->authorizeEmployeeLinking();
+
+        $userId = isset($params['id']) ? (int) $params['id'] : 0;
+        if ($userId <= 0) {
+            redirect('/users');
+        }
+
+        if (!verify_csrf($_POST['csrf_token'] ?? null)) {
+            flash('error', 'Your session expired. Please try again.');
+            redirect('/users/' . $userId);
+        }
+
+        $user = User::findById($userId);
+        if (!$user) {
+            http_response_code(404);
+            if (class_exists('App\\Controllers\\ErrorController')) {
+                (new \App\Controllers\ErrorController())->notFound();
+                return;
+            }
+
+            echo '404 Not Found';
+            return;
+        }
+
+        if (!Employee::supportsUserLinking()) {
+            flash('error', 'Employee-to-user linking is not enabled yet. Run the user/employee link migration first.');
+            redirect('/users/' . $userId);
+        }
+
+        $employeeId = (int) ($_POST['employee_id'] ?? 0);
+        if ($employeeId <= 0) {
+            flash('error', 'Select an employee to link.');
+            redirect('/users/' . $userId);
+        }
+
+        $employee = Employee::findActiveById($employeeId);
+        if (!$employee) {
+            flash('error', 'Selected employee is invalid or inactive.');
+            redirect('/users/' . $userId);
+        }
+
+        try {
+            Employee::assignToUser($employeeId, $userId, auth_user_id());
+        } catch (\Throwable) {
+            flash('error', 'Unable to link employee right now. Please try again.');
+            redirect('/users/' . $userId);
+        }
+
+        $employeeName = trim((string) ($employee['name'] ?? ''));
+        $label = $employeeName !== '' ? $employeeName : ('Employee #' . $employeeId);
+        log_user_action(
+            'user_employee_linked',
+            'employees',
+            $employeeId,
+            'Linked ' . $label . ' to user #' . $userId . '.'
+        );
+
+        flash('success', 'Employee linked for punch actions.');
+        redirect('/users/' . $userId);
+    }
+
+    public function unlinkEmployee(array $params): void
+    {
+        $this->authorizeEmployeeLinking();
+
+        $userId = isset($params['id']) ? (int) $params['id'] : 0;
+        if ($userId <= 0) {
+            redirect('/users');
+        }
+
+        if (!verify_csrf($_POST['csrf_token'] ?? null)) {
+            flash('error', 'Your session expired. Please try again.');
+            redirect('/users/' . $userId);
+        }
+
+        if (!Employee::supportsUserLinking()) {
+            flash('error', 'Employee-to-user linking is not enabled yet. Run the user/employee link migration first.');
+            redirect('/users/' . $userId);
+        }
+
+        $linked = Employee::linkedToUser($userId);
+        $affected = Employee::clearUserLink($userId, auth_user_id());
+
+        if ($affected < 1) {
+            flash('error', 'No linked employee found for this user.');
+            redirect('/users/' . $userId);
+        }
+
+        $employeeId = isset($linked['id']) ? (int) $linked['id'] : null;
+        $employeeName = trim((string) ($linked['name'] ?? ''));
+        $label = $employeeName !== '' ? $employeeName : ($employeeId !== null ? ('Employee #' . $employeeId) : 'employee');
+        log_user_action(
+            'user_employee_unlinked',
+            'employees',
+            $employeeId,
+            'Unlinked ' . $label . ' from user #' . $userId . '.'
+        );
+
+        flash('success', 'Employee link removed.');
+        redirect('/users/' . $userId);
     }
 
     public function create(): void
@@ -148,6 +297,14 @@ final class UsersController extends Controller
         $id = isset($params['id']) ? (int) $params['id'] : 0;
         if ($id <= 0) {
             redirect('/users');
+        }
+
+        $viewer = auth_user();
+        $viewerRole = (int) ($viewer['role'] ?? 0);
+        $viewerId = auth_user_id();
+        if ($viewerId !== null && $viewerId === $id && $viewerRole !== 99) {
+            flash('error', 'You cannot deactivate your own account.');
+            redirect('/users/' . $id);
         }
 
         User::deactivate($id, auth_user_id());
@@ -332,5 +489,14 @@ final class UsersController extends Controller
             'isLogReady' => UserAction::isAvailable(),
             'pageScripts' => $pageScripts,
         ]);
+    }
+
+    private function authorizeEmployeeLinking(): void
+    {
+        require_permission('users', 'view');
+
+        if (!has_role(2)) {
+            redirect('/401');
+        }
     }
 }

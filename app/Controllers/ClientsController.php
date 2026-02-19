@@ -31,9 +31,15 @@ final class ClientsController extends Controller
             '<script src="' . asset('js/clients-search-autocomplete.js') . '"></script>',
         ]);
 
+        $clients = Client::search($query, $status);
+        if ((string) ($_GET['export'] ?? '') === 'csv') {
+            $this->downloadIndexCsv($clients);
+            return;
+        }
+
         $this->render('clients/index', [
             'pageTitle' => 'Clients',
-            'clients' => Client::search($query, $status),
+            'clients' => $clients,
             'query' => $query,
             'status' => $status,
             'pageScripts' => $pageScripts,
@@ -184,6 +190,18 @@ final class ClientsController extends Controller
         $companyId = $this->toIntOrNull($_POST['company_id'] ?? null);
         $actorId = auth_user_id();
         $data['active'] = (int) ($client['active'] ?? 1);
+        $ignoreDuplicateWarning = isset($_POST['ignore_duplicate_warning']) && (string) $_POST['ignore_duplicate_warning'] === '1';
+
+        $duplicateMatches = Client::findPotentialDuplicates($data, $id);
+        if (!$ignoreDuplicateWarning && !empty($duplicateMatches)) {
+            $topIds = array_map(
+                static fn (array $row): string => '#' . (int) ($row['id'] ?? 0),
+                array_slice($duplicateMatches, 0, 3)
+            );
+            flash('error', 'Potential duplicate client found (' . implode(', ', $topIds) . '). Check "Ignore duplicate warning" if this update is intentional.');
+            flash_old($_POST);
+            redirect('/clients/' . $id . '/edit');
+        }
 
         Client::update($id, $data, $actorId);
         Client::syncCompanyLink($id, $companyId, $actorId);
@@ -435,6 +453,33 @@ final class ClientsController extends Controller
         }
 
         return (int) $raw;
+    }
+
+    private function downloadIndexCsv(array $clients): void
+    {
+        $rows = [];
+        foreach ($clients as $client) {
+            $name = trim((string) (($client['first_name'] ?? '') . ' ' . ($client['last_name'] ?? '')));
+            if ($name === '') {
+                $name = 'Client #' . (int) ($client['id'] ?? 0);
+            }
+
+            $rows[] = [
+                (string) ($client['id'] ?? ''),
+                $name,
+                (string) ($client['phone'] ?? ''),
+                (string) ($client['email'] ?? ''),
+                (string) ($client['company_names'] ?? ''),
+                !empty($client['deleted_at']) || empty($client['active']) ? 'Inactive' : 'Active',
+                format_datetime($client['updated_at'] ?? null),
+            ];
+        }
+
+        stream_csv_download(
+            'clients-' . date('Ymd-His') . '.csv',
+            ['ID', 'Name', 'Phone', 'Email', 'Company', 'Status', 'Last Activity'],
+            $rows
+        );
     }
 
     private function renderNotFound(): void

@@ -163,6 +163,12 @@
                                     Admin
                                 </a>
                             <?php endif; ?>
+                            <?php if (has_role(99)): ?>
+                                <a class="nav-link" href="<?= url('/dev') ?>">
+                                    <div class="sb-nav-link-icon"><i class="fas fa-code"></i></div>
+                                    Dev
+                                </a>
+                            <?php endif; ?>
                             <!-- <a class="nav-link collapsed" href="#" data-bs-toggle="collapse" data-bs-target="#collapsePages" aria-expanded="false" aria-controls="collapsePages">
                                 <div class="sb-nav-link-icon"><i class="fas fa-book-open"></i></div>
                                 Pages
@@ -239,6 +245,7 @@
         </div>
         <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js" crossorigin="anonymous"></script>
         <script src="<?= asset('js/scripts.js') ?>"></script>
+        <script src="<?= asset('js/ajax-actions.js') ?>"></script>
         <script>
             (function () {
                 const searchInput = document.getElementById('globalNavSearchInput');

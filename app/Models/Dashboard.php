@@ -23,11 +23,12 @@ final class Dashboard
         $tasks = self::taskSummary();
         $outstandingTasks = self::outstandingTasks(8, 8);
         $consignorPayments = self::consignorPaymentsDue(10);
+        $completedUnbilled = self::completedUnbilledJobs(10);
 
         $grossMtd = (float) ($sales['gross_mtd'] ?? 0) + (float) ($jobsGross['gross_mtd'] ?? 0);
         $grossYtd = (float) ($sales['gross_ytd'] ?? 0) + (float) ($jobsGross['gross_ytd'] ?? 0);
 
-        return [
+        $overview = [
             'period' => [
                 'today' => $today,
                 'mtd_start' => $mtdStart,
@@ -56,7 +57,13 @@ final class Dashboard
             'tasks' => $tasks,
             'tasks_outstanding' => $outstandingTasks,
             'consignor_payments' => $consignorPayments,
+            'completed_unbilled_jobs' => $completedUnbilled,
+            'alert_queue' => self::buildAlertQueue($outstandingTasks, $completedUnbilled, $consignorPayments),
         ];
+
+        self::storeSnapshot($today, $overview);
+
+        return $overview;
     }
 
     private static function counts(string $today): array
@@ -416,6 +423,141 @@ final class Dashboard
             'rows' => [],
             'summary' => ['due_now_count' => 0, 'upcoming_count' => 0],
         ]);
+    }
+
+    private static function completedUnbilledJobs(int $limit): array
+    {
+        return self::safe(static function () use ($limit): array {
+            $capped = max(1, min($limit, 25));
+            $sql = 'SELECT j.id,
+                           j.name,
+                           j.updated_at,
+                           j.scheduled_date,
+                           j.total_quote,
+                           j.total_billed,
+                           j.billed_date,
+                           COALESCE(
+                               NULLIF(c.business_name, \'\'),
+                               NULLIF(TRIM(CONCAT_WS(\' \', c.first_name, c.last_name)), \'\'),
+                               CONCAT(\'Client #\', c.id)
+                           ) AS client_name
+                    FROM jobs j
+                    LEFT JOIN clients c ON c.id = j.client_id
+                    WHERE j.deleted_at IS NULL
+                      AND COALESCE(j.active, 1) = 1
+                      AND j.job_status = \'complete\'
+                      AND (
+                           j.billed_date IS NULL
+                           OR COALESCE(j.total_billed, 0) <= 0
+                      )
+                    ORDER BY COALESCE(j.updated_at, j.end_date, j.scheduled_date, j.created_at) DESC, j.id DESC
+                    LIMIT ' . $capped;
+
+            $rows = Database::connection()->query($sql)->fetchAll();
+            $summarySql = 'SELECT COUNT(*) AS count_total
+                           FROM jobs j
+                           WHERE j.deleted_at IS NULL
+                             AND COALESCE(j.active, 1) = 1
+                             AND j.job_status = \'complete\'
+                             AND (
+                                  j.billed_date IS NULL
+                                  OR COALESCE(j.total_billed, 0) <= 0
+                             )';
+            $summary = Database::connection()->query($summarySql)->fetch();
+
+            return [
+                'rows' => $rows,
+                'summary' => $summary ?: ['count_total' => 0],
+            ];
+        }, [
+            'rows' => [],
+            'summary' => ['count_total' => 0],
+        ]);
+    }
+
+    private static function buildAlertQueue(array $tasksOutstanding, array $completedUnbilled, array $consignorPayments): array
+    {
+        $alerts = [];
+
+        foreach (array_slice(is_array($tasksOutstanding['overdue'] ?? null) ? $tasksOutstanding['overdue'] : [], 0, 5) as $row) {
+            $taskId = (int) ($row['id'] ?? 0);
+            if ($taskId <= 0) {
+                continue;
+            }
+
+            $alerts[] = [
+                'type' => 'task_overdue',
+                'label' => (string) (($row['title'] ?? '') !== '' ? $row['title'] : ('Task #' . $taskId)),
+                'meta' => 'Overdue task',
+                'url' => '/tasks/' . $taskId,
+            ];
+        }
+
+        foreach (array_slice(is_array($completedUnbilled['rows'] ?? null) ? $completedUnbilled['rows'] : [], 0, 5) as $row) {
+            $jobId = (int) ($row['id'] ?? 0);
+            if ($jobId <= 0) {
+                continue;
+            }
+            $jobName = trim((string) ($row['name'] ?? ''));
+            $label = $jobName !== '' ? $jobName : ('Job #' . $jobId);
+
+            $alerts[] = [
+                'type' => 'job_unbilled',
+                'label' => $label,
+                'meta' => 'Completed but not billed',
+                'url' => '/jobs/' . $jobId,
+            ];
+        }
+
+        foreach (array_slice(is_array($consignorPayments['rows'] ?? null) ? $consignorPayments['rows'] : [], 0, 5) as $row) {
+            $consignorId = (int) ($row['id'] ?? 0);
+            if ($consignorId <= 0) {
+                continue;
+            }
+            $name = trim((string) ($row['business_name'] ?? ''));
+            if ($name === '') {
+                $name = trim((string) ($row['first_name'] ?? '') . ' ' . (string) ($row['last_name'] ?? ''));
+            }
+            if ($name === '') {
+                $name = 'Consignor #' . $consignorId;
+            }
+
+            $alerts[] = [
+                'type' => 'consignor_due',
+                'label' => $name,
+                'meta' => 'Consignor payment due ' . format_date((string) ($row['next_payment_due_date'] ?? null)),
+                'url' => '/consignors/' . $consignorId,
+            ];
+        }
+
+        return $alerts;
+    }
+
+    private static function storeSnapshot(string $today, array $overview): void
+    {
+        $metrics = [
+            'counts' => [
+                'prospects_active' => (int) ($overview['counts']['prospects_active'] ?? 0),
+                'prospects_follow_up_due' => (int) ($overview['counts']['prospects_follow_up_due'] ?? 0),
+                'jobs_pending' => (int) ($overview['counts']['jobs_pending'] ?? 0),
+                'jobs_active' => (int) ($overview['counts']['jobs_active'] ?? 0),
+            ],
+            'totals' => [
+                'sales_gross_mtd' => (float) ($overview['revenue']['sales']['gross_mtd'] ?? 0),
+                'sales_net_mtd' => (float) ($overview['revenue']['sales']['net_mtd'] ?? 0),
+                'jobs_gross_mtd' => (float) ($overview['revenue']['jobs']['gross_mtd'] ?? 0),
+                'expenses_mtd' => (float) ($overview['revenue']['expenses']['mtd'] ?? 0),
+                'open_tasks' => (int) ($overview['tasks']['open_count'] ?? 0),
+                'overdue_tasks' => (int) ($overview['tasks']['overdue_count'] ?? 0),
+            ],
+            'recorded_at' => date('c'),
+        ];
+
+        try {
+            DashboardKpiSnapshot::record($today, $metrics);
+        } catch (\Throwable) {
+            // Snapshot persistence should not affect dashboard rendering.
+        }
     }
 
     private static function safe(callable $callback, array $fallback): array

@@ -7,6 +7,7 @@ namespace App\Controllers;
 use App\Models\Expense;
 use App\Models\ExpenseCategory;
 use App\Models\Job;
+use App\Models\UserFilterPreset;
 use Core\Controller;
 
 final class ExpensesController extends Controller
@@ -15,14 +16,47 @@ final class ExpensesController extends Controller
     {
         $this->authorize('view');
 
+        $moduleKey = 'expenses';
+        $userId = auth_user_id() ?? 0;
+        $savedPresets = $userId > 0 ? UserFilterPreset::forUser($userId, $moduleKey) : [];
+        $selectedPresetId = $this->toIntOrNull($_GET['preset_id'] ?? null);
+        $presetFilters = [];
+        if ($selectedPresetId !== null && $selectedPresetId > 0 && $userId > 0) {
+            $preset = UserFilterPreset::findForUser($selectedPresetId, $userId, $moduleKey);
+            if ($preset) {
+                $presetFilters = is_array($preset['filters'] ?? null) ? $preset['filters'] : [];
+            } else {
+                $selectedPresetId = null;
+            }
+        }
+
         $filters = [
-            'q' => trim((string) ($_GET['q'] ?? '')),
-            'category_id' => $this->toIntOrNull($_GET['category_id'] ?? null),
-            'job_link' => (string) ($_GET['job_link'] ?? 'all'),
-            'record_status' => (string) ($_GET['record_status'] ?? 'active'),
-            'start_date' => trim((string) ($_GET['start_date'] ?? '')),
-            'end_date' => trim((string) ($_GET['end_date'] ?? '')),
+            'q' => trim((string) ($presetFilters['q'] ?? '')),
+            'category_id' => $this->toIntOrNull($presetFilters['category_id'] ?? null),
+            'job_link' => (string) ($presetFilters['job_link'] ?? 'all'),
+            'record_status' => (string) ($presetFilters['record_status'] ?? 'active'),
+            'start_date' => trim((string) ($presetFilters['start_date'] ?? '')),
+            'end_date' => trim((string) ($presetFilters['end_date'] ?? '')),
         ];
+
+        if (array_key_exists('q', $_GET)) {
+            $filters['q'] = trim((string) ($_GET['q'] ?? ''));
+        }
+        if (array_key_exists('category_id', $_GET)) {
+            $filters['category_id'] = $this->toIntOrNull($_GET['category_id'] ?? null);
+        }
+        if (array_key_exists('job_link', $_GET)) {
+            $filters['job_link'] = (string) ($_GET['job_link'] ?? 'all');
+        }
+        if (array_key_exists('record_status', $_GET)) {
+            $filters['record_status'] = (string) ($_GET['record_status'] ?? 'active');
+        }
+        if (array_key_exists('start_date', $_GET)) {
+            $filters['start_date'] = trim((string) ($_GET['start_date'] ?? ''));
+        }
+        if (array_key_exists('end_date', $_GET)) {
+            $filters['end_date'] = trim((string) ($_GET['end_date'] ?? ''));
+        }
 
         if ($filters['start_date'] === '' && $filters['end_date'] === '') {
             $filters['start_date'] = date('Y-m-01');
@@ -36,6 +70,12 @@ final class ExpensesController extends Controller
             $filters['record_status'] = 'active';
         }
 
+        $expenses = Expense::filter($filters);
+        if ((string) ($_GET['export'] ?? '') === 'csv') {
+            $this->downloadIndexCsv($expenses);
+            return;
+        }
+
         $pageScripts = implode("\n", [
             '<script src="https://cdn.jsdelivr.net/npm/simple-datatables@7.1.2/dist/umd/simple-datatables.min.js" crossorigin="anonymous"></script>',
             '<script src="' . asset('js/expenses-table.js') . '"></script>',
@@ -45,9 +85,12 @@ final class ExpensesController extends Controller
             'pageTitle' => 'Expenses',
             'filters' => $filters,
             'categories' => Expense::categories(),
-            'expenses' => Expense::filter($filters),
+            'expenses' => $expenses,
             'summary' => Expense::summary($filters),
             'byJob' => Expense::summaryByJob($filters),
+            'savedPresets' => $savedPresets,
+            'selectedPresetId' => $selectedPresetId,
+            'filterPresetModule' => $moduleKey,
             'pageScripts' => $pageScripts,
         ]);
     }
@@ -114,7 +157,9 @@ final class ExpensesController extends Controller
             redirect('/expenses/new');
         }
 
-        $expenseId = Job::createExpense($jobId ?? 0, [
+        $normalizedJobId = ($jobId !== null && $jobId > 0) ? $jobId : null;
+
+        $expenseId = Job::createExpense($normalizedJobId, [
             'disposal_location_id' => null,
             'expense_category_id' => (int) $categoryId,
             'category' => (string) ($category['name'] ?? ''),
@@ -181,5 +226,28 @@ final class ExpensesController extends Controller
     private function authorize(string $action): void
     {
         require_permission('expenses', $action);
+    }
+
+    private function downloadIndexCsv(array $expenses): void
+    {
+        $rows = [];
+        foreach ($expenses as $expense) {
+            $jobId = isset($expense['job_id']) ? (int) $expense['job_id'] : 0;
+            $rows[] = [
+                (string) ($expense['id'] ?? ''),
+                format_date($expense['expense_date'] ?? null),
+                (string) ($expense['category_label'] ?? ''),
+                (string) ($expense['description'] ?? ''),
+                $jobId > 0 ? (string) ($expense['job_name'] ?? ('Job #' . $jobId)) : 'Unlinked',
+                number_format((float) ($expense['amount'] ?? 0), 2),
+                format_datetime($expense['updated_at'] ?? null),
+            ];
+        }
+
+        stream_csv_download(
+            'expenses-' . date('Ymd-His') . '.csv',
+            ['ID', 'Date', 'Category', 'Description', 'Job', 'Amount', 'Last Activity'],
+            $rows
+        );
     }
 }

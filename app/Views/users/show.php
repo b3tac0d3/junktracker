@@ -1,6 +1,10 @@
 <?php
     $name = trim(($user['first_name'] ?? '') . ' ' . ($user['last_name'] ?? ''));
     $lastLogin = is_array($lastLogin ?? null) ? $lastLogin : null;
+    $canManageEmployeeLink = !empty($canManageEmployeeLink);
+    $employeeLinkSupported = !empty($employeeLinkSupported);
+    $linkedEmployee = is_array($linkedEmployee ?? null) ? $linkedEmployee : null;
+    $canDeactivate = !array_key_exists('canDeactivate', get_defined_vars()) || !empty($canDeactivate);
     $lastLoginBrowser = trim((string) ($lastLogin['browser_name'] ?? ''));
     $lastLoginBrowserVersion = trim((string) ($lastLogin['browser_version'] ?? ''));
     if ($lastLoginBrowser !== '' && $lastLoginBrowserVersion !== '') {
@@ -19,7 +23,7 @@
                 <li class="breadcrumb-item active">#<?= e((string) ($user['id'] ?? '')) ?></li>
             </ol>
         </div>
-        <div class="d-flex gap-2">
+        <div class="entity-action-buttons">
             <a class="btn btn-warning" href="<?= url('/users/' . ($user['id'] ?? '') . '/edit') ?>">
                 <i class="fas fa-pen me-1"></i>
                 Edit User
@@ -33,10 +37,17 @@
                 Login Records
             </a>
             <?php if (!empty($user['is_active'])): ?>
-                <button class="btn btn-danger" type="button" data-bs-toggle="modal" data-bs-target="#deactivateUserModal">
-                    <i class="fas fa-user-slash me-1"></i>
-                    Deactivate
-                </button>
+                <?php if ($canDeactivate): ?>
+                    <button class="btn btn-danger" type="button" data-bs-toggle="modal" data-bs-target="#deactivateUserModal">
+                        <i class="fas fa-user-slash me-1"></i>
+                        Deactivate
+                    </button>
+                <?php else: ?>
+                    <button class="btn btn-outline-secondary" type="button" disabled title="Only dev users can self-deactivate.">
+                        <i class="fas fa-user-lock me-1"></i>
+                        Self Deactivate Locked
+                    </button>
+                <?php endif; ?>
             <?php else: ?>
                 <span class="badge bg-secondary align-self-center">Inactive</span>
             <?php endif; ?>
@@ -127,6 +138,83 @@
         </div>
     </div>
 
+    <?php if ($canManageEmployeeLink): ?>
+        <div class="card mb-4 user-punch-link-card">
+            <div class="card-header">
+                <i class="fas fa-link me-1"></i>
+                Punch Profile Link
+            </div>
+            <div class="card-body">
+                <?php if (!$employeeLinkSupported): ?>
+                    <div class="alert alert-warning mb-0">
+                        Employee linking is not enabled yet. Run the user/employee link migration first.
+                    </div>
+                <?php else: ?>
+                    <div class="row g-3 align-items-end">
+                        <div class="col-lg-6">
+                            <div class="text-muted small">Linked Employee</div>
+                            <?php if ($linkedEmployee): ?>
+                                <div class="fw-semibold">
+                                    <a href="<?= url('/employees/' . ($linkedEmployee['id'] ?? '')) ?>">
+                                        <?= e((string) ($linkedEmployee['name'] ?? ('Employee #' . ($linkedEmployee['id'] ?? '')))) ?>
+                                    </a>
+                                </div>
+                                <div class="small text-muted">
+                                    <?= e((string) ($linkedEmployee['email'] ?? '')) ?>
+                                    <?php if (!empty($linkedEmployee['phone'])): ?>
+                                        &middot; <?= e(format_phone((string) $linkedEmployee['phone'])) ?>
+                                    <?php endif; ?>
+                                </div>
+                            <?php else: ?>
+                                <div class="fw-semibold text-muted">No employee linked.</div>
+                            <?php endif; ?>
+                        </div>
+                        <div class="col-lg-6">
+                            <?php if ($linkedEmployee): ?>
+                                <form method="post" action="<?= url('/users/' . ($user['id'] ?? '') . '/employee-unlink') ?>" class="d-flex justify-content-lg-end">
+                                    <?= csrf_field() ?>
+                                    <button class="btn btn-outline-danger" type="submit">
+                                        <i class="fas fa-link-slash me-1"></i>
+                                        Unlink Employee
+                                    </button>
+                                </form>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+
+                    <hr class="my-3" />
+
+                    <input type="hidden" id="user_employee_lookup_url" value="<?= e(url('/users/lookup/employees')) ?>" />
+                    <input type="hidden" id="user_employee_current_user_id" value="<?= e((string) ($user['id'] ?? '')) ?>" />
+
+                    <form method="post" action="<?= url('/users/' . ($user['id'] ?? '') . '/employee-link') ?>" class="position-relative">
+                        <?= csrf_field() ?>
+                        <input type="hidden" id="user_employee_id" name="employee_id" value="" />
+
+                        <label class="form-label" for="user_employee_search">Link to Employee</label>
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="fas fa-user"></i></span>
+                            <input
+                                class="form-control"
+                                id="user_employee_search"
+                                type="text"
+                                autocomplete="off"
+                                placeholder="Search active employees by name, email, phone, or ID..."
+                            />
+                            <button class="btn btn-primary" type="submit">
+                                <i class="fas fa-link me-1"></i>
+                                Link Employee
+                            </button>
+                        </div>
+                        <div id="user_employee_suggestions" class="list-group position-absolute w-100 shadow-sm d-none" style="z-index: 1050; top: 100%;"></div>
+                        <div id="user_employee_error" class="text-danger small mt-2 d-none"></div>
+                        <div class="form-text">Only managers/admins/dev can update this mapping.</div>
+                    </form>
+                <?php endif; ?>
+            </div>
+        </div>
+    <?php endif; ?>
+
     <div class="card mb-4">
         <div class="card-header">
             <i class="fas fa-clipboard-list me-1"></i>
@@ -164,7 +252,7 @@
         </div>
     </div>
 
-    <?php if (!empty($user['is_active'])): ?>
+    <?php if (!empty($user['is_active']) && $canDeactivate): ?>
         <div class="modal fade" id="deactivateUserModal" tabindex="-1" aria-labelledby="deactivateUserModalLabel" aria-hidden="true">
             <div class="modal-dialog">
                 <div class="modal-content">

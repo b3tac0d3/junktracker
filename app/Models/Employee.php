@@ -8,6 +8,11 @@ use Core\Database;
 
 final class Employee
 {
+    public static function supportsUserLinking(): bool
+    {
+        return Schema::hasColumn('employees', 'user_id');
+    }
+
     public static function search(string $term = '', string $status = 'active'): array
     {
         $hasHourlyRate = Schema::hasColumn('employees', 'hourly_rate');
@@ -123,6 +128,245 @@ final class Employee
         $employee = $stmt->fetch();
 
         return $employee ?: null;
+    }
+
+    public static function findForUser(array $user): ?array
+    {
+        $userId = isset($user['id']) ? (int) $user['id'] : 0;
+        $email = strtolower(trim((string) ($user['email'] ?? '')));
+        $firstName = strtolower(trim((string) ($user['first_name'] ?? '')));
+        $lastName = strtolower(trim((string) ($user['last_name'] ?? '')));
+
+        $hasHourlyRate = Schema::hasColumn('employees', 'hourly_rate');
+        $hasWageRate = Schema::hasColumn('employees', 'wage_rate');
+        $rateExpr = $hasHourlyRate && $hasWageRate
+            ? 'COALESCE(e.hourly_rate, e.wage_rate)'
+            : ($hasHourlyRate ? 'e.hourly_rate' : ($hasWageRate ? 'e.wage_rate' : 'NULL'));
+
+        $baseSelect = 'SELECT e.id,
+                              e.first_name,
+                              e.last_name,
+                              e.email,
+                              e.active,
+                              e.deleted_at,
+                              ' . $rateExpr . ' AS pay_rate,
+                              COALESCE(NULLIF(TRIM(CONCAT_WS(\' \', e.first_name, e.last_name)), \'\'), CONCAT(\'Employee #\', e.id)) AS name
+                       FROM employees e
+                       WHERE e.deleted_at IS NULL
+                         AND COALESCE(e.active, 1) = 1
+                         AND ';
+
+        if ($userId > 0 && Schema::hasColumn('employees', 'user_id')) {
+            $sql = $baseSelect . 'e.user_id = :user_id
+                                  ORDER BY e.id ASC
+                                  LIMIT 1';
+            $stmt = Database::connection()->prepare($sql);
+            $stmt->execute(['user_id' => $userId]);
+            $row = $stmt->fetch();
+            if ($row) {
+                return $row;
+            }
+        }
+
+        if ($email !== '') {
+            $sql = $baseSelect . 'LOWER(COALESCE(e.email, \'\')) = :email
+                                  ORDER BY e.id ASC
+                                  LIMIT 2';
+            $stmt = Database::connection()->prepare($sql);
+            $stmt->execute(['email' => $email]);
+            $rows = $stmt->fetchAll();
+            if (count($rows) === 1) {
+                return $rows[0];
+            }
+        }
+
+        if ($firstName !== '' && $lastName !== '') {
+            $sql = $baseSelect . 'LOWER(e.first_name) = :first_name
+                                  AND LOWER(e.last_name) = :last_name
+                                  ORDER BY e.id ASC
+                                  LIMIT 2';
+            $stmt = Database::connection()->prepare($sql);
+            $stmt->execute([
+                'first_name' => $firstName,
+                'last_name' => $lastName,
+            ]);
+            $rows = $stmt->fetchAll();
+            if (count($rows) === 1) {
+                return $rows[0];
+            }
+        }
+
+        return null;
+    }
+
+    public static function linkedToUser(int $userId): ?array
+    {
+        if ($userId <= 0 || !self::supportsUserLinking()) {
+            return null;
+        }
+
+        $sql = 'SELECT e.id,
+                       e.first_name,
+                       e.last_name,
+                       e.email,
+                       e.phone,
+                       e.active,
+                       e.deleted_at,
+                       e.user_id,
+                       COALESCE(NULLIF(TRIM(CONCAT_WS(\' \', e.first_name, e.last_name)), \'\'), CONCAT(\'Employee #\', e.id)) AS name
+                FROM employees e
+                WHERE e.user_id = :user_id
+                LIMIT 1';
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute(['user_id' => $userId]);
+        $row = $stmt->fetch();
+
+        return $row ?: null;
+    }
+
+    public static function lookupForUserLink(string $term = ''): array
+    {
+        if (!self::supportsUserLinking()) {
+            return [];
+        }
+
+        $term = trim($term);
+        $sql = 'SELECT e.id,
+                       e.first_name,
+                       e.last_name,
+                       e.email,
+                       e.phone,
+                       e.user_id,
+                       COALESCE(NULLIF(TRIM(CONCAT_WS(\' \', e.first_name, e.last_name)), \'\'), CONCAT(\'Employee #\', e.id)) AS name,
+                       COALESCE(NULLIF(TRIM(CONCAT_WS(\' \', u.first_name, u.last_name)), \'\'), u.email) AS linked_user_name
+                FROM employees e
+                LEFT JOIN users u ON u.id = e.user_id
+                WHERE e.deleted_at IS NULL
+                  AND COALESCE(e.active, 1) = 1';
+        $params = [];
+
+        if ($term !== '') {
+            $sql .= ' AND (
+                        e.first_name LIKE :term
+                        OR e.last_name LIKE :term
+                        OR e.email LIKE :term
+                        OR e.phone LIKE :term
+                        OR CAST(e.id AS CHAR) LIKE :term
+                      )';
+            $params['term'] = '%' . $term . '%';
+        }
+
+        $sql .= ' ORDER BY e.last_name ASC, e.first_name ASC, e.id ASC
+                  LIMIT 25';
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute($params);
+
+        return $stmt->fetchAll();
+    }
+
+    public static function findActiveById(int $id): ?array
+    {
+        if ($id <= 0) {
+            return null;
+        }
+
+        $sql = 'SELECT e.id,
+                       e.first_name,
+                       e.last_name,
+                       e.email,
+                       e.phone,
+                       e.active,
+                       e.deleted_at,
+                       COALESCE(NULLIF(TRIM(CONCAT_WS(\' \', e.first_name, e.last_name)), \'\'), CONCAT(\'Employee #\', e.id)) AS name
+                FROM employees e
+                WHERE e.id = :id
+                  AND e.deleted_at IS NULL
+                  AND COALESCE(e.active, 1) = 1
+                LIMIT 1';
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute(['id' => $id]);
+        $row = $stmt->fetch();
+
+        return $row ?: null;
+    }
+
+    public static function assignToUser(int $employeeId, int $userId, ?int $actorId = null): void
+    {
+        if ($employeeId <= 0 || $userId <= 0 || !self::supportsUserLinking()) {
+            return;
+        }
+
+        $pdo = Database::connection();
+        $pdo->beginTransaction();
+
+        try {
+            $clearSets = ['user_id = NULL', 'updated_at = NOW()'];
+            $clearParams = ['user_id' => $userId];
+            if ($actorId !== null && Schema::hasColumn('employees', 'updated_by')) {
+                $clearSets[] = 'updated_by = :updated_by';
+                $clearParams['updated_by'] = $actorId;
+            }
+
+            $clearSql = 'UPDATE employees
+                         SET ' . implode(', ', $clearSets) . '
+                         WHERE user_id = :user_id';
+            $clearStmt = $pdo->prepare($clearSql);
+            $clearStmt->execute($clearParams);
+
+            $assignSets = ['user_id = :user_id', 'updated_at = NOW()'];
+            $assignParams = [
+                'employee_id' => $employeeId,
+                'user_id' => $userId,
+            ];
+            if ($actorId !== null && Schema::hasColumn('employees', 'updated_by')) {
+                $assignSets[] = 'updated_by = :updated_by';
+                $assignParams['updated_by'] = $actorId;
+            }
+
+            $assignSql = 'UPDATE employees
+                          SET ' . implode(', ', $assignSets) . '
+                          WHERE id = :employee_id
+                          LIMIT 1';
+            $assignStmt = $pdo->prepare($assignSql);
+            $assignStmt->execute($assignParams);
+
+            if ($assignStmt->rowCount() < 1) {
+                throw new \RuntimeException('Unable to link employee to user.');
+            }
+
+            $pdo->commit();
+        } catch (\Throwable $exception) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            throw $exception;
+        }
+    }
+
+    public static function clearUserLink(int $userId, ?int $actorId = null): int
+    {
+        if ($userId <= 0 || !self::supportsUserLinking()) {
+            return 0;
+        }
+
+        $sets = ['user_id = NULL', 'updated_at = NOW()'];
+        $params = ['user_id' => $userId];
+        if ($actorId !== null && Schema::hasColumn('employees', 'updated_by')) {
+            $sets[] = 'updated_by = :updated_by';
+            $params['updated_by'] = $actorId;
+        }
+
+        $sql = 'UPDATE employees
+                SET ' . implode(', ', $sets) . '
+                WHERE user_id = :user_id';
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute($params);
+
+        return $stmt->rowCount();
     }
 
     public static function create(array $data, ?int $actorId = null): int

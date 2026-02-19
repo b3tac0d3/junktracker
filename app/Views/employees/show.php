@@ -98,9 +98,8 @@
                                 id="employee_punch_job_search"
                                 name="job_search"
                                 type="text"
-                                placeholder="Search job by name, id, city..."
+                                placeholder="Search job by name, id, city... (optional)"
                                 autocomplete="off"
-                                required
                             />
                             <input type="hidden" id="employee_punch_job_id" name="job_id" value="" />
                             <div id="employee_punch_job_suggestions" class="list-group position-absolute w-100 d-none" style="z-index: 1049;"></div>
@@ -109,7 +108,7 @@
                             <button class="btn btn-success w-100" type="submit">Punch In</button>
                         </div>
                     </div>
-                    <div class="form-text">Quick punch in: select a job from suggestions, then submit.</div>
+                    <div class="form-text">Quick punch in: pick a job from suggestions, or leave blank for non-job time.</div>
                 </form>
             <?php endif; ?>
         </div>
