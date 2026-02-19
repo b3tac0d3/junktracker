@@ -263,19 +263,19 @@ final class JobsController extends Controller
             return;
         }
 
-        if (!$this->checkCsrf('/jobs/' . $jobId)) {
+        if (!$this->checkCsrf($this->jobCrewRedirectPath($jobId))) {
             return;
         }
 
         $employeeId = $this->toIntOrNull($_POST['employee_id'] ?? null);
         if ($employeeId === null || $employeeId <= 0) {
             flash('error', 'Select a valid employee.');
-            redirect('/jobs/' . $jobId);
+            redirect($this->jobCrewRedirectPath($jobId));
         }
 
         if (!Job::isCrewMember($jobId, $employeeId)) {
             flash('error', 'Employee must be added to the crew before punch in.');
-            redirect('/jobs/' . $jobId);
+            redirect($this->jobCrewRedirectPath($jobId));
         }
 
         $openEntry = TimeEntry::findOpenForEmployee($employeeId);
@@ -283,11 +283,11 @@ final class JobsController extends Controller
             $openJobId = (int) ($openEntry['job_id'] ?? 0);
             if ($openJobId === $jobId) {
                 flash('error', 'This employee is already punched in on this job.');
-                redirect('/jobs/' . $jobId);
+                redirect($this->jobCrewRedirectPath($jobId));
             }
 
             flash('error', 'This employee is currently punched in on job #' . $openJobId . '.');
-            redirect('/jobs/' . $jobId);
+            redirect($this->jobCrewRedirectPath($jobId));
         }
 
         $employee = null;
@@ -302,17 +302,22 @@ final class JobsController extends Controller
             ? (float) $employee['pay_rate']
             : (TimeEntry::employeeRate($employeeId) ?? 0.0);
 
-        $entryId = TimeEntry::create([
-            'employee_id' => $employeeId,
-            'job_id' => $jobId,
-            'work_date' => date('Y-m-d'),
-            'start_time' => date('H:i:s'),
-            'end_time' => null,
-            'minutes_worked' => null,
-            'pay_rate' => $payRate,
-            'total_paid' => null,
-            'note' => null,
-        ], $this->actorId());
+        try {
+            $entryId = TimeEntry::create([
+                'employee_id' => $employeeId,
+                'job_id' => $jobId,
+                'work_date' => date('Y-m-d'),
+                'start_time' => date('H:i:s'),
+                'end_time' => null,
+                'minutes_worked' => null,
+                'pay_rate' => $payRate,
+                'total_paid' => null,
+                'note' => null,
+            ], $this->actorId());
+        } catch (\Throwable) {
+            flash('error', 'Punch in failed on server. Please refresh and try again.');
+            redirect($this->jobCrewRedirectPath($jobId));
+        }
 
         $employeeName = trim((string) (($employee['employee_name'] ?? '') !== '' ? $employee['employee_name'] : ('Employee #' . $employeeId)));
         $this->logJobAction(
@@ -325,7 +330,7 @@ final class JobsController extends Controller
         );
 
         flash('success', $employeeName . ' punched in.');
-        redirect('/jobs/' . $jobId);
+        redirect($this->jobCrewRedirectPath($jobId));
     }
 
     public function punchOut(array $params): void
@@ -336,14 +341,14 @@ final class JobsController extends Controller
             return;
         }
 
-        if (!$this->checkCsrf('/jobs/' . $jobId)) {
+        if (!$this->checkCsrf($this->jobCrewRedirectPath($jobId))) {
             return;
         }
 
         $entryId = $this->toIntOrNull($_POST['time_entry_id'] ?? null);
         if ($entryId === null || $entryId <= 0) {
             flash('error', 'Invalid time entry.');
-            redirect('/jobs/' . $jobId);
+            redirect($this->jobCrewRedirectPath($jobId));
         }
 
         $entry = TimeEntry::findById($entryId);
@@ -356,7 +361,7 @@ final class JobsController extends Controller
             || !empty($entry['end_time'])
         ) {
             flash('error', 'This time entry is not available for punch out.');
-            redirect('/jobs/' . $jobId);
+            redirect($this->jobCrewRedirectPath($jobId));
         }
 
         $minutesWorked = $this->calculateOpenMinutes(
@@ -368,12 +373,17 @@ final class JobsController extends Controller
             : (TimeEntry::employeeRate((int) ($entry['employee_id'] ?? 0)) ?? 0.0);
         $totalPaid = round(($payRate * $minutesWorked) / 60, 2);
 
-        TimeEntry::punchOut($entryId, [
-            'end_time' => date('H:i:s'),
-            'minutes_worked' => $minutesWorked,
-            'pay_rate' => $payRate,
-            'total_paid' => $totalPaid,
-        ], $this->actorId());
+        try {
+            TimeEntry::punchOut($entryId, [
+                'end_time' => date('H:i:s'),
+                'minutes_worked' => $minutesWorked,
+                'pay_rate' => $payRate,
+                'total_paid' => $totalPaid,
+            ], $this->actorId());
+        } catch (\Throwable) {
+            flash('error', 'Punch out failed on server. Please refresh and try again.');
+            redirect($this->jobCrewRedirectPath($jobId));
+        }
 
         $employeeName = trim((string) ($entry['employee_name'] ?? ('Employee #' . (string) ($entry['employee_id'] ?? ''))));
         $this->logJobAction(
@@ -386,7 +396,7 @@ final class JobsController extends Controller
         );
 
         flash('success', $employeeName . ' punched out.');
-        redirect('/jobs/' . $jobId);
+        redirect($this->jobCrewRedirectPath($jobId));
     }
 
     public function edit(array $params): void
@@ -451,20 +461,20 @@ final class JobsController extends Controller
             return;
         }
 
-        if (!$this->checkCsrf('/jobs/' . $jobId)) {
+        if (!$this->checkCsrf($this->jobCrewRedirectPath($jobId))) {
             return;
         }
 
         $employeeId = $this->toIntOrNull($_POST['employee_id'] ?? null);
         if ($employeeId === null || $employeeId <= 0) {
             flash('error', 'Select an employee to add.');
-            redirect('/jobs/' . $jobId);
+            redirect($this->jobCrewRedirectPath($jobId));
         }
 
         $isAlreadyCrew = Job::isCrewMember($jobId, $employeeId);
         if ($isAlreadyCrew) {
             flash('error', 'Employee is already on this crew.');
-            redirect('/jobs/' . $jobId);
+            redirect($this->jobCrewRedirectPath($jobId));
         }
 
         $activeEmployees = TimeEntry::employees();
@@ -477,7 +487,7 @@ final class JobsController extends Controller
         }
         if (!$isActiveEmployee) {
             flash('error', 'Selected employee is not active.');
-            redirect('/jobs/' . $jobId);
+            redirect($this->jobCrewRedirectPath($jobId));
         }
 
         Job::addCrewMember($jobId, $employeeId, $this->actorId());
@@ -493,7 +503,7 @@ final class JobsController extends Controller
 
         $this->logJobAction($jobId, 'crew_member_added', $employeeName . ' added to crew.', null, 'employees', $employeeId);
         flash('success', $employeeName . ' added to crew.');
-        redirect('/jobs/' . $jobId);
+        redirect($this->jobCrewRedirectPath($jobId));
     }
 
     public function crewRemove(array $params): void
@@ -506,30 +516,30 @@ final class JobsController extends Controller
             return;
         }
 
-        if (!$this->checkCsrf('/jobs/' . $jobId)) {
+        if (!$this->checkCsrf($this->jobCrewRedirectPath($jobId))) {
             return;
         }
 
         if ($employeeId <= 0) {
             flash('error', 'Invalid crew member.');
-            redirect('/jobs/' . $jobId);
+            redirect($this->jobCrewRedirectPath($jobId));
         }
 
         if (TimeEntry::findOpenForEmployee($employeeId)) {
             flash('error', 'Employee must be punched out before removal from crew.');
-            redirect('/jobs/' . $jobId);
+            redirect($this->jobCrewRedirectPath($jobId));
         }
 
         if (!Job::isCrewMember($jobId, $employeeId)) {
             flash('error', 'Employee is not on this crew.');
-            redirect('/jobs/' . $jobId);
+            redirect($this->jobCrewRedirectPath($jobId));
         }
 
         Job::removeCrewMember($jobId, $employeeId, $this->actorId());
 
         $this->logJobAction($jobId, 'crew_member_removed', 'Employee #' . $employeeId . ' removed from crew.', null, 'employees', $employeeId);
         flash('success', 'Crew member removed.');
-        redirect('/jobs/' . $jobId);
+        redirect($this->jobCrewRedirectPath($jobId));
     }
 
     public function update(array $params): void
@@ -1376,6 +1386,11 @@ final class JobsController extends Controller
         flash('error', 'Your session expired. Please try again.');
         redirect($redirectPath);
         return false;
+    }
+
+    private function jobCrewRedirectPath(int $jobId): string
+    {
+        return '/jobs/' . $jobId . '?refresh=' . time() . '#crew-punch';
     }
 
     private function calculateOpenMinutes(string $workDate, string $startTime): int

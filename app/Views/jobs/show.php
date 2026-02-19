@@ -118,7 +118,7 @@
 
     <div class="row g-4">
         <div class="col-12 col-xl-8">
-            <div class="card mb-4">
+            <div class="card mb-4" id="crew-punch">
                 <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
                     <div>
                         <i class="fas fa-briefcase me-1"></i>
