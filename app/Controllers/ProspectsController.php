@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Controllers;
 
+use App\Models\Attachment;
 use App\Models\Client;
 use App\Models\ClientContact;
 use App\Models\Prospect;
@@ -67,6 +68,7 @@ final class ProspectsController extends Controller
             'pageTitle' => 'Prospect Details',
             'prospect' => $prospect,
             'priorityLabels' => $this->priorityLabels(),
+            'attachments' => Attachment::forLink('prospect', $id),
             'contacts' => ClientContact::forProspect(
                 $id,
                 isset($prospect['client_id']) ? (int) $prospect['client_id'] : null

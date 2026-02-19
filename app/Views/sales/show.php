@@ -10,6 +10,8 @@
     $isActive = empty($sale['deleted_at']) && !empty($sale['active']);
     $grossAmount = (float) ($sale['gross_amount'] ?? 0);
     $netAmount = ($sale['net_amount'] ?? null) !== null ? (float) $sale['net_amount'] : $grossAmount;
+    $attachments = is_array($attachments ?? null) ? $attachments : [];
+    $salePath = '/sales/' . (string) ($sale['id'] ?? '');
 ?>
 <div class="container-fluid px-4">
     <div class="d-flex flex-wrap align-items-center justify-content-between mt-4 mb-3 gap-3">
@@ -121,6 +123,14 @@
             </div>
         </div>
     </div>
+
+    <?php
+        $attachmentPanelTitle = 'Attachments';
+        $attachmentLinkType = 'sale';
+        $attachmentLinkId = (int) ($sale['id'] ?? 0);
+        $attachmentReturnTo = $salePath;
+        require __DIR__ . '/../partials/attachments_panel.php';
+    ?>
 
     <div class="card mb-4">
         <div class="card-header">

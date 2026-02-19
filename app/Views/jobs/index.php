@@ -26,10 +26,16 @@
                 <li class="breadcrumb-item active">Jobs</li>
             </ol>
         </div>
-        <a class="btn btn-primary" href="<?= url('/jobs/new') ?>">
-            <i class="fas fa-plus me-1"></i>
-            Add Job
-        </a>
+        <div class="d-flex gap-2">
+            <a class="btn btn-outline-primary" href="<?= url('/jobs/schedule') ?>">
+                <i class="fas fa-calendar-days me-1"></i>
+                Schedule Board
+            </a>
+            <a class="btn btn-primary" href="<?= url('/jobs/new') ?>">
+                <i class="fas fa-plus me-1"></i>
+                Add Job
+            </a>
+        </div>
     </div>
 
     <div class="card mb-4">

@@ -30,6 +30,9 @@
     $openByEmployee = $openByEmployee ?? [];
     $openElsewhereByEmployee = $openElsewhereByEmployee ?? [];
     $tasks = $tasks ?? [];
+    $documents = is_array($documents ?? null) ? $documents : [];
+    $documentSummary = is_array($documentSummary ?? null) ? $documentSummary : [];
+    $attachments = is_array($attachments ?? null) ? $attachments : [];
     $isDeleted = !empty($job['deleted_at']) || (isset($job['active']) && (int) $job['active'] === 0);
     $jobPath = '/jobs/' . (string) ($job['id'] ?? '');
 
@@ -711,6 +714,85 @@
                 </div>
             </div>
 
+            <div class="card mb-4" id="estimate-invoice">
+                <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+                    <div>
+                        <i class="fas fa-file-signature me-1"></i>
+                        Estimate / Invoice Workflow
+                    </div>
+                    <div class="d-flex gap-2">
+                        <a class="btn btn-sm btn-outline-primary" href="<?= url('/jobs/' . ($job['id'] ?? '') . '/documents/new?type=estimate') ?>">
+                            <i class="fas fa-plus me-1"></i>
+                            Add Estimate
+                        </a>
+                        <a class="btn btn-sm btn-primary" href="<?= url('/jobs/' . ($job['id'] ?? '') . '/documents/new?type=invoice') ?>">
+                            <i class="fas fa-plus me-1"></i>
+                            Add Invoice
+                        </a>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3 mb-3">
+                        <div class="col-6">
+                            <div class="text-muted small">Documents</div>
+                            <div class="fw-semibold"><?= e((string) ((int) ($documentSummary['total_count'] ?? 0))) ?></div>
+                        </div>
+                        <div class="col-6">
+                            <div class="text-muted small">Estimates</div>
+                            <div class="fw-semibold"><?= e((string) ((int) ($documentSummary['estimate_count'] ?? 0))) ?></div>
+                        </div>
+                        <div class="col-6">
+                            <div class="text-muted small">Invoices</div>
+                            <div class="fw-semibold"><?= e((string) ((int) ($documentSummary['invoice_count'] ?? 0))) ?></div>
+                        </div>
+                        <div class="col-6">
+                            <div class="text-muted small">Paid</div>
+                            <div class="fw-semibold text-success"><?= e((string) ((int) ($documentSummary['paid_count'] ?? 0))) ?></div>
+                        </div>
+                    </div>
+
+                    <div class="table-responsive">
+                        <table class="table table-sm table-striped align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Type</th>
+                                    <th>Title</th>
+                                    <th>Status</th>
+                                    <th>Amount</th>
+                                    <th>Issued</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php if (empty($documents)): ?>
+                                    <tr>
+                                        <td colspan="5" class="text-muted">No estimates/invoices yet.</td>
+                                    </tr>
+                                <?php else: ?>
+                                    <?php foreach ($documents as $document): ?>
+                                        <?php
+                                            $docId = (int) ($document['id'] ?? 0);
+                                            $docType = \App\Models\JobDocument::typeLabel((string) ($document['document_type'] ?? 'document'));
+                                            $docStatus = \App\Models\JobDocument::statusLabel((string) ($document['status'] ?? 'draft'));
+                                        ?>
+                                        <tr>
+                                            <td><?= e($docType) ?></td>
+                                            <td>
+                                                <a class="text-decoration-none" href="<?= url('/jobs/' . ($job['id'] ?? '') . '/documents/' . $docId) ?>">
+                                                    <?= e((string) (($document['title'] ?? '') !== '' ? $document['title'] : ('Document #' . $docId))) ?>
+                                                </a>
+                                            </td>
+                                            <td><?= e($docStatus) ?></td>
+                                            <td><?= isset($document['amount']) && $document['amount'] !== null ? e('$' . number_format((float) $document['amount'], 2)) : '—' ?></td>
+                                            <td><?= e(format_datetime($document['issued_at'] ?? null)) ?></td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                <?php endif; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
             <div class="card mb-4">
                 <div class="card-header">
                     <i class="fas fa-chart-pie me-1"></i>
@@ -800,6 +882,14 @@
                     </div>
                 </div>
             </div>
+
+            <?php
+                $attachmentPanelTitle = 'Attachments';
+                $attachmentLinkType = 'job';
+                $attachmentLinkId = (int) ($job['id'] ?? 0);
+                $attachmentReturnTo = $jobPath;
+                require __DIR__ . '/../partials/attachments_panel.php';
+            ?>
 
             <div class="card mb-4">
                 <div class="card-header">

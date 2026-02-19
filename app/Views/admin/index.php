@@ -409,5 +409,25 @@
                 </div>
             </div>
         </div>
+
+        <div class="col-xl-6">
+            <div class="card h-100 admin-link-card">
+                <div class="card-body d-flex flex-column">
+                    <h5 class="card-title mb-2"><i class="fas fa-clone me-2 text-dark"></i>Data Quality</h5>
+                    <p class="card-text text-muted mb-4">Review duplicate queues for clients, companies, and jobs, then merge safely.</p>
+                    <a class="btn btn-outline-dark mt-auto" href="<?= url('/data-quality') ?>">Open Data Quality</a>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-6">
+            <div class="card h-100 admin-link-card">
+                <div class="card-body d-flex flex-column">
+                    <h5 class="card-title mb-2"><i class="fas fa-chart-line me-2 text-success"></i>Reporting Hub</h5>
+                    <p class="card-text text-muted mb-4">Open financial and operational reports, then save presets for recurring review.</p>
+                    <a class="btn btn-outline-success mt-auto" href="<?= url('/reports') ?>">Open Reports</a>
+                </div>
+            </div>
+        </div>
     </div>
 </div>

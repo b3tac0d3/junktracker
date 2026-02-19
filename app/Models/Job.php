@@ -81,6 +81,215 @@ final class Job
         return $stmt->fetchAll();
     }
 
+    public static function calendarEvents(
+        ?string $start,
+        ?string $end,
+        array $statuses = [],
+        string $recordStatus = 'active'
+    ): array {
+        $sql = 'SELECT j.id,
+                       j.name,
+                       j.job_status,
+                       j.scheduled_date,
+                       j.city,
+                       j.state,
+                       COALESCE(
+                           NULLIF(c.business_name, \'\'),
+                           NULLIF(TRIM(CONCAT_WS(\' \', c.first_name, c.last_name)), \'\'),
+                           CONCAT(\'Client #\', c.id)
+                       ) AS client_name
+                FROM jobs j
+                LEFT JOIN clients c ON c.id = j.client_id
+                WHERE j.scheduled_date IS NOT NULL';
+
+        $params = [];
+
+        if ($recordStatus === 'active') {
+            $sql .= ' AND j.deleted_at IS NULL AND COALESCE(j.active, 1) = 1';
+        } elseif ($recordStatus === 'deleted') {
+            $sql .= ' AND (j.deleted_at IS NOT NULL OR j.active = 0)';
+        }
+
+        $statusList = array_values(array_filter(array_map(
+            static fn (mixed $status): string => strtolower(trim((string) $status)),
+            $statuses
+        ), static fn (string $status): bool => $status !== ''));
+
+        if (!empty($statusList)) {
+            $placeholders = [];
+            foreach ($statusList as $index => $status) {
+                $key = 'status_' . $index;
+                $placeholders[] = ':' . $key;
+                $params[$key] = $status;
+            }
+            $sql .= ' AND LOWER(TRIM(COALESCE(j.job_status, \'\'))) IN (' . implode(', ', $placeholders) . ')';
+        }
+
+        $startDate = self::normalizeDateTimeForQuery($start);
+        if ($startDate !== null) {
+            $sql .= ' AND j.scheduled_date >= :start_date';
+            $params['start_date'] = $startDate;
+        }
+
+        $endDate = self::normalizeDateTimeForQuery($end);
+        if ($endDate !== null) {
+            $sql .= ' AND j.scheduled_date < :end_date';
+            $params['end_date'] = $endDate;
+        }
+
+        $sql .= ' ORDER BY j.scheduled_date ASC, j.id ASC';
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute($params);
+        $rows = $stmt->fetchAll();
+        if (empty($rows)) {
+            return [];
+        }
+
+        $events = [];
+        foreach ($rows as $row) {
+            $jobId = (int) ($row['id'] ?? 0);
+            if ($jobId <= 0) {
+                continue;
+            }
+
+            $status = strtolower(trim((string) ($row['job_status'] ?? 'pending')));
+            $scheduledAt = trim((string) ($row['scheduled_date'] ?? ''));
+            if ($scheduledAt === '') {
+                continue;
+            }
+
+            $time = strtotime($scheduledAt);
+            if ($time === false) {
+                continue;
+            }
+
+            $title = '#' . $jobId . ' - ' . trim((string) ($row['name'] ?? ('Job #' . $jobId)));
+            $clientName = trim((string) ($row['client_name'] ?? ''));
+            $location = trim((string) ($row['city'] ?? ''));
+            $state = trim((string) ($row['state'] ?? ''));
+            if ($location !== '' && $state !== '') {
+                $location .= ', ' . $state;
+            } elseif ($location === '') {
+                $location = $state;
+            }
+
+            $color = self::calendarColorForStatus($status);
+            $events[] = [
+                'id' => (string) $jobId,
+                'title' => $title,
+                'start' => date('c', $time),
+                'allDay' => false,
+                'url' => '/jobs/' . $jobId,
+                'backgroundColor' => $color,
+                'borderColor' => $color,
+                'textColor' => '#ffffff',
+                'extendedProps' => [
+                    'job_id' => $jobId,
+                    'job_status' => $status,
+                    'client_name' => $clientName,
+                    'location' => $location,
+                ],
+            ];
+        }
+
+        return $events;
+    }
+
+    public static function unscheduledForBoard(
+        array $statuses = [],
+        string $recordStatus = 'active',
+        int $limit = 200,
+        string $search = ''
+    ): array {
+        $sql = 'SELECT j.id,
+                       j.name,
+                       j.job_status,
+                       j.city,
+                       j.state,
+                       COALESCE(
+                           NULLIF(c.business_name, \'\'),
+                           NULLIF(TRIM(CONCAT_WS(\' \', c.first_name, c.last_name)), \'\'),
+                           CONCAT(\'Client #\', c.id)
+                       ) AS client_name,
+                       COALESCE(j.updated_at, j.created_at) AS sort_date
+                FROM jobs j
+                LEFT JOIN clients c ON c.id = j.client_id
+                WHERE j.scheduled_date IS NULL';
+
+        $params = [];
+
+        if ($recordStatus === 'active') {
+            $sql .= ' AND j.deleted_at IS NULL AND COALESCE(j.active, 1) = 1';
+        } elseif ($recordStatus === 'deleted') {
+            $sql .= ' AND (j.deleted_at IS NOT NULL OR j.active = 0)';
+        }
+
+        $statusList = array_values(array_filter(array_map(
+            static fn (mixed $status): string => strtolower(trim((string) $status)),
+            $statuses
+        ), static fn (string $status): bool => $status !== ''));
+
+        if (!empty($statusList)) {
+            $placeholders = [];
+            foreach ($statusList as $index => $status) {
+                $key = 'unscheduled_status_' . $index;
+                $placeholders[] = ':' . $key;
+                $params[$key] = $status;
+            }
+            $sql .= ' AND LOWER(TRIM(COALESCE(j.job_status, \'\'))) IN (' . implode(', ', $placeholders) . ')';
+        }
+
+        $query = trim($search);
+        if ($query !== '') {
+            $sql .= ' AND (
+                CAST(j.id AS CHAR) LIKE :q
+                OR j.name LIKE :q
+                OR COALESCE(c.first_name, \'\') LIKE :q
+                OR COALESCE(c.last_name, \'\') LIKE :q
+                OR COALESCE(c.business_name, \'\') LIKE :q
+                OR COALESCE(j.city, \'\') LIKE :q
+                OR COALESCE(j.state, \'\') LIKE :q
+            )';
+            $params['q'] = '%' . $query . '%';
+        }
+
+        $limit = max(10, min($limit, 500));
+        $sql .= ' ORDER BY sort_date DESC, j.id DESC LIMIT ' . $limit;
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute($params);
+        return $stmt->fetchAll();
+    }
+
+    public static function updateScheduledDate(int $jobId, ?string $scheduledDate, ?int $actorId = null): bool
+    {
+        if ($jobId <= 0) {
+            return false;
+        }
+
+        $sets = ['scheduled_date = :scheduled_date', 'updated_at = NOW()'];
+        $params = [
+            'id' => $jobId,
+            'scheduled_date' => $scheduledDate,
+        ];
+
+        if ($actorId !== null && Schema::hasColumn('jobs', 'updated_by')) {
+            $sets[] = 'updated_by = :updated_by';
+            $params['updated_by'] = $actorId;
+        }
+
+        $sql = 'UPDATE jobs
+                SET ' . implode(', ', $sets) . '
+                WHERE id = :id
+                  AND deleted_at IS NULL
+                  AND COALESCE(active, 1) = 1';
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute($params);
+        return $stmt->rowCount() > 0;
+    }
+
     public static function findPotentialDuplicates(array $data, ?int $excludeId = null, int $limit = 8): array
     {
         $name = strtolower(trim((string) ($data['name'] ?? '')));
@@ -1675,6 +1884,31 @@ final class Job
         );
 
         $ensured = true;
+    }
+
+    private static function normalizeDateTimeForQuery(?string $value): ?string
+    {
+        $raw = trim((string) ($value ?? ''));
+        if ($raw === '') {
+            return null;
+        }
+
+        $time = strtotime($raw);
+        if ($time === false) {
+            return null;
+        }
+
+        return date('Y-m-d H:i:s', $time);
+    }
+
+    private static function calendarColorForStatus(string $status): string
+    {
+        return match ($status) {
+            'active' => '#2563eb',
+            'complete' => '#16a34a',
+            'cancelled' => '#64748b',
+            default => '#f59e0b',
+        };
     }
 
     private static function normalizePhone(string $value): string

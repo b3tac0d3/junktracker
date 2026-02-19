@@ -18,6 +18,8 @@
     };
     $isActive = empty($prospect['deleted_at']) && !empty($prospect['active']);
     $contacts = $contacts ?? [];
+    $attachments = is_array($attachments ?? null) ? $attachments : [];
+    $prospectPath = '/prospects/' . (string) ($prospect['id'] ?? '');
 ?>
 <div class="container-fluid px-4">
     <div class="d-flex flex-wrap align-items-center justify-content-between mt-4 mb-3 gap-3">
@@ -180,6 +182,14 @@
             </div>
         </div>
     </div>
+
+    <?php
+        $attachmentPanelTitle = 'Attachments';
+        $attachmentLinkType = 'prospect';
+        $attachmentLinkId = (int) ($prospect['id'] ?? 0);
+        $attachmentReturnTo = $prospectPath;
+        require __DIR__ . '/../partials/attachments_panel.php';
+    ?>
 
     <div class="card mb-4">
         <div class="card-header">

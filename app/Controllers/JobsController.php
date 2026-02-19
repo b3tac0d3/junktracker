@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use Core\Controller;
+use App\Models\Attachment;
 use App\Models\Client;
 use App\Models\ExpenseCategory;
 use App\Models\Job;
+use App\Models\JobDocument;
 use App\Models\Prospect;
 use App\Models\Task;
 use App\Models\TimeEntry;
@@ -296,6 +298,8 @@ final class JobsController extends Controller
             'pageTitle' => 'Job Details',
             'job' => $job,
             'actions' => Job::actions($id),
+            'documents' => JobDocument::forJob($id),
+            'documentSummary' => JobDocument::summaryForJob($id),
             'disposals' => Job::disposals($id),
             'expenses' => Job::expenses($id),
             'summary' => Job::summary($id),
@@ -304,6 +308,7 @@ final class JobsController extends Controller
             'timeEntries' => TimeEntry::forJob($id),
             'timeSummary' => TimeEntry::summaryForJob($id),
             'tasks' => Task::forLinkedRecord('job', $id),
+            'attachments' => Attachment::forLink('job', $id),
             'crewEmployees' => $crewEmployees,
             'openByEmployee' => $openByEmployee,
             'openElsewhereByEmployee' => $openElsewhereByEmployee,

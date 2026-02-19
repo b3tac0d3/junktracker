@@ -18,9 +18,11 @@ final class RolePermission
 
     private const MODULES = [
         'dashboard' => 'Dashboard',
+        'notifications' => 'Notifications',
         'jobs' => 'Jobs',
         'prospects' => 'Prospects',
         'sales' => 'Sales',
+        'reports' => 'Reports',
         'customers' => 'Customers',
         'clients' => 'Clients',
         'estates' => 'Estates',
@@ -39,6 +41,7 @@ final class RolePermission
         'audit_log' => 'Audit Log',
         'recovery' => 'Recovery',
         'lookups' => 'Lookups',
+        'data_quality' => 'Data Quality',
         'permissions' => 'Permissions',
         'dev_tools' => 'Dev Tools',
     ];
@@ -237,11 +240,12 @@ final class RolePermission
         }
 
         if ($role === 1) {
-            self::allow($matrix, ['dashboard'], ['view']);
+            self::allow($matrix, ['dashboard', 'notifications'], ['view']);
             self::allow($matrix, [
                 'jobs',
                 'prospects',
                 'sales',
+                'reports',
                 'customers',
                 'clients',
                 'estates',
@@ -252,17 +256,18 @@ final class RolePermission
                 'expenses',
                 'tasks',
             ], ['view', 'create', 'edit']);
-            self::allow($matrix, ['prospects', 'tasks'], ['delete']);
+            self::allow($matrix, ['prospects', 'tasks', 'reports'], ['delete']);
             self::allow($matrix, ['employees'], ['view']);
             return $matrix;
         }
 
         if ($role === 2) {
-            self::allow($matrix, ['dashboard'], ['view']);
+            self::allow($matrix, ['dashboard', 'notifications'], ['view']);
             self::allow($matrix, [
                 'jobs',
                 'prospects',
                 'sales',
+                'reports',
                 'customers',
                 'clients',
                 'estates',
@@ -276,6 +281,7 @@ final class RolePermission
             self::allow($matrix, ['employees'], ['view', 'create', 'edit']);
             self::allow($matrix, ['users', 'expense_categories', 'disposal_locations'], ['view']);
             self::allow($matrix, ['expense_categories', 'disposal_locations'], ['create', 'edit']);
+            self::allow($matrix, ['data_quality'], ['view']);
             return $matrix;
         }
 

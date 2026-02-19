@@ -6,6 +6,7 @@
     }
     $contacts = $contacts ?? [];
     $tasks = $tasks ?? [];
+    $attachments = is_array($attachments ?? null) ? $attachments : [];
     $clientPath = '/clients/' . (string) ($client['id'] ?? '');
 ?>
 <div class="container-fluid px-4">
@@ -299,6 +300,14 @@
             </div>
         </div>
     </div>
+
+    <?php
+        $attachmentPanelTitle = 'Attachments';
+        $attachmentLinkType = 'client';
+        $attachmentLinkId = (int) ($client['id'] ?? 0);
+        $attachmentReturnTo = $clientPath;
+        require __DIR__ . '/../partials/attachments_panel.php';
+    ?>
 
     <div class="card mb-4">
         <div class="card-header">

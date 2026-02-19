@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Controllers;
 
+use App\Models\Attachment;
 use App\Models\Client;
 use App\Models\ClientContact;
 use App\Models\Company;
@@ -66,6 +67,7 @@ final class ClientsController extends Controller
             'client' => $client,
             'companies' => Client::linkedCompanies($id),
             'tasks' => Task::forLinkedRecord('client', $id),
+            'attachments' => Attachment::forLink('client', $id),
             'contacts' => ClientContact::filter([
                 'client_id' => $id,
                 'record_status' => 'all',
