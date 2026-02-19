@@ -1,5 +1,9 @@
 RewriteEngine On
 
+<IfModule mod_headers.c>
+    Header always set X-Robots-Tag "noindex, nofollow, noarchive, nosnippet, noimageindex"
+</IfModule>
+
 # Block access to application internals and dotfiles
 RewriteRule ^(app|core|config|routes|layout|vendor|storage)/ - [F,L]
 RewriteRule ^\. - [F,L]

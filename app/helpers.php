@@ -66,12 +66,7 @@ function verify_csrf(?string $token): bool
         return false;
     }
 
-    $valid = hash_equals($_SESSION['csrf_token'], $token);
-    if ($valid) {
-        $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
-    }
-
-    return $valid;
+    return hash_equals($_SESSION['csrf_token'], $token);
 }
 
 function app_key(): string

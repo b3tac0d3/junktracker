@@ -22,6 +22,18 @@
     $consignorPayments = is_array($overview['consignor_payments'] ?? null) ? $overview['consignor_payments'] : [];
     $consignorPaymentRows = is_array($consignorPayments['rows'] ?? null) ? $consignorPayments['rows'] : [];
     $consignorPaymentSummary = is_array($consignorPayments['summary'] ?? null) ? $consignorPayments['summary'] : [];
+    $mtdStart = (string) ($period['mtd_start'] ?? date('Y-m-01'));
+    $ytdStart = (string) ($period['ytd_start'] ?? date('Y-01-01'));
+    $today = (string) ($period['today'] ?? date('Y-m-d'));
+    $salesMtdUrl = url('/sales?start_date=' . urlencode($mtdStart) . '&end_date=' . urlencode($today));
+    $salesYtdUrl = url('/sales?start_date=' . urlencode($ytdStart) . '&end_date=' . urlencode($today));
+    $jobsMtdUrl = url('/jobs?start_date=' . urlencode($mtdStart) . '&end_date=' . urlencode($today));
+    $jobsYtdUrl = url('/jobs?start_date=' . urlencode($ytdStart) . '&end_date=' . urlencode($today));
+    $expensesMtdUrl = url('/expenses?start_date=' . urlencode($mtdStart) . '&end_date=' . urlencode($today));
+    $expensesYtdUrl = url('/expenses?start_date=' . urlencode($ytdStart) . '&end_date=' . urlencode($today));
+    $tasksOpenUrl = url('/tasks?status=open');
+    $tasksOverdueUrl = url('/tasks?status=overdue');
+    $consignorsUrl = url('/consignors');
 
     $money = static fn (mixed $value): string => '$' . number_format((float) ($value ?? 0), 2);
     $minutes = static function (mixed $value): string {
@@ -121,101 +133,112 @@
 
     <div class="row g-3 mb-4">
         <div class="col-lg-4">
-            <div class="card border-0 shadow-sm h-100">
+            <div class="card border-0 shadow-sm h-100 position-relative">
                 <div class="card-body">
                     <div class="text-uppercase small text-muted">Sales Gross MTD</div>
                     <div class="h3 mb-1 text-primary"><?= e($money($sales['gross_mtd'] ?? 0)) ?></div>
                     <div class="small text-muted">Net MTD: <?= e($money($sales['net_mtd'] ?? 0)) ?></div>
                 </div>
+                <a class="stretched-link" href="<?= e($salesMtdUrl) ?>" aria-label="Open sales month-to-date"></a>
             </div>
         </div>
         <div class="col-lg-4">
-            <div class="card border-0 shadow-sm h-100">
+            <div class="card border-0 shadow-sm h-100 position-relative">
                 <div class="card-body">
                     <div class="text-uppercase small text-muted">Jobs Gross MTD</div>
                     <div class="h3 mb-1 text-success"><?= e($money($jobsRevenue['gross_mtd'] ?? 0)) ?></div>
                     <div class="small text-muted">Based on billed/paid dates</div>
                 </div>
+                <a class="stretched-link" href="<?= e($jobsMtdUrl) ?>" aria-label="Open jobs month-to-date"></a>
             </div>
         </div>
         <div class="col-lg-4">
-            <div class="card border-0 shadow-sm h-100">
+            <div class="card border-0 shadow-sm h-100 position-relative">
                 <div class="card-body">
                     <div class="text-uppercase small text-muted">Total Gross MTD</div>
                     <div class="h3 mb-1 text-danger"><?= e($money($totals['gross_mtd'] ?? 0)) ?></div>
                     <div class="small text-muted">Net after expenses: <?= e($money($totals['net_mtd'] ?? 0)) ?></div>
                 </div>
+                <a class="stretched-link" href="<?= e($jobsMtdUrl) ?>" aria-label="Open total month-to-date breakdown"></a>
             </div>
         </div>
         <div class="col-lg-4">
-            <div class="card border-0 shadow-sm h-100">
+            <div class="card border-0 shadow-sm h-100 position-relative">
                 <div class="card-body">
                     <div class="text-uppercase small text-muted">Sales Gross YTD</div>
                     <div class="h3 mb-1 text-primary"><?= e($money($sales['gross_ytd'] ?? 0)) ?></div>
                     <div class="small text-muted">Net YTD: <?= e($money($sales['net_ytd'] ?? 0)) ?></div>
                 </div>
+                <a class="stretched-link" href="<?= e($salesYtdUrl) ?>" aria-label="Open sales year-to-date"></a>
             </div>
         </div>
         <div class="col-lg-4">
-            <div class="card border-0 shadow-sm h-100">
+            <div class="card border-0 shadow-sm h-100 position-relative">
                 <div class="card-body">
                     <div class="text-uppercase small text-muted">Jobs Gross YTD</div>
                     <div class="h3 mb-1 text-success"><?= e($money($jobsRevenue['gross_ytd'] ?? 0)) ?></div>
                     <div class="small text-muted">Based on billed/paid dates</div>
                 </div>
+                <a class="stretched-link" href="<?= e($jobsYtdUrl) ?>" aria-label="Open jobs year-to-date"></a>
             </div>
         </div>
         <div class="col-lg-4">
-            <div class="card border-0 shadow-sm h-100">
+            <div class="card border-0 shadow-sm h-100 position-relative">
                 <div class="card-body">
                     <div class="text-uppercase small text-muted">Total Gross YTD</div>
                     <div class="h3 mb-1 text-danger"><?= e($money($totals['gross_ytd'] ?? 0)) ?></div>
                     <div class="small text-muted">Net after expenses: <?= e($money($totals['net_ytd'] ?? 0)) ?></div>
                 </div>
+                <a class="stretched-link" href="<?= e($jobsYtdUrl) ?>" aria-label="Open total year-to-date breakdown"></a>
             </div>
         </div>
     </div>
 
     <div class="row g-3 mb-4">
         <div class="col-md-6 col-xl-3">
-            <div class="card border-0 shadow-sm h-100">
+            <div class="card border-0 shadow-sm h-100 position-relative">
                 <div class="card-body">
                     <div class="text-uppercase small text-muted">Expenses MTD</div>
                     <div class="h4 mb-0 text-warning"><?= e($money($expenses['mtd'] ?? 0)) ?></div>
                 </div>
+                <a class="stretched-link" href="<?= e($expensesMtdUrl) ?>" aria-label="Open expenses month-to-date"></a>
             </div>
         </div>
         <div class="col-md-6 col-xl-3">
-            <div class="card border-0 shadow-sm h-100">
+            <div class="card border-0 shadow-sm h-100 position-relative">
                 <div class="card-body">
                     <div class="text-uppercase small text-muted">Expenses YTD</div>
                     <div class="h4 mb-0 text-warning"><?= e($money($expenses['ytd'] ?? 0)) ?></div>
                 </div>
+                <a class="stretched-link" href="<?= e($expensesYtdUrl) ?>" aria-label="Open expenses year-to-date"></a>
             </div>
         </div>
         <div class="col-md-6 col-xl-3">
-            <div class="card border-0 shadow-sm h-100">
+            <div class="card border-0 shadow-sm h-100 position-relative">
                 <div class="card-body">
                     <div class="text-uppercase small text-muted">Open Tasks</div>
                     <div class="h4 mb-0 text-info"><?= e((string) ((int) ($tasks['open_count'] ?? 0))) ?></div>
                 </div>
+                <a class="stretched-link" href="<?= e($tasksOpenUrl) ?>" aria-label="Open active tasks"></a>
             </div>
         </div>
         <div class="col-md-6 col-xl-3">
-            <div class="card border-0 shadow-sm h-100">
+            <div class="card border-0 shadow-sm h-100 position-relative">
                 <div class="card-body">
                     <div class="text-uppercase small text-muted">Overdue Tasks</div>
                     <div class="h4 mb-0 text-danger"><?= e((string) ((int) ($tasks['overdue_count'] ?? 0))) ?></div>
                 </div>
+                <a class="stretched-link" href="<?= e($tasksOverdueUrl) ?>" aria-label="Open overdue tasks"></a>
             </div>
         </div>
         <div class="col-md-6 col-xl-3">
-            <div class="card border-0 shadow-sm h-100">
+            <div class="card border-0 shadow-sm h-100 position-relative">
                 <div class="card-body">
                     <div class="text-uppercase small text-muted">Consignor Payments Due</div>
                     <div class="h4 mb-0 text-primary"><?= e((string) ((int) ($consignorPaymentSummary['due_now_count'] ?? 0))) ?></div>
                     <div class="small text-muted">Upcoming: <?= e((string) ((int) ($consignorPaymentSummary['upcoming_count'] ?? 0))) ?></div>
                 </div>
+                <a class="stretched-link" href="<?= e($consignorsUrl) ?>" aria-label="Open consignors"></a>
             </div>
         </div>
     </div>

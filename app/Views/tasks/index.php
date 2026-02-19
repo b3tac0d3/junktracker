@@ -104,6 +104,7 @@
                         <label class="form-label">Status</label>
                         <select class="form-select" name="status">
                             <option value="all" <?= ($filters['status'] ?? 'all') === 'all' ? 'selected' : '' ?>>All</option>
+                            <option value="overdue" <?= ($filters['status'] ?? '') === 'overdue' ? 'selected' : '' ?>>Overdue</option>
                             <?php foreach ($statusOptions as $status): ?>
                                 <option value="<?= e($status) ?>" <?= ($filters['status'] ?? '') === $status ? 'selected' : '' ?>>
                                     <?= e(ucwords(str_replace('_', ' ', $status))) ?>

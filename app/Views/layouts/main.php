@@ -18,6 +18,10 @@
         <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
         <meta name="description" content="" />
         <meta name="author" content="" />
+        <?php if (config('app.noindex', true)): ?>
+            <meta name="robots" content="noindex, nofollow, noarchive, nosnippet, noimageindex" />
+            <meta name="googlebot" content="noindex, nofollow, noarchive, nosnippet, noimageindex" />
+        <?php endif; ?>
         <title><?= e($pageTitle) ?> - JunkTracker</title>
         <link href="https://cdn.jsdelivr.net/npm/simple-datatables@7.1.2/dist/style.min.css" rel="stylesheet" />
         <link href="<?= asset('css/styles.css') ?>" rel="stylesheet" />

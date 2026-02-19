@@ -130,7 +130,7 @@
 
         <div class="col-md-7 position-relative">
             <label class="form-label" for="company_name">Company (Optional)</label>
-            <input id="company_lookup_url" type="hidden" value="<?= e(url('/companies/lookup')) ?>" />
+            <input id="company_lookup_url" type="hidden" value="<?= e(url('/clients/lookup/companies')) ?>" />
             <input id="company_create_url" type="hidden" value="<?= e(url('/companies/quick-create')) ?>" />
             <input id="company_id" name="company_id" type="hidden" value="<?= e($companyId) ?>" />
             <input

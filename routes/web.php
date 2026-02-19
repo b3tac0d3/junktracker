@@ -160,6 +160,7 @@ $router->post('/users/{id}/deactivate', [UsersController::class, 'deactivate']);
 
 $router->get('/clients', [ClientsController::class, 'index']);
 $router->get('/clients/lookup', [ClientsController::class, 'lookup']);
+$router->get('/clients/lookup/companies', [ClientsController::class, 'companyLookup']);
 $router->get('/clients/duplicate-check', [ClientsController::class, 'duplicateCheck']);
 $router->post('/clients/quick-create', [ClientsController::class, 'quickCreate']);
 $router->get('/clients/new', [ClientsController::class, 'create']);
