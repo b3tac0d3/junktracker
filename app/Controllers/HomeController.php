@@ -18,11 +18,13 @@ final class HomeController extends Controller
 
         $overview = Dashboard::overview();
         $selfPunch = $this->selfPunchData();
+        $pageScripts = '<script src="' . asset('js/dashboard-self-punch.js') . '?v=' . rawurlencode((string) config('app.version', 'dev')) . '"></script>';
 
         $this->render('home/index', [
             'pageTitle' => 'Dashboard',
             'overview' => $overview,
             'selfPunch' => $selfPunch,
+            'pageScripts' => $pageScripts,
         ]);
     }
 
@@ -54,21 +56,51 @@ final class HomeController extends Controller
             redirect('/');
         }
 
+        $jobId = $this->toIntOrNull($_POST['job_id'] ?? null);
+        $job = null;
+        if ($jobId !== null && $jobId > 0) {
+            $job = Job::findById($jobId);
+            if (!$job || !empty($job['deleted_at']) || (int) ($job['active'] ?? 1) !== 1) {
+                flash('error', 'Selected job is invalid or inactive.');
+                redirect('/');
+            }
+        }
+        $nonJobTime = $jobId === null || $jobId <= 0;
+
         $entryId = TimeEntry::create([
             'employee_id' => $employeeId,
-            'job_id' => null,
+            'job_id' => $jobId,
             'work_date' => date('Y-m-d'),
             'start_time' => date('H:i:s'),
             'end_time' => null,
             'minutes_worked' => null,
             'pay_rate' => TimeEntry::employeeRate($employeeId) ?? null,
             'total_paid' => null,
-            'note' => 'Self punch in from dashboard.',
+            'note' => !$nonJobTime
+                ? ('Self punch in from dashboard (Job #' . (int) $jobId . ').')
+                : 'Self punch in from dashboard (Non-Job Time).',
         ], auth_user_id());
 
+        if (!$nonJobTime && $jobId !== null && $jobId > 0) {
+            Job::createAction($jobId, [
+                'action_type' => 'time_punched_in',
+                'action_at' => date('Y-m-d H:i:s'),
+                'amount' => null,
+                'ref_table' => 'employee_time_entries',
+                'ref_id' => $entryId,
+                'note' => 'Employee punched in from dashboard.',
+            ], auth_user_id());
+        }
+
+        $jobLabel = 'Non-Job Time';
+        if (!$nonJobTime && $jobId !== null && $jobId > 0) {
+            $jobName = trim((string) ($job['name'] ?? ''));
+            $jobLabel = $jobName !== '' ? ('Job #' . $jobId . ' - ' . $jobName) : ('Job #' . $jobId);
+        }
+
         $employeeName = (string) ($employee['name'] ?? ('Employee #' . $employeeId));
-        log_user_action('time_punched_in', 'employee_time_entries', $entryId, $employeeName . ' punched in from dashboard.');
-        flash('success', 'You are punched in (Non-Job Time).');
+        log_user_action('time_punched_in', 'employee_time_entries', $entryId, $employeeName . ' punched in from dashboard on ' . $jobLabel . '.');
+        flash('success', 'You are punched in on ' . $jobLabel . '.');
         redirect('/');
     }
 
@@ -244,5 +276,15 @@ final class HomeController extends Controller
         $remaining = $minutes % 60;
 
         return $hours . 'h ' . str_pad((string) $remaining, 2, '0', STR_PAD_LEFT) . 'm';
+    }
+
+    private function toIntOrNull(mixed $value): ?int
+    {
+        $raw = trim((string) ($value ?? ''));
+        if ($raw === '' || !ctype_digit($raw)) {
+            return null;
+        }
+
+        return (int) $raw;
     }
 }

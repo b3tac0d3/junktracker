@@ -11449,3 +11449,18 @@ main .card.user-punch-link-card #user_employee_suggestions {
   border-radius: 0.55rem;
   background: #fff;
 }
+
+.dashboard-self-punch-modal #dashboardSelfJobLookupWrap {
+  z-index: 10;
+}
+
+.dashboard-self-punch-modal #dashboard_self_job_suggestions {
+  left: 0;
+  top: calc(100% + 0.2rem);
+  max-height: 15rem;
+  overflow-y: auto;
+  z-index: 2000;
+  border: 1px solid #cfdbef;
+  border-radius: 0.55rem;
+  background: #fff;
+}

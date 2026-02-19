@@ -46,6 +46,7 @@
     $selfCanPunchOut = !empty($selfPunch['can_punch_out']);
     $selfOpenLabel = trim((string) ($selfPunch['open_label'] ?? ''));
     $selfMessage = trim((string) ($selfPunch['message'] ?? ''));
+    $selfJobLookupUrl = url('/time-tracking/lookup/jobs');
 
     $money = static fn (mixed $value): string => '$' . number_format((float) ($value ?? 0), 2);
     $minutes = static function (mixed $value): string {
@@ -93,7 +94,7 @@
                                 Since: <?= e(format_datetime((string) ($selfOpenEntry['work_date'] ?? '') . ' ' . (string) ($selfOpenEntry['start_time'] ?? ''))) ?>
                             </div>
                         <?php else: ?>
-                            <div class="small text-muted">Punch in quickly as Non-Job Time, or open Time Tracking to punch into a job.</div>
+                            <div class="small text-muted">Use Punch Me In to select Job Time or Non-Job Time.</div>
                         <?php endif; ?>
                     <?php else: ?>
                         <div class="fw-semibold text-danger"><?= e($selfMessage !== '' ? $selfMessage : 'No linked employee profile found.') ?></div>
@@ -110,13 +111,10 @@
                             </button>
                         </form>
                     <?php elseif ($selfCanPunchIn && $selfEmployee): ?>
-                        <form method="post" action="<?= url('/dashboard/punch-in') ?>">
-                            <?= csrf_field() ?>
-                            <button class="btn btn-success" type="submit">
-                                <i class="fas fa-play-circle me-1"></i>
-                                Punch Me In
-                            </button>
-                        </form>
+                        <button class="btn btn-success" type="button" data-bs-toggle="modal" data-bs-target="#dashboardPunchInModal">
+                            <i class="fas fa-play-circle me-1"></i>
+                            Punch Me In
+                        </button>
                     <?php endif; ?>
 
                     <?php if ($selfEmployee): ?>
@@ -125,6 +123,48 @@
                             Time Tracking
                         </a>
                     <?php endif; ?>
+                </div>
+            </div>
+        </div>
+    <?php endif; ?>
+
+    <?php if ($selfCanPunchIn && $selfEmployee): ?>
+        <div class="modal fade" id="dashboardPunchInModal" tabindex="-1" aria-labelledby="dashboardPunchInModalLabel" aria-hidden="true">
+            <div class="modal-dialog">
+                <div class="modal-content dashboard-self-punch-modal">
+                    <form method="post" action="<?= url('/dashboard/punch-in') ?>" id="dashboardSelfPunchForm">
+                        <?= csrf_field() ?>
+                        <div class="modal-header">
+                            <h5 class="modal-title" id="dashboardPunchInModalLabel">Punch Me In</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <p class="mb-3">Search for a job (optional). If left blank, this punch-in is saved as Non-Job Time.</p>
+
+                            <input type="hidden" id="dashboard_self_job_lookup_url" value="<?= e($selfJobLookupUrl) ?>">
+                            <input type="hidden" id="dashboard_self_job_id" name="job_id" value="">
+
+                            <div id="dashboardSelfJobLookupWrap" class="position-relative">
+                                <label class="form-label" for="dashboard_self_job_search">Job (optional)</label>
+                                <input
+                                    class="form-control"
+                                    id="dashboard_self_job_search"
+                                    type="text"
+                                    autocomplete="off"
+                                    placeholder="Search job by name, id, city..."
+                                />
+                                <div id="dashboard_self_job_suggestions" class="list-group position-absolute w-100 shadow-sm d-none"></div>
+                                <div class="form-text">Pick from suggestions to attach this punch to a job.</div>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                            <button type="submit" class="btn btn-success">
+                                <i class="fas fa-play-circle me-1"></i>
+                                Punch In
+                            </button>
+                        </div>
+                    </form>
                 </div>
             </div>
         </div>
