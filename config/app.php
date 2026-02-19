@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 return [
     'name' => 'JunkTracker',
-    'version' => '1.2.0 (beta)',
+    'version' => '1.2.1 (beta)',
     'env' => 'local',
     'key' => getenv('APP_KEY') ?: 'local-dev-key-change-me',
     'url' => getenv('APP_URL') ?: 'http://localhost/junktracker',

@@ -187,26 +187,28 @@
                     <input type="hidden" id="user_employee_lookup_url" value="<?= e(url('/users/lookup/employees')) ?>" />
                     <input type="hidden" id="user_employee_current_user_id" value="<?= e((string) ($user['id'] ?? '')) ?>" />
 
-                    <form method="post" action="<?= url('/users/' . ($user['id'] ?? '') . '/employee-link') ?>" class="position-relative">
+                    <form method="post" action="<?= url('/users/' . ($user['id'] ?? '') . '/employee-link') ?>">
                         <?= csrf_field() ?>
                         <input type="hidden" id="user_employee_id" name="employee_id" value="" />
 
                         <label class="form-label" for="user_employee_search">Link to Employee</label>
-                        <div class="input-group">
-                            <span class="input-group-text"><i class="fas fa-user"></i></span>
-                            <input
-                                class="form-control"
-                                id="user_employee_search"
-                                type="text"
-                                autocomplete="off"
-                                placeholder="Search active employees by name, email, phone, or ID..."
-                            />
-                            <button class="btn btn-primary" type="submit">
-                                <i class="fas fa-link me-1"></i>
-                                Link Employee
-                            </button>
+                        <div class="user-employee-lookup-wrap position-relative">
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="fas fa-user"></i></span>
+                                <input
+                                    class="form-control"
+                                    id="user_employee_search"
+                                    type="text"
+                                    autocomplete="off"
+                                    placeholder="Search active employees by name, email, phone, or ID..."
+                                />
+                                <button class="btn btn-primary" type="submit">
+                                    <i class="fas fa-link me-1"></i>
+                                    Link Employee
+                                </button>
+                            </div>
+                            <div id="user_employee_suggestions" class="list-group position-absolute w-100 shadow-sm d-none"></div>
                         </div>
-                        <div id="user_employee_suggestions" class="list-group position-absolute w-100 shadow-sm d-none" style="z-index: 1050; top: 100%;"></div>
                         <div id="user_employee_error" class="text-danger small mt-2 d-none"></div>
                         <div class="form-text">Only managers/admins/dev can update this mapping.</div>
                     </form>
