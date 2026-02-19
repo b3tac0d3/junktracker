@@ -13,6 +13,8 @@ final class ExpensesController extends Controller
 {
     public function index(): void
     {
+        $this->authorize('view');
+
         $filters = [
             'q' => trim((string) ($_GET['q'] ?? '')),
             'category_id' => $this->toIntOrNull($_GET['category_id'] ?? null),
@@ -52,6 +54,8 @@ final class ExpensesController extends Controller
 
     public function create(): void
     {
+        $this->authorize('create');
+
         $this->render('expenses/create', [
             'pageTitle' => 'Add Expense',
             'expense' => null,
@@ -64,6 +68,8 @@ final class ExpensesController extends Controller
 
     public function store(): void
     {
+        $this->authorize('create');
+
         if (!verify_csrf($_POST['csrf_token'] ?? null)) {
             flash('error', 'Your session expired. Please try again.');
             redirect('/expenses/new');
@@ -134,6 +140,8 @@ final class ExpensesController extends Controller
 
     public function jobLookup(): void
     {
+        $this->authorize('view');
+
         $term = trim((string) ($_GET['q'] ?? ''));
         header('Content-Type: application/json; charset=utf-8');
         echo json_encode(Job::lookupForSales($term));
@@ -168,5 +176,10 @@ final class ExpensesController extends Controller
         }
 
         return is_numeric($raw) ? (float) $raw : null;
+    }
+
+    private function authorize(string $action): void
+    {
+        require_permission('expenses', $action);
     }
 }

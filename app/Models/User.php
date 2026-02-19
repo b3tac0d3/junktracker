@@ -27,6 +27,11 @@ final class User
             'two_factor_expires_at' => 'ALTER TABLE users ADD COLUMN two_factor_expires_at DATETIME NULL AFTER two_factor_code_hash',
             'two_factor_sent_at' => 'ALTER TABLE users ADD COLUMN two_factor_sent_at DATETIME NULL AFTER two_factor_expires_at',
             'last_2fa_at' => 'ALTER TABLE users ADD COLUMN last_2fa_at DATETIME NULL AFTER two_factor_sent_at',
+            'failed_login_count' => 'ALTER TABLE users ADD COLUMN failed_login_count INT UNSIGNED NOT NULL DEFAULT 0 AFTER last_2fa_at',
+            'last_failed_login_at' => 'ALTER TABLE users ADD COLUMN last_failed_login_at DATETIME NULL AFTER failed_login_count',
+            'last_failed_login_ip' => 'ALTER TABLE users ADD COLUMN last_failed_login_ip VARCHAR(45) NULL AFTER last_failed_login_at',
+            'locked_until' => 'ALTER TABLE users ADD COLUMN locked_until DATETIME NULL AFTER last_failed_login_ip',
+            'last_login_at' => 'ALTER TABLE users ADD COLUMN last_login_at DATETIME NULL AFTER locked_until',
         ];
 
         foreach ($columns as $column => $sql) {
@@ -66,7 +71,12 @@ final class User
                        two_factor_code_hash,
                        two_factor_expires_at,
                        two_factor_sent_at,
-                       last_2fa_at
+                       last_2fa_at,
+                       failed_login_count,
+                       last_failed_login_at,
+                       last_failed_login_ip,
+                       locked_until,
+                       last_login_at
                 FROM users
                 WHERE email = :email
                 LIMIT 1';
@@ -101,7 +111,12 @@ final class User
                        password_setup_sent_at,
                        password_setup_expires_at,
                        password_setup_used_at,
-                       last_2fa_at
+                       last_2fa_at,
+                       failed_login_count,
+                       last_failed_login_at,
+                       last_failed_login_ip,
+                       locked_until,
+                       last_login_at
                 FROM users
                 WHERE id = :id
                 LIMIT 1';
@@ -130,7 +145,12 @@ final class User
                        two_factor_code_hash,
                        two_factor_expires_at,
                        two_factor_sent_at,
-                       last_2fa_at
+                       last_2fa_at,
+                       failed_login_count,
+                       last_failed_login_at,
+                       last_failed_login_ip,
+                       locked_until,
+                       last_login_at
                 FROM users
                 WHERE id = :id
                 LIMIT 1';
@@ -155,7 +175,12 @@ final class User
                        password_setup_sent_at,
                        password_setup_expires_at,
                        password_setup_used_at,
-                       last_2fa_at
+                       last_2fa_at,
+                       failed_login_count,
+                       last_failed_login_at,
+                       last_failed_login_ip,
+                       locked_until,
+                       last_login_at
                 FROM users';
         $params = [];
         $where = [];
@@ -410,6 +435,62 @@ final class User
 
         $stmt = Database::connection()->prepare($sql);
         $stmt->execute(['id' => $userId]);
+    }
+
+    public static function registerFailedLogin(int $id, ?string $ipAddress = null): void
+    {
+        self::ensureAuthColumns();
+
+        if ($id <= 0) {
+            return;
+        }
+
+        $sql = 'UPDATE users
+                SET failed_login_count = CASE
+                        WHEN last_failed_login_at IS NULL OR last_failed_login_at < DATE_SUB(NOW(), INTERVAL 15 MINUTE)
+                            THEN 1
+                        ELSE COALESCE(failed_login_count, 0) + 1
+                    END,
+                    last_failed_login_at = NOW(),
+                    last_failed_login_ip = :ip_address,
+                    locked_until = CASE
+                        WHEN (
+                            CASE
+                                WHEN last_failed_login_at IS NULL OR last_failed_login_at < DATE_SUB(NOW(), INTERVAL 15 MINUTE)
+                                    THEN 1
+                                ELSE COALESCE(failed_login_count, 0) + 1
+                            END
+                        ) >= 5
+                        THEN DATE_ADD(NOW(), INTERVAL 15 MINUTE)
+                        ELSE locked_until
+                    END,
+                    updated_at = NOW()
+                WHERE id = :id';
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute([
+            'id' => $id,
+            'ip_address' => $ipAddress,
+        ]);
+    }
+
+    public static function clearFailedLogin(int $id): void
+    {
+        self::ensureAuthColumns();
+
+        if ($id <= 0) {
+            return;
+        }
+
+        $sql = 'UPDATE users
+                SET failed_login_count = 0,
+                    locked_until = NULL,
+                    last_login_at = NOW(),
+                    updated_at = NOW()
+                WHERE id = :id';
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute(['id' => $id]);
     }
 
     public static function update(int $id, array $data, ?int $actorId = null): void

@@ -19,6 +19,13 @@
     $timeTotalMinutes = (int) ($timeSummary['total_minutes'] ?? 0);
     $timeTotalPaid = (float) ($timeSummary['total_paid'] ?? 0);
     $timeEntryCount = (int) ($timeSummary['entry_count'] ?? 0);
+    $profitability = is_array($profitability ?? null) ? $profitability : [];
+    $profitRevenueTotal = (float) ($profitability['revenue_total'] ?? 0);
+    $profitCostTotal = (float) ($profitability['cost_total'] ?? 0);
+    $profitNetEstimate = (float) ($profitability['net_estimate'] ?? 0);
+    $profitBillingCollected = (float) ($profitability['billing_collected'] ?? 0);
+    $profitScrapTotal = (float) ($profitability['scrap_total'] ?? 0);
+    $profitDumpTotal = (float) ($profitability['dump_total'] ?? 0);
     $crewEmployees = $crewEmployees ?? [];
     $openByEmployee = $openByEmployee ?? [];
     $openElsewhereByEmployee = $openElsewhereByEmployee ?? [];
@@ -575,6 +582,43 @@
         </div>
 
         <div class="col-12 col-xl-4">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <i class="fas fa-chart-line me-1"></i>
+                    Profit Snapshot
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-6">
+                            <div class="text-muted small">Revenue Target</div>
+                            <div class="fw-semibold"><?= e('$' . number_format($profitRevenueTotal, 2)) ?></div>
+                        </div>
+                        <div class="col-6">
+                            <div class="text-muted small">Costs</div>
+                            <div class="fw-semibold text-danger"><?= e('$' . number_format($profitCostTotal, 2)) ?></div>
+                        </div>
+                        <div class="col-6">
+                            <div class="text-muted small">Estimated Net</div>
+                            <div class="fw-semibold <?= $profitNetEstimate < 0 ? 'text-danger' : 'text-success' ?>">
+                                <?= e('$' . number_format($profitNetEstimate, 2)) ?>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="text-muted small">Collected to Date</div>
+                            <div class="fw-semibold"><?= e('$' . number_format($profitBillingCollected + $profitScrapTotal, 2)) ?></div>
+                        </div>
+                        <div class="col-6">
+                            <div class="text-muted small">Scrap Sales</div>
+                            <div class="fw-semibold text-success"><?= e('$' . number_format($profitScrapTotal, 2)) ?></div>
+                        </div>
+                        <div class="col-6">
+                            <div class="text-muted small">Dump Costs</div>
+                            <div class="fw-semibold text-danger"><?= e('$' . number_format($profitDumpTotal, 2)) ?></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <div class="card mb-4">
                 <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
                     <div>

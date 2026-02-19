@@ -17,6 +17,8 @@ final class SalesController extends Controller
 
     public function index(): void
     {
+        $this->authorize('view');
+
         $startDate = trim((string) ($_GET['start_date'] ?? ''));
         $endDate = trim((string) ($_GET['end_date'] ?? ''));
 
@@ -60,6 +62,8 @@ final class SalesController extends Controller
 
     public function show(array $params): void
     {
+        $this->authorize('view');
+
         $id = isset($params['id']) ? (int) $params['id'] : 0;
         if ($id <= 0) {
             redirect('/sales');
@@ -79,6 +83,8 @@ final class SalesController extends Controller
 
     public function create(): void
     {
+        $this->authorize('create');
+
         $this->render('sales/create', [
             'pageTitle' => 'Add Sale',
             'sale' => null,
@@ -92,6 +98,8 @@ final class SalesController extends Controller
 
     public function store(): void
     {
+        $this->authorize('create');
+
         if (!verify_csrf($_POST['csrf_token'] ?? null)) {
             flash('error', 'Your session expired. Please try again.');
             redirect('/sales/new');
@@ -113,6 +121,8 @@ final class SalesController extends Controller
 
     public function edit(array $params): void
     {
+        $this->authorize('edit');
+
         $id = isset($params['id']) ? (int) $params['id'] : 0;
         if ($id <= 0) {
             redirect('/sales');
@@ -137,6 +147,8 @@ final class SalesController extends Controller
 
     public function update(array $params): void
     {
+        $this->authorize('edit');
+
         $id = isset($params['id']) ? (int) $params['id'] : 0;
         if ($id <= 0) {
             redirect('/sales');
@@ -169,6 +181,8 @@ final class SalesController extends Controller
 
     public function delete(array $params): void
     {
+        $this->authorize('delete');
+
         $id = isset($params['id']) ? (int) $params['id'] : 0;
         if ($id <= 0) {
             redirect('/sales');
@@ -197,6 +211,8 @@ final class SalesController extends Controller
 
     public function scrapYardLookup(): void
     {
+        $this->authorize('view');
+
         $term = trim((string) ($_GET['q'] ?? ''));
         header('Content-Type: application/json; charset=utf-8');
         echo json_encode(DisposalLocation::lookupActiveByType($term, 'scrap'));
@@ -204,6 +220,8 @@ final class SalesController extends Controller
 
     public function jobLookup(): void
     {
+        $this->authorize('view');
+
         $term = trim((string) ($_GET['q'] ?? ''));
         header('Content-Type: application/json; charset=utf-8');
         echo json_encode(Job::lookupForSales($term));
@@ -339,5 +357,10 @@ final class SalesController extends Controller
         }
 
         return round((float) $raw, 2);
+    }
+
+    private function authorize(string $action): void
+    {
+        require_permission('sales', $action);
     }
 }

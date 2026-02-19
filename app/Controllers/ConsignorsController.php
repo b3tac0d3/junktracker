@@ -21,6 +21,8 @@ final class ConsignorsController extends Controller
 
     public function index(): void
     {
+        $this->authorize('view');
+
         $query = trim((string) ($_GET['q'] ?? ''));
         $status = (string) ($_GET['status'] ?? 'active');
         if (!in_array($status, ['active', 'inactive', 'all'], true)) {
@@ -43,6 +45,8 @@ final class ConsignorsController extends Controller
 
     public function show(array $params): void
     {
+        $this->authorize('view');
+
         $id = isset($params['id']) ? (int) $params['id'] : 0;
         if ($id <= 0) {
             redirect('/consignors');
@@ -72,6 +76,8 @@ final class ConsignorsController extends Controller
 
     public function create(): void
     {
+        $this->authorize('create');
+
         $this->render('consignors/create', [
             'pageTitle' => 'Add Consignor',
             'consignor' => null,
@@ -83,6 +89,8 @@ final class ConsignorsController extends Controller
 
     public function store(): void
     {
+        $this->authorize('create');
+
         if (!verify_csrf($_POST['csrf_token'] ?? null)) {
             flash('error', 'Your session expired. Please try again.');
             redirect('/consignors/new');
@@ -106,6 +114,8 @@ final class ConsignorsController extends Controller
 
     public function edit(array $params): void
     {
+        $this->authorize('edit');
+
         $id = isset($params['id']) ? (int) $params['id'] : 0;
         if ($id <= 0) {
             redirect('/consignors');
@@ -128,6 +138,8 @@ final class ConsignorsController extends Controller
 
     public function update(array $params): void
     {
+        $this->authorize('edit');
+
         $id = isset($params['id']) ? (int) $params['id'] : 0;
         if ($id <= 0) {
             redirect('/consignors');
@@ -163,6 +175,8 @@ final class ConsignorsController extends Controller
 
     public function deactivate(array $params): void
     {
+        $this->authorize('delete');
+
         $id = isset($params['id']) ? (int) $params['id'] : 0;
         if ($id <= 0) {
             redirect('/consignors');
@@ -193,6 +207,8 @@ final class ConsignorsController extends Controller
 
     public function addContact(array $params): void
     {
+        $this->authorize('edit');
+
         $consignorId = isset($params['id']) ? (int) $params['id'] : 0;
         if ($consignorId <= 0) {
             redirect('/consignors');
@@ -240,6 +256,8 @@ final class ConsignorsController extends Controller
 
     public function addPayout(array $params): void
     {
+        $this->authorize('edit');
+
         $consignorId = isset($params['id']) ? (int) $params['id'] : 0;
         if ($consignorId <= 0) {
             redirect('/consignors');
@@ -302,6 +320,8 @@ final class ConsignorsController extends Controller
 
     public function addContract(array $params): void
     {
+        $this->authorize('edit');
+
         $consignorId = isset($params['id']) ? (int) $params['id'] : 0;
         if ($consignorId <= 0) {
             redirect('/consignors');
@@ -407,6 +427,8 @@ final class ConsignorsController extends Controller
 
     public function deleteContract(array $params): void
     {
+        $this->authorize('delete');
+
         $consignorId = isset($params['id']) ? (int) $params['id'] : 0;
         $contractId = isset($params['contractId']) ? (int) $params['contractId'] : 0;
         if ($consignorId <= 0 || $contractId <= 0) {
@@ -433,6 +455,8 @@ final class ConsignorsController extends Controller
 
     public function downloadContract(array $params): void
     {
+        $this->authorize('view');
+
         $consignorId = isset($params['id']) ? (int) $params['id'] : 0;
         $contractId = isset($params['contractId']) ? (int) $params['contractId'] : 0;
         if ($consignorId <= 0 || $contractId <= 0) {
@@ -509,6 +533,11 @@ final class ConsignorsController extends Controller
             'note' => trim((string) ($_POST['note'] ?? '')),
             'active' => 1,
         ];
+    }
+
+    private function authorize(string $action): void
+    {
+        require_permission('consignors', $action);
     }
 
     private function validateConsignor(array $data, ?int $currentId = null): array

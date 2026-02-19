@@ -13,6 +13,8 @@ final class TimeTrackingController extends Controller
 {
     public function index(): void
     {
+        $this->authorize('view');
+
         $filters = [
             'q' => trim((string) ($_GET['q'] ?? '')),
             'employee_id' => $this->toIntOrNull($_GET['employee_id'] ?? null),
@@ -52,6 +54,8 @@ final class TimeTrackingController extends Controller
 
     public function open(): void
     {
+        $this->authorize('view');
+
         $filters = [
             'q' => trim((string) ($_GET['q'] ?? '')),
             'employee_id' => $this->toIntOrNull($_GET['employee_id'] ?? null),
@@ -76,6 +80,8 @@ final class TimeTrackingController extends Controller
 
     public function create(): void
     {
+        $this->authorize('create');
+
         $jobId = $this->toIntOrNull($_GET['job_id'] ?? null);
         $employees = TimeEntry::employees();
         $jobs = TimeEntry::jobs();
@@ -109,6 +115,8 @@ final class TimeTrackingController extends Controller
 
     public function store(): void
     {
+        $this->authorize('create');
+
         if (!verify_csrf($_POST['csrf_token'] ?? null)) {
             flash('error', 'Your session expired. Please try again.');
             redirect('/time-tracking/new');
@@ -226,6 +234,8 @@ final class TimeTrackingController extends Controller
 
     public function show(array $params): void
     {
+        $this->authorize('view');
+
         $id = isset($params['id']) ? (int) $params['id'] : 0;
         if ($id <= 0) {
             redirect('/time-tracking');
@@ -249,6 +259,8 @@ final class TimeTrackingController extends Controller
 
     public function edit(array $params): void
     {
+        $this->authorize('edit');
+
         $id = isset($params['id']) ? (int) $params['id'] : 0;
         if ($id <= 0) {
             redirect('/time-tracking');
@@ -287,6 +299,8 @@ final class TimeTrackingController extends Controller
 
     public function update(array $params): void
     {
+        $this->authorize('edit');
+
         $id = isset($params['id']) ? (int) $params['id'] : 0;
         if ($id <= 0) {
             redirect('/time-tracking');
@@ -359,6 +373,8 @@ final class TimeTrackingController extends Controller
 
     public function punchOut(array $params): void
     {
+        $this->authorize('edit');
+
         $id = isset($params['id']) ? (int) $params['id'] : 0;
         if ($id <= 0) {
             redirect('/time-tracking/open');
@@ -422,6 +438,8 @@ final class TimeTrackingController extends Controller
 
     public function delete(array $params): void
     {
+        $this->authorize('delete');
+
         $id = isset($params['id']) ? (int) $params['id'] : 0;
         if ($id <= 0) {
             redirect('/time-tracking');
@@ -465,6 +483,8 @@ final class TimeTrackingController extends Controller
 
     public function employeeLookup(): void
     {
+        $this->authorize('view');
+
         $term = trim((string) ($_GET['q'] ?? ''));
         header('Content-Type: application/json; charset=utf-8');
         echo json_encode(TimeEntry::lookupEmployees($term));
@@ -472,6 +492,8 @@ final class TimeTrackingController extends Controller
 
     public function jobLookup(): void
     {
+        $this->authorize('view');
+
         $term = trim((string) ($_GET['q'] ?? ''));
         header('Content-Type: application/json; charset=utf-8');
         echo json_encode(TimeEntry::lookupJobs($term));
@@ -676,6 +698,11 @@ final class TimeTrackingController extends Controller
         }
 
         return 'Job #' . $jobId;
+    }
+
+    private function authorize(string $action): void
+    {
+        require_permission('time_tracking', $action);
     }
 
     private function renderNotFound(): void

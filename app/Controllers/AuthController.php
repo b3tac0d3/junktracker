@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Controllers;
 
+use App\Models\AuthLoginAttempt;
 use App\Models\User;
 use App\Support\Mailer;
 use Core\Controller;
@@ -39,8 +40,15 @@ final class AuthController extends Controller
         $email = trim((string) ($_POST['email'] ?? ''));
         $password = (string) ($_POST['password'] ?? '');
         $remember = !empty($_POST['remember']);
+        $requestIp = request_ip_address();
+        $requestUserAgent = request_user_agent();
+
+        if ($email !== '' && AuthLoginAttempt::isRateLimited($email, $requestIp)) {
+            $this->redirectLoginError('too_many_attempts', $email);
+        }
 
         if ($email === '' || $password === '') {
+            AuthLoginAttempt::record($email, null, $requestIp, 'failed', 'missing_credentials', $requestUserAgent);
             $this->redirectLoginError('missing_credentials', $email);
         }
 
@@ -49,16 +57,61 @@ final class AuthController extends Controller
         } catch (\Throwable) {
             $this->redirectLoginError('login_unavailable', $email);
         }
+
+        if ($user && !empty($user['locked_until'])) {
+            $lockedUntil = strtotime((string) $user['locked_until']);
+            if ($lockedUntil !== false && $lockedUntil > time()) {
+                AuthLoginAttempt::record(
+                    $email,
+                    (int) ($user['id'] ?? 0),
+                    $requestIp,
+                    'failed',
+                    'locked_out',
+                    $requestUserAgent
+                );
+                $this->redirectLoginError('too_many_attempts', $email);
+            }
+        }
+
         if (!$user || (int) ($user['is_active'] ?? 0) !== 1) {
+            AuthLoginAttempt::record(
+                $email,
+                $user ? (int) ($user['id'] ?? 0) : null,
+                $requestIp,
+                'failed',
+                'invalid_credentials',
+                $requestUserAgent
+            );
+            if ($user) {
+                User::registerFailedLogin((int) ($user['id'] ?? 0), $requestIp);
+            }
             $this->redirectLoginError('invalid_credentials', $email);
         }
 
         $passwordHash = (string) ($user['password_hash'] ?? '');
         if ($passwordHash === '') {
+            AuthLoginAttempt::record(
+                $email,
+                (int) ($user['id'] ?? 0),
+                $requestIp,
+                'failed',
+                'password_not_set',
+                $requestUserAgent
+            );
+            User::registerFailedLogin((int) ($user['id'] ?? 0), $requestIp);
             $this->redirectLoginError('password_not_set', $email);
         }
 
         if (!password_verify($password, $passwordHash)) {
+            AuthLoginAttempt::record(
+                $email,
+                (int) ($user['id'] ?? 0),
+                $requestIp,
+                'failed',
+                'invalid_credentials',
+                $requestUserAgent
+            );
+            User::registerFailedLogin((int) ($user['id'] ?? 0), $requestIp);
             $this->redirectLoginError('invalid_credentials', $email);
         }
 
@@ -349,9 +402,22 @@ final class AuthController extends Controller
 
     private function finalizeLogin(array $user, bool $remember, bool $setTrustCookie, string $loginMethod = 'password'): void
     {
+        $userId = (int) ($user['id'] ?? 0);
+        if ($userId > 0) {
+            User::clearFailedLogin($userId);
+            AuthLoginAttempt::record(
+                (string) ($user['email'] ?? ''),
+                $userId,
+                request_ip_address(),
+                'success',
+                'authenticated',
+                request_user_agent()
+            );
+        }
+
         session_regenerate_id(true);
         $_SESSION['user'] = [
-            'id' => (int) $user['id'],
+            'id' => $userId,
             'email' => $user['email'],
             'first_name' => $user['first_name'] ?? '',
             'last_name' => $user['last_name'] ?? '',
@@ -411,6 +477,7 @@ final class AuthController extends Controller
             'invalid_credentials' => 'Invalid credentials.',
             'password_not_set' => 'Your account setup is incomplete. Use your invite email to set a password.',
             'two_factor_unavailable' => 'Unable to send your verification code. Please try again.',
+            'too_many_attempts' => 'Too many failed login attempts. Please wait 15 minutes and try again.',
             'login_unavailable' => 'Login is temporarily unavailable. Please try again in a moment.',
             default => '',
         };

@@ -1,6 +1,8 @@
 -- JunkTracker beta launch prep
 -- Run this once on local, then on live before deploy.
 
+SET @schema := DATABASE();
+
 -- 1) Ensure employee_time_entries exists with nullable job_id for Non-Job Time entries
 CREATE TABLE IF NOT EXISTS employee_time_entries (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -159,15 +161,110 @@ CREATE TABLE IF NOT EXISTS consignors (
         ON UPDATE CASCADE ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-ALTER TABLE consignors
-    ADD COLUMN IF NOT EXISTS consignor_number VARCHAR(40) NULL AFTER zip,
-    ADD COLUMN IF NOT EXISTS consignment_start_date DATE NULL AFTER consignor_number,
-    ADD COLUMN IF NOT EXISTS consignment_end_date DATE NULL AFTER consignment_start_date,
-    ADD COLUMN IF NOT EXISTS payment_schedule VARCHAR(20) NULL AFTER consignment_end_date,
-    ADD COLUMN IF NOT EXISTS next_payment_due_date DATE NULL AFTER payment_schedule;
+SET @sql := IF(
+    EXISTS(
+        SELECT 1
+        FROM information_schema.COLUMNS
+        WHERE BINARY TABLE_SCHEMA = BINARY @schema
+          AND BINARY TABLE_NAME = BINARY 'consignors'
+          AND BINARY COLUMN_NAME = BINARY 'consignor_number'
+    ),
+    'SELECT 1',
+    'ALTER TABLE consignors ADD COLUMN consignor_number VARCHAR(40) NULL AFTER zip'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
-CREATE UNIQUE INDEX IF NOT EXISTS uniq_consignors_number ON consignors (consignor_number);
-CREATE INDEX IF NOT EXISTS idx_consignors_next_payment_due ON consignors (next_payment_due_date);
+SET @sql := IF(
+    EXISTS(
+        SELECT 1
+        FROM information_schema.COLUMNS
+        WHERE BINARY TABLE_SCHEMA = BINARY @schema
+          AND BINARY TABLE_NAME = BINARY 'consignors'
+          AND BINARY COLUMN_NAME = BINARY 'consignment_start_date'
+    ),
+    'SELECT 1',
+    'ALTER TABLE consignors ADD COLUMN consignment_start_date DATE NULL AFTER consignor_number'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @sql := IF(
+    EXISTS(
+        SELECT 1
+        FROM information_schema.COLUMNS
+        WHERE BINARY TABLE_SCHEMA = BINARY @schema
+          AND BINARY TABLE_NAME = BINARY 'consignors'
+          AND BINARY COLUMN_NAME = BINARY 'consignment_end_date'
+    ),
+    'SELECT 1',
+    'ALTER TABLE consignors ADD COLUMN consignment_end_date DATE NULL AFTER consignment_start_date'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @sql := IF(
+    EXISTS(
+        SELECT 1
+        FROM information_schema.COLUMNS
+        WHERE BINARY TABLE_SCHEMA = BINARY @schema
+          AND BINARY TABLE_NAME = BINARY 'consignors'
+          AND BINARY COLUMN_NAME = BINARY 'payment_schedule'
+    ),
+    'SELECT 1',
+    'ALTER TABLE consignors ADD COLUMN payment_schedule VARCHAR(20) NULL AFTER consignment_end_date'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @sql := IF(
+    EXISTS(
+        SELECT 1
+        FROM information_schema.COLUMNS
+        WHERE BINARY TABLE_SCHEMA = BINARY @schema
+          AND BINARY TABLE_NAME = BINARY 'consignors'
+          AND BINARY COLUMN_NAME = BINARY 'next_payment_due_date'
+    ),
+    'SELECT 1',
+    'ALTER TABLE consignors ADD COLUMN next_payment_due_date DATE NULL AFTER payment_schedule'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @sql := IF(
+    EXISTS(
+        SELECT 1
+        FROM information_schema.STATISTICS
+        WHERE BINARY TABLE_SCHEMA = BINARY @schema
+          AND BINARY TABLE_NAME = BINARY 'consignors'
+          AND BINARY INDEX_NAME = BINARY 'uniq_consignors_number'
+    ),
+    'SELECT 1',
+    'CREATE UNIQUE INDEX uniq_consignors_number ON consignors (consignor_number)'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @sql := IF(
+    EXISTS(
+        SELECT 1
+        FROM information_schema.STATISTICS
+        WHERE BINARY TABLE_SCHEMA = BINARY @schema
+          AND BINARY TABLE_NAME = BINARY 'consignors'
+          AND BINARY INDEX_NAME = BINARY 'idx_consignors_next_payment_due'
+    ),
+    'SELECT 1',
+    'CREATE INDEX idx_consignors_next_payment_due ON consignors (next_payment_due_date)'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
 CREATE TABLE IF NOT EXISTS consignor_contacts (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -286,17 +383,140 @@ CREATE TABLE IF NOT EXISTS consignor_payouts (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 6) User auth hardening: invite-password + email 2FA columns
-ALTER TABLE users
-    ADD COLUMN IF NOT EXISTS password_setup_token_hash VARCHAR(255) NULL AFTER password_hash,
-    ADD COLUMN IF NOT EXISTS password_setup_expires_at DATETIME NULL AFTER password_setup_token_hash,
-    ADD COLUMN IF NOT EXISTS password_setup_sent_at DATETIME NULL AFTER password_setup_expires_at,
-    ADD COLUMN IF NOT EXISTS password_setup_used_at DATETIME NULL AFTER password_setup_sent_at,
-    ADD COLUMN IF NOT EXISTS two_factor_code_hash VARCHAR(255) NULL AFTER password_setup_used_at,
-    ADD COLUMN IF NOT EXISTS two_factor_expires_at DATETIME NULL AFTER two_factor_code_hash,
-    ADD COLUMN IF NOT EXISTS two_factor_sent_at DATETIME NULL AFTER two_factor_expires_at,
-    ADD COLUMN IF NOT EXISTS last_2fa_at DATETIME NULL AFTER two_factor_sent_at;
+SET @sql := IF(
+    EXISTS(
+        SELECT 1
+        FROM information_schema.COLUMNS
+        WHERE BINARY TABLE_SCHEMA = BINARY @schema
+          AND BINARY TABLE_NAME = BINARY 'users'
+          AND BINARY COLUMN_NAME = BINARY 'password_setup_token_hash'
+    ),
+    'SELECT 1',
+    'ALTER TABLE users ADD COLUMN password_setup_token_hash VARCHAR(255) NULL AFTER password_hash'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
-CREATE INDEX IF NOT EXISTS idx_users_password_setup_expires ON users (password_setup_expires_at);
+SET @sql := IF(
+    EXISTS(
+        SELECT 1
+        FROM information_schema.COLUMNS
+        WHERE BINARY TABLE_SCHEMA = BINARY @schema
+          AND BINARY TABLE_NAME = BINARY 'users'
+          AND BINARY COLUMN_NAME = BINARY 'password_setup_expires_at'
+    ),
+    'SELECT 1',
+    'ALTER TABLE users ADD COLUMN password_setup_expires_at DATETIME NULL AFTER password_setup_token_hash'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @sql := IF(
+    EXISTS(
+        SELECT 1
+        FROM information_schema.COLUMNS
+        WHERE BINARY TABLE_SCHEMA = BINARY @schema
+          AND BINARY TABLE_NAME = BINARY 'users'
+          AND BINARY COLUMN_NAME = BINARY 'password_setup_sent_at'
+    ),
+    'SELECT 1',
+    'ALTER TABLE users ADD COLUMN password_setup_sent_at DATETIME NULL AFTER password_setup_expires_at'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @sql := IF(
+    EXISTS(
+        SELECT 1
+        FROM information_schema.COLUMNS
+        WHERE BINARY TABLE_SCHEMA = BINARY @schema
+          AND BINARY TABLE_NAME = BINARY 'users'
+          AND BINARY COLUMN_NAME = BINARY 'password_setup_used_at'
+    ),
+    'SELECT 1',
+    'ALTER TABLE users ADD COLUMN password_setup_used_at DATETIME NULL AFTER password_setup_sent_at'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @sql := IF(
+    EXISTS(
+        SELECT 1
+        FROM information_schema.COLUMNS
+        WHERE BINARY TABLE_SCHEMA = BINARY @schema
+          AND BINARY TABLE_NAME = BINARY 'users'
+          AND BINARY COLUMN_NAME = BINARY 'two_factor_code_hash'
+    ),
+    'SELECT 1',
+    'ALTER TABLE users ADD COLUMN two_factor_code_hash VARCHAR(255) NULL AFTER password_setup_used_at'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @sql := IF(
+    EXISTS(
+        SELECT 1
+        FROM information_schema.COLUMNS
+        WHERE BINARY TABLE_SCHEMA = BINARY @schema
+          AND BINARY TABLE_NAME = BINARY 'users'
+          AND BINARY COLUMN_NAME = BINARY 'two_factor_expires_at'
+    ),
+    'SELECT 1',
+    'ALTER TABLE users ADD COLUMN two_factor_expires_at DATETIME NULL AFTER two_factor_code_hash'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @sql := IF(
+    EXISTS(
+        SELECT 1
+        FROM information_schema.COLUMNS
+        WHERE BINARY TABLE_SCHEMA = BINARY @schema
+          AND BINARY TABLE_NAME = BINARY 'users'
+          AND BINARY COLUMN_NAME = BINARY 'two_factor_sent_at'
+    ),
+    'SELECT 1',
+    'ALTER TABLE users ADD COLUMN two_factor_sent_at DATETIME NULL AFTER two_factor_expires_at'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @sql := IF(
+    EXISTS(
+        SELECT 1
+        FROM information_schema.COLUMNS
+        WHERE BINARY TABLE_SCHEMA = BINARY @schema
+          AND BINARY TABLE_NAME = BINARY 'users'
+          AND BINARY COLUMN_NAME = BINARY 'last_2fa_at'
+    ),
+    'SELECT 1',
+    'ALTER TABLE users ADD COLUMN last_2fa_at DATETIME NULL AFTER two_factor_sent_at'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @sql := IF(
+    EXISTS(
+        SELECT 1
+        FROM information_schema.STATISTICS
+        WHERE BINARY TABLE_SCHEMA = BINARY @schema
+          AND BINARY TABLE_NAME = BINARY 'users'
+          AND BINARY INDEX_NAME = BINARY 'idx_users_password_setup_expires'
+    ),
+    'SELECT 1',
+    'CREATE INDEX idx_users_password_setup_expires ON users (password_setup_expires_at)'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
 -- 7) Admin settings store
 CREATE TABLE IF NOT EXISTS app_settings (
@@ -395,3 +615,143 @@ CREATE TABLE IF NOT EXISTS user_login_records (
         ON UPDATE CASCADE
         ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 11) Auth hardening: failed login telemetry + lockout metadata
+CREATE TABLE IF NOT EXISTS auth_login_attempts (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    email VARCHAR(255) NULL,
+    user_id BIGINT UNSIGNED NULL,
+    ip_address VARCHAR(45) NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'failed',
+    reason VARCHAR(80) NULL,
+    user_agent VARCHAR(512) NULL,
+    attempted_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY idx_auth_login_attempts_email_date (email, attempted_at),
+    KEY idx_auth_login_attempts_ip_date (ip_address, attempted_at),
+    KEY idx_auth_login_attempts_user_date (user_id, attempted_at),
+    KEY idx_auth_login_attempts_status_date (status, attempted_at),
+    CONSTRAINT fk_auth_login_attempts_user
+        FOREIGN KEY (user_id) REFERENCES users(id)
+        ON UPDATE CASCADE
+        ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+SET @sql := IF(
+    EXISTS(
+        SELECT 1
+        FROM information_schema.COLUMNS
+        WHERE BINARY TABLE_SCHEMA = BINARY @schema
+          AND BINARY TABLE_NAME = BINARY 'users'
+          AND BINARY COLUMN_NAME = BINARY 'failed_login_count'
+    ),
+    'SELECT 1',
+    'ALTER TABLE users ADD COLUMN failed_login_count INT UNSIGNED NOT NULL DEFAULT 0 AFTER last_2fa_at'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @sql := IF(
+    EXISTS(
+        SELECT 1
+        FROM information_schema.COLUMNS
+        WHERE BINARY TABLE_SCHEMA = BINARY @schema
+          AND BINARY TABLE_NAME = BINARY 'users'
+          AND BINARY COLUMN_NAME = BINARY 'last_failed_login_at'
+    ),
+    'SELECT 1',
+    'ALTER TABLE users ADD COLUMN last_failed_login_at DATETIME NULL AFTER failed_login_count'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @sql := IF(
+    EXISTS(
+        SELECT 1
+        FROM information_schema.COLUMNS
+        WHERE BINARY TABLE_SCHEMA = BINARY @schema
+          AND BINARY TABLE_NAME = BINARY 'users'
+          AND BINARY COLUMN_NAME = BINARY 'last_failed_login_ip'
+    ),
+    'SELECT 1',
+    'ALTER TABLE users ADD COLUMN last_failed_login_ip VARCHAR(45) NULL AFTER last_failed_login_at'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @sql := IF(
+    EXISTS(
+        SELECT 1
+        FROM information_schema.COLUMNS
+        WHERE BINARY TABLE_SCHEMA = BINARY @schema
+          AND BINARY TABLE_NAME = BINARY 'users'
+          AND BINARY COLUMN_NAME = BINARY 'locked_until'
+    ),
+    'SELECT 1',
+    'ALTER TABLE users ADD COLUMN locked_until DATETIME NULL AFTER last_failed_login_ip'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @sql := IF(
+    EXISTS(
+        SELECT 1
+        FROM information_schema.COLUMNS
+        WHERE BINARY TABLE_SCHEMA = BINARY @schema
+          AND BINARY TABLE_NAME = BINARY 'users'
+          AND BINARY COLUMN_NAME = BINARY 'last_login_at'
+    ),
+    'SELECT 1',
+    'ALTER TABLE users ADD COLUMN last_login_at DATETIME NULL AFTER locked_until'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @sql := IF(
+    EXISTS(
+        SELECT 1
+        FROM information_schema.STATISTICS
+        WHERE BINARY TABLE_SCHEMA = BINARY @schema
+          AND BINARY TABLE_NAME = BINARY 'users'
+          AND BINARY INDEX_NAME = BINARY 'idx_users_locked_until'
+    ),
+    'SELECT 1',
+    'CREATE INDEX idx_users_locked_until ON users (locked_until)'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @sql := IF(
+    EXISTS(
+        SELECT 1
+        FROM information_schema.STATISTICS
+        WHERE BINARY TABLE_SCHEMA = BINARY @schema
+          AND BINARY TABLE_NAME = BINARY 'users'
+          AND BINARY INDEX_NAME = BINARY 'idx_users_last_failed_login_at'
+    ),
+    'SELECT 1',
+    'CREATE INDEX idx_users_last_failed_login_at ON users (last_failed_login_at)'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+-- 12) Migration tracking
+CREATE TABLE IF NOT EXISTS schema_migrations (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    migration_key VARCHAR(190) NOT NULL,
+    checksum VARCHAR(64) NULL,
+    applied_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uniq_schema_migrations_key (migration_key),
+    KEY idx_schema_migrations_applied_at (applied_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT IGNORE INTO schema_migrations (migration_key, checksum, applied_at) VALUES
+('2026-02-16_beta_launch_prep', 'beta-1.1.3', NOW());

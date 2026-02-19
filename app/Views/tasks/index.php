@@ -6,6 +6,7 @@
     $statusOptions = $statusOptions ?? ['open', 'in_progress', 'closed'];
     $linkTypes = $linkTypes ?? ['general'];
     $linkTypeLabels = $linkTypeLabels ?? [];
+    $ownerScopes = $ownerScopes ?? ['all', 'mine', 'team'];
     $returnTo = '/tasks';
     $queryString = (string) ($_SERVER['QUERY_STRING'] ?? '');
     if ($queryString !== '') {
@@ -143,6 +144,20 @@
                             <?php endforeach; ?>
                         </select>
                     </div>
+                    <div class="col-12 col-lg-2">
+                        <label class="form-label">Owner Scope</label>
+                        <select class="form-select" name="owner_scope">
+                            <?php foreach ($ownerScopes as $scope): ?>
+                                <option value="<?= e($scope) ?>" <?= (string) ($filters['owner_scope'] ?? 'all') === $scope ? 'selected' : '' ?>>
+                                    <?= e(match ($scope) {
+                                        'mine' => 'Mine',
+                                        'team' => 'Team',
+                                        default => 'All',
+                                    }) ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
                     <div class="col-12 col-lg-1">
                         <label class="form-label">Record</label>
                         <select class="form-select" name="record_status">
@@ -200,6 +215,17 @@
                                     'in_progress' => 'bg-primary',
                                     default => 'bg-warning text-dark',
                                 };
+                                $importance = (int) ($task['importance'] ?? 3);
+                                $priorityClass = match (true) {
+                                    $importance >= 5 => 'bg-danger',
+                                    $importance === 4 => 'bg-warning text-dark',
+                                    $importance === 3 => 'bg-info text-dark',
+                                    default => 'bg-secondary',
+                                };
+                                $dueAt = (string) ($task['due_at'] ?? '');
+                                $dueTs = $dueAt !== '' ? strtotime($dueAt) : false;
+                                $isOverdue = $status !== 'closed' && $dueTs !== false && $dueTs < time();
+                                $isDueToday = $status !== 'closed' && $dueTs !== false && date('Y-m-d', $dueTs) === date('Y-m-d');
                             ?>
                             <tr data-href="<?= $rowHref ?>" style="cursor: pointer;">
                                 <td data-href="<?= $rowHref ?>">
@@ -235,8 +261,15 @@
                                 </td>
                                 <td><?= e((string) (($task['assigned_user_name'] ?? '') !== '' ? $task['assigned_user_name'] : 'Unassigned')) ?></td>
                                 <td><span class="badge <?= e($statusClass) ?>"><?= e(ucwords(str_replace('_', ' ', $status))) ?></span></td>
-                                <td><?= e((string) ($task['importance'] ?? 3)) ?></td>
-                                <td><?= e(format_datetime($task['due_at'] ?? null)) ?></td>
+                                <td><span class="badge <?= e($priorityClass) ?>">P<?= e((string) $importance) ?></span></td>
+                                <td>
+                                    <?= e(format_datetime($task['due_at'] ?? null)) ?>
+                                    <?php if ($isOverdue): ?>
+                                        <span class="badge bg-danger ms-1">Overdue</span>
+                                    <?php elseif ($isDueToday): ?>
+                                        <span class="badge bg-warning text-dark ms-1">Due Today</span>
+                                    <?php endif; ?>
+                                </td>
                             </tr>
                         <?php endforeach; ?>
                     </tbody>

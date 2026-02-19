@@ -10,6 +10,13 @@
     $isActive = empty($task['deleted_at']);
     $isCompleted = $status === 'closed';
     $returnTo = '/tasks/' . (string) ($task['id'] ?? '');
+    $importance = (int) ($task['importance'] ?? 3);
+    $priorityClass = match (true) {
+        $importance >= 5 => 'bg-danger',
+        $importance === 4 => 'bg-warning text-dark',
+        $importance === 3 => 'bg-info text-dark',
+        default => 'bg-secondary',
+    };
 ?>
 <div class="container-fluid px-4">
     <div class="d-flex flex-wrap align-items-center justify-content-between mt-4 mb-3 gap-3">
@@ -71,7 +78,7 @@
                 </div>
                 <div class="col-md-2">
                     <div class="text-muted small">Priority</div>
-                    <div class="fw-semibold"><?= e((string) ($task['importance'] ?? '3')) ?></div>
+                    <div class="fw-semibold"><span class="badge <?= e($priorityClass) ?>">P<?= e((string) $importance) ?></span></div>
                 </div>
                 <div class="col-md-2">
                     <div class="text-muted small">Completed</div>

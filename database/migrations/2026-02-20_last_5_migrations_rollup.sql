@@ -1,6 +1,11 @@
--- JunkTracker live transition schema script
--- Safe to run multiple times on MySQL 8+
--- Run this one file on local and live before launch.
+-- JunkTracker rollup migration for last 5 migrations
+-- phpMyAdmin-safe (no ADD COLUMN IF NOT EXISTS syntax)
+-- Includes combined changes from:
+-- 1) 2026-02-13_recent_changes.sql
+-- 2) 2026-02-16_beta_launch_prep.sql
+-- 3) 2026-02-16_live_transition_full.sql
+-- 4) 2026-02-19_login_records.sql
+-- 5) 2026-02-20_beta_1.1.3_security_ops.sql
 
 SET @schema := DATABASE();
 
@@ -164,7 +169,12 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT IGNORE INTO schema_migrations (migration_key, checksum, applied_at) VALUES
-('2026-02-16_live_transition_full', 'beta-1.1.3', NOW());
+('2026-02-13_recent_changes', 'rollup-1.1.3', NOW()),
+('2026-02-16_beta_launch_prep', 'rollup-1.1.3', NOW()),
+('2026-02-16_live_transition_full', 'rollup-1.1.3', NOW()),
+('2026-02-19_login_records', 'rollup-1.1.3', NOW()),
+('2026-02-20_beta_1.1.3_security_ops', 'rollup-1.1.3', NOW()),
+('2026-02-20_last_5_migrations_rollup', 'rollup-1.1.3', NOW());
 
 -- =========================================================
 -- 12) Admin settings store

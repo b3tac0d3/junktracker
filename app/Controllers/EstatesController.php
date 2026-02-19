@@ -12,6 +12,8 @@ final class EstatesController extends Controller
 {
     public function index(): void
     {
+        $this->authorize('view');
+
         $query = trim((string) ($_GET['q'] ?? ''));
         $status = (string) ($_GET['status'] ?? 'active');
 
@@ -36,6 +38,8 @@ final class EstatesController extends Controller
 
     public function show(array $params): void
     {
+        $this->authorize('view');
+
         $id = isset($params['id']) ? (int) $params['id'] : 0;
         if ($id <= 0) {
             redirect('/estates');
@@ -56,6 +60,8 @@ final class EstatesController extends Controller
 
     public function create(): void
     {
+        $this->authorize('create');
+
         $this->render('estates/create', [
             'pageTitle' => 'Add Estate',
             'estate' => null,
@@ -68,6 +74,8 @@ final class EstatesController extends Controller
 
     public function store(): void
     {
+        $this->authorize('create');
+
         if (!verify_csrf($_POST['csrf_token'] ?? null)) {
             flash('error', 'Your session expired. Please try again.');
             redirect('/estates/new');
@@ -90,6 +98,8 @@ final class EstatesController extends Controller
 
     public function edit(array $params): void
     {
+        $this->authorize('edit');
+
         $id = isset($params['id']) ? (int) $params['id'] : 0;
         $estate = $id > 0 ? Estate::findById($id) : null;
 
@@ -110,6 +120,8 @@ final class EstatesController extends Controller
 
     public function update(array $params): void
     {
+        $this->authorize('edit');
+
         $id = isset($params['id']) ? (int) $params['id'] : 0;
         if ($id <= 0) {
             redirect('/estates');
@@ -143,6 +155,8 @@ final class EstatesController extends Controller
 
     public function lookup(): void
     {
+        $this->authorize('view');
+
         $term = trim((string) ($_GET['q'] ?? ''));
 
         header('Content-Type: application/json; charset=utf-8');
@@ -161,6 +175,11 @@ final class EstatesController extends Controller
         }
 
         return null;
+    }
+
+    private function authorize(string $action): void
+    {
+        require_permission('estates', $action);
     }
 
     private function collectFormData(): array

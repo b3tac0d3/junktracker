@@ -107,6 +107,22 @@
                         ?>
                     </div>
                 </div>
+                <div class="col-md-3">
+                    <div class="text-muted small">Failed Login Count</div>
+                    <div class="fw-semibold"><?= e((string) ((int) ($user['failed_login_count'] ?? 0))) ?></div>
+                </div>
+                <div class="col-md-3">
+                    <div class="text-muted small">Last Failed Login</div>
+                    <div class="fw-semibold"><?= e(format_datetime($user['last_failed_login_at'] ?? null)) ?></div>
+                </div>
+                <div class="col-md-3">
+                    <div class="text-muted small">Last Failed IP</div>
+                    <div class="fw-semibold"><?= e((string) ($user['last_failed_login_ip'] ?? '—')) ?></div>
+                </div>
+                <div class="col-md-3">
+                    <div class="text-muted small">Locked Until</div>
+                    <div class="fw-semibold"><?= e(format_datetime($user['locked_until'] ?? null)) ?></div>
+                </div>
             </div>
         </div>
     </div>

@@ -3,6 +3,12 @@
     $currentUser = auth_user();
     $displayName = $currentUser ? trim(($currentUser['first_name'] ?? '') . ' ' . ($currentUser['last_name'] ?? '')) : 'Guest';
     $appVersion = trim((string) config('app.version', ''));
+    $canViewCustomersSection = can_access('customers', 'view')
+        || can_access('clients', 'view')
+        || can_access('estates', 'view')
+        || can_access('companies', 'view')
+        || can_access('client_contacts', 'view')
+        || can_access('consignors', 'view');
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -25,6 +31,7 @@
                 <div class="input-group">
                     <input
                         class="form-control"
+                        id="globalNavSearchInput"
                         type="text"
                         name="q"
                         value="<?= e((string) ($_GET['q'] ?? '')) ?>"
@@ -57,47 +64,69 @@
                 <nav class="sb-sidenav accordion sb-sidenav-dark" id="sidenavAccordion">
                     <div class="sb-sidenav-menu">
                         <div class="nav">
-                            <a class="nav-link" href="<?= url('/') ?>">
-                                <div class="sb-nav-link-icon"><i class="fas fa-gauge-high"></i></div>
-                                Dashboard
-                            </a>
-                            <a class="nav-link" href="<?= url('/jobs') ?>">
-                                <div class="sb-nav-link-icon"><i class="fas fa-briefcase"></i></div>
-                                Jobs
-                            </a>
-                            <a class="nav-link" href="<?= url('/prospects') ?>">
-                                <div class="sb-nav-link-icon"><i class="fas fa-user-plus"></i></div>
-                                Prospects
-                            </a>
-                            <a class="nav-link" href="<?= url('/sales') ?>">
-                                <div class="sb-nav-link-icon"><i class="fas fa-sack-dollar"></i></div>
-                                Sales
-                            </a>
-                            <a class="nav-link collapsed" href="#" data-bs-toggle="collapse" data-bs-target="#collapseLayouts" aria-expanded="false" aria-controls="collapseLayouts">
-                                <div class="sb-nav-link-icon"><i class="fas fa-address-book"></i></div>
-                                Customers
-                                <div class="sb-sidenav-collapse-arrow"><i class="fas fa-angle-down"></i></div>
-                            </a>
+                            <?php if (can_access('dashboard', 'view')): ?>
+                                <a class="nav-link" href="<?= url('/') ?>">
+                                    <div class="sb-nav-link-icon"><i class="fas fa-gauge-high"></i></div>
+                                    Dashboard
+                                </a>
+                            <?php endif; ?>
+                            <?php if (can_access('jobs', 'view')): ?>
+                                <a class="nav-link" href="<?= url('/jobs') ?>">
+                                    <div class="sb-nav-link-icon"><i class="fas fa-briefcase"></i></div>
+                                    Jobs
+                                </a>
+                            <?php endif; ?>
+                            <?php if (can_access('prospects', 'view')): ?>
+                                <a class="nav-link" href="<?= url('/prospects') ?>">
+                                    <div class="sb-nav-link-icon"><i class="fas fa-user-plus"></i></div>
+                                    Prospects
+                                </a>
+                            <?php endif; ?>
+                            <?php if (can_access('sales', 'view')): ?>
+                                <a class="nav-link" href="<?= url('/sales') ?>">
+                                    <div class="sb-nav-link-icon"><i class="fas fa-sack-dollar"></i></div>
+                                    Sales
+                                </a>
+                            <?php endif; ?>
+                            <?php if ($canViewCustomersSection): ?>
+                                <a class="nav-link collapsed" href="#" data-bs-toggle="collapse" data-bs-target="#collapseLayouts" aria-expanded="false" aria-controls="collapseLayouts">
+                                    <div class="sb-nav-link-icon"><i class="fas fa-address-book"></i></div>
+                                    Customers
+                                    <div class="sb-sidenav-collapse-arrow"><i class="fas fa-angle-down"></i></div>
+                                </a>
                                 <div class="collapse" id="collapseLayouts" aria-labelledby="headingOne" data-bs-parent="#sidenavAccordion">
                                     <nav class="sb-sidenav-menu-nested nav">
-                                        <a class="nav-link" href="<?= url('/companies') ?>"><i class="fas fa-building me-1"></i>Companies</a>
-                                        <a class="nav-link" href="<?= url('/estates') ?>"><i class="fas fa-house me-1"></i>Estates</a>
-                                        <a class="nav-link" href="<?= url('/clients') ?>"><i class="fas fa-user me-1"></i>Clients</a>
-                                        <a class="nav-link" href="<?= url('/client-contacts') ?>"><i class="fas fa-phone me-1"></i>Client Contacts</a>
-                                        <a class="nav-link" href="<?= url('/consignors') ?>"><i class="fas fa-handshake me-1"></i>Consignors</a>
+                                        <?php if (can_access('companies', 'view')): ?>
+                                            <a class="nav-link" href="<?= url('/companies') ?>"><i class="fas fa-building me-1"></i>Companies</a>
+                                        <?php endif; ?>
+                                        <?php if (can_access('estates', 'view')): ?>
+                                            <a class="nav-link" href="<?= url('/estates') ?>"><i class="fas fa-house me-1"></i>Estates</a>
+                                        <?php endif; ?>
+                                        <?php if (can_access('clients', 'view')): ?>
+                                            <a class="nav-link" href="<?= url('/clients') ?>"><i class="fas fa-user me-1"></i>Clients</a>
+                                        <?php endif; ?>
+                                        <?php if (can_access('client_contacts', 'view')): ?>
+                                            <a class="nav-link" href="<?= url('/client-contacts') ?>"><i class="fas fa-phone me-1"></i>Client Contacts</a>
+                                        <?php endif; ?>
+                                        <?php if (can_access('consignors', 'view')): ?>
+                                            <a class="nav-link" href="<?= url('/consignors') ?>"><i class="fas fa-handshake me-1"></i>Consignors</a>
+                                        <?php endif; ?>
                                     </nav>
                                 </div>
-                            <a class="nav-link collapsed" href="#" data-bs-toggle="collapse" data-bs-target="#collapseLayouts1" aria-expanded="false" aria-controls="collapseLayouts1">
-                                <div class="sb-nav-link-icon"><i class="fas fa-clock"></i></div>
-                                Time
-                                <div class="sb-sidenav-collapse-arrow"><i class="fas fa-angle-down"></i></div>
-                            </a>
+                            <?php endif; ?>
+                            <?php if (can_access('time_tracking', 'view')): ?>
+                                <a class="nav-link collapsed" href="#" data-bs-toggle="collapse" data-bs-target="#collapseLayouts1" aria-expanded="false" aria-controls="collapseLayouts1">
+                                    <div class="sb-nav-link-icon"><i class="fas fa-clock"></i></div>
+                                    Time
+                                    <div class="sb-sidenav-collapse-arrow"><i class="fas fa-angle-down"></i></div>
+                                </a>
                                 <div class="collapse" id="collapseLayouts1" aria-labelledby="headingOne" data-bs-parent="#sidenavAccordion">
                                     <nav class="sb-sidenav-menu-nested nav">
                                         <a class="nav-link" href="<?= url('/time-tracking') ?>"><i class="fas fa-business-time me-1"></i>Time Tracking</a>
                                         <a class="nav-link" href="<?= url('/time-tracking/open') ?>"><i class="fas fa-user-clock me-1"></i>Punch Clock</a>
                                     </nav>
                                 </div>
+                            <?php endif; ?>
                             <!-- <a class="nav-link" href="<?= url('/time-tracking') ?>">
                                 <div class="sb-nav-link-icon"><i class="fas fa-tachometer-alt"></i></div>
                                 Time Tracking
@@ -106,14 +135,18 @@
                                 <div class="sb-nav-link-icon"><i class="fas fa-user-clock"></i></div>
                                 Open Clock
                             </a> -->
-                            <a class="nav-link" href="<?= url('/expenses') ?>">
-                                <div class="sb-nav-link-icon"><i class="fas fa-receipt"></i></div>
-                                Expenses
-                            </a>
-                            <a class="nav-link" href="<?= url('/tasks') ?>">
-                                <div class="sb-nav-link-icon"><i class="fas fa-list-check"></i></div>
-                                Tasks
-                            </a>
+                            <?php if (can_access('expenses', 'view')): ?>
+                                <a class="nav-link" href="<?= url('/expenses') ?>">
+                                    <div class="sb-nav-link-icon"><i class="fas fa-receipt"></i></div>
+                                    Expenses
+                                </a>
+                            <?php endif; ?>
+                            <?php if (can_access('tasks', 'view')): ?>
+                                <a class="nav-link" href="<?= url('/tasks') ?>">
+                                    <div class="sb-nav-link-icon"><i class="fas fa-list-check"></i></div>
+                                    Tasks
+                                </a>
+                            <?php endif; ?>
                             <?php if (can_access('employees', 'view')): ?>
                                 <a class="nav-link" href="<?= url('/employees') ?>">
                                     <div class="sb-nav-link-icon"><i class="fas fa-id-badge"></i></div>
@@ -202,6 +235,29 @@
         </div>
         <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js" crossorigin="anonymous"></script>
         <script src="<?= asset('js/scripts.js') ?>"></script>
+        <script>
+            (function () {
+                const searchInput = document.getElementById('globalNavSearchInput');
+                if (!searchInput) {
+                    return;
+                }
+
+                document.addEventListener('keydown', function (event) {
+                    const target = event.target;
+                    const tagName = target && target.tagName ? target.tagName.toLowerCase() : '';
+                    const isEditable = tagName === 'input' || tagName === 'textarea' || tagName === 'select' || (target && target.isContentEditable);
+                    if (isEditable) {
+                        return;
+                    }
+
+                    if (event.key === '/' || (event.key.toLowerCase() === 'k' && (event.metaKey || event.ctrlKey))) {
+                        event.preventDefault();
+                        searchInput.focus();
+                        searchInput.select();
+                    }
+                });
+            })();
+        </script>
         <?= $pageScripts ?? '' ?>
     </body>
 </html>

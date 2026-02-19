@@ -44,6 +44,7 @@ final class RolePermission
 
     private static ?bool $available = null;
     private static array $cache = [];
+    private static bool $defaultsSeeded = false;
 
     public static function roleOptions(): array
     {
@@ -97,18 +98,25 @@ final class RolePermission
         $moduleKey = trim($module);
         $actionKey = trim($action);
 
-        if ($role === 99) {
-            return true;
-        }
-
         if ($moduleKey === '' || !isset(self::MODULES[$moduleKey])) {
             return true;
         }
 
-        $column = self::ACTION_COLUMN[$actionKey] ?? self::ACTION_COLUMN['view'];
-        if (!self::isAvailable()) {
+        if ($role === 99) {
             return true;
         }
+
+        if (!array_key_exists($role, self::roleOptions())) {
+            return false;
+        }
+
+        $actionKey = array_key_exists($actionKey, self::ACTION_COLUMN) ? $actionKey : 'view';
+        $column = self::ACTION_COLUMN[$actionKey];
+        if (!self::isAvailable()) {
+            return self::defaultAllows($role, $moduleKey, $actionKey);
+        }
+
+        self::seedDefaultsIfNeeded();
 
         $cacheKey = $role . '|' . $moduleKey;
         if (!isset(self::$cache[$cacheKey])) {
@@ -117,7 +125,7 @@ final class RolePermission
         $row = self::$cache[$cacheKey];
 
         if ($row === null) {
-            return true;
+            return self::defaultAllows($role, $moduleKey, $actionKey);
         }
 
         return (int) ($row[$column] ?? 0) === 1;
@@ -204,5 +212,127 @@ final class RolePermission
             return null;
         }
     }
-}
 
+    private static function defaultAllows(int $role, string $module, string $action): bool
+    {
+        $matrix = self::defaultMatrixForRole($role);
+        if (!isset($matrix[$module])) {
+            return false;
+        }
+
+        return !empty($matrix[$module][$action]);
+    }
+
+    private static function defaultMatrixForRole(int $role): array
+    {
+        $matrix = [];
+        foreach (self::MODULES as $module => $_label) {
+            $matrix[$module] = [
+                'view' => false,
+                'create' => false,
+                'edit' => false,
+                'delete' => false,
+            ];
+        }
+
+        if ($role === 1) {
+            self::allow($matrix, ['dashboard'], ['view']);
+            self::allow($matrix, [
+                'jobs',
+                'prospects',
+                'sales',
+                'customers',
+                'clients',
+                'estates',
+                'companies',
+                'client_contacts',
+                'consignors',
+                'time_tracking',
+                'expenses',
+                'tasks',
+            ], ['view', 'create', 'edit']);
+            self::allow($matrix, ['prospects', 'tasks'], ['delete']);
+            self::allow($matrix, ['employees'], ['view']);
+            return $matrix;
+        }
+
+        if ($role === 2) {
+            self::allow($matrix, ['dashboard'], ['view']);
+            self::allow($matrix, [
+                'jobs',
+                'prospects',
+                'sales',
+                'customers',
+                'clients',
+                'estates',
+                'companies',
+                'client_contacts',
+                'consignors',
+                'time_tracking',
+                'expenses',
+                'tasks',
+            ], ['view', 'create', 'edit', 'delete']);
+            self::allow($matrix, ['employees'], ['view', 'create', 'edit']);
+            self::allow($matrix, ['users', 'expense_categories', 'disposal_locations'], ['view']);
+            self::allow($matrix, ['expense_categories', 'disposal_locations'], ['create', 'edit']);
+            return $matrix;
+        }
+
+        if ($role === 3) {
+            self::allow($matrix, array_keys(self::MODULES), ['view', 'create', 'edit', 'delete']);
+            return $matrix;
+        }
+
+        return $matrix;
+    }
+
+    private static function allow(array &$matrix, array $modules, array $actions): void
+    {
+        foreach ($modules as $module) {
+            if (!isset($matrix[$module])) {
+                continue;
+            }
+            foreach ($actions as $action) {
+                if (!isset($matrix[$module][$action])) {
+                    continue;
+                }
+                $matrix[$module][$action] = true;
+            }
+        }
+    }
+
+    private static function seedDefaultsIfNeeded(): void
+    {
+        if (self::$defaultsSeeded || !self::isAvailable()) {
+            return;
+        }
+
+        try {
+            $pdo = Database::connection();
+            $stmt = $pdo->prepare(
+                'INSERT IGNORE INTO role_permissions
+                    (role_value, module_key, can_view, can_create, can_edit, can_delete, updated_by, updated_at)
+                 VALUES
+                    (:role_value, :module_key, :can_view, :can_create, :can_edit, :can_delete, NULL, NOW())'
+            );
+
+            foreach ([1, 2, 3] as $role) {
+                $matrix = self::defaultMatrixForRole($role);
+                foreach ($matrix as $module => $actions) {
+                    $stmt->execute([
+                        'role_value' => $role,
+                        'module_key' => $module,
+                        'can_view' => !empty($actions['view']) ? 1 : 0,
+                        'can_create' => !empty($actions['create']) ? 1 : 0,
+                        'can_edit' => !empty($actions['edit']) ? 1 : 0,
+                        'can_delete' => !empty($actions['delete']) ? 1 : 0,
+                    ]);
+                }
+            }
+        } catch (Throwable) {
+            // Keep permissions usable via in-code defaults when table writes fail.
+        }
+
+        self::$defaultsSeeded = true;
+    }
+}

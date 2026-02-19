@@ -11,6 +11,8 @@ final class HomeController extends Controller
 {
     public function index(): void
     {
+        require_permission('dashboard', 'view');
+
         $overview = Dashboard::overview();
 
         $this->render('home/index', [

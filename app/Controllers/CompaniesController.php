@@ -11,6 +11,8 @@ final class CompaniesController extends Controller
 {
     public function index(): void
     {
+        $this->authorize('view');
+
         $query = trim((string) ($_GET['q'] ?? ''));
         $status = (string) ($_GET['status'] ?? 'active');
 
@@ -35,6 +37,8 @@ final class CompaniesController extends Controller
 
     public function show(array $params): void
     {
+        $this->authorize('view');
+
         $id = isset($params['id']) ? (int) $params['id'] : 0;
         if ($id <= 0) {
             redirect('/companies');
@@ -55,6 +59,8 @@ final class CompaniesController extends Controller
 
     public function create(): void
     {
+        $this->authorize('create');
+
         $this->render('companies/create', [
             'pageTitle' => 'Add Company',
             'company' => null,
@@ -65,6 +71,8 @@ final class CompaniesController extends Controller
 
     public function store(): void
     {
+        $this->authorize('create');
+
         if (!verify_csrf($_POST['csrf_token'] ?? null)) {
             flash('error', 'Your session expired. Please try again.');
             redirect('/companies/new');
@@ -86,6 +94,8 @@ final class CompaniesController extends Controller
 
     public function edit(array $params): void
     {
+        $this->authorize('edit');
+
         $id = isset($params['id']) ? (int) $params['id'] : 0;
         $company = $id > 0 ? Company::findById($id) : null;
         if (!$company) {
@@ -103,6 +113,8 @@ final class CompaniesController extends Controller
 
     public function update(array $params): void
     {
+        $this->authorize('edit');
+
         $id = isset($params['id']) ? (int) $params['id'] : 0;
         if ($id <= 0) {
             redirect('/companies');
@@ -120,7 +132,7 @@ final class CompaniesController extends Controller
         }
 
         $data = $this->collectFormData();
-        $errors = $this->validate($data);
+        $errors = $this->validate($data, $id);
 
         if (!empty($errors)) {
             flash('error', implode(' ', $errors));
@@ -138,6 +150,8 @@ final class CompaniesController extends Controller
 
     public function delete(array $params): void
     {
+        $this->authorize('delete');
+
         $id = isset($params['id']) ? (int) $params['id'] : 0;
         if ($id <= 0) {
             redirect('/companies');
@@ -166,6 +180,8 @@ final class CompaniesController extends Controller
 
     public function lookup(): void
     {
+        $this->authorize('view');
+
         $term = trim((string) ($_GET['q'] ?? ''));
 
         header('Content-Type: application/json; charset=utf-8');
@@ -174,6 +190,8 @@ final class CompaniesController extends Controller
 
     public function quickCreate(): void
     {
+        $this->authorize('create');
+
         header('Content-Type: application/json; charset=utf-8');
 
         if (!verify_csrf($_POST['csrf_token'] ?? null)) {
@@ -252,7 +270,12 @@ final class CompaniesController extends Controller
         ];
     }
 
-    private function validate(array $data): array
+    private function authorize(string $action): void
+    {
+        require_permission('companies', $action);
+    }
+
+    private function validate(array $data, ?int $excludeId = null): array
     {
         $errors = [];
 
@@ -266,6 +289,15 @@ final class CompaniesController extends Controller
 
         if ($data['web_address'] !== '' && !filter_var($data['web_address'], FILTER_VALIDATE_URL)) {
             $errors[] = 'Website must be a valid URL.';
+        }
+
+        $matches = Company::findPotentialDuplicates($data, $excludeId, 3);
+        if (!empty($matches)) {
+            $topIds = array_map(
+                static fn (array $row): string => '#' . (int) ($row['id'] ?? 0),
+                $matches
+            );
+            $errors[] = 'Potential duplicate company found (' . implode(', ', $topIds) . '). Review existing records before saving.';
         }
 
         return $errors;

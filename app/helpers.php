@@ -652,6 +652,20 @@ function attempt_remember_login(): void
         'role' => $user['role'] ?? null,
     ];
 
+    try {
+        \App\Models\User::clearFailedLogin((int) ($user['id'] ?? 0));
+        \App\Models\AuthLoginAttempt::record(
+            (string) ($user['email'] ?? ''),
+            (int) ($user['id'] ?? 0),
+            request_ip_address(),
+            'success',
+            'remember_token',
+            request_user_agent()
+        );
+    } catch (\Throwable) {
+        // Never block login recovery.
+    }
+
     record_user_login_event($user, 'remember_token');
 }
 

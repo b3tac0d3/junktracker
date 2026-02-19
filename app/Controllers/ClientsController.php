@@ -16,6 +16,8 @@ final class ClientsController extends Controller
 
     public function index(): void
     {
+        $this->authorize('view');
+
         $query = trim((string) ($_GET['q'] ?? ''));
         $status = (string) ($_GET['status'] ?? 'active');
 
@@ -40,6 +42,8 @@ final class ClientsController extends Controller
 
     public function show(array $params): void
     {
+        $this->authorize('view');
+
         $id = isset($params['id']) ? (int) $params['id'] : 0;
         if ($id <= 0) {
             redirect('/clients');
@@ -66,6 +70,8 @@ final class ClientsController extends Controller
 
     public function create(): void
     {
+        $this->authorize('create');
+
         $this->render('clients/create', [
             'pageTitle' => 'Add Client',
             'client' => null,
@@ -81,6 +87,8 @@ final class ClientsController extends Controller
 
     public function store(): void
     {
+        $this->authorize('create');
+
         if (!verify_csrf($_POST['csrf_token'] ?? null)) {
             flash('error', 'Your session expired. Please try again.');
             redirect('/clients/new');
@@ -123,6 +131,8 @@ final class ClientsController extends Controller
 
     public function edit(array $params): void
     {
+        $this->authorize('edit');
+
         $id = isset($params['id']) ? (int) $params['id'] : 0;
         $client = $id > 0 ? Client::findById($id) : null;
 
@@ -144,6 +154,8 @@ final class ClientsController extends Controller
 
     public function update(array $params): void
     {
+        $this->authorize('edit');
+
         $id = isset($params['id']) ? (int) $params['id'] : 0;
         if ($id <= 0) {
             redirect('/clients');
@@ -182,6 +194,8 @@ final class ClientsController extends Controller
 
     public function deactivate(array $params): void
     {
+        $this->authorize('delete');
+
         $id = isset($params['id']) ? (int) $params['id'] : 0;
         if ($id <= 0) {
             redirect('/clients');
@@ -211,6 +225,8 @@ final class ClientsController extends Controller
 
     public function lookup(): void
     {
+        $this->authorize('view');
+
         $term = trim((string) ($_GET['q'] ?? ''));
 
         header('Content-Type: application/json; charset=utf-8');
@@ -219,6 +235,8 @@ final class ClientsController extends Controller
 
     public function duplicateCheck(): void
     {
+        $this->authorize('view');
+
         $payload = [
             'first_name' => trim((string) ($_GET['first_name'] ?? '')),
             'last_name' => trim((string) ($_GET['last_name'] ?? '')),
@@ -239,6 +257,8 @@ final class ClientsController extends Controller
 
     public function quickCreate(): void
     {
+        $this->authorize('create');
+
         header('Content-Type: application/json; charset=utf-8');
 
         if (!verify_csrf($_POST['csrf_token'] ?? null)) {
@@ -322,6 +342,11 @@ final class ClientsController extends Controller
         }
 
         return null;
+    }
+
+    private function authorize(string $action): void
+    {
+        require_permission('clients', $action);
     }
 
     private function collectFormData(): array

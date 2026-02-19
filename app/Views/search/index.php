@@ -43,7 +43,19 @@
     <?php if ($query === ''): ?>
         <div class="alert alert-info">Enter a search term to find matching records across the system.</div>
     <?php elseif (empty($sections)): ?>
-        <div class="alert alert-warning">No results found for "<?= e($query) ?>".</div>
+        <div class="alert alert-warning mb-3">No results found for "<?= e($query) ?>".</div>
+        <div class="card mb-4">
+            <div class="card-header"><i class="fas fa-plus-circle me-1"></i>Create New Record</div>
+            <div class="card-body d-flex flex-wrap gap-2">
+                <a class="btn btn-primary" href="<?= url('/jobs/new') ?>">Add Job</a>
+                <a class="btn btn-warning text-dark" href="<?= url('/prospects/new') ?>">Add Prospect</a>
+                <a class="btn btn-success" href="<?= url('/clients/new') ?>">Add Client</a>
+                <a class="btn btn-info text-white" href="<?= url('/companies/new') ?>">Add Company</a>
+                <a class="btn btn-outline-secondary" href="<?= url('/sales/new') ?>">Add Sale</a>
+                <a class="btn btn-outline-dark" href="<?= url('/expenses/new') ?>">Add Expense</a>
+                <a class="btn btn-outline-primary" href="<?= url('/tasks/new') ?>">Add Task</a>
+            </div>
+        </div>
     <?php else: ?>
         <div class="mb-3 text-muted">
             Showing results for <strong><?= e($query) ?></strong> • <?= e((string) $totalResults) ?> matches across <?= e((string) count($sections)) ?> sections

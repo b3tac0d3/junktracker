@@ -11,15 +11,19 @@ final class TasksController extends Controller
 {
     public function index(): void
     {
+        $this->authorize('view');
+
         $filters = [
             'q' => trim((string) ($_GET['q'] ?? '')),
             'status' => (string) ($_GET['status'] ?? 'all'),
             'importance' => $this->toIntOrNull($_GET['importance'] ?? null),
             'link_type' => (string) ($_GET['link_type'] ?? 'all'),
+            'owner_scope' => (string) ($_GET['owner_scope'] ?? 'all'),
             'assigned_user_id' => $this->toIntOrNull($_GET['assigned_user_id'] ?? null),
             'record_status' => (string) ($_GET['record_status'] ?? 'active'),
             'due_start' => trim((string) ($_GET['due_start'] ?? '')),
             'due_end' => trim((string) ($_GET['due_end'] ?? '')),
+            'current_user_id' => auth_user_id() ?? 0,
         ];
 
         if (!in_array($filters['status'], array_merge(['all'], Task::STATUSES), true)) {
@@ -30,6 +34,9 @@ final class TasksController extends Controller
         }
         if (!in_array($filters['link_type'], array_merge(['all'], Task::LINK_TYPES), true)) {
             $filters['link_type'] = 'all';
+        }
+        if (!in_array($filters['owner_scope'], ['all', 'mine', 'team'], true)) {
+            $filters['owner_scope'] = 'all';
         }
         if (!in_array($filters['record_status'], ['active', 'deleted', 'all'], true)) {
             $filters['record_status'] = 'active';
@@ -49,12 +56,15 @@ final class TasksController extends Controller
             'statusOptions' => Task::STATUSES,
             'linkTypes' => Task::LINK_TYPES,
             'linkTypeLabels' => $this->linkTypeLabels(),
+            'ownerScopes' => ['all', 'mine', 'team'],
             'pageScripts' => $pageScripts,
         ]);
     }
 
     public function create(): void
     {
+        $this->authorize('create');
+
         $task = $this->prefillTask();
 
         $this->render('tasks/create', [
@@ -73,6 +83,8 @@ final class TasksController extends Controller
 
     public function store(): void
     {
+        $this->authorize('create');
+
         if (!verify_csrf($_POST['csrf_token'] ?? null)) {
             flash('error', 'Your session expired. Please try again.');
             redirect('/tasks/new');
@@ -94,6 +106,8 @@ final class TasksController extends Controller
 
     public function show(array $params): void
     {
+        $this->authorize('view');
+
         $id = isset($params['id']) ? (int) $params['id'] : 0;
         if ($id <= 0) {
             redirect('/tasks');
@@ -114,6 +128,8 @@ final class TasksController extends Controller
 
     public function edit(array $params): void
     {
+        $this->authorize('edit');
+
         $id = isset($params['id']) ? (int) $params['id'] : 0;
         if ($id <= 0) {
             redirect('/tasks');
@@ -141,6 +157,8 @@ final class TasksController extends Controller
 
     public function update(array $params): void
     {
+        $this->authorize('edit');
+
         $id = isset($params['id']) ? (int) $params['id'] : 0;
         if ($id <= 0) {
             redirect('/tasks');
@@ -173,6 +191,8 @@ final class TasksController extends Controller
 
     public function delete(array $params): void
     {
+        $this->authorize('delete');
+
         $id = isset($params['id']) ? (int) $params['id'] : 0;
         if ($id <= 0) {
             redirect('/tasks');
@@ -201,6 +221,8 @@ final class TasksController extends Controller
 
     public function toggleComplete(array $params): void
     {
+        $this->authorize('edit');
+
         $id = isset($params['id']) ? (int) $params['id'] : 0;
         if ($id <= 0) {
             redirect('/tasks');
@@ -231,6 +253,8 @@ final class TasksController extends Controller
 
     public function linkLookup(): void
     {
+        $this->authorize('view');
+
         $type = (string) ($_GET['type'] ?? 'general');
         $term = trim((string) ($_GET['q'] ?? ''));
 
@@ -323,6 +347,11 @@ final class TasksController extends Controller
     private function formScripts(): string
     {
         return '<script src="' . asset('js/task-link-lookup.js') . '"></script>';
+    }
+
+    private function authorize(string $action): void
+    {
+        require_permission('tasks', $action);
     }
 
     private function toIntOrNull(mixed $value): ?int

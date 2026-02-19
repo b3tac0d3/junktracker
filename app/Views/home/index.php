@@ -221,7 +221,7 @@
     </div>
 
     <div class="row g-3 mb-4">
-        <div class="col-12">
+        <div class="col-12 col-xl-8">
             <div class="card h-100">
                 <div class="card-header d-flex align-items-center justify-content-between">
                     <div><i class="fas fa-list-check me-1"></i>Outstanding Tasks</div>
@@ -232,6 +232,7 @@
                         <table class="table table-striped table-hover align-middle mb-0">
                             <thead>
                                 <tr>
+                                    <th>Done</th>
                                     <th>Bucket</th>
                                     <th>Task</th>
                                     <th>Linked</th>
@@ -243,12 +244,20 @@
                             <tbody>
                                 <?php if (empty($overdueTasks) && empty($upcomingTasks)): ?>
                                     <tr>
-                                        <td colspan="6" class="text-muted">No overdue or upcoming tasks.</td>
+                                        <td colspan="7" class="text-muted">No overdue or upcoming tasks.</td>
                                     </tr>
                                 <?php else: ?>
                                     <?php foreach ($overdueTasks as $taskRow): ?>
                                         <?php $taskId = (int) ($taskRow['id'] ?? 0); ?>
                                         <tr>
+                                            <td>
+                                                <form method="post" action="<?= url('/tasks/' . $taskId . '/toggle-complete') ?>">
+                                                    <?= csrf_field() ?>
+                                                    <input type="hidden" name="return_to" value="/" />
+                                                    <input type="hidden" name="is_completed" value="0" />
+                                                    <input class="form-check-input" type="checkbox" name="is_completed" value="1" onchange="this.form.submit()" />
+                                                </form>
+                                            </td>
                                             <td><span class="badge bg-danger">Overdue</span></td>
                                             <td>
                                                 <a class="text-decoration-none" href="<?= url('/tasks/' . $taskId) ?>">
@@ -272,6 +281,14 @@
                                     <?php foreach ($upcomingTasks as $taskRow): ?>
                                         <?php $taskId = (int) ($taskRow['id'] ?? 0); ?>
                                         <tr>
+                                            <td>
+                                                <form method="post" action="<?= url('/tasks/' . $taskId . '/toggle-complete') ?>">
+                                                    <?= csrf_field() ?>
+                                                    <input type="hidden" name="return_to" value="/" />
+                                                    <input type="hidden" name="is_completed" value="0" />
+                                                    <input class="form-check-input" type="checkbox" name="is_completed" value="1" onchange="this.form.submit()" />
+                                                </form>
+                                            </td>
                                             <td><span class="badge bg-warning text-dark">Upcoming</span></td>
                                             <td>
                                                 <a class="text-decoration-none" href="<?= url('/tasks/' . $taskId) ?>">
@@ -299,7 +316,23 @@
                 </div>
             </div>
         </div>
-        <div class="col-12">
+        <div class="col-12 col-xl-4">
+            <div class="card h-100">
+                <div class="card-header d-flex align-items-center justify-content-between">
+                    <div><i class="fas fa-bolt me-1"></i>Quick Actions</div>
+                    <span class="small text-muted">Daily workflow</span>
+                </div>
+                <div class="card-body d-grid gap-2">
+                    <a class="btn btn-primary" href="<?= url('/jobs/new') ?>"><i class="fas fa-plus me-1"></i>Add Job</a>
+                    <a class="btn btn-warning text-dark" href="<?= url('/prospects/new') ?>"><i class="fas fa-user-plus me-1"></i>Add Prospect</a>
+                    <a class="btn btn-success" href="<?= url('/time-tracking/open') ?>"><i class="fas fa-user-clock me-1"></i>Open Punch Clock</a>
+                    <a class="btn btn-info text-white" href="<?= url('/expenses/new') ?>"><i class="fas fa-receipt me-1"></i>Add Expense</a>
+                    <a class="btn btn-outline-secondary" href="<?= url('/sales/new') ?>"><i class="fas fa-sack-dollar me-1"></i>Add Sale</a>
+                    <a class="btn btn-outline-dark" href="<?= url('/tasks/new') ?>"><i class="fas fa-list-check me-1"></i>Add Task</a>
+                </div>
+            </div>
+        </div>
+        <div class="col-12 col-xl-6">
             <div class="card h-100">
                 <div class="card-header d-flex align-items-center justify-content-between">
                     <div><i class="fas fa-handshake me-1"></i>Consignor Payment Schedule</div>
@@ -357,7 +390,7 @@
             </div>
         </div>
 
-        <div class="col-12">
+        <div class="col-12 col-xl-6">
             <div class="card h-100">
                 <div class="card-header d-flex align-items-center justify-content-between">
                     <div><i class="fas fa-user-clock me-1"></i>Employees Currently Punched In</div>
@@ -421,7 +454,7 @@
                 </div>
             </div>
         </div>
-        <div class="col-12">
+        <div class="col-12 col-xl-6">
             <div class="card h-100">
                 <div class="card-header d-flex align-items-center justify-content-between">
                     <div><i class="fas fa-bullseye me-1"></i>Prospect Follow-Ups</div>
@@ -467,7 +500,7 @@
     </div>
 
     <div class="row g-3 mb-4">
-        <div class="col-12">
+        <div class="col-12 col-xl-6">
             <div class="card h-100">
                 <div class="card-header d-flex align-items-center justify-content-between">
                     <div><i class="fas fa-hourglass-half me-1"></i>Pending Jobs Queue</div>
@@ -510,7 +543,7 @@
                 </div>
             </div>
         </div>
-        <div class="col-12">
+        <div class="col-12 col-xl-6">
             <div class="card h-100">
                 <div class="card-header d-flex align-items-center justify-content-between">
                     <div><i class="fas fa-play-circle me-1"></i>Active Jobs In Progress</div>

@@ -569,6 +569,18 @@ final class Task
         if ($assignedUserId > 0) {
             $where[] = 't.assigned_user_id = :assigned_user_id';
             $params['assigned_user_id'] = $assignedUserId;
+        } else {
+            $ownerScope = (string) ($filters['owner_scope'] ?? 'all');
+            $currentUserId = isset($filters['current_user_id']) ? (int) $filters['current_user_id'] : 0;
+
+            if ($ownerScope === 'mine' && $currentUserId > 0) {
+                $where[] = 't.assigned_user_id = :owner_scope_user_id';
+                $params['owner_scope_user_id'] = $currentUserId;
+            } elseif ($ownerScope === 'team' && $currentUserId > 0) {
+                $where[] = 't.assigned_user_id IS NOT NULL';
+                $where[] = 't.assigned_user_id <> :owner_scope_user_id';
+                $params['owner_scope_user_id'] = $currentUserId;
+            }
         }
 
         $dueStart = trim((string) ($filters['due_start'] ?? ''));

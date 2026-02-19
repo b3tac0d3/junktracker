@@ -17,6 +17,7 @@ final class AdminController extends Controller
         $this->render('admin/index', [
             'pageTitle' => 'Admin',
             'health' => AdminPanel::healthSummary(),
+            'systemStatus' => AdminPanel::systemStatus(),
             'deletedCounts' => Recovery::softDeleteCounts(),
         ]);
     }

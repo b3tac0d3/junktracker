@@ -15,8 +15,36 @@ final class AdminPanel
             'pending_invites' => self::pendingInvites(),
             'expired_invites' => self::expiredInvites(),
             'failed_mail_24h' => self::failedMailCountLastDay(),
+            'failed_logins_24h' => AuthLoginAttempt::failedCountLastDay(),
             'active_sessions' => self::activeSessionCount(),
             'overdue_tasks' => self::overdueTaskCount(),
+        ];
+    }
+
+    public static function systemStatus(): array
+    {
+        $sessionDir = BASE_PATH . '/storage/sessions';
+        $logsDir = BASE_PATH . '/storage/logs';
+        $contractsDir = BASE_PATH . '/storage/consignor_contracts';
+
+        return [
+            'database' => self::dbConnected(),
+            'sessions_path' => [
+                'ok' => is_dir($sessionDir) && is_writable($sessionDir),
+                'path' => $sessionDir,
+            ],
+            'logs_path' => [
+                'ok' => is_dir($logsDir) && is_writable($logsDir),
+                'path' => $logsDir,
+            ],
+            'contracts_path' => [
+                'ok' => is_dir($contractsDir) && is_writable($contractsDir),
+                'path' => $contractsDir,
+            ],
+            'mail_mode' => setting('mail.mode', (string) config('mail.mode', 'log')),
+            'mail_host' => setting('mail.host', (string) config('mail.host', '')),
+            'migrations_table' => SchemaMigration::isAvailable(),
+            'last_migration' => SchemaMigration::latest(),
         ];
     }
 
@@ -116,6 +144,16 @@ final class AdminPanel
         return $count;
     }
 
+    private static function dbConnected(): bool
+    {
+        try {
+            Database::connection()->query('SELECT 1');
+            return true;
+        } catch (Throwable) {
+            return false;
+        }
+    }
+
     private static function safeCount(callable $callback): int
     {
         try {
@@ -125,4 +163,3 @@ final class AdminPanel
         }
     }
 }
-

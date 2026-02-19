@@ -5,6 +5,10 @@
     $actionOptions = is_array($actionOptions ?? null) ? $actionOptions : [];
     $userOptions = is_array($userOptions ?? null) ? $userOptions : [];
     $isReady = !empty($isReady);
+    $preset = (string) ($preset ?? 'all');
+    $exportParams = $filters;
+    $exportParams['preset'] = $preset;
+    $exportParams['export'] = 'csv';
 ?>
 <div class="container-fluid px-4">
     <div class="d-flex flex-wrap justify-content-between align-items-center mt-4 mb-3 gap-2">
@@ -15,7 +19,12 @@
                 <li class="breadcrumb-item active">Audit Log</li>
             </ol>
         </div>
-        <a class="btn btn-outline-secondary" href="<?= url('/admin') ?>">Back to Admin</a>
+        <div class="d-flex gap-2">
+            <a class="btn btn-outline-primary" href="<?= url('/admin/audit?' . http_build_query($exportParams)) ?>">
+                <i class="fas fa-file-csv me-1"></i>Export CSV
+            </a>
+            <a class="btn btn-outline-secondary" href="<?= url('/admin') ?>">Back to Admin</a>
+        </div>
     </div>
 
     <?php if ($error = flash('error')): ?>
@@ -74,6 +83,15 @@
                 <div class="col-md-1">
                     <label class="form-label" for="date_to">To</label>
                     <input class="form-control" id="date_to" name="date_to" type="date" value="<?= e((string) ($filters['date_to'] ?? '')) ?>" />
+                </div>
+                <div class="col-md-1">
+                    <label class="form-label" for="preset">Preset</label>
+                    <select class="form-select" id="preset" name="preset">
+                        <option value="all" <?= $preset === 'all' ? 'selected' : '' ?>>All</option>
+                        <option value="security" <?= $preset === 'security' ? 'selected' : '' ?>>Security</option>
+                        <option value="financial" <?= $preset === 'financial' ? 'selected' : '' ?>>Financial</option>
+                        <option value="data_changes" <?= $preset === 'data_changes' ? 'selected' : '' ?>>Changes</option>
+                    </select>
                 </div>
                 <div class="col-md-1 d-flex align-items-end">
                     <button class="btn btn-primary w-100" type="submit">Apply</button>

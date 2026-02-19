@@ -8,6 +8,122 @@ use Core\Database;
 
 final class Company
 {
+    public static function findPotentialDuplicates(array $data, ?int $excludeId = null, int $limit = 8): array
+    {
+        $name = self::normalizeName((string) ($data['name'] ?? ''));
+        $phone = self::normalizePhone((string) ($data['phone'] ?? ''));
+        $domain = self::normalizeDomain((string) ($data['web_address'] ?? ''));
+
+        if ($name === '' && $phone === '' && $domain === '') {
+            return [];
+        }
+
+        $limit = max(1, min($limit, 25));
+        $where = [];
+        $params = [];
+
+        if ($excludeId !== null && $excludeId > 0) {
+            $where[] = 'c.id <> :exclude_id';
+            $params['exclude_id'] = $excludeId;
+        }
+
+        $matchSql = [];
+        if ($name !== '') {
+            $matchSql[] = 'LOWER(TRIM(COALESCE(c.name, ""))) = :name_exact';
+            $params['name_exact'] = $name;
+        }
+        if ($phone !== '') {
+            $matchSql[] = 'RIGHT(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(c.phone, \'\'), \'(\', \'\'), \')\', \'\'), \'-\', \'\'), \' \', \'\'), \'.\', \'\'), \'+\', \'\'), \'/\', \'\'), ' . strlen($phone) . ') = :phone_exact';
+            $params['phone_exact'] = $phone;
+        }
+        if ($domain !== '') {
+            $matchSql[] = 'LOWER(COALESCE(c.web_address, "")) LIKE :domain_like';
+            $params['domain_like'] = '%' . $domain . '%';
+        }
+
+        if (empty($matchSql)) {
+            return [];
+        }
+        $where[] = '(' . implode(' OR ', $matchSql) . ')';
+
+        $sql = 'SELECT c.id,
+                       c.name,
+                       c.phone,
+                       c.web_address,
+                       c.city,
+                       c.state,
+                       c.active,
+                       c.deleted_at,
+                       c.updated_at
+                FROM companies c
+                WHERE ' . implode(' AND ', $where) . '
+                ORDER BY c.updated_at DESC, c.id DESC
+                LIMIT ' . $limit;
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute($params);
+        $rows = $stmt->fetchAll();
+        if (empty($rows)) {
+            return [];
+        }
+
+        $matches = [];
+        foreach ($rows as $row) {
+            $score = 0;
+            $reasons = [];
+            $rowName = self::normalizeName((string) ($row['name'] ?? ''));
+            $rowPhone = self::normalizePhone((string) ($row['phone'] ?? ''));
+            $rowDomain = self::normalizeDomain((string) ($row['web_address'] ?? ''));
+
+            if ($name !== '' && $rowName !== '' && $rowName === $name) {
+                $score += 70;
+                $reasons[] = 'Name match';
+            }
+            if ($phone !== '' && $rowPhone !== '' && str_ends_with($rowPhone, $phone)) {
+                $score += 40;
+                $reasons[] = 'Phone match';
+            }
+            if ($domain !== '' && $rowDomain !== '' && $rowDomain === $domain) {
+                $score += 30;
+                $reasons[] = 'Website domain match';
+            }
+
+            if ($score <= 0) {
+                continue;
+            }
+
+            $status = 'active';
+            if (!empty($row['deleted_at'])) {
+                $status = 'deleted';
+            } elseif (empty($row['active'])) {
+                $status = 'inactive';
+            }
+
+            $matches[] = [
+                'id' => (int) ($row['id'] ?? 0),
+                'name' => (string) ($row['name'] ?? ''),
+                'phone' => (string) ($row['phone'] ?? ''),
+                'web_address' => (string) ($row['web_address'] ?? ''),
+                'city' => (string) ($row['city'] ?? ''),
+                'state' => (string) ($row['state'] ?? ''),
+                'status' => $status,
+                'match_score' => $score,
+                'match_reasons' => $reasons,
+            ];
+        }
+
+        usort($matches, static function (array $a, array $b): int {
+            $scoreCompare = (int) ($b['match_score'] ?? 0) <=> (int) ($a['match_score'] ?? 0);
+            if ($scoreCompare !== 0) {
+                return $scoreCompare;
+            }
+
+            return (int) ($b['id'] ?? 0) <=> (int) ($a['id'] ?? 0);
+        });
+
+        return array_slice($matches, 0, $limit);
+    }
+
     public static function findActiveByName(string $name): ?array
     {
         $sql = 'SELECT id, name
@@ -346,5 +462,44 @@ final class Company
         $stmt->execute(['term' => '%' . $term . '%']);
 
         return $stmt->fetchAll();
+    }
+
+    private static function normalizeName(string $value): string
+    {
+        $normalized = strtolower(trim($value));
+        if ($normalized === '') {
+            return '';
+        }
+
+        $normalized = preg_replace('/[^a-z0-9]/', '', $normalized);
+        return $normalized ?? '';
+    }
+
+    private static function normalizePhone(string $value): string
+    {
+        $digits = preg_replace('/\D+/', '', $value);
+        if ($digits === null || $digits === '') {
+            return '';
+        }
+
+        if (strlen($digits) > 10) {
+            return substr($digits, -10);
+        }
+
+        return $digits;
+    }
+
+    private static function normalizeDomain(string $value): string
+    {
+        $raw = trim(strtolower($value));
+        if ($raw === '') {
+            return '';
+        }
+
+        $raw = preg_replace('/^https?:\/\//', '', $raw);
+        $raw = preg_replace('/^www\./', '', (string) $raw);
+        $raw = trim((string) strtok((string) $raw, '/'));
+
+        return $raw !== '' ? $raw : '';
     }
 }

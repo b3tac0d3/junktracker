@@ -14,6 +14,8 @@ final class ClientContactsController extends Controller
 {
     public function index(): void
     {
+        $this->authorize('view');
+
         $filters = [
             'q' => trim((string) ($_GET['q'] ?? '')),
             'client_id' => $this->toIntOrNull($_GET['client_id'] ?? null),
@@ -33,6 +35,8 @@ final class ClientContactsController extends Controller
 
     public function create(): void
     {
+        $this->authorize('create');
+
         $prefillProspectId = $this->toIntOrNull($_GET['prospect_id'] ?? null);
         $prefillProspect = ($prefillProspectId !== null && $prefillProspectId > 0) ? Prospect::findById($prefillProspectId) : null;
 
@@ -83,6 +87,8 @@ final class ClientContactsController extends Controller
 
     public function store(): void
     {
+        $this->authorize('create');
+
         if (!verify_csrf($_POST['csrf_token'] ?? null)) {
             flash('error', 'Your session expired. Please try again.');
             redirect('/client-contacts/new');
@@ -109,6 +115,8 @@ final class ClientContactsController extends Controller
 
     public function show(array $params): void
     {
+        $this->authorize('view');
+
         $id = isset($params['id']) ? (int) $params['id'] : 0;
         if ($id <= 0) {
             redirect('/client-contacts');
@@ -167,6 +175,11 @@ final class ClientContactsController extends Controller
             'contacted_at' => $this->toDateTimeOrNull($_POST['contacted_at'] ?? null),
             'follow_up_at' => $this->toDateTimeOrNull($_POST['follow_up_at'] ?? null),
         ];
+    }
+
+    private function authorize(string $action): void
+    {
+        require_permission('client_contacts', $action);
     }
 
     private function validate(array $data): array

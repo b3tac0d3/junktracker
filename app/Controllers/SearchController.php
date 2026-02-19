@@ -11,6 +11,8 @@ final class SearchController extends Controller
 {
     public function index(): void
     {
+        require_permission('dashboard', 'view');
+
         $query = trim((string) ($_GET['q'] ?? ''));
         $results = GlobalSearch::search($query, 8);
 

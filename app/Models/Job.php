@@ -1389,6 +1389,98 @@ final class Job
         ];
     }
 
+    public static function profitabilitySnapshot(int $jobId): array
+    {
+        $sql = 'SELECT
+                    COALESCE(j.total_billed, j.total_quote, 0) AS invoice_amount,
+                    COALESCE((
+                        SELECT SUM(
+                            CASE
+                                WHEN ja.action_type IN (\'payment\', \'deposit\', \'adjustment\')
+                                THEN COALESCE(ja.amount, 0)
+                                ELSE 0
+                            END
+                        )
+                        FROM job_actions ja
+                        WHERE ja.job_id = :job_id_actions
+                    ), 0) AS billing_collected,
+                    COALESCE((
+                        SELECT SUM(CASE WHEN d.type = \'scrap\' THEN COALESCE(d.amount, 0) ELSE 0 END)
+                        FROM job_disposal_events d
+                        WHERE d.job_id = :job_id_disposals_1
+                          AND d.deleted_at IS NULL
+                    ), 0) AS scrap_total,
+                    COALESCE((
+                        SELECT SUM(CASE WHEN d.type = \'dump\' THEN COALESCE(d.amount, 0) ELSE 0 END)
+                        FROM job_disposal_events d
+                        WHERE d.job_id = :job_id_disposals_2
+                          AND d.deleted_at IS NULL
+                    ), 0) AS dump_total,
+                    COALESCE((
+                        SELECT SUM(COALESCE(e.amount, 0))
+                        FROM expenses e
+                        WHERE e.job_id = :job_id_expenses
+                          AND e.deleted_at IS NULL
+                    ), 0) AS expense_total,
+                    COALESCE((
+                        SELECT SUM(COALESCE(te.total_paid, 0))
+                        FROM employee_time_entries te
+                        WHERE te.job_id = :job_id_time
+                          AND te.deleted_at IS NULL
+                          AND COALESCE(te.active, 1) = 1
+                    ), 0) AS labor_total
+                FROM jobs j
+                WHERE j.id = :job_id
+                LIMIT 1';
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute([
+            'job_id' => $jobId,
+            'job_id_actions' => $jobId,
+            'job_id_disposals_1' => $jobId,
+            'job_id_disposals_2' => $jobId,
+            'job_id_expenses' => $jobId,
+            'job_id_time' => $jobId,
+        ]);
+
+        $row = $stmt->fetch();
+        if (!$row) {
+            return [
+                'invoice_amount' => 0.0,
+                'billing_collected' => 0.0,
+                'scrap_total' => 0.0,
+                'dump_total' => 0.0,
+                'expense_total' => 0.0,
+                'labor_total' => 0.0,
+                'revenue_total' => 0.0,
+                'cost_total' => 0.0,
+                'net_estimate' => 0.0,
+            ];
+        }
+
+        $invoiceAmount = (float) ($row['invoice_amount'] ?? 0);
+        $billingCollected = (float) ($row['billing_collected'] ?? 0);
+        $scrapTotal = (float) ($row['scrap_total'] ?? 0);
+        $dumpTotal = (float) ($row['dump_total'] ?? 0);
+        $expenseTotal = (float) ($row['expense_total'] ?? 0);
+        $laborTotal = (float) ($row['labor_total'] ?? 0);
+
+        $revenueTotal = $invoiceAmount + $scrapTotal;
+        $costTotal = $dumpTotal + $expenseTotal + $laborTotal;
+
+        return [
+            'invoice_amount' => $invoiceAmount,
+            'billing_collected' => $billingCollected,
+            'scrap_total' => $scrapTotal,
+            'dump_total' => $dumpTotal,
+            'expense_total' => $expenseTotal,
+            'labor_total' => $laborTotal,
+            'revenue_total' => $revenueTotal,
+            'cost_total' => $costTotal,
+            'net_estimate' => $revenueTotal - $costTotal,
+        ];
+    }
+
     private static function ensureCrewTable(): void
     {
         static $ensured = false;

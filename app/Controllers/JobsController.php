@@ -243,6 +243,7 @@ final class JobsController extends Controller
             'disposals' => Job::disposals($id),
             'expenses' => Job::expenses($id),
             'summary' => Job::summary($id),
+            'profitability' => Job::profitabilitySnapshot($id),
             'billingEntries' => Job::billingEntries($id),
             'timeEntries' => TimeEntry::forJob($id),
             'timeSummary' => TimeEntry::summaryForJob($id),
