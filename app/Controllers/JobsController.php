@@ -217,21 +217,23 @@ final class JobsController extends Controller
         }
 
         $crewEmployees = Job::crewMembers($id);
-        $openEntriesForJob = TimeEntry::openEntriesForJob($id);
-        $openByEmployee = [];
-        foreach ($openEntriesForJob as $entry) {
-            $employeeId = (int) ($entry['employee_id'] ?? 0);
-            if ($employeeId > 0) {
-                $openByEmployee[$employeeId] = $entry;
-            }
-        }
-
         $employeeIds = array_map(static fn (array $employee): int => (int) ($employee['employee_id'] ?? 0), $crewEmployees);
-        $openEntriesElsewhere = TimeEntry::openEntriesOutsideJob($id, $employeeIds);
+        $openEntries = TimeEntry::openEntriesForEmployees($employeeIds);
+        $openByEmployee = [];
         $openElsewhereByEmployee = [];
-        foreach ($openEntriesElsewhere as $entry) {
+        foreach ($openEntries as $entry) {
             $employeeId = (int) ($entry['employee_id'] ?? 0);
-            if ($employeeId > 0 && !isset($openElsewhereByEmployee[$employeeId])) {
+            if ($employeeId <= 0) {
+                continue;
+            }
+            if (isset($openByEmployee[$employeeId]) || isset($openElsewhereByEmployee[$employeeId])) {
+                continue;
+            }
+
+            $openJobId = (int) ($entry['job_id'] ?? 0);
+            if ($openJobId === $id) {
+                $openByEmployee[$employeeId] = $entry;
+            } else {
                 $openElsewhereByEmployee[$employeeId] = $entry;
             }
         }
