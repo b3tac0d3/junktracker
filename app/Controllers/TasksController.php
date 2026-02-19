@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Models\Task;
+use App\Models\UserFilterPreset;
 use Core\Controller;
 
 final class TasksController extends Controller
@@ -13,18 +14,60 @@ final class TasksController extends Controller
     {
         $this->authorize('view');
 
+        $moduleKey = 'tasks';
+        $userId = auth_user_id() ?? 0;
+        $savedPresets = $userId > 0 ? UserFilterPreset::forUser($userId, $moduleKey) : [];
+        $selectedPresetId = $this->toIntOrNull($_GET['preset_id'] ?? null);
+        $presetFilters = [];
+        if ($selectedPresetId !== null && $selectedPresetId > 0 && $userId > 0) {
+            $preset = UserFilterPreset::findForUser($selectedPresetId, $userId, $moduleKey);
+            if ($preset) {
+                $presetFilters = is_array($preset['filters'] ?? null) ? $preset['filters'] : [];
+            } else {
+                $selectedPresetId = null;
+            }
+        }
+
         $filters = [
-            'q' => trim((string) ($_GET['q'] ?? '')),
-            'status' => (string) ($_GET['status'] ?? 'open'),
-            'importance' => $this->toIntOrNull($_GET['importance'] ?? null),
-            'link_type' => (string) ($_GET['link_type'] ?? 'all'),
-            'owner_scope' => (string) ($_GET['owner_scope'] ?? 'all'),
-            'assigned_user_id' => $this->toIntOrNull($_GET['assigned_user_id'] ?? null),
-            'record_status' => (string) ($_GET['record_status'] ?? 'active'),
-            'due_start' => trim((string) ($_GET['due_start'] ?? '')),
-            'due_end' => trim((string) ($_GET['due_end'] ?? '')),
+            'q' => trim((string) ($presetFilters['q'] ?? '')),
+            'status' => (string) ($presetFilters['status'] ?? 'open'),
+            'importance' => $this->toIntOrNull($presetFilters['importance'] ?? null),
+            'link_type' => (string) ($presetFilters['link_type'] ?? 'all'),
+            'owner_scope' => (string) ($presetFilters['owner_scope'] ?? 'all'),
+            'assigned_user_id' => $this->toIntOrNull($presetFilters['assigned_user_id'] ?? null),
+            'record_status' => (string) ($presetFilters['record_status'] ?? 'active'),
+            'due_start' => trim((string) ($presetFilters['due_start'] ?? '')),
+            'due_end' => trim((string) ($presetFilters['due_end'] ?? '')),
             'current_user_id' => auth_user_id() ?? 0,
         ];
+
+        if (array_key_exists('q', $_GET)) {
+            $filters['q'] = trim((string) ($_GET['q'] ?? ''));
+        }
+        if (array_key_exists('status', $_GET)) {
+            $filters['status'] = (string) ($_GET['status'] ?? 'open');
+        }
+        if (array_key_exists('importance', $_GET)) {
+            $filters['importance'] = $this->toIntOrNull($_GET['importance'] ?? null);
+        }
+        if (array_key_exists('link_type', $_GET)) {
+            $filters['link_type'] = (string) ($_GET['link_type'] ?? 'all');
+        }
+        if (array_key_exists('owner_scope', $_GET)) {
+            $filters['owner_scope'] = (string) ($_GET['owner_scope'] ?? 'all');
+        }
+        if (array_key_exists('assigned_user_id', $_GET)) {
+            $filters['assigned_user_id'] = $this->toIntOrNull($_GET['assigned_user_id'] ?? null);
+        }
+        if (array_key_exists('record_status', $_GET)) {
+            $filters['record_status'] = (string) ($_GET['record_status'] ?? 'active');
+        }
+        if (array_key_exists('due_start', $_GET)) {
+            $filters['due_start'] = trim((string) ($_GET['due_start'] ?? ''));
+        }
+        if (array_key_exists('due_end', $_GET)) {
+            $filters['due_end'] = trim((string) ($_GET['due_end'] ?? ''));
+        }
 
         if (!in_array($filters['status'], array_merge(['all', 'overdue'], Task::STATUSES), true)) {
             $filters['status'] = 'open';
@@ -42,6 +85,12 @@ final class TasksController extends Controller
             $filters['record_status'] = 'active';
         }
 
+        $tasks = Task::filter($filters);
+        if ((string) ($_GET['export'] ?? '') === 'csv') {
+            $this->downloadIndexCsv($tasks);
+            return;
+        }
+
         $pageScripts = implode("\n", [
             '<script src="https://cdn.jsdelivr.net/npm/simple-datatables@7.1.2/dist/umd/simple-datatables.min.js" crossorigin="anonymous"></script>',
             '<script src="' . asset('js/tasks-table.js') . '"></script>',
@@ -50,13 +99,16 @@ final class TasksController extends Controller
         $this->render('tasks/index', [
             'pageTitle' => 'Tasks',
             'filters' => $filters,
-            'tasks' => Task::filter($filters),
+            'tasks' => $tasks,
             'summary' => Task::summary($filters),
             'users' => Task::users(),
             'statusOptions' => Task::STATUSES,
             'linkTypes' => Task::LINK_TYPES,
             'linkTypeLabels' => $this->linkTypeLabels(),
             'ownerScopes' => ['all', 'mine', 'team'],
+            'savedPresets' => $savedPresets,
+            'selectedPresetId' => $selectedPresetId,
+            'filterPresetModule' => $moduleKey,
             'pageScripts' => $pageScripts,
         ]);
     }
@@ -225,30 +277,80 @@ final class TasksController extends Controller
 
         $id = isset($params['id']) ? (int) $params['id'] : 0;
         if ($id <= 0) {
+            if (expects_json_response()) {
+                json_response([
+                    'ok' => false,
+                    'message' => 'Invalid task.',
+                ], 400);
+                return;
+            }
             redirect('/tasks');
         }
 
+        $returnPath = $this->resolveReturnPath('/tasks/' . $id);
+
         if (!verify_csrf($_POST['csrf_token'] ?? null)) {
-            flash('error', 'Your session expired. Please try again.');
-            redirect($this->resolveReturnPath('/tasks/' . $id));
+            $message = 'Your session expired. Please try again.';
+            if (expects_json_response()) {
+                json_response([
+                    'ok' => false,
+                    'message' => $message,
+                ], 419);
+                return;
+            }
+
+            flash('error', $message);
+            redirect($returnPath);
         }
 
         $task = Task::findById($id);
         if (!$task) {
+            if (expects_json_response()) {
+                json_response([
+                    'ok' => false,
+                    'message' => 'Task not found.',
+                ], 404);
+                return;
+            }
             $this->renderNotFound();
             return;
         }
 
         if (!empty($task['deleted_at'])) {
-            flash('error', 'Deleted tasks cannot be updated.');
-            redirect($this->resolveReturnPath('/tasks/' . $id));
+            $message = 'Deleted tasks cannot be updated.';
+            if (expects_json_response()) {
+                json_response([
+                    'ok' => false,
+                    'message' => $message,
+                ], 422);
+                return;
+            }
+
+            flash('error', $message);
+            redirect($returnPath);
         }
 
         $isCompleted = $this->toIntOrNull($_POST['is_completed'] ?? null) === 1;
         Task::setCompletion($id, $isCompleted, auth_user_id());
 
-        flash('success', $isCompleted ? 'Task marked complete.' : 'Task marked active.');
-        redirect($this->resolveReturnPath('/tasks/' . $id));
+        $message = $isCompleted ? 'Task marked complete.' : 'Task marked active.';
+        if (expects_json_response()) {
+            $updatedTask = Task::findById($id);
+            $status = (string) ($updatedTask['status'] ?? ($isCompleted ? 'closed' : 'open'));
+            json_response([
+                'ok' => true,
+                'message' => $message,
+                'task' => [
+                    'id' => $id,
+                    'status' => $status,
+                    'is_completed' => $status === 'closed',
+                ],
+            ]);
+            return;
+        }
+
+        flash('success', $message);
+        redirect($returnPath);
     }
 
     public function linkLookup(): void
@@ -366,6 +468,29 @@ final class TasksController extends Controller
         }
 
         return (int) $raw;
+    }
+
+    private function downloadIndexCsv(array $tasks): void
+    {
+        $rows = [];
+        foreach ($tasks as $task) {
+            $rows[] = [
+                (string) ($task['id'] ?? ''),
+                (string) ($task['title'] ?? ''),
+                (string) ($task['link_label'] ?? ''),
+                (string) (($task['assigned_user_name'] ?? '') !== '' ? $task['assigned_user_name'] : 'Unassigned'),
+                (string) ($task['status'] ?? ''),
+                (string) ($task['importance'] ?? ''),
+                format_datetime($task['due_at'] ?? null),
+                format_datetime($task['updated_at'] ?? null),
+            ];
+        }
+
+        stream_csv_download(
+            'tasks-' . date('Ymd-His') . '.csv',
+            ['ID', 'Task', 'Linked To', 'Assigned', 'Status', 'Priority', 'Due', 'Last Activity'],
+            $rows
+        );
     }
 
     private function toDateTimeOrNull(mixed $value): ?string

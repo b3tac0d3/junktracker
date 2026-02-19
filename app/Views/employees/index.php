@@ -68,6 +68,7 @@
                             <th>Pay Rate</th>
                             <th>Wage Type</th>
                             <th>Status</th>
+                            <th>Last Activity</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -103,6 +104,7 @@
                                         <?= e($isActive ? 'Active' : 'Inactive') ?>
                                     </span>
                                 </td>
+                                <td><?= e(format_datetime($employee['updated_at'] ?? null)) ?></td>
                             </tr>
                         <?php endforeach; ?>
                     </tbody>

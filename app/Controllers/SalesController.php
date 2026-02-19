@@ -44,6 +44,10 @@ final class SalesController extends Controller
         }
 
         $sales = Sale::filter($filters);
+        if ((string) ($_GET['export'] ?? '') === 'csv') {
+            $this->downloadIndexCsv($sales);
+            return;
+        }
         $summary = Sale::summarize($sales);
 
         $pageScripts = implode("\n", [
@@ -328,6 +332,33 @@ final class SalesController extends Controller
         }
 
         return (int) $raw;
+    }
+
+    private function downloadIndexCsv(array $sales): void
+    {
+        $rows = [];
+        foreach ($sales as $row) {
+            $gross = (float) ($row['gross_amount'] ?? 0);
+            $net = $row['net_amount'] !== null ? (float) $row['net_amount'] : $gross;
+
+            $rows[] = [
+                (string) ($row['id'] ?? ''),
+                (string) ($row['name'] ?? ''),
+                (string) ($row['type'] ?? ''),
+                !empty($row['job_id']) ? (string) ($row['job_name'] ?? ('Job #' . $row['job_id'])) : '',
+                format_date($row['start_date'] ?? null),
+                format_date($row['end_date'] ?? null),
+                number_format($gross, 2),
+                number_format($net, 2),
+                format_datetime($row['updated_at'] ?? null),
+            ];
+        }
+
+        stream_csv_download(
+            'sales-' . date('Ymd-His') . '.csv',
+            ['ID', 'Name', 'Type', 'Job', 'Start Date', 'End Date', 'Gross', 'Net', 'Last Activity'],
+            $rows
+        );
     }
 
     private function toDateOrNull(mixed $value): ?string

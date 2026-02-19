@@ -579,7 +579,7 @@ final class TimeEntry
                        END AS job_name
                 FROM employee_time_entries e
                 LEFT JOIN jobs j ON j.id = e.job_id
-                WHERE e.job_id <> ?
+                WHERE COALESCE(e.job_id, 0) <> ?
                   AND e.employee_id IN (' . $placeholders . ')
                   AND e.deleted_at IS NULL
                   AND COALESCE(e.active, 1) = 1
@@ -589,6 +589,51 @@ final class TimeEntry
 
         $stmt = Database::connection()->prepare($sql);
         $stmt->execute(array_merge([$jobId], $employeeIds));
+
+        return $stmt->fetchAll();
+    }
+
+    public static function openEntriesForEmployees(array $employeeIds): array
+    {
+        self::ensureTable();
+
+        $employeeIds = array_values(array_filter(array_map(static fn (mixed $id): int => (int) $id, $employeeIds), static fn (int $id): bool => $id > 0));
+        if (empty($employeeIds)) {
+            return [];
+        }
+
+        $placeholders = implode(', ', array_fill(0, count($employeeIds), '?'));
+        $sql = 'SELECT e.id,
+                       e.employee_id,
+                       e.job_id,
+                       e.work_date,
+                       e.start_time,
+                       e.note,
+                       COALESCE(NULLIF(TRIM(CONCAT_WS(\' \', emp.first_name, emp.last_name)), \'\'), CONCAT(\'Employee #\', emp.id)) AS employee_name,
+                       CASE
+                           WHEN COALESCE(e.job_id, 0) = 0 THEN \'Non-Job Time\'
+                           ELSE COALESCE(NULLIF(j.name, \'\'), CONCAT(\'Job #\', j.id))
+                       END AS job_name,
+                       GREATEST(
+                           TIMESTAMPDIFF(
+                               MINUTE,
+                               STR_TO_DATE(CONCAT(e.work_date, \' \', e.start_time), \'%Y-%m-%d %H:%i:%s\'),
+                               NOW()
+                           ),
+                           0
+                       ) AS open_minutes
+                FROM employee_time_entries e
+                LEFT JOIN employees emp ON emp.id = e.employee_id
+                LEFT JOIN jobs j ON j.id = e.job_id
+                WHERE e.employee_id IN (' . $placeholders . ')
+                  AND e.deleted_at IS NULL
+                  AND COALESCE(e.active, 1) = 1
+                  AND e.start_time IS NOT NULL
+                  AND e.end_time IS NULL
+                ORDER BY e.id DESC';
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute($employeeIds);
 
         return $stmt->fetchAll();
     }

@@ -183,6 +183,16 @@
             <label class="form-label" for="note">Notes</label>
             <textarea class="form-control" id="note" name="note" rows="4"><?= e($note) ?></textarea>
         </div>
+        <?php if ($isEdit): ?>
+            <div class="col-12">
+                <div class="form-check">
+                    <input class="form-check-input" id="ignore_duplicate_warning" name="ignore_duplicate_warning" type="checkbox" value="1" <?= old('ignore_duplicate_warning') === '1' ? 'checked' : '' ?> />
+                    <label class="form-check-label" for="ignore_duplicate_warning">
+                        Ignore duplicate warning and update anyway
+                    </label>
+                </div>
+            </div>
+        <?php endif; ?>
     </div>
 
     <div class="mt-4 d-flex gap-2">

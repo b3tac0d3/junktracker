@@ -172,6 +172,8 @@ final class User
                        role,
                        is_active,
                        created_at,
+                       updated_at,
+                       COALESCE(last_login_at, updated_at, created_at) AS last_activity_at,
                        password_setup_sent_at,
                        password_setup_expires_at,
                        password_setup_used_at,

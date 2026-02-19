@@ -40,6 +40,7 @@ final class RolePermission
         'recovery' => 'Recovery',
         'lookups' => 'Lookups',
         'permissions' => 'Permissions',
+        'dev_tools' => 'Dev Tools',
     ];
 
     private static ?bool $available = null;
@@ -279,7 +280,8 @@ final class RolePermission
         }
 
         if ($role === 3) {
-            self::allow($matrix, array_keys(self::MODULES), ['view', 'create', 'edit', 'delete']);
+            $adminModules = array_values(array_filter(array_keys(self::MODULES), static fn (string $module): bool => $module !== 'dev_tools'));
+            self::allow($matrix, $adminModules, ['view', 'create', 'edit', 'delete']);
             return $matrix;
         }
 

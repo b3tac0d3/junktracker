@@ -111,16 +111,22 @@ window.addEventListener('DOMContentLoaded', () => {
 
     input.addEventListener('blur', () => {
         window.setTimeout(() => {
-            if (hidden.value === '' && input.value.trim() !== '') {
-                input.setCustomValidity('Select a job from the suggestion list.');
-            } else {
+            // Keep the field valid when blank (non-job punch-in allowed).
+            if (input.value.trim() === '') {
                 input.setCustomValidity('');
             }
         }, 120);
     });
 
     form.addEventListener('submit', (event) => {
-        if (hidden.value === '') {
+        input.setCustomValidity('');
+        const hasTypedJob = input.value.trim() !== '';
+        if (!hasTypedJob) {
+            hidden.value = '';
+            return;
+        }
+
+        if (hasTypedJob && hidden.value === '') {
             event.preventDefault();
             input.setCustomValidity('Select a job from the suggestion list.');
             input.reportValidity();

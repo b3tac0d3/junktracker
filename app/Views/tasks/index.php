@@ -7,11 +7,27 @@
     $linkTypes = $linkTypes ?? ['general'];
     $linkTypeLabels = $linkTypeLabels ?? [];
     $ownerScopes = $ownerScopes ?? ['all', 'mine', 'team'];
+    $savedPresets = is_array($savedPresets ?? null) ? $savedPresets : [];
+    $selectedPresetId = isset($selectedPresetId) ? (int) $selectedPresetId : 0;
+    $filterPresetModule = (string) ($filterPresetModule ?? 'tasks');
     $returnTo = '/tasks';
     $queryString = (string) ($_SERVER['QUERY_STRING'] ?? '');
     if ($queryString !== '') {
         $returnTo .= '?' . $queryString;
     }
+    $currentFilters = [
+        'q' => (string) ($filters['q'] ?? ''),
+        'status' => (string) ($filters['status'] ?? 'open'),
+        'importance' => $filters['importance'] ?? '',
+        'link_type' => (string) ($filters['link_type'] ?? 'all'),
+        'owner_scope' => (string) ($filters['owner_scope'] ?? 'all'),
+        'assigned_user_id' => $filters['assigned_user_id'] ?? '',
+        'record_status' => (string) ($filters['record_status'] ?? 'active'),
+        'due_start' => (string) ($filters['due_start'] ?? ''),
+        'due_end' => (string) ($filters['due_end'] ?? ''),
+    ];
+    $exportParams = array_merge($currentFilters, ['preset_id' => $selectedPresetId > 0 ? (string) $selectedPresetId : '', 'export' => 'csv']);
+    $exportParams = array_filter($exportParams, static fn (mixed $value): bool => (string) $value !== '');
 ?>
 <div class="container-fluid px-4">
     <div class="d-flex flex-wrap align-items-center justify-content-between mt-4 mb-3 gap-3">
@@ -47,6 +63,58 @@
     <?php if ($error = flash('error')): ?>
         <div class="alert alert-danger"><?= e($error) ?></div>
     <?php endif; ?>
+
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="row g-2 align-items-end">
+                <div class="col-12 col-lg-5">
+                    <form method="get" action="<?= url('/tasks') ?>">
+                        <label class="form-label">Saved Filters</label>
+                        <div class="input-group">
+                            <select class="form-select" name="preset_id">
+                                <option value="">Choose preset...</option>
+                                <?php foreach ($savedPresets as $preset): ?>
+                                    <?php $presetId = (int) ($preset['id'] ?? 0); ?>
+                                    <option value="<?= e((string) $presetId) ?>" <?= $selectedPresetId === $presetId ? 'selected' : '' ?>>
+                                        <?= e((string) ($preset['preset_name'] ?? ('Preset #' . $presetId))) ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                            <button class="btn btn-outline-primary" type="submit">Load</button>
+                            <a class="btn btn-outline-secondary" href="<?= url('/tasks') ?>">Reset</a>
+                        </div>
+                    </form>
+                </div>
+                <div class="col-12 col-lg-4">
+                    <form method="post" action="<?= url('/filter-presets/save') ?>">
+                        <?= csrf_field() ?>
+                        <input type="hidden" name="module_key" value="<?= e($filterPresetModule) ?>" />
+                        <input type="hidden" name="return_to" value="<?= e($returnTo) ?>" />
+                        <input type="hidden" name="filters_json" value='<?= e((string) json_encode($currentFilters)) ?>' />
+                        <label class="form-label">Save Current Filters</label>
+                        <div class="input-group">
+                            <input class="form-control" type="text" name="preset_name" placeholder="Preset name..." />
+                            <button class="btn btn-outline-success" type="submit">Save</button>
+                        </div>
+                    </form>
+                </div>
+                <div class="col-12 col-lg-3 d-flex gap-2 justify-content-lg-end">
+                    <?php if ($selectedPresetId > 0): ?>
+                        <form method="post" action="<?= url('/filter-presets/' . $selectedPresetId . '/delete') ?>" onsubmit="return confirm('Delete this preset?');">
+                            <?= csrf_field() ?>
+                            <input type="hidden" name="module_key" value="<?= e($filterPresetModule) ?>" />
+                            <input type="hidden" name="return_to" value="<?= e('/tasks') ?>" />
+                            <button class="btn btn-outline-danger" type="submit">Delete Preset</button>
+                        </form>
+                    <?php endif; ?>
+                    <a class="btn btn-outline-primary" href="<?= url('/tasks?' . http_build_query($exportParams)) ?>">
+                        <i class="fas fa-file-csv me-1"></i>
+                        Export CSV
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <div class="row g-3 mb-4">
         <div class="col-md-6 col-xl-3">
@@ -86,6 +154,9 @@
     <div class="card mb-4">
         <div class="card-body">
             <form method="get" action="<?= url('/tasks') ?>">
+                <?php if ($selectedPresetId > 0): ?>
+                    <input type="hidden" name="preset_id" value="<?= e((string) $selectedPresetId) ?>" />
+                <?php endif; ?>
                 <div class="row g-2 align-items-end">
                     <div class="col-12 col-lg-4">
                         <label class="form-label">Search</label>
@@ -204,6 +275,7 @@
                             <th>Status</th>
                             <th>Priority</th>
                             <th>Due</th>
+                            <th>Last Activity</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -228,9 +300,9 @@
                                 $isOverdue = $status !== 'closed' && $dueTs !== false && $dueTs < time();
                                 $isDueToday = $status !== 'closed' && $dueTs !== false && date('Y-m-d', $dueTs) === date('Y-m-d');
                             ?>
-                            <tr data-href="<?= $rowHref ?>" style="cursor: pointer;">
+                            <tr data-href="<?= $rowHref ?>" data-task-id="<?= e((string) ($task['id'] ?? '')) ?>" style="cursor: pointer;">
                                 <td data-href="<?= $rowHref ?>">
-                                    <form method="post" action="<?= url('/tasks/' . (string) ($task['id'] ?? '') . '/toggle-complete') ?>">
+                                    <form method="post" action="<?= url('/tasks/' . (string) ($task['id'] ?? '') . '/toggle-complete') ?>" class="js-task-toggle-form">
                                         <?= csrf_field() ?>
                                         <input type="hidden" name="return_to" value="<?= e($returnTo) ?>" />
                                         <input type="hidden" name="is_completed" value="0" />
@@ -247,7 +319,7 @@
                                 </td>
                                 <td data-href="<?= $rowHref ?>"><?= e((string) ($task['id'] ?? '')) ?></td>
                                 <td>
-                                    <a class="text-decoration-none fw-semibold <?= $status === 'closed' ? 'text-muted text-decoration-line-through' : '' ?>" href="<?= $rowHref ?>">
+                                    <a class="text-decoration-none fw-semibold js-task-title <?= $status === 'closed' ? 'text-muted text-decoration-line-through' : '' ?>" href="<?= $rowHref ?>">
                                         <?= e((string) ($task['title'] ?? '')) ?>
                                     </a>
                                 </td>
@@ -261,7 +333,7 @@
                                     <?php endif; ?>
                                 </td>
                                 <td><?= e((string) (($task['assigned_user_name'] ?? '') !== '' ? $task['assigned_user_name'] : 'Unassigned')) ?></td>
-                                <td><span class="badge <?= e($statusClass) ?>"><?= e(ucwords(str_replace('_', ' ', $status))) ?></span></td>
+                                <td><span class="badge js-task-status-badge <?= e($statusClass) ?>"><?= e(ucwords(str_replace('_', ' ', $status))) ?></span></td>
                                 <td><span class="badge <?= e($priorityClass) ?>">P<?= e((string) $importance) ?></span></td>
                                 <td>
                                     <?= e(format_datetime($task['due_at'] ?? null)) ?>
@@ -271,6 +343,7 @@
                                         <span class="badge bg-warning text-dark ms-1">Due Today</span>
                                     <?php endif; ?>
                                 </td>
+                                <td><?= e(format_datetime($task['updated_at'] ?? null)) ?></td>
                             </tr>
                         <?php endforeach; ?>
                     </tbody>

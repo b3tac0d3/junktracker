@@ -1,6 +1,14 @@
 <?php
     $summary = $summary ?? [];
     $filters = $filters ?? [];
+    $exportParams = array_filter([
+        'q' => (string) ($filters['q'] ?? ''),
+        'type' => (string) ($filters['type'] ?? 'all'),
+        'record_status' => (string) ($filters['record_status'] ?? 'active'),
+        'start_date' => (string) ($filters['start_date'] ?? ''),
+        'end_date' => (string) ($filters['end_date'] ?? ''),
+        'export' => 'csv',
+    ], static fn (mixed $value): bool => (string) $value !== '');
 ?>
 <div class="container-fluid px-4">
     <div class="d-flex flex-wrap align-items-center justify-content-between mt-4 mb-3 gap-3">
@@ -14,6 +22,10 @@
         <a class="btn btn-primary" href="<?= url('/sales/new') ?>">
             <i class="fas fa-plus me-1"></i>
             Add Sale
+        </a>
+        <a class="btn btn-outline-primary" href="<?= url('/sales?' . http_build_query($exportParams)) ?>">
+            <i class="fas fa-file-csv me-1"></i>
+            Export CSV
         </a>
     </div>
 
@@ -137,6 +149,7 @@
                             <th>Date Range</th>
                             <th>Gross</th>
                             <th>Net</th>
+                            <th>Last Activity</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -182,6 +195,7 @@
                                 </td>
                                 <td class="text-success"><?= e('$' . number_format($gross, 2)) ?></td>
                                 <td><?= e('$' . number_format($net, 2)) ?></td>
+                                <td><?= e(format_datetime($row['updated_at'] ?? null)) ?></td>
                             </tr>
                         <?php endforeach; ?>
                     </tbody>

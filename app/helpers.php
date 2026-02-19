@@ -69,6 +69,51 @@ function verify_csrf(?string $token): bool
     return hash_equals($_SESSION['csrf_token'], $token);
 }
 
+function expects_json_response(): bool
+{
+    $requestedWith = strtolower(trim((string) ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '')));
+    if ($requestedWith === 'xmlhttprequest') {
+        return true;
+    }
+
+    $accept = strtolower(trim((string) ($_SERVER['HTTP_ACCEPT'] ?? '')));
+    if ($accept !== '' && str_contains($accept, 'application/json')) {
+        return true;
+    }
+
+    $ajaxFlag = strtolower(trim((string) ($_POST['ajax'] ?? $_GET['ajax'] ?? '')));
+    return in_array($ajaxFlag, ['1', 'true', 'yes'], true);
+}
+
+function json_response(array $payload, int $statusCode = 200): void
+{
+    http_response_code($statusCode);
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode($payload);
+}
+
+function stream_csv_download(string $filename, array $headerRow, array $rows): never
+{
+    $safeName = trim($filename) !== '' ? trim($filename) : ('export-' . date('Ymd-His') . '.csv');
+    if (!str_ends_with(strtolower($safeName), '.csv')) {
+        $safeName .= '.csv';
+    }
+
+    header('Content-Type: text/csv; charset=utf-8');
+    header('Content-Disposition: attachment; filename="' . $safeName . '"');
+
+    $output = fopen('php://output', 'w');
+    if ($output !== false) {
+        fputcsv($output, $headerRow);
+        foreach ($rows as $row) {
+            fputcsv($output, $row);
+        }
+        fclose($output);
+    }
+
+    exit;
+}
+
 function app_key(): string
 {
     return (string) config('app.key', '');

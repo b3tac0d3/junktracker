@@ -242,7 +242,7 @@
                                     </tr>
                                 <?php else: ?>
                                     <?php foreach ($disposals as $disposal): ?>
-                                        <tr>
+                                        <tr data-job-id="<?= e((string) ($job['id'] ?? '')) ?>" data-employee-id="<?= e((string) $employeeId) ?>">
                                             <td><?= e(format_date($disposal['event_date'] ?? null)) ?></td>
                                             <td><?= e((string) ($disposal['disposal_location_name'] ?? '-')) ?></td>
                                             <td class="text-uppercase"><?= e((string) ($disposal['type'] ?? '-')) ?></td>
@@ -467,7 +467,7 @@
                                                     </small>
                                                 <?php endif; ?>
                                             </td>
-                                            <td>
+                                            <td class="js-crew-status">
                                                 <?php if ($currentOpen): ?>
                                                     <span class="badge bg-success">On Clock</span>
                                                     <span class="small text-muted ms-2">
@@ -484,14 +484,14 @@
                                                     <span class="badge bg-secondary">Punched Out</span>
                                                 <?php endif; ?>
                                             </td>
-                                            <td>
+                                            <td class="js-crew-elapsed">
                                                 <?php if ($currentOpen): ?>
                                                     <?= e($formatMinutes((int) ($currentOpen['open_minutes'] ?? 0))) ?>
                                                 <?php else: ?>
                                                     —
                                                 <?php endif; ?>
                                             </td>
-                                            <td class="text-end">
+                                            <td class="text-end js-crew-actions">
                                                 <?php if (!$currentOpen && !$otherOpen): ?>
                                                     <form class="d-inline" method="post" action="<?= url('/jobs/' . ($job['id'] ?? '') . '/crew/' . $employeeId . '/remove') ?>">
                                                         <?= csrf_field() ?>
@@ -501,7 +501,7 @@
                                                     </form>
                                                 <?php endif; ?>
                                                 <?php if ($currentOpen): ?>
-                                                    <form class="d-inline" method="post" action="<?= url('/jobs/' . ($job['id'] ?? '') . '/time/punch-out') ?>">
+                                                    <form class="d-inline js-job-punch-form" method="post" action="<?= url('/jobs/' . ($job['id'] ?? '') . '/time/punch-out') ?>">
                                                         <?= csrf_field() ?>
                                                         <input type="hidden" name="time_entry_id" value="<?= e((string) ($currentOpen['id'] ?? '')) ?>" />
                                                         <button class="btn btn-sm btn-danger" type="submit">
@@ -515,7 +515,7 @@
                                                         Busy
                                                     </button>
                                                 <?php else: ?>
-                                                    <form class="d-inline" method="post" action="<?= url('/jobs/' . ($job['id'] ?? '') . '/time/punch-in') ?>">
+                                                    <form class="d-inline js-job-punch-form" method="post" action="<?= url('/jobs/' . ($job['id'] ?? '') . '/time/punch-in') ?>">
                                                         <?= csrf_field() ?>
                                                         <input type="hidden" name="employee_id" value="<?= e((string) $employeeId) ?>" />
                                                         <button class="btn btn-sm btn-success" type="submit">
