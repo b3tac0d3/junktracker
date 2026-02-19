@@ -203,6 +203,11 @@ function require_role(int $minimumRole): void
     }
 }
 
+function is_two_factor_enabled(): bool
+{
+    return (bool) config('app.two_factor_enabled', true);
+}
+
 function role_label(?int $role): string
 {
     return match ($role) {
@@ -405,7 +410,7 @@ function attempt_remember_login(): void
         return;
     }
 
-    if (!has_valid_two_factor_trust_cookie($user)) {
+    if (is_two_factor_enabled() && !has_valid_two_factor_trust_cookie($user)) {
         clear_remember_cookie();
         return;
     }

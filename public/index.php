@@ -5,6 +5,26 @@ declare(strict_types=1);
 ini_set('display_errors', '1');
 error_reporting(E_ALL);
 
+// Use an app-local session storage path so auth does not depend on host-level
+// PHP session directory permissions.
+$sessionPath = dirname(__DIR__) . '/storage/sessions';
+if (!is_dir($sessionPath)) {
+    @mkdir($sessionPath, 0755, true);
+}
+if (is_dir($sessionPath) && is_writable($sessionPath)) {
+    session_save_path($sessionPath);
+}
+
+$secureCookie = !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
+session_name('junktracker_sid');
+session_set_cookie_params([
+    'lifetime' => 0,
+    'path' => '/',
+    'secure' => $secureCookie,
+    'httponly' => true,
+    'samesite' => 'Lax',
+]);
+
 session_start();
 
 require dirname(__DIR__) . '/app/bootstrap.php';

@@ -16,8 +16,10 @@ final class AuthController extends Controller
             redirect('/');
         }
 
+        $errorCode = trim((string) ($_GET['error'] ?? ''));
         $this->render('auth/login', [
             'pageTitle' => 'Login',
+            'fallbackError' => $this->errorMessageForCode($errorCode),
         ], 'auth');
 
         clear_old();
@@ -29,9 +31,9 @@ final class AuthController extends Controller
             redirect('/');
         }
 
-        if (!verify_csrf($_POST['csrf_token'] ?? null)) {
-            flash('error', 'Your session expired. Please try again.');
-            redirect('/login');
+        $csrfValid = verify_csrf($_POST['csrf_token'] ?? null);
+        if (!$csrfValid && !$this->isSameOriginRequest()) {
+            $this->redirectLoginError('session_expired');
         }
 
         $email = trim((string) ($_POST['email'] ?? ''));
@@ -39,29 +41,35 @@ final class AuthController extends Controller
         $remember = !empty($_POST['remember']);
 
         if ($email === '' || $password === '') {
-            flash('error', 'Please enter your email and password.');
-            flash_old(['email' => $email]);
-            redirect('/login');
+            $this->redirectLoginError('missing_credentials', $email);
         }
 
-        $user = User::findByEmail($email);
+        try {
+            $user = User::findByEmail($email);
+        } catch (\Throwable) {
+            $this->redirectLoginError('login_unavailable', $email);
+        }
         if (!$user || (int) ($user['is_active'] ?? 0) !== 1) {
-            flash('error', 'Invalid credentials.');
-            flash_old(['email' => $email]);
-            redirect('/login');
+            $this->redirectLoginError('invalid_credentials', $email);
         }
 
         $passwordHash = (string) ($user['password_hash'] ?? '');
         if ($passwordHash === '') {
-            flash('error', 'Your account setup is incomplete. Use your invite email to set a password.');
-            flash_old(['email' => $email]);
-            redirect('/login');
+            $this->redirectLoginError('password_not_set', $email);
         }
 
         if (!password_verify($password, $passwordHash)) {
-            flash('error', 'Invalid credentials.');
-            flash_old(['email' => $email]);
-            redirect('/login');
+            $this->redirectLoginError('invalid_credentials', $email);
+        }
+
+        $twoFactorEnabled = function_exists('is_two_factor_enabled')
+            ? is_two_factor_enabled()
+            : (bool) config('app.two_factor_enabled', true);
+
+        if (!$twoFactorEnabled) {
+            User::clearTwoFactorCode((int) $user['id'], false);
+            $this->finalizeLogin($user, $remember, false);
+            return;
         }
 
         if (has_valid_two_factor_trust_cookie($user)) {
@@ -72,8 +80,7 @@ final class AuthController extends Controller
 
         $started = $this->beginTwoFactorChallenge($user, $remember);
         if (!$started) {
-            flash('error', 'Unable to send your verification code. Please try again.');
-            redirect('/login');
+            $this->redirectLoginError('two_factor_unavailable', $email);
         }
 
         redirect('/login/2fa');
@@ -83,6 +90,13 @@ final class AuthController extends Controller
     {
         if (is_authenticated()) {
             redirect('/');
+        }
+
+        $twoFactorEnabled = function_exists('is_two_factor_enabled')
+            ? is_two_factor_enabled()
+            : (bool) config('app.two_factor_enabled', true);
+        if (!$twoFactorEnabled) {
+            redirect('/login');
         }
 
         $pending = $_SESSION['pending_2fa'] ?? null;
@@ -102,6 +116,13 @@ final class AuthController extends Controller
     {
         if (is_authenticated()) {
             redirect('/');
+        }
+
+        $twoFactorEnabled = function_exists('is_two_factor_enabled')
+            ? is_two_factor_enabled()
+            : (bool) config('app.two_factor_enabled', true);
+        if (!$twoFactorEnabled) {
+            redirect('/login');
         }
 
         if (!verify_csrf($_POST['csrf_token'] ?? null)) {
@@ -154,6 +175,13 @@ final class AuthController extends Controller
     {
         if (is_authenticated()) {
             redirect('/');
+        }
+
+        $twoFactorEnabled = function_exists('is_two_factor_enabled')
+            ? is_two_factor_enabled()
+            : (bool) config('app.two_factor_enabled', true);
+        if (!$twoFactorEnabled) {
+            redirect('/login');
         }
 
         if (!verify_csrf($_POST['csrf_token'] ?? null)) {
@@ -262,9 +290,8 @@ final class AuthController extends Controller
 
     public function logout(): void
     {
-        if (!verify_csrf($_POST['csrf_token'] ?? null)) {
-            redirect('/');
-        }
+        // Keep logout functional even if the session token is unavailable.
+        verify_csrf($_POST['csrf_token'] ?? null);
 
         $_SESSION = [];
         clear_remember_cookie();
@@ -353,5 +380,64 @@ final class AuthController extends Controller
 
         $visible = substr($local, 0, 2);
         return $visible . str_repeat('*', max(2, strlen($local) - 2)) . '@' . $domain;
+    }
+
+    private function redirectLoginError(string $code, string $email = ''): never
+    {
+        $message = $this->errorMessageForCode($code);
+        if ($message !== '') {
+            flash('error', $message);
+        }
+
+        $cleanEmail = trim($email);
+        if ($cleanEmail !== '') {
+            flash_old(['email' => $cleanEmail]);
+        }
+
+        $query = '?error=' . urlencode($code);
+        if ($cleanEmail !== '') {
+            $query .= '&email=' . urlencode($cleanEmail);
+        }
+
+        redirect('/login' . $query);
+    }
+
+    private function errorMessageForCode(string $code): string
+    {
+        return match ($code) {
+            'session_expired' => 'Your session expired. Please try again.',
+            'missing_credentials' => 'Please enter your email and password.',
+            'invalid_credentials' => 'Invalid credentials.',
+            'password_not_set' => 'Your account setup is incomplete. Use your invite email to set a password.',
+            'two_factor_unavailable' => 'Unable to send your verification code. Please try again.',
+            'login_unavailable' => 'Login is temporarily unavailable. Please try again in a moment.',
+            default => '',
+        };
+    }
+
+    private function isSameOriginRequest(): bool
+    {
+        $host = strtolower(trim((string) ($_SERVER['HTTP_HOST'] ?? '')));
+        if ($host === '') {
+            return false;
+        }
+
+        $origin = trim((string) ($_SERVER['HTTP_ORIGIN'] ?? ''));
+        if ($origin !== '') {
+            $originHost = strtolower((string) (parse_url($origin, PHP_URL_HOST) ?? ''));
+            if ($originHost !== '') {
+                return $originHost === $host;
+            }
+        }
+
+        $referer = trim((string) ($_SERVER['HTTP_REFERER'] ?? ''));
+        if ($referer !== '') {
+            $refererHost = strtolower((string) (parse_url($referer, PHP_URL_HOST) ?? ''));
+            if ($refererHost !== '') {
+                return $refererHost === $host;
+            }
+        }
+
+        return false;
     }
 }

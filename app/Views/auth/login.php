@@ -1,3 +1,8 @@
+<?php
+    $fallbackError = trim((string) ($fallbackError ?? ''));
+    $emailFallback = trim((string) ($_GET['email'] ?? ''));
+    $emailValue = (string) old('email', $emailFallback);
+?>
 <div class="container">
     <div class="row justify-content-center">
         <div class="col-lg-5">
@@ -9,11 +14,13 @@
                     <?php endif; ?>
                     <?php if ($error = flash('error')): ?>
                         <div class="alert alert-danger"><?= e($error) ?></div>
+                    <?php elseif ($fallbackError !== ''): ?>
+                        <div class="alert alert-danger"><?= e($fallbackError) ?></div>
                     <?php endif; ?>
                     <form method="post" action="<?= url('/login') ?>">
                         <?= csrf_field() ?>
                         <div class="form-floating mb-3">
-                            <input class="form-control" id="inputEmail" name="email" type="email" placeholder="name@example.com" value="<?= e((string) old('email', '')) ?>" required />
+                            <input class="form-control" id="inputEmail" name="email" type="email" placeholder="name@example.com" value="<?= e($emailValue) ?>" required />
                             <label for="inputEmail">Email address</label>
                         </div>
                         <div class="form-floating mb-3">
