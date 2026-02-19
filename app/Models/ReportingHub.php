@@ -177,38 +177,48 @@ final class ReportingHub
     {
         $range = self::normalizeDateRange($startDate, $endDate);
 
-        $sql = 'SELECT
-                    dl.id,
-                    dl.name,
-                    dl.type,
-                    COALESCE(SUM(CASE WHEN src.kind = "scrap" THEN src.amount ELSE 0 END), 0) AS scrap_revenue,
-                    COALESCE(SUM(CASE WHEN src.kind = "dump" THEN src.amount ELSE 0 END), 0) AS dump_spend,
-                    COALESCE(SUM(CASE WHEN src.kind = "expense" THEN src.amount ELSE 0 END), 0) AS expense_spend
-                FROM disposal_locations dl
-                LEFT JOIN (
-                    SELECT d.disposal_location_id AS location_id,
-                           COALESCE(d.amount, 0) AS amount,
-                           CASE WHEN d.type = "scrap" THEN "scrap" ELSE "dump" END AS kind
-                    FROM job_disposal_events d
-                    WHERE d.deleted_at IS NULL
-                      AND DATE(COALESCE(d.event_date, d.created_at)) BETWEEN :start_date_disposal AND :end_date_disposal
+        // Use an outer query so MariaDB/MySQL variants do not choke on aggregate aliases in HAVING/ORDER BY.
+        $sql = 'SELECT metrics.id,
+                       metrics.name,
+                       metrics.type,
+                       metrics.scrap_revenue,
+                       metrics.dump_spend,
+                       metrics.expense_spend
+                FROM (
+                    SELECT dl.id,
+                           dl.name,
+                           dl.type,
+                           COALESCE(SUM(CASE WHEN src.kind = "scrap" THEN src.amount ELSE 0 END), 0) AS scrap_revenue,
+                           COALESCE(SUM(CASE WHEN src.kind = "dump" THEN src.amount ELSE 0 END), 0) AS dump_spend,
+                           COALESCE(SUM(CASE WHEN src.kind = "expense" THEN src.amount ELSE 0 END), 0) AS expense_spend
+                    FROM disposal_locations dl
+                    LEFT JOIN (
+                        SELECT d.disposal_location_id AS location_id,
+                               COALESCE(d.amount, 0) AS amount,
+                               CASE WHEN d.type = "scrap" THEN "scrap" ELSE "dump" END AS kind
+                        FROM job_disposal_events d
+                        WHERE d.deleted_at IS NULL
+                          AND DATE(COALESCE(d.event_date, d.created_at)) BETWEEN :start_date_disposal AND :end_date_disposal
 
-                    UNION ALL
+                        UNION ALL
 
-                    SELECT e.disposal_location_id AS location_id,
-                           COALESCE(e.amount, 0) AS amount,
-                           "expense" AS kind
-                    FROM expenses e
-                    WHERE e.deleted_at IS NULL
-                      AND COALESCE(e.is_active, 1) = 1
-                      AND e.disposal_location_id IS NOT NULL
-                      AND DATE(COALESCE(e.expense_date, e.created_at)) BETWEEN :start_date_expense AND :end_date_expense
-                ) src ON src.location_id = dl.id
-                WHERE dl.deleted_at IS NULL
-                  AND COALESCE(dl.active, 1) = 1
-                GROUP BY dl.id, dl.name, dl.type
-                HAVING scrap_revenue <> 0 OR dump_spend <> 0 OR expense_spend <> 0
-                ORDER BY (scrap_revenue - dump_spend - expense_spend) DESC, dl.name ASC';
+                        SELECT e.disposal_location_id AS location_id,
+                               COALESCE(e.amount, 0) AS amount,
+                               "expense" AS kind
+                        FROM expenses e
+                        WHERE e.deleted_at IS NULL
+                          AND COALESCE(e.is_active, 1) = 1
+                          AND e.disposal_location_id IS NOT NULL
+                          AND DATE(COALESCE(e.expense_date, e.created_at)) BETWEEN :start_date_expense AND :end_date_expense
+                    ) src ON src.location_id = dl.id
+                    WHERE dl.deleted_at IS NULL
+                      AND COALESCE(dl.active, 1) = 1
+                    GROUP BY dl.id, dl.name, dl.type
+                ) metrics
+                WHERE metrics.scrap_revenue <> 0
+                   OR metrics.dump_spend <> 0
+                   OR metrics.expense_spend <> 0
+                ORDER BY (metrics.scrap_revenue - metrics.dump_spend - metrics.expense_spend) DESC, metrics.name ASC';
 
         $stmt = Database::connection()->prepare($sql);
         $stmt->execute([
