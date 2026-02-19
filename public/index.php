@@ -29,6 +29,15 @@ session_start();
 
 require dirname(__DIR__) . '/app/bootstrap.php';
 
+// Prevent stale HTML from being served for authenticated app routes.
+header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+header('Pragma: no-cache');
+header('Expires: 0');
+
+if (config('app.noindex', true)) {
+    header('X-Robots-Tag: noindex, nofollow, noarchive, nosnippet, noimageindex');
+}
+
 attempt_remember_login();
 
 $path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH) ?? '/';
