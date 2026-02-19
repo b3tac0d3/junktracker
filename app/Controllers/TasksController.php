@@ -15,7 +15,7 @@ final class TasksController extends Controller
 
         $filters = [
             'q' => trim((string) ($_GET['q'] ?? '')),
-            'status' => (string) ($_GET['status'] ?? 'all'),
+            'status' => (string) ($_GET['status'] ?? 'open'),
             'importance' => $this->toIntOrNull($_GET['importance'] ?? null),
             'link_type' => (string) ($_GET['link_type'] ?? 'all'),
             'owner_scope' => (string) ($_GET['owner_scope'] ?? 'all'),
@@ -26,8 +26,8 @@ final class TasksController extends Controller
             'current_user_id' => auth_user_id() ?? 0,
         ];
 
-        if (!in_array($filters['status'], array_merge(['all'], Task::STATUSES), true)) {
-            $filters['status'] = 'all';
+        if (!in_array($filters['status'], array_merge(['all', 'overdue'], Task::STATUSES), true)) {
+            $filters['status'] = 'open';
         }
         if (($filters['importance'] ?? 0) < 1 || ($filters['importance'] ?? 0) > 5) {
             $filters['importance'] = null;

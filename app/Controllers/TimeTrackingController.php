@@ -87,8 +87,20 @@ final class TimeTrackingController extends Controller
         $jobs = TimeEntry::jobs();
 
         $selectedJobId = null;
-        if ($jobId !== null && $this->optionExists($jobId, $jobs)) {
-            $selectedJobId = $jobId;
+        if ($jobId !== null && $jobId > 0) {
+            if ($this->optionExists($jobId, $jobs)) {
+                $selectedJobId = $jobId;
+            } else {
+                $job = Job::findById($jobId);
+                if ($job && empty($job['deleted_at']) && (int) ($job['active'] ?? 1) === 1) {
+                    $jobs[] = [
+                        'id' => $jobId,
+                        'name' => (string) ($job['name'] ?? ('Job #' . $jobId)),
+                        'job_status' => (string) ($job['job_status'] ?? ''),
+                    ];
+                    $selectedJobId = $jobId;
+                }
+            }
         }
 
         $returnTo = $this->sanitizeReturnTo($_GET['return_to'] ?? null, $selectedJobId);
@@ -534,7 +546,16 @@ final class TimeTrackingController extends Controller
         if ($employeeId === null || !$this->optionExists($employeeId, $employees)) {
             $errors[] = 'Select a valid employee.';
         }
-        if (!$nonJobTime && ($jobId === null || !$this->optionExists($jobId, $jobs))) {
+        $validJob = false;
+        if (!$nonJobTime && $jobId !== null) {
+            if ($this->optionExists($jobId, $jobs)) {
+                $validJob = true;
+            } else {
+                $job = Job::findById($jobId);
+                $validJob = $job && empty($job['deleted_at']) && (int) ($job['active'] ?? 1) === 1;
+            }
+        }
+        if (!$nonJobTime && (!$jobId || !$validJob)) {
             $errors[] = 'Select a valid job.';
         }
         if (!$isPunchInNow && $workDate === null) {

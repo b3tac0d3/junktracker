@@ -10,6 +10,10 @@
                 <li class="breadcrumb-item active">Jobs</li>
             </ol>
         </div>
+        <a class="btn btn-primary" href="<?= url('/jobs/new') ?>">
+            <i class="fas fa-plus me-1"></i>
+            Add Job
+        </a>
     </div>
 
     <div class="card mb-4">

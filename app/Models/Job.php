@@ -457,20 +457,36 @@ final class Job
         $sql = 'SELECT
                     c.id AS client_id,
                     COALESCE(
-                        NULLIF(c.business_name, \'\'),
                         NULLIF(TRIM(CONCAT_WS(\' \', c.first_name, c.last_name)), \'\'),
                         CONCAT(\'Client #\', c.id)
                     ) AS label,
-                    CONCAT_WS(\' • \', \'Client\', NULLIF(c.city, \'\'), NULLIF(c.state, \'\')) AS sub_label
+                    CONCAT_WS(
+                        \' • \',
+                        \'Client\',
+                        NULLIF(GROUP_CONCAT(DISTINCT co.name ORDER BY co.name SEPARATOR \', \'), \'\'),
+                        NULLIF(c.email, \'\'),
+                        NULLIF(c.phone, \'\')
+                    ) AS sub_label
                 FROM clients c
+                LEFT JOIN companies_x_clients cxc
+                    ON cxc.client_id = c.id
+                   AND cxc.deleted_at IS NULL
+                   AND COALESCE(cxc.active, 1) = 1
+                LEFT JOIN companies co
+                    ON co.id = cxc.company_id
+                   AND co.deleted_at IS NULL
+                   AND COALESCE(co.active, 1) = 1
                 WHERE c.deleted_at IS NULL
                   AND c.active = 1
+                  AND (NULLIF(TRIM(CONCAT_WS(\' \', c.first_name, c.last_name)), \'\') IS NOT NULL)
                   AND (
-                        c.business_name LIKE :term
-                        OR c.first_name LIKE :term
+                        c.first_name LIKE :term
                         OR c.last_name LIKE :term
                         OR c.email LIKE :term
+                        OR c.phone LIKE :term
+                        OR co.name LIKE :term
                   )
+                GROUP BY c.id, c.first_name, c.last_name, c.email, c.phone
                 ORDER BY label ASC
                 LIMIT ' . $limit;
 

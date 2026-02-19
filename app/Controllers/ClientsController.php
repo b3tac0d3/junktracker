@@ -233,6 +233,24 @@ final class ClientsController extends Controller
         echo json_encode(Client::lookupByName($term));
     }
 
+    public function companyLookup(): void
+    {
+        $canLookup = can_access('clients', 'view')
+            || can_access('clients', 'create')
+            || can_access('clients', 'edit');
+        if (!$canLookup) {
+            http_response_code(403);
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode([]);
+            return;
+        }
+
+        $term = trim((string) ($_GET['q'] ?? ''));
+
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode(Company::lookupByName($term));
+    }
+
     public function duplicateCheck(): void
     {
         $this->authorize('view');

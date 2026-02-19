@@ -551,6 +551,10 @@ final class Task
         if (in_array($status, self::STATUSES, true)) {
             $where[] = 't.status = :status';
             $params['status'] = $status;
+        } elseif ($status === 'overdue') {
+            $where[] = 't.status <> \'closed\'';
+            $where[] = 't.due_at IS NOT NULL';
+            $where[] = 't.due_at < NOW()';
         }
 
         $importance = isset($filters['importance']) ? (int) $filters['importance'] : 0;
