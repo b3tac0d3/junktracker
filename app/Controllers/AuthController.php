@@ -68,13 +68,13 @@ final class AuthController extends Controller
 
         if (!$twoFactorEnabled) {
             User::clearTwoFactorCode((int) $user['id'], false);
-            $this->finalizeLogin($user, $remember, false);
+            $this->finalizeLogin($user, $remember, false, 'password');
             return;
         }
 
         if (has_valid_two_factor_trust_cookie($user)) {
             User::clearTwoFactorCode((int) $user['id'], false);
-            $this->finalizeLogin($user, $remember, false);
+            $this->finalizeLogin($user, $remember, false, 'password');
             return;
         }
 
@@ -168,7 +168,7 @@ final class AuthController extends Controller
 
         $remember = !empty($pending['remember']);
         unset($_SESSION['pending_2fa']);
-        $this->finalizeLogin($user, $remember, true);
+        $this->finalizeLogin($user, $remember, true, 'two_factor');
     }
 
     public function resendTwoFactor(): void
@@ -347,7 +347,7 @@ final class AuthController extends Controller
         return Mailer::send($email, $subject, $body);
     }
 
-    private function finalizeLogin(array $user, bool $remember, bool $setTrustCookie): void
+    private function finalizeLogin(array $user, bool $remember, bool $setTrustCookie, string $loginMethod = 'password'): void
     {
         session_regenerate_id(true);
         $_SESSION['user'] = [
@@ -362,6 +362,7 @@ final class AuthController extends Controller
         if ($setTrustCookie) {
             set_two_factor_trust_cookie($user, 30);
         }
+        record_user_login_event($user, $loginMethod);
 
         redirect('/');
     }

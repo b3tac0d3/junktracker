@@ -140,6 +140,53 @@ function auth_user_id(): ?int
     return $id > 0 ? $id : null;
 }
 
+function request_ip_address(): ?string
+{
+    $candidates = [
+        (string) ($_SERVER['HTTP_CF_CONNECTING_IP'] ?? ''),
+        (string) ($_SERVER['HTTP_X_FORWARDED_FOR'] ?? ''),
+        (string) ($_SERVER['HTTP_X_REAL_IP'] ?? ''),
+        (string) ($_SERVER['REMOTE_ADDR'] ?? ''),
+    ];
+
+    foreach ($candidates as $candidate) {
+        if ($candidate === '') {
+            continue;
+        }
+
+        if (str_contains($candidate, ',')) {
+            $candidate = trim((string) explode(',', $candidate)[0]);
+        } else {
+            $candidate = trim($candidate);
+        }
+
+        if ($candidate !== '' && filter_var($candidate, FILTER_VALIDATE_IP)) {
+            return $candidate;
+        }
+    }
+
+    return null;
+}
+
+function request_user_agent(): ?string
+{
+    $value = trim((string) ($_SERVER['HTTP_USER_AGENT'] ?? ''));
+    if ($value === '') {
+        return null;
+    }
+
+    return substr($value, 0, 512);
+}
+
+function login_method_label(?string $method): string
+{
+    return match (trim((string) $method)) {
+        'two_factor' => 'Password + 2FA',
+        'remember_token' => 'Remember Token',
+        default => 'Password',
+    };
+}
+
 function log_user_action(string $actionKey, ?string $entityTable = null, ?int $entityId = null, ?string $summary = null, ?string $details = null): void
 {
     $userId = auth_user_id();
@@ -157,10 +204,7 @@ function log_user_action(string $actionKey, ?string $entityTable = null, ?int $e
         $summaryText = ucwords(str_replace('_', ' ', $normalizedActionKey));
     }
 
-    $ip = trim((string) ($_SERVER['REMOTE_ADDR'] ?? ''));
-    if ($ip === '') {
-        $ip = null;
-    }
+    $ip = request_ip_address();
 
     try {
         \App\Models\UserAction::create([
@@ -177,9 +221,111 @@ function log_user_action(string $actionKey, ?string $entityTable = null, ?int $e
     }
 }
 
+function record_user_login_event(array $user, string $loginMethod = 'password'): void
+{
+    $userId = (int) ($user['id'] ?? 0);
+    if ($userId <= 0) {
+        return;
+    }
+
+    $context = [
+        'login_method' => $loginMethod,
+        'ip_address' => request_ip_address(),
+        'user_agent' => request_user_agent(),
+    ];
+
+    $record = null;
+    try {
+        $record = \App\Models\UserLoginRecord::create($userId, $context);
+    } catch (\Throwable) {
+        $record = null;
+    }
+
+    if (auth_user_id() !== $userId) {
+        return;
+    }
+
+    $record = is_array($record) ? $record : $context;
+    $browser = trim((string) ($record['browser_name'] ?? ''));
+    $browserVersion = trim((string) ($record['browser_version'] ?? ''));
+    if ($browser !== '' && $browserVersion !== '') {
+        $browser .= ' ' . $browserVersion;
+    }
+    $osName = trim((string) ($record['os_name'] ?? ''));
+    $deviceType = trim((string) ($record['device_type'] ?? ''));
+    $methodLabel = login_method_label((string) ($record['login_method'] ?? $loginMethod));
+
+    $summary = 'Successful login via ' . $methodLabel;
+    if ($browser !== '' && $osName !== '') {
+        $summary .= ' (' . $browser . ' on ' . $osName . ')';
+    } elseif ($browser !== '') {
+        $summary .= ' (' . $browser . ')';
+    } elseif ($osName !== '') {
+        $summary .= ' (' . $osName . ')';
+    }
+
+    $details = [];
+    if ($deviceType !== '') {
+        $details[] = 'Device: ' . ucfirst($deviceType);
+    }
+
+    $ipAddress = trim((string) ($record['ip_address'] ?? $context['ip_address'] ?? ''));
+    if ($ipAddress !== '') {
+        $details[] = 'IP: ' . $ipAddress;
+    }
+
+    $userAgent = trim((string) ($record['user_agent'] ?? $context['user_agent'] ?? ''));
+    if ($userAgent !== '') {
+        $details[] = 'Agent: ' . substr($userAgent, 0, 255);
+    }
+
+    log_user_action(
+        'user_login',
+        'user_login_records',
+        isset($record['id']) ? (int) $record['id'] : null,
+        $summary,
+        !empty($details) ? implode(' | ', $details) : null
+    );
+}
+
 function is_authenticated(): bool
 {
     return auth_user() !== null;
+}
+
+function setting(string $key, mixed $default = null): mixed
+{
+    $normalized = trim($key);
+    if ($normalized === '') {
+        return $default;
+    }
+
+    try {
+        if (class_exists(\App\Models\AppSetting::class) && \App\Models\AppSetting::isAvailable()) {
+            $value = \App\Models\AppSetting::get($normalized, null);
+            if ($value !== null && $value !== '') {
+                return $value;
+            }
+        }
+    } catch (\Throwable) {
+        // Fallback to provided default.
+    }
+
+    return $default;
+}
+
+function setting_bool(string $key, bool $default = false): bool
+{
+    $raw = setting($key, $default ? '1' : '0');
+    if (is_bool($raw)) {
+        return $raw;
+    }
+    if (is_numeric($raw)) {
+        return (int) $raw === 1;
+    }
+
+    $value = strtolower(trim((string) $raw));
+    return in_array($value, ['1', 'true', 'yes', 'on'], true);
 }
 
 function has_role(int $minimumRole): bool
@@ -205,7 +351,63 @@ function require_role(int $minimumRole): void
 
 function is_two_factor_enabled(): bool
 {
-    return (bool) config('app.two_factor_enabled', true);
+    return setting_bool('security.two_factor_enabled', (bool) config('app.two_factor_enabled', true));
+}
+
+function can_access(string $module, string $action = 'view'): bool
+{
+    $user = auth_user();
+    if (!$user) {
+        return false;
+    }
+
+    $role = (int) ($user['role'] ?? 0);
+    if ($role === 99) {
+        return true;
+    }
+
+    try {
+        if (class_exists(\App\Models\RolePermission::class) && \App\Models\RolePermission::isAvailable()) {
+            return \App\Models\RolePermission::allows($role, $module, $action);
+        }
+    } catch (\Throwable) {
+        // Fall through to permissive behavior for compatibility.
+    }
+
+    return true;
+}
+
+function require_permission(string $module, string $action = 'view'): void
+{
+    if (!is_authenticated()) {
+        redirect('/login');
+    }
+
+    if (!can_access($module, $action)) {
+        redirect('/401');
+    }
+}
+
+function lookup_options(string $groupKey, array $fallback = []): array
+{
+    $normalized = trim($groupKey);
+    if ($normalized === '') {
+        return $fallback;
+    }
+
+    try {
+        if (class_exists(\App\Models\LookupOption::class) && \App\Models\LookupOption::isAvailable()) {
+            \App\Models\LookupOption::seedDefaults();
+            $rows = \App\Models\LookupOption::options($normalized);
+            if (!empty($rows)) {
+                return $rows;
+            }
+        }
+    } catch (\Throwable) {
+        // Ignore and use fallback options.
+    }
+
+    return $fallback;
 }
 
 function role_label(?int $role): string
@@ -230,7 +432,14 @@ function format_datetime(?string $value): string
         return $value;
     }
 
-    return date('m/d/Y g:i A', $timestamp);
+    $format = (string) setting('display.datetime_format', 'm/d/Y g:i A');
+    $timezone = (string) setting('display.timezone', (string) config('app.timezone', 'America/New_York'));
+    try {
+        $dt = (new \DateTimeImmutable('@' . $timestamp))->setTimezone(new \DateTimeZone($timezone));
+        return $dt->format($format !== '' ? $format : 'm/d/Y g:i A');
+    } catch (\Throwable) {
+        return date($format !== '' ? $format : 'm/d/Y g:i A', $timestamp);
+    }
 }
 
 function format_datetime_local(?string $value): string
@@ -244,7 +453,13 @@ function format_datetime_local(?string $value): string
         return '';
     }
 
-    return date('Y-m-d\\TH:i', $timestamp);
+    $timezone = (string) setting('display.timezone', (string) config('app.timezone', 'America/New_York'));
+    try {
+        $dt = (new \DateTimeImmutable('@' . $timestamp))->setTimezone(new \DateTimeZone($timezone));
+        return $dt->format('Y-m-d\\TH:i');
+    } catch (\Throwable) {
+        return date('Y-m-d\\TH:i', $timestamp);
+    }
 }
 
 function format_date(?string $value): string
@@ -258,7 +473,14 @@ function format_date(?string $value): string
         return $value;
     }
 
-    return date('m/d/Y', $timestamp);
+    $format = (string) setting('display.date_format', 'm/d/Y');
+    $timezone = (string) setting('display.timezone', (string) config('app.timezone', 'America/New_York'));
+    try {
+        $dt = (new \DateTimeImmutable('@' . $timestamp))->setTimezone(new \DateTimeZone($timezone));
+        return $dt->format($format !== '' ? $format : 'm/d/Y');
+    } catch (\Throwable) {
+        return date($format !== '' ? $format : 'm/d/Y', $timestamp);
+    }
 }
 
 function format_phone(?string $value): string
@@ -429,6 +651,8 @@ function attempt_remember_login(): void
         'last_name' => $user['last_name'] ?? '',
         'role' => $user['role'] ?? null,
     ];
+
+    record_user_login_event($user, 'remember_token');
 }
 
 function config(string $key, mixed $default = null): mixed

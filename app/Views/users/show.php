@@ -1,5 +1,13 @@
 <?php
     $name = trim(($user['first_name'] ?? '') . ' ' . ($user['last_name'] ?? ''));
+    $lastLogin = is_array($lastLogin ?? null) ? $lastLogin : null;
+    $lastLoginBrowser = trim((string) ($lastLogin['browser_name'] ?? ''));
+    $lastLoginBrowserVersion = trim((string) ($lastLogin['browser_version'] ?? ''));
+    if ($lastLoginBrowser !== '' && $lastLoginBrowserVersion !== '') {
+        $lastLoginBrowser .= ' ' . $lastLoginBrowserVersion;
+    }
+    $lastLoginOs = trim((string) ($lastLogin['os_name'] ?? ''));
+    $lastLoginDevice = trim((string) ($lastLogin['device_type'] ?? ''));
 ?>
 <div class="container-fluid px-4">
     <div class="d-flex flex-wrap align-items-center justify-content-between mt-4 mb-3 gap-3">
@@ -19,6 +27,10 @@
             <a class="btn btn-info text-white" href="<?= url('/users/' . ($user['id'] ?? '') . '/activity') ?>">
                 <i class="fas fa-clock-rotate-left me-1"></i>
                 Activity Log
+            </a>
+            <a class="btn btn-primary" href="<?= url('/users/' . ($user['id'] ?? '') . '/logins') ?>">
+                <i class="fas fa-shield-alt me-1"></i>
+                Login Records
             </a>
             <?php if (!empty($user['is_active'])): ?>
                 <button class="btn btn-danger" type="button" data-bs-toggle="modal" data-bs-target="#deactivateUserModal">
@@ -63,6 +75,36 @@
                         <?php else: ?>
                             <span class="badge bg-secondary">Inactive</span>
                         <?php endif; ?>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="text-muted small">Last Login</div>
+                    <div class="fw-semibold"><?= e(format_datetime($lastLogin['logged_in_at'] ?? null)) ?></div>
+                </div>
+                <div class="col-md-3">
+                    <div class="text-muted small">Login Method</div>
+                    <div class="fw-semibold"><?= e($lastLogin !== null ? login_method_label((string) ($lastLogin['login_method'] ?? '')) : '—') ?></div>
+                </div>
+                <div class="col-md-3">
+                    <div class="text-muted small">Last Login IP</div>
+                    <div class="fw-semibold"><?= e((string) ($lastLogin['ip_address'] ?? '—')) ?></div>
+                </div>
+                <div class="col-md-6">
+                    <div class="text-muted small">Browser / System</div>
+                    <div class="fw-semibold">
+                        <?php
+                            $browserSystem = trim($lastLoginBrowser);
+                            if ($lastLoginOs !== '') {
+                                $browserSystem = $browserSystem !== '' ? $browserSystem . ' on ' . $lastLoginOs : $lastLoginOs;
+                            }
+                            if ($browserSystem === '') {
+                                $browserSystem = '—';
+                            }
+                            if ($lastLoginDevice !== '') {
+                                $browserSystem .= ' (' . ucfirst($lastLoginDevice) . ')';
+                            }
+                            echo e($browserSystem);
+                        ?>
                     </div>
                 </div>
             </div>

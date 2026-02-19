@@ -7,12 +7,15 @@ namespace App\Controllers;
 use Core\Controller;
 use App\Models\User;
 use App\Models\UserAction;
+use App\Models\UserLoginRecord;
 use App\Support\Mailer;
 
 final class UsersController extends Controller
 {
     public function index(): void
     {
+        require_permission('users', 'view');
+
         $query = trim($_GET['q'] ?? '');
         $status = $_GET['status'] ?? 'active';
         if (!in_array($status, ['active', 'inactive', 'all'], true)) {
@@ -37,8 +40,11 @@ final class UsersController extends Controller
 
     public function show(array $params): void
     {
+        require_permission('users', 'view');
+
         $id = isset($params['id']) ? (int) $params['id'] : 0;
         $user = $id > 0 ? User::findById($id) : null;
+        $lastLogin = $id > 0 ? UserLoginRecord::latestForUser($id) : null;
 
         if (!$user) {
             http_response_code(404);
@@ -51,11 +57,14 @@ final class UsersController extends Controller
         $this->render('users/show', [
             'pageTitle' => 'User Details',
             'user' => $user,
+            'lastLogin' => $lastLogin,
         ]);
     }
 
     public function create(): void
     {
+        require_permission('users', 'create');
+
         $this->render('users/create', [
             'pageTitle' => 'Add User',
         ]);
@@ -65,6 +74,8 @@ final class UsersController extends Controller
 
     public function store(): void
     {
+        require_permission('users', 'create');
+
         if (!verify_csrf($_POST['csrf_token'] ?? null)) {
             flash('error', 'Your session expired. Please try again.');
             redirect('/users/new');
@@ -100,6 +111,8 @@ final class UsersController extends Controller
 
     public function update(array $params): void
     {
+        require_permission('users', 'edit');
+
         if (!verify_csrf($_POST['csrf_token'] ?? null)) {
             flash('error', 'Your session expired. Please try again.');
             redirect('/users/' . ($params['id'] ?? '') . '/edit');
@@ -126,6 +139,8 @@ final class UsersController extends Controller
 
     public function deactivate(array $params): void
     {
+        require_permission('users', 'delete');
+
         if (!verify_csrf($_POST['csrf_token'] ?? null)) {
             redirect('/users/' . ($params['id'] ?? ''));
         }
@@ -142,6 +157,8 @@ final class UsersController extends Controller
 
     public function edit(array $params): void
     {
+        require_permission('users', 'edit');
+
         $id = isset($params['id']) ? (int) $params['id'] : 0;
         $user = $id > 0 ? User::findById($id) : null;
 
@@ -173,12 +190,52 @@ final class UsersController extends Controller
 
     public function activity(array $params): void
     {
+        require_permission('users', 'view');
+
         $id = isset($params['id']) ? (int) $params['id'] : 0;
         if ($id <= 0) {
             redirect('/users');
         }
 
         $this->renderActivity($id, false);
+    }
+
+    public function logins(array $params): void
+    {
+        require_permission('users', 'view');
+
+        $id = isset($params['id']) ? (int) $params['id'] : 0;
+        if ($id <= 0) {
+            redirect('/users');
+        }
+
+        $user = User::findById($id);
+        if (!$user) {
+            http_response_code(404);
+            if (class_exists('App\\Controllers\\ErrorController')) {
+                (new \App\Controllers\ErrorController())->notFound();
+                return;
+            }
+
+            echo '404 Not Found';
+            return;
+        }
+
+        $query = trim((string) ($_GET['q'] ?? ''));
+        $records = UserLoginRecord::forUser($id, $query);
+        $pageScripts = implode("\n", [
+            '<script src="https://cdn.jsdelivr.net/npm/simple-datatables@7.1.2/dist/umd/simple-datatables.min.js" crossorigin="anonymous"></script>',
+            '<script src="' . asset('js/user-activity-table.js') . '"></script>',
+        ]);
+
+        $this->render('users/logins', [
+            'pageTitle' => 'User Login Records',
+            'user' => $user,
+            'records' => $records,
+            'query' => $query,
+            'isReady' => UserLoginRecord::isAvailable(),
+            'pageScripts' => $pageScripts,
+        ]);
     }
 
     private function collectFormData(): array

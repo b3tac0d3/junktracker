@@ -18,13 +18,16 @@ final class ProspectsController extends Controller
 
     public function index(): void
     {
+        require_permission('prospects', 'view');
+
         $filters = [
             'q' => trim((string) ($_GET['q'] ?? '')),
             'status' => (string) ($_GET['status'] ?? 'all'),
             'record_status' => (string) ($_GET['record_status'] ?? 'active'),
         ];
 
-        if (!in_array($filters['status'], array_merge(['all'], self::STATUSES), true)) {
+        $statuses = $this->statusValues();
+        if (!in_array($filters['status'], array_merge(['all'], $statuses), true)) {
             $filters['status'] = 'all';
         }
         if (!in_array($filters['record_status'], ['active', 'inactive', 'all'], true)) {
@@ -40,12 +43,15 @@ final class ProspectsController extends Controller
             'pageTitle' => 'Prospects',
             'prospects' => Prospect::filter($filters),
             'filters' => $filters,
+            'statuses' => $statuses,
             'pageScripts' => $pageScripts,
         ]);
     }
 
     public function show(array $params): void
     {
+        require_permission('prospects', 'view');
+
         $id = isset($params['id']) ? (int) $params['id'] : 0;
         if ($id <= 0) {
             redirect('/prospects');
@@ -70,11 +76,13 @@ final class ProspectsController extends Controller
 
     public function create(): void
     {
+        require_permission('prospects', 'create');
+
         $this->render('prospects/create', [
             'pageTitle' => 'Add Prospect',
             'prospect' => null,
-            'statuses' => self::STATUSES,
-            'nextSteps' => self::NEXT_STEPS,
+            'statuses' => $this->statusValues(),
+            'nextSteps' => $this->nextStepValues(),
             'priorities' => self::PRIORITIES,
             'priorityLabels' => $this->priorityLabels(),
             'pageScripts' => $this->formScripts(),
@@ -85,6 +93,8 @@ final class ProspectsController extends Controller
 
     public function store(): void
     {
+        require_permission('prospects', 'create');
+
         if (!verify_csrf($_POST['csrf_token'] ?? null)) {
             flash('error', 'Your session expired. Please try again.');
             redirect('/prospects/new');
@@ -107,6 +117,8 @@ final class ProspectsController extends Controller
 
     public function edit(array $params): void
     {
+        require_permission('prospects', 'edit');
+
         $id = isset($params['id']) ? (int) $params['id'] : 0;
         if ($id <= 0) {
             redirect('/prospects');
@@ -121,8 +133,8 @@ final class ProspectsController extends Controller
         $this->render('prospects/edit', [
             'pageTitle' => 'Edit Prospect',
             'prospect' => $prospect,
-            'statuses' => self::STATUSES,
-            'nextSteps' => self::NEXT_STEPS,
+            'statuses' => $this->statusValues(),
+            'nextSteps' => $this->nextStepValues(),
             'priorities' => self::PRIORITIES,
             'priorityLabels' => $this->priorityLabels(),
             'pageScripts' => $this->formScripts(),
@@ -133,6 +145,8 @@ final class ProspectsController extends Controller
 
     public function update(array $params): void
     {
+        require_permission('prospects', 'edit');
+
         $id = isset($params['id']) ? (int) $params['id'] : 0;
         if ($id <= 0) {
             redirect('/prospects');
@@ -171,6 +185,8 @@ final class ProspectsController extends Controller
 
     public function delete(array $params): void
     {
+        require_permission('prospects', 'delete');
+
         $id = isset($params['id']) ? (int) $params['id'] : 0;
         if ($id <= 0) {
             redirect('/prospects');
@@ -199,6 +215,8 @@ final class ProspectsController extends Controller
 
     public function clientLookup(): void
     {
+        require_permission('prospects', 'view');
+
         $term = trim((string) ($_GET['q'] ?? ''));
         header('Content-Type: application/json; charset=utf-8');
         echo json_encode(Client::lookupByName($term));
@@ -206,6 +224,8 @@ final class ProspectsController extends Controller
 
     public function convert(array $params): void
     {
+        require_permission('prospects', 'edit');
+
         $id = isset($params['id']) ? (int) $params['id'] : 0;
         if ($id <= 0) {
             redirect('/prospects');
@@ -227,13 +247,15 @@ final class ProspectsController extends Controller
 
     private function collectFormData(): array
     {
+        $statuses = $this->statusValues();
         $status = trim((string) ($_POST['status'] ?? 'active'));
-        if (!in_array($status, self::STATUSES, true)) {
+        if (!in_array($status, $statuses, true)) {
             $status = 'active';
         }
 
+        $nextSteps = $this->nextStepValues();
         $nextStep = trim((string) ($_POST['next_step'] ?? ''));
-        if ($nextStep !== '' && !in_array($nextStep, self::NEXT_STEPS, true)) {
+        if ($nextStep !== '' && !in_array($nextStep, $nextSteps, true)) {
             $nextStep = '';
         }
 
@@ -251,6 +273,62 @@ final class ProspectsController extends Controller
             'next_step' => $nextStep !== '' ? $nextStep : null,
             'note' => trim((string) ($_POST['note'] ?? '')),
         ];
+    }
+
+    private function statusValues(): array
+    {
+        $fallback = array_map(
+            static fn (string $value): array => [
+                'group_key' => 'prospect_status',
+                'value_key' => $value,
+                'label' => ucfirst($value),
+                'active' => 1,
+            ],
+            self::STATUSES
+        );
+
+        $rows = lookup_options('prospect_status', $fallback);
+        $values = [];
+        foreach ($rows as $row) {
+            if (!empty($row['deleted_at']) || (isset($row['active']) && (int) $row['active'] !== 1)) {
+                continue;
+            }
+            $value = trim((string) ($row['value_key'] ?? ''));
+            if ($value === '') {
+                continue;
+            }
+            $values[] = $value;
+        }
+
+        return !empty($values) ? array_values(array_unique($values)) : self::STATUSES;
+    }
+
+    private function nextStepValues(): array
+    {
+        $fallback = array_map(
+            static fn (string $value): array => [
+                'group_key' => 'prospect_next_step',
+                'value_key' => $value,
+                'label' => ucwords(str_replace('_', ' ', $value)),
+                'active' => 1,
+            ],
+            self::NEXT_STEPS
+        );
+
+        $rows = lookup_options('prospect_next_step', $fallback);
+        $values = [];
+        foreach ($rows as $row) {
+            if (!empty($row['deleted_at']) || (isset($row['active']) && (int) $row['active'] !== 1)) {
+                continue;
+            }
+            $value = trim((string) ($row['value_key'] ?? ''));
+            if ($value === '') {
+                continue;
+            }
+            $values[] = $value;
+        }
+
+        return !empty($values) ? array_values(array_unique($values)) : self::NEXT_STEPS;
     }
 
     private function validate(array $data): array

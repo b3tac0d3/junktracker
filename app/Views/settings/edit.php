@@ -11,6 +11,9 @@
             </ol>
         </div>
         <div class="d-flex gap-2">
+            <?php if (can_access('admin_settings', 'view')): ?>
+                <a class="btn btn-outline-primary" href="<?= url('/admin/settings') ?>">Admin Settings</a>
+            <?php endif; ?>
             <a class="btn btn-outline-secondary" href="<?= url('/') ?>">Back to Dashboard</a>
         </div>
     </div>

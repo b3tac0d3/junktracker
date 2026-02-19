@@ -20,6 +20,8 @@ final class JobsController extends Controller
 
     public function index(): void
     {
+        require_permission('jobs', 'view');
+
         $filters = [
             'q' => trim($_GET['q'] ?? ''),
             'status' => $_GET['status'] ?? 'all',
@@ -28,7 +30,8 @@ final class JobsController extends Controller
             'end_date' => trim($_GET['end_date'] ?? ''),
         ];
 
-        if (!in_array($filters['status'], ['all', 'pending', 'active', 'complete', 'cancelled'], true)) {
+        $statusOptions = $this->jobStatuses();
+        if (!in_array($filters['status'], array_merge(['all'], $statusOptions), true)) {
             $filters['status'] = 'all';
         }
         if (!in_array($filters['record_status'], ['active', 'deleted', 'all'], true)) {
@@ -46,12 +49,15 @@ final class JobsController extends Controller
             'pageTitle' => 'Jobs',
             'jobs' => $jobs,
             'filters' => $filters,
+            'statusOptions' => $statusOptions,
             'pageScripts' => $pageScripts,
         ]);
     }
 
     public function create(): void
     {
+        require_permission('jobs', 'create');
+
         $job = [];
         $fromProspectId = $this->toIntOrNull($_GET['from_prospect'] ?? null);
         if ($fromProspectId !== null && $fromProspectId > 0) {
@@ -73,6 +79,7 @@ final class JobsController extends Controller
         $this->render('jobs/create', [
             'pageTitle' => 'Add Job',
             'job' => $job,
+            'statusOptions' => $this->jobStatuses(),
             'pageScripts' => '<script src="' . asset('js/job-owner-contact-lookup.js') . '"></script>',
         ]);
 
@@ -81,12 +88,14 @@ final class JobsController extends Controller
 
     public function store(): void
     {
+        require_permission('jobs', 'create');
+
         if (!$this->checkCsrf('/jobs/new')) {
             return;
         }
 
         $status = (string) ($_POST['job_status'] ?? 'pending');
-        if (!in_array($status, self::JOB_STATUSES, true)) {
+        if (!in_array($status, $this->jobStatuses(), true)) {
             $status = 'pending';
         }
 
@@ -199,6 +208,8 @@ final class JobsController extends Controller
 
     public function show(array $params): void
     {
+        require_permission('jobs', 'view');
+
         $id = isset($params['id']) ? (int) $params['id'] : 0;
         $job = $this->findJobOr404($id);
         if (!$job) {
@@ -379,6 +390,8 @@ final class JobsController extends Controller
 
     public function edit(array $params): void
     {
+        require_permission('jobs', 'edit');
+
         $id = isset($params['id']) ? (int) $params['id'] : 0;
         $job = $this->findJobOr404($id);
         if (!$job) {
@@ -388,6 +401,7 @@ final class JobsController extends Controller
         $this->render('jobs/edit', [
             'pageTitle' => 'Edit Job',
             'job' => $job,
+            'statusOptions' => $this->jobStatuses(),
             'pageScripts' => '<script src="' . asset('js/job-owner-contact-lookup.js') . '"></script>',
         ]);
 
@@ -519,6 +533,8 @@ final class JobsController extends Controller
 
     public function update(array $params): void
     {
+        require_permission('jobs', 'edit');
+
         $id = isset($params['id']) ? (int) $params['id'] : 0;
         if ($id <= 0) {
             redirect('/jobs');
@@ -534,7 +550,7 @@ final class JobsController extends Controller
         }
 
         $status = (string) ($_POST['job_status'] ?? 'pending');
-        if (!in_array($status, self::JOB_STATUSES, true)) {
+        if (!in_array($status, $this->jobStatuses(), true)) {
             $status = 'pending';
         }
 
@@ -1387,6 +1403,39 @@ final class JobsController extends Controller
         $remaining = $minutes % 60;
 
         return $hours . 'h ' . str_pad((string) $remaining, 2, '0', STR_PAD_LEFT) . 'm';
+    }
+
+    private function jobStatuses(): array
+    {
+        $fallback = array_map(
+            static fn (string $value): array => [
+                'group_key' => 'job_status',
+                'value_key' => $value,
+                'label' => ucwords(str_replace('_', ' ', $value)),
+                'sort_order' => 100,
+                'active' => 1,
+            ],
+            self::JOB_STATUSES
+        );
+
+        $rows = lookup_options('job_status', $fallback);
+        $values = [];
+        foreach ($rows as $row) {
+            if (!empty($row['deleted_at']) || (isset($row['active']) && (int) $row['active'] !== 1)) {
+                continue;
+            }
+            $value = trim((string) ($row['value_key'] ?? ''));
+            if ($value === '') {
+                continue;
+            }
+            $values[] = $value;
+        }
+
+        if (empty($values)) {
+            return self::JOB_STATUSES;
+        }
+
+        return array_values(array_unique($values));
     }
 
     private function toDateTimeOrNull(mixed $value): ?string

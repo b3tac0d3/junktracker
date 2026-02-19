@@ -117,4 +117,125 @@ final class UserAction
 
         return $stmt->fetchAll();
     }
+
+    public static function search(array $filters): array
+    {
+        if (!self::isAvailable()) {
+            return [];
+        }
+
+        $sql = 'SELECT ua.id,
+                       ua.user_id,
+                       ua.action_key,
+                       ua.entity_table,
+                       ua.entity_id,
+                       ua.summary,
+                       ua.details,
+                       ua.ip_address,
+                       ua.created_at,
+                       TRIM(CONCAT(COALESCE(u.first_name, \'\'), \' \', COALESCE(u.last_name, \'\'))) AS actor_name,
+                       u.email AS actor_email
+                FROM user_actions ua
+                LEFT JOIN users u
+                    ON u.id = ua.user_id
+                WHERE 1=1';
+        $params = [];
+
+        $query = trim((string) ($filters['q'] ?? ''));
+        if ($query !== '') {
+            $sql .= ' AND (
+                        ua.action_key LIKE :q
+                        OR ua.entity_table LIKE :q
+                        OR ua.summary LIKE :q
+                        OR ua.details LIKE :q
+                        OR CAST(ua.entity_id AS CHAR) LIKE :q
+                        OR CAST(ua.id AS CHAR) LIKE :q
+                      )';
+            $params['q'] = '%' . $query . '%';
+        }
+
+        $userId = isset($filters['user_id']) ? (int) $filters['user_id'] : 0;
+        if ($userId > 0) {
+            $sql .= ' AND ua.user_id = :user_id';
+            $params['user_id'] = $userId;
+        }
+
+        $entityTable = trim((string) ($filters['entity_table'] ?? ''));
+        if ($entityTable !== '') {
+            $sql .= ' AND ua.entity_table = :entity_table';
+            $params['entity_table'] = $entityTable;
+        }
+
+        $actionKey = trim((string) ($filters['action_key'] ?? ''));
+        if ($actionKey !== '') {
+            $sql .= ' AND ua.action_key = :action_key';
+            $params['action_key'] = $actionKey;
+        }
+
+        $dateFrom = trim((string) ($filters['date_from'] ?? ''));
+        if ($dateFrom !== '') {
+            $sql .= ' AND DATE(ua.created_at) >= :date_from';
+            $params['date_from'] = $dateFrom;
+        }
+
+        $dateTo = trim((string) ($filters['date_to'] ?? ''));
+        if ($dateTo !== '') {
+            $sql .= ' AND DATE(ua.created_at) <= :date_to';
+            $params['date_to'] = $dateTo;
+        }
+
+        $sql .= ' ORDER BY ua.created_at DESC, ua.id DESC
+                  LIMIT 2000';
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute($params);
+        return $stmt->fetchAll();
+    }
+
+    public static function entityOptions(): array
+    {
+        if (!self::isAvailable()) {
+            return [];
+        }
+
+        try {
+            $rows = Database::connection()->query(
+                'SELECT DISTINCT entity_table
+                 FROM user_actions
+                 WHERE entity_table IS NOT NULL
+                   AND entity_table <> \'\'
+                 ORDER BY entity_table ASC'
+            )->fetchAll();
+
+            return array_values(array_filter(array_map(
+                static fn (array $row): string => (string) ($row['entity_table'] ?? ''),
+                $rows
+            )));
+        } catch (Throwable) {
+            return [];
+        }
+    }
+
+    public static function actionOptions(): array
+    {
+        if (!self::isAvailable()) {
+            return [];
+        }
+
+        try {
+            $rows = Database::connection()->query(
+                'SELECT DISTINCT action_key
+                 FROM user_actions
+                 WHERE action_key <> \'\'
+                 ORDER BY action_key ASC'
+            )->fetchAll();
+
+            return array_values(array_filter(array_map(
+                static fn (array $row): string => (string) ($row['action_key'] ?? ''),
+                $rows
+            )));
+        } catch (Throwable) {
+            return [];
+        }
+    }
 }

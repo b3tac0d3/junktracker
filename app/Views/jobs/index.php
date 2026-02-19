@@ -1,3 +1,6 @@
+<?php
+    $statusOptions = is_array($statusOptions ?? null) ? $statusOptions : ['pending', 'active', 'complete', 'cancelled'];
+?>
 <div class="container-fluid px-4">
     <div class="d-flex flex-wrap align-items-center justify-content-between mt-4 mb-3 gap-3">
         <div>
@@ -24,10 +27,11 @@
                         <label class="form-label">Status</label>
                         <select class="form-select" name="status">
                             <option value="all" <?= ($filters['status'] ?? 'all') === 'all' ? 'selected' : '' ?>>All</option>
-                            <option value="pending" <?= ($filters['status'] ?? '') === 'pending' ? 'selected' : '' ?>>Pending</option>
-                            <option value="active" <?= ($filters['status'] ?? '') === 'active' ? 'selected' : '' ?>>Active</option>
-                            <option value="complete" <?= ($filters['status'] ?? '') === 'complete' ? 'selected' : '' ?>>Complete</option>
-                            <option value="cancelled" <?= ($filters['status'] ?? '') === 'cancelled' ? 'selected' : '' ?>>Cancelled</option>
+                            <?php foreach ($statusOptions as $statusOption): ?>
+                                <option value="<?= e((string) $statusOption) ?>" <?= ($filters['status'] ?? '') === (string) $statusOption ? 'selected' : '' ?>>
+                                    <?= e(ucwords(str_replace('_', ' ', (string) $statusOption))) ?>
+                                </option>
+                            <?php endforeach; ?>
                         </select>
                     </div>
                     <div class="col-12 col-lg-2">

@@ -13,6 +13,8 @@ final class EmployeesController extends Controller
 {
     public function index(): void
     {
+        require_permission('employees', 'view');
+
         $query = trim((string) ($_GET['q'] ?? ''));
         $status = (string) ($_GET['status'] ?? 'active');
 
@@ -36,6 +38,8 @@ final class EmployeesController extends Controller
 
     public function show(array $params): void
     {
+        require_permission('employees', 'view');
+
         $id = isset($params['id']) ? (int) $params['id'] : 0;
         if ($id <= 0) {
             redirect('/employees');
@@ -94,6 +98,8 @@ final class EmployeesController extends Controller
 
     public function punchIn(array $params): void
     {
+        require_permission('employees', 'edit');
+
         $id = isset($params['id']) ? (int) $params['id'] : 0;
         if ($id <= 0) {
             redirect('/employees');
@@ -161,6 +167,8 @@ final class EmployeesController extends Controller
 
     public function punchOut(array $params): void
     {
+        require_permission('employees', 'edit');
+
         $id = isset($params['id']) ? (int) $params['id'] : 0;
         if ($id <= 0) {
             redirect('/employees');
@@ -231,6 +239,8 @@ final class EmployeesController extends Controller
 
     public function create(): void
     {
+        require_permission('employees', 'create');
+
         $this->render('employees/create', [
             'pageTitle' => 'Add Employee',
             'employee' => null,
@@ -241,6 +251,8 @@ final class EmployeesController extends Controller
 
     public function store(): void
     {
+        require_permission('employees', 'create');
+
         if (!verify_csrf($_POST['csrf_token'] ?? null)) {
             flash('error', 'Your session expired. Please try again.');
             redirect('/employees/new');
@@ -262,6 +274,8 @@ final class EmployeesController extends Controller
 
     public function edit(array $params): void
     {
+        require_permission('employees', 'edit');
+
         $id = isset($params['id']) ? (int) $params['id'] : 0;
         if ($id <= 0) {
             redirect('/employees');
@@ -283,6 +297,8 @@ final class EmployeesController extends Controller
 
     public function update(array $params): void
     {
+        require_permission('employees', 'edit');
+
         $id = isset($params['id']) ? (int) $params['id'] : 0;
         if ($id <= 0) {
             redirect('/employees');

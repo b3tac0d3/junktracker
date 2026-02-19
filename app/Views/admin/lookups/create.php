@@ -1,0 +1,32 @@
+<?php
+    $selectedGroup = (string) ($selectedGroup ?? 'job_status');
+?>
+<div class="container-fluid px-4">
+    <div class="d-flex flex-wrap justify-content-between align-items-center mt-4 mb-3 gap-2">
+        <div>
+            <h1 class="mb-1">Add Lookup Option</h1>
+            <ol class="breadcrumb mb-0">
+                <li class="breadcrumb-item"><a href="<?= url('/admin') ?>">Admin</a></li>
+                <li class="breadcrumb-item"><a href="<?= url('/admin/lookups?group=' . urlencode($selectedGroup)) ?>">Lookups</a></li>
+                <li class="breadcrumb-item active">Add</li>
+            </ol>
+        </div>
+        <a class="btn btn-outline-secondary" href="<?= url('/admin/lookups?group=' . urlencode($selectedGroup)) ?>">Back to Lookups</a>
+    </div>
+
+    <?php if ($error = flash('error')): ?>
+        <div class="alert alert-danger"><?= e($error) ?></div>
+    <?php endif; ?>
+
+    <form method="post" action="<?= url('/admin/lookups/new') ?>" class="card border-0 shadow-sm">
+        <?= csrf_field() ?>
+        <div class="card-body">
+            <?php require __DIR__ . '/_form.php'; ?>
+        </div>
+        <div class="card-footer d-flex gap-2">
+            <button class="btn btn-primary" type="submit">Save Option</button>
+            <a class="btn btn-outline-secondary" href="<?= url('/admin/lookups?group=' . urlencode($selectedGroup)) ?>">Cancel</a>
+        </div>
+    </form>
+</div>
+

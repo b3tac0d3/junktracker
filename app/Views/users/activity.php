@@ -21,6 +21,7 @@
             'employees' => url('/employees/' . $id),
             'tasks' => url('/tasks/' . $id),
             'employee_time_entries' => url('/time-tracking/' . $id),
+            'user_login_records' => url('/users/' . ($user['id'] ?? '') . '/logins'),
             default => null,
         };
     };

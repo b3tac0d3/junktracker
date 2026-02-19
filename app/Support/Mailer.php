@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Support;
 
+use App\Models\AppSetting;
+
 final class Mailer
 {
     public static function send(string $toEmail, string $subject, string $textBody): bool
@@ -17,6 +19,12 @@ final class Mailer
         $fromName = trim((string) config('mail.from_name', 'JunkTracker'));
         $replyTo = trim((string) config('mail.reply_to', ''));
         $subjectPrefix = (string) config('mail.subject_prefix', '');
+        if (AppSetting::isAvailable()) {
+            $fromAddress = trim((string) AppSetting::get('mail.from_address', $fromAddress));
+            $fromName = trim((string) AppSetting::get('mail.from_name', $fromName));
+            $replyTo = trim((string) AppSetting::get('mail.reply_to', $replyTo));
+            $subjectPrefix = (string) AppSetting::get('mail.subject_prefix', $subjectPrefix);
+        }
 
         $encodedFromName = str_replace(["\r", "\n"], '', $fromName);
         $safeSubject = str_replace(["\r", "\n"], '', trim($subjectPrefix . $subject));

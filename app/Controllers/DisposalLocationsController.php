@@ -11,6 +11,8 @@ final class DisposalLocationsController extends Controller
 {
     public function index(): void
     {
+        require_permission('disposal_locations', 'view');
+
         $pageScripts = implode("\n", [
             '<script src="https://cdn.jsdelivr.net/npm/simple-datatables@7.1.2/dist/umd/simple-datatables.min.js" crossorigin="anonymous"></script>',
             '<script src="' . asset('js/admin-tables.js') . '"></script>',
@@ -25,6 +27,8 @@ final class DisposalLocationsController extends Controller
 
     public function create(): void
     {
+        require_permission('disposal_locations', 'create');
+
         $this->render('admin/disposal_locations/create', [
             'pageTitle' => 'Add Disposal Location',
             'location' => null,
@@ -35,6 +39,8 @@ final class DisposalLocationsController extends Controller
 
     public function store(): void
     {
+        require_permission('disposal_locations', 'create');
+
         if (!verify_csrf($_POST['csrf_token'] ?? null)) {
             flash('error', 'Your session expired. Please try again.');
             redirect('/admin/disposal-locations/new');
@@ -56,6 +62,8 @@ final class DisposalLocationsController extends Controller
 
     public function edit(array $params): void
     {
+        require_permission('disposal_locations', 'edit');
+
         $id = isset($params['id']) ? (int) $params['id'] : 0;
         $location = $id > 0 ? DisposalLocation::findById($id) : null;
         if (!$location) {
@@ -73,6 +81,8 @@ final class DisposalLocationsController extends Controller
 
     public function update(array $params): void
     {
+        require_permission('disposal_locations', 'edit');
+
         $id = isset($params['id']) ? (int) $params['id'] : 0;
         if ($id <= 0) {
             redirect('/admin/disposal-locations');
@@ -99,6 +109,8 @@ final class DisposalLocationsController extends Controller
 
     public function delete(array $params): void
     {
+        require_permission('disposal_locations', 'delete');
+
         $id = isset($params['id']) ? (int) $params['id'] : 0;
         if ($id <= 0) {
             redirect('/admin/disposal-locations');

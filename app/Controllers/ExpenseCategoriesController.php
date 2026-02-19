@@ -11,6 +11,8 @@ final class ExpenseCategoriesController extends Controller
 {
     public function index(): void
     {
+        require_permission('expense_categories', 'view');
+
         $pageScripts = implode("\n", [
             '<script src="https://cdn.jsdelivr.net/npm/simple-datatables@7.1.2/dist/umd/simple-datatables.min.js" crossorigin="anonymous"></script>',
             '<script src="' . asset('js/admin-tables.js') . '"></script>',
@@ -25,6 +27,8 @@ final class ExpenseCategoriesController extends Controller
 
     public function create(): void
     {
+        require_permission('expense_categories', 'create');
+
         $this->render('admin/expense_categories/create', [
             'pageTitle' => 'Add Expense Category',
             'category' => null,
@@ -35,6 +39,8 @@ final class ExpenseCategoriesController extends Controller
 
     public function store(): void
     {
+        require_permission('expense_categories', 'create');
+
         if (!verify_csrf($_POST['csrf_token'] ?? null)) {
             flash('error', 'Your session expired. Please try again.');
             redirect('/admin/expense-categories/new');
@@ -56,6 +62,8 @@ final class ExpenseCategoriesController extends Controller
 
     public function edit(array $params): void
     {
+        require_permission('expense_categories', 'edit');
+
         $id = isset($params['id']) ? (int) $params['id'] : 0;
         $category = $id > 0 ? ExpenseCategory::findById($id) : null;
         if (!$category) {
@@ -73,6 +81,8 @@ final class ExpenseCategoriesController extends Controller
 
     public function update(array $params): void
     {
+        require_permission('expense_categories', 'edit');
+
         $id = isset($params['id']) ? (int) $params['id'] : 0;
         if ($id <= 0) {
             redirect('/admin/expense-categories');
@@ -99,6 +109,8 @@ final class ExpenseCategoriesController extends Controller
 
     public function delete(array $params): void
     {
+        require_permission('expense_categories', 'delete');
+
         $id = isset($params['id']) ? (int) $params['id'] : 0;
         if ($id <= 0) {
             redirect('/admin/expense-categories');

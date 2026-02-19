@@ -297,3 +297,101 @@ ALTER TABLE users
     ADD COLUMN IF NOT EXISTS last_2fa_at DATETIME NULL AFTER two_factor_sent_at;
 
 CREATE INDEX IF NOT EXISTS idx_users_password_setup_expires ON users (password_setup_expires_at);
+
+-- 7) Admin settings store
+CREATE TABLE IF NOT EXISTS app_settings (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    setting_key VARCHAR(120) NOT NULL,
+    setting_value TEXT NULL,
+    updated_by BIGINT UNSIGNED NULL,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uniq_app_settings_key (setting_key),
+    KEY idx_app_settings_updated_by (updated_by),
+    CONSTRAINT fk_app_settings_updated_by
+        FOREIGN KEY (updated_by) REFERENCES users(id)
+        ON UPDATE CASCADE ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 8) Role permission matrix
+CREATE TABLE IF NOT EXISTS role_permissions (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    role_value SMALLINT UNSIGNED NOT NULL,
+    module_key VARCHAR(80) NOT NULL,
+    can_view TINYINT(1) NOT NULL DEFAULT 1,
+    can_create TINYINT(1) NOT NULL DEFAULT 1,
+    can_edit TINYINT(1) NOT NULL DEFAULT 1,
+    can_delete TINYINT(1) NOT NULL DEFAULT 1,
+    updated_by BIGINT UNSIGNED NULL,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uniq_role_permissions_role_module (role_value, module_key),
+    KEY idx_role_permissions_module (module_key),
+    KEY idx_role_permissions_updated_by (updated_by),
+    CONSTRAINT fk_role_permissions_updated_by
+        FOREIGN KEY (updated_by) REFERENCES users(id)
+        ON UPDATE CASCADE ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 9) Lookup option management
+CREATE TABLE IF NOT EXISTS app_lookups (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    group_key VARCHAR(80) NOT NULL,
+    value_key VARCHAR(80) NOT NULL,
+    label VARCHAR(120) NOT NULL,
+    sort_order INT NOT NULL DEFAULT 100,
+    active TINYINT(1) NOT NULL DEFAULT 1,
+    deleted_at DATETIME NULL,
+    created_by BIGINT UNSIGNED NULL,
+    updated_by BIGINT UNSIGNED NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uniq_app_lookups_group_value (group_key, value_key),
+    KEY idx_app_lookups_group_active (group_key, active, deleted_at),
+    KEY idx_app_lookups_sort (group_key, sort_order),
+    KEY idx_app_lookups_created_by (created_by),
+    KEY idx_app_lookups_updated_by (updated_by),
+    CONSTRAINT fk_app_lookups_created_by
+        FOREIGN KEY (created_by) REFERENCES users(id)
+        ON UPDATE CASCADE ON DELETE SET NULL,
+    CONSTRAINT fk_app_lookups_updated_by
+        FOREIGN KEY (updated_by) REFERENCES users(id)
+        ON UPDATE CASCADE ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT IGNORE INTO app_lookups (group_key, value_key, label, sort_order, active, created_at, updated_at) VALUES
+('job_status', 'pending', 'Pending', 10, 1, NOW(), NOW()),
+('job_status', 'active', 'Active', 20, 1, NOW(), NOW()),
+('job_status', 'complete', 'Complete', 30, 1, NOW(), NOW()),
+('job_status', 'cancelled', 'Cancelled', 40, 1, NOW(), NOW()),
+('prospect_status', 'active', 'Active', 10, 1, NOW(), NOW()),
+('prospect_status', 'converted', 'Converted', 20, 1, NOW(), NOW()),
+('prospect_status', 'closed', 'Closed', 30, 1, NOW(), NOW()),
+('prospect_next_step', 'follow_up', 'Follow Up', 10, 1, NOW(), NOW()),
+('prospect_next_step', 'call', 'Call', 20, 1, NOW(), NOW()),
+('prospect_next_step', 'text', 'Text', 30, 1, NOW(), NOW()),
+('prospect_next_step', 'send_quote', 'Send Quote', 40, 1, NOW(), NOW()),
+('prospect_next_step', 'make_appointment', 'Make Appointment', 50, 1, NOW(), NOW()),
+('prospect_next_step', 'other', 'Other', 60, 1, NOW(), NOW());
+
+-- 10) User login records for audit + last-login details
+CREATE TABLE IF NOT EXISTS user_login_records (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    user_id BIGINT UNSIGNED NOT NULL,
+    login_method VARCHAR(30) NOT NULL DEFAULT 'password',
+    ip_address VARCHAR(45) DEFAULT NULL,
+    user_agent VARCHAR(512) DEFAULT NULL,
+    browser_name VARCHAR(80) DEFAULT NULL,
+    browser_version VARCHAR(40) DEFAULT NULL,
+    os_name VARCHAR(80) DEFAULT NULL,
+    device_type VARCHAR(30) DEFAULT NULL,
+    logged_in_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY idx_user_login_records_user_date (user_id, logged_in_at),
+    KEY idx_user_login_records_method (login_method),
+    CONSTRAINT fk_user_login_records_user
+        FOREIGN KEY (user_id) REFERENCES users(id)
+        ON UPDATE CASCADE
+        ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

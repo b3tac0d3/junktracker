@@ -2,6 +2,7 @@
     $pageTitle = $pageTitle ?? 'Dashboard';
     $currentUser = auth_user();
     $displayName = $currentUser ? trim(($currentUser['first_name'] ?? '') . ' ' . ($currentUser['last_name'] ?? '')) : 'Guest';
+    $appVersion = trim((string) config('app.version', ''));
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -113,23 +114,18 @@
                                 <div class="sb-nav-link-icon"><i class="fas fa-list-check"></i></div>
                                 Tasks
                             </a>
-                            <div class="sb-sidenav-menu-heading">Admin</div>
-                            <a class="nav-link" href="<?= url('/admin/disposal-locations') ?>">
-                                <div class="sb-nav-link-icon"><i class="fas fa-recycle"></i></div>
-                                Disposal Locations
-                            </a>
-                            <a class="nav-link" href="<?= url('/admin/expense-categories') ?>">
-                                <div class="sb-nav-link-icon"><i class="fas fa-tags"></i></div>
-                                Expense Categories
-                            </a>
-                            <a class="nav-link" href="<?= url('/users') ?>">
-                                <div class="sb-nav-link-icon"><i class="fas fa-users-cog"></i></div>
-                                Users
-                            </a>
-                            <a class="nav-link" href="<?= url('/employees') ?>">
-                                <div class="sb-nav-link-icon"><i class="fas fa-id-badge"></i></div>
-                                Employees
-                            </a>
+                            <?php if (can_access('employees', 'view')): ?>
+                                <a class="nav-link" href="<?= url('/employees') ?>">
+                                    <div class="sb-nav-link-icon"><i class="fas fa-id-badge"></i></div>
+                                    Employees
+                                </a>
+                            <?php endif; ?>
+                            <?php if (can_access('admin', 'view')): ?>
+                                <a class="nav-link" href="<?= url('/admin') ?>">
+                                    <div class="sb-nav-link-icon"><i class="fas fa-user-shield"></i></div>
+                                    Admin
+                                </a>
+                            <?php endif; ?>
                             <!-- <a class="nav-link collapsed" href="#" data-bs-toggle="collapse" data-bs-target="#collapsePages" aria-expanded="false" aria-controls="collapsePages">
                                 <div class="sb-nav-link-icon"><i class="fas fa-book-open"></i></div>
                                 Pages
@@ -175,6 +171,9 @@
                     <div class="sb-sidenav-footer">
                         <div class="small">Logged in as:</div>
                         <?= e($displayName !== '' ? $displayName : 'Guest') ?>
+                        <?php if ($appVersion !== ''): ?>
+                            <div class="small text-muted mt-1">v<?= e($appVersion) ?></div>
+                        <?php endif; ?>
                     </div>
                 </nav>
             </div>
@@ -185,7 +184,12 @@
                 <footer class="py-4 bg-light mt-auto">
                     <div class="container-fluid px-4">
                         <div class="d-flex align-items-center justify-content-between small">
-                            <div class="text-muted">Copyright &copy; JunkTracker <?= date('Y') ?></div>
+                            <div class="text-muted">
+                                Copyright &copy; JunkTracker <?= date('Y') ?>
+                                <?php if ($appVersion !== ''): ?>
+                                    &middot; v<?= e($appVersion) ?>
+                                <?php endif; ?>
+                            </div>
                             <div>
                                 <a href="#">Privacy Policy</a>
                                 &middot;

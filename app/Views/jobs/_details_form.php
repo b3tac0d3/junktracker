@@ -2,6 +2,31 @@
     $job = $job ?? [];
     $isEdit = !empty($job['id']);
     $statusValue = (string) old('job_status', $job['job_status'] ?? 'pending');
+    $statusRows = $statusOptions ?? lookup_options('job_status', [
+        ['value_key' => 'pending', 'label' => 'Pending', 'active' => 1],
+        ['value_key' => 'active', 'label' => 'Active', 'active' => 1],
+        ['value_key' => 'complete', 'label' => 'Complete', 'active' => 1],
+        ['value_key' => 'cancelled', 'label' => 'Cancelled', 'active' => 1],
+    ]);
+    $statusChoices = [];
+    foreach ($statusRows as $statusRow) {
+        if (!empty($statusRow['deleted_at']) || (isset($statusRow['active']) && (int) $statusRow['active'] !== 1)) {
+            continue;
+        }
+        $value = trim((string) ($statusRow['value_key'] ?? ''));
+        if ($value === '') {
+            continue;
+        }
+        $statusChoices[$value] = (string) ($statusRow['label'] ?? ucwords(str_replace('_', ' ', $value)));
+    }
+    if (empty($statusChoices)) {
+        $statusChoices = [
+            'pending' => 'Pending',
+            'active' => 'Active',
+            'complete' => 'Complete',
+            'cancelled' => 'Cancelled',
+        ];
+    }
     $ownerType = (string) old('job_owner_type', $job['resolved_owner_type'] ?? (isset($job['estate_id']) && !empty($job['estate_id']) ? 'estate' : 'client'));
     $ownerId = (string) old('job_owner_id', (string) ($job['resolved_owner_id'] ?? ''));
     $ownerSearch = (string) old('job_owner_search', $job['owner_display_name'] ?? '');
@@ -27,10 +52,11 @@
         <div class="col-md-3">
             <label class="form-label" for="job_status">Status</label>
             <select class="form-select" id="job_status" name="job_status">
-                <option value="pending" <?= $statusValue === 'pending' ? 'selected' : '' ?>>Pending</option>
-                <option value="active" <?= $statusValue === 'active' ? 'selected' : '' ?>>Active</option>
-                <option value="complete" <?= $statusValue === 'complete' ? 'selected' : '' ?>>Complete</option>
-                <option value="cancelled" <?= $statusValue === 'cancelled' ? 'selected' : '' ?>>Cancelled</option>
+                <?php foreach ($statusChoices as $value => $label): ?>
+                    <option value="<?= e((string) $value) ?>" <?= $statusValue === (string) $value ? 'selected' : '' ?>>
+                        <?= e((string) $label) ?>
+                    </option>
+                <?php endforeach; ?>
             </select>
         </div>
         <div class="col-md-5 position-relative">

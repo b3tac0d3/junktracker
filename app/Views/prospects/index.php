@@ -1,5 +1,6 @@
 <?php
     $filters = $filters ?? [];
+    $statuses = is_array($statuses ?? null) ? $statuses : ['active', 'converted', 'closed'];
 ?>
 <div class="container-fluid px-4">
     <div class="d-flex flex-wrap align-items-center justify-content-between mt-4 mb-3 gap-3">
@@ -44,9 +45,11 @@
                         <label class="form-label">Status</label>
                         <select class="form-select" name="status">
                             <option value="all" <?= ($filters['status'] ?? 'all') === 'all' ? 'selected' : '' ?>>All</option>
-                            <option value="active" <?= ($filters['status'] ?? '') === 'active' ? 'selected' : '' ?>>Active</option>
-                            <option value="converted" <?= ($filters['status'] ?? '') === 'converted' ? 'selected' : '' ?>>Converted</option>
-                            <option value="closed" <?= ($filters['status'] ?? '') === 'closed' ? 'selected' : '' ?>>Closed</option>
+                            <?php foreach ($statuses as $statusOption): ?>
+                                <option value="<?= e((string) $statusOption) ?>" <?= ($filters['status'] ?? '') === (string) $statusOption ? 'selected' : '' ?>>
+                                    <?= e(ucwords(str_replace('_', ' ', (string) $statusOption))) ?>
+                                </option>
+                            <?php endforeach; ?>
                         </select>
                     </div>
                     <div class="col-12 col-lg-2">
