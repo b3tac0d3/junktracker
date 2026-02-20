@@ -266,6 +266,69 @@ final class Employee
         return $stmt->fetchAll();
     }
 
+    public static function findUserLinkCandidates(array $userData): array
+    {
+        if (!self::supportsUserLinking()) {
+            return [];
+        }
+
+        $email = strtolower(trim((string) ($userData['email'] ?? '')));
+        $firstName = strtolower(trim((string) ($userData['first_name'] ?? '')));
+        $lastName = strtolower(trim((string) ($userData['last_name'] ?? '')));
+
+        $conditions = [];
+        $params = [];
+        $scoreParts = ['0'];
+
+        if ($email !== '') {
+            $conditions[] = 'LOWER(COALESCE(e.email, \'\')) = :email';
+            $params['email'] = $email;
+            $scoreParts[] = 'CASE WHEN LOWER(COALESCE(e.email, \'\')) = :email THEN 100 ELSE 0 END';
+        }
+
+        if ($firstName !== '' && $lastName !== '') {
+            $conditions[] = '(LOWER(COALESCE(e.first_name, \'\')) = :first_name
+                          AND LOWER(COALESCE(e.last_name, \'\')) = :last_name)';
+            $params['first_name'] = $firstName;
+            $params['last_name'] = $lastName;
+            $scoreParts[] = 'CASE WHEN LOWER(COALESCE(e.first_name, \'\')) = :first_name
+                                    AND LOWER(COALESCE(e.last_name, \'\')) = :last_name
+                              THEN 60 ELSE 0 END';
+        }
+
+        if (empty($conditions)) {
+            return [];
+        }
+
+        $sql = 'SELECT e.id,
+                       e.first_name,
+                       e.last_name,
+                       e.email,
+                       e.phone,
+                       e.user_id,
+                       COALESCE(NULLIF(TRIM(CONCAT_WS(\' \', e.first_name, e.last_name)), \'\'), CONCAT(\'Employee #\', e.id)) AS name,
+                       COALESCE(NULLIF(TRIM(CONCAT_WS(\' \', u.first_name, u.last_name)), \'\'), u.email) AS linked_user_name,
+                       (' . implode(' + ', $scoreParts) . ') AS match_score
+                FROM employees e
+                LEFT JOIN users u ON u.id = e.user_id
+                WHERE e.deleted_at IS NULL
+                  AND COALESCE(e.active, 1) = 1
+                  AND (' . implode(' OR ', $conditions) . ')
+                ORDER BY match_score DESC, e.last_name ASC, e.first_name ASC, e.id ASC
+                LIMIT 10';
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute($params);
+        $rows = $stmt->fetchAll();
+
+        foreach ($rows as &$row) {
+            $row['match_score'] = isset($row['match_score']) ? (int) $row['match_score'] : 0;
+        }
+        unset($row);
+
+        return $rows;
+    }
+
     public static function findActiveById(int $id): ?array
     {
         if ($id <= 0) {

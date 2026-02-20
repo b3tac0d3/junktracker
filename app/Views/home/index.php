@@ -19,6 +19,9 @@
     $tasksOutstanding = is_array($overview['tasks_outstanding'] ?? null) ? $overview['tasks_outstanding'] : [];
     $overdueTasks = is_array($tasksOutstanding['overdue'] ?? null) ? $tasksOutstanding['overdue'] : [];
     $upcomingTasks = is_array($tasksOutstanding['upcoming'] ?? null) ? $tasksOutstanding['upcoming'] : [];
+    $invites = is_array($overview['invites'] ?? null) ? $overview['invites'] : [];
+    $inviteSummary = is_array($invites['summary'] ?? null) ? $invites['summary'] : [];
+    $inviteRows = is_array($invites['rows'] ?? null) ? $invites['rows'] : [];
     $completedUnbilled = is_array($overview['completed_unbilled_jobs'] ?? null) ? $overview['completed_unbilled_jobs'] : [];
     $completedUnbilledRows = is_array($completedUnbilled['rows'] ?? null) ? $completedUnbilled['rows'] : [];
     $completedUnbilledSummary = is_array($completedUnbilled['summary'] ?? null) ? $completedUnbilled['summary'] : [];
@@ -38,6 +41,8 @@
     $tasksOpenUrl = url('/tasks?status=open');
     $tasksOverdueUrl = url('/tasks?status=overdue');
     $consignorsUrl = url('/consignors');
+    $usersUrl = url('/users');
+    $canViewUsers = can_access('users', 'view');
     $selfPunch = is_array($selfPunch ?? null) ? $selfPunch : [];
     $selfEmployee = is_array($selfPunch['employee'] ?? null) ? $selfPunch['employee'] : null;
     $selfOpenEntry = is_array($selfPunch['open_entry'] ?? null) ? $selfPunch['open_entry'] : null;
@@ -265,6 +270,57 @@
             <?php endif; ?>
         </div>
     </div>
+
+    <?php if ($canViewUsers && (int) ($inviteSummary['outstanding_count'] ?? 0) > 0): ?>
+        <div class="card mb-4">
+            <div class="card-header d-flex align-items-center justify-content-between">
+                <div><i class="fas fa-user-clock me-1"></i>Outstanding User Invites</div>
+                <a class="small text-decoration-none" href="<?= e($usersUrl) ?>">Open Users</a>
+            </div>
+            <div class="card-body p-0">
+                <div class="px-3 py-2 border-bottom">
+                    <span class="badge text-bg-warning">Invited: <?= e((string) ((int) ($inviteSummary['invited_count'] ?? 0))) ?></span>
+                    <span class="badge text-bg-danger ms-1">Expired: <?= e((string) ((int) ($inviteSummary['expired_count'] ?? 0))) ?></span>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th>User</th>
+                                <th>Email</th>
+                                <th>Status</th>
+                                <th>Invited</th>
+                                <th>Expires</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($inviteRows as $inviteRow): ?>
+                                <?php
+                                    $inviteUserId = (int) ($inviteRow['id'] ?? 0);
+                                    $inviteName = trim((string) ($inviteRow['first_name'] ?? '') . ' ' . (string) ($inviteRow['last_name'] ?? ''));
+                                    if ($inviteName === '') {
+                                        $inviteName = 'User #' . $inviteUserId;
+                                    }
+                                    $inviteMeta = is_array($inviteRow['invite'] ?? null) ? $inviteRow['invite'] : [];
+                                ?>
+                                <tr>
+                                    <td><a class="text-decoration-none" href="<?= url('/users/' . $inviteUserId) ?>"><?= e($inviteName) ?></a></td>
+                                    <td><?= e((string) ($inviteRow['email'] ?? '')) ?></td>
+                                    <td>
+                                        <span class="badge <?= e((string) ($inviteMeta['badge_class'] ?? 'bg-secondary')) ?>">
+                                            <?= e((string) ($inviteMeta['label'] ?? 'Invited')) ?>
+                                        </span>
+                                    </td>
+                                    <td><?= e(format_datetime($inviteMeta['sent_at'] ?? null)) ?></td>
+                                    <td><?= e(format_datetime($inviteMeta['expires_at'] ?? null)) ?></td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    <?php endif; ?>
 
     <div class="row g-3 mb-4">
         <div class="col-lg-4">

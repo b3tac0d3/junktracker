@@ -5,6 +5,16 @@
     $employeeLinkSupported = !empty($employeeLinkSupported);
     $linkedEmployee = is_array($linkedEmployee ?? null) ? $linkedEmployee : null;
     $canDeactivate = !array_key_exists('canDeactivate', get_defined_vars()) || !empty($canDeactivate);
+    $inviteStatus = is_array($inviteStatus ?? null) ? $inviteStatus : [
+        'status' => 'none',
+        'label' => 'N/A',
+        'badge_class' => 'bg-secondary',
+        'sent_at' => null,
+        'expires_at' => null,
+        'accepted_at' => null,
+        'is_outstanding' => false,
+    ];
+    $canAutoAcceptInvite = in_array((string) ($inviteStatus['status'] ?? ''), ['invited', 'expired'], true) && can_access('users', 'edit');
     $lastLoginBrowser = trim((string) ($lastLogin['browser_name'] ?? ''));
     $lastLoginBrowserVersion = trim((string) ($lastLogin['browser_version'] ?? ''));
     if ($lastLoginBrowser !== '' && $lastLoginBrowserVersion !== '') {
@@ -36,6 +46,12 @@
                 <i class="fas fa-shield-alt me-1"></i>
                 Login Records
             </a>
+            <?php if ($canAutoAcceptInvite): ?>
+                <button class="btn btn-success" type="button" data-bs-toggle="modal" data-bs-target="#autoAcceptInviteModal">
+                    <i class="fas fa-user-check me-1"></i>
+                    Auto-Accept Invite
+                </button>
+            <?php endif; ?>
             <?php if (!empty($user['is_active'])): ?>
                 <?php if ($canDeactivate): ?>
                     <button class="btn btn-danger" type="button" data-bs-toggle="modal" data-bs-target="#deactivateUserModal">
@@ -54,6 +70,13 @@
             <a class="btn btn-outline-secondary" href="<?= url('/users') ?>">Back to Users</a>
         </div>
     </div>
+
+    <?php if ($success = flash('success')): ?>
+        <div class="alert alert-success"><?= e($success) ?></div>
+    <?php endif; ?>
+    <?php if ($error = flash('error')): ?>
+        <div class="alert alert-danger"><?= e($error) ?></div>
+    <?php endif; ?>
 
     <div class="card mb-4">
         <div class="card-header">
@@ -87,6 +110,26 @@
                             <span class="badge bg-secondary">Inactive</span>
                         <?php endif; ?>
                     </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="text-muted small">Invite Status</div>
+                    <div class="fw-semibold">
+                        <span class="badge <?= e((string) ($inviteStatus['badge_class'] ?? 'bg-secondary')) ?>">
+                            <?= e((string) ($inviteStatus['label'] ?? 'N/A')) ?>
+                        </span>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="text-muted small">Invite Sent</div>
+                    <div class="fw-semibold"><?= e(format_datetime($inviteStatus['sent_at'] ?? null)) ?></div>
+                </div>
+                <div class="col-md-3">
+                    <div class="text-muted small">Invite Expires</div>
+                    <div class="fw-semibold"><?= e(format_datetime($inviteStatus['expires_at'] ?? null)) ?></div>
+                </div>
+                <div class="col-md-3">
+                    <div class="text-muted small">Invite Accepted</div>
+                    <div class="fw-semibold"><?= e(format_datetime($inviteStatus['accepted_at'] ?? null)) ?></div>
                 </div>
                 <div class="col-md-3">
                     <div class="text-muted small">Last Login</div>
@@ -253,6 +296,30 @@
             </div>
         </div>
     </div>
+
+    <?php if ($canAutoAcceptInvite): ?>
+        <div class="modal fade" id="autoAcceptInviteModal" tabindex="-1" aria-labelledby="autoAcceptInviteModalLabel" aria-hidden="true">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="autoAcceptInviteModalLabel">Auto-Accept Invite</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        This will mark the invite as accepted and generate a temporary password for this user.
+                        The temporary password will be shown once after save.
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <form method="post" action="<?= url('/users/' . ($user['id'] ?? '') . '/invite-auto-accept') ?>">
+                            <?= csrf_field() ?>
+                            <button class="btn btn-success" type="submit">Auto-Accept Invite</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    <?php endif; ?>
 
     <?php if (!empty($user['is_active']) && $canDeactivate): ?>
         <div class="modal fade" id="deactivateUserModal" tabindex="-1" aria-labelledby="deactivateUserModalLabel" aria-hidden="true">

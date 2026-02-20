@@ -55,12 +55,16 @@
                         <th>Email</th>
                         <th>Role</th>
                         <th>Status</th>
+                        <th>Invite</th>
+                        <th>Invite Expires</th>
+                        <th>Accepted</th>
                         <th>Last Activity</th>
                     </tr>
                 </thead>
                 <tbody>
                     <?php foreach ($users as $user): ?>
                         <?php $rowHref = url('/users/' . $user['id']); ?>
+                        <?php $invite = is_array($user['invite'] ?? null) ? $user['invite'] : ['label' => 'N/A', 'badge_class' => 'bg-secondary']; ?>
                         <tr data-href="<?= $rowHref ?>" style="cursor: pointer;">
                             <td data-href="<?= $rowHref ?>"><?= e((string) $user['id']) ?></td>
                             <td>
@@ -77,6 +81,13 @@
                                     <span class="badge bg-secondary">Inactive</span>
                                 <?php endif; ?>
                             </td>
+                            <td>
+                                <span class="badge <?= e((string) ($invite['badge_class'] ?? 'bg-secondary')) ?>">
+                                    <?= e((string) ($invite['label'] ?? 'N/A')) ?>
+                                </span>
+                            </td>
+                            <td><?= e(format_datetime($invite['expires_at'] ?? null)) ?></td>
+                            <td><?= e(format_datetime($invite['accepted_at'] ?? null)) ?></td>
                             <td><?= e(format_datetime($user['last_activity_at'] ?? null)) ?></td>
                         </tr>
                     <?php endforeach; ?>

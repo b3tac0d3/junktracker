@@ -22,6 +22,10 @@ final class Dashboard
         $onClock = self::onClockSummary();
         $tasks = self::taskSummary();
         $outstandingTasks = self::outstandingTasks(8, 8);
+        $inviteSummary = User::outstandingInviteSummary();
+        $outstandingInvites = ((int) ($inviteSummary['outstanding_count'] ?? 0) > 0)
+            ? User::outstandingInvites(10)
+            : [];
         $consignorPayments = self::consignorPaymentsDue(10);
         $completedUnbilled = self::completedUnbilledJobs(10);
 
@@ -56,9 +60,13 @@ final class Dashboard
             ],
             'tasks' => $tasks,
             'tasks_outstanding' => $outstandingTasks,
+            'invites' => [
+                'summary' => $inviteSummary,
+                'rows' => $outstandingInvites,
+            ],
             'consignor_payments' => $consignorPayments,
             'completed_unbilled_jobs' => $completedUnbilled,
-            'alert_queue' => self::buildAlertQueue($outstandingTasks, $completedUnbilled, $consignorPayments),
+            'alert_queue' => self::buildAlertQueue($outstandingTasks, $completedUnbilled, $consignorPayments, $outstandingInvites),
         ];
 
         self::storeSnapshot($today, $overview);
@@ -475,7 +483,7 @@ final class Dashboard
         ]);
     }
 
-    private static function buildAlertQueue(array $tasksOutstanding, array $completedUnbilled, array $consignorPayments): array
+    private static function buildAlertQueue(array $tasksOutstanding, array $completedUnbilled, array $consignorPayments, array $outstandingInvites): array
     {
         $alerts = [];
 
@@ -530,6 +538,34 @@ final class Dashboard
             ];
         }
 
+        foreach (array_slice($outstandingInvites, 0, 5) as $invite) {
+            $userId = (int) ($invite['id'] ?? 0);
+            if ($userId <= 0) {
+                continue;
+            }
+
+            $name = trim((string) ($invite['first_name'] ?? '') . ' ' . (string) ($invite['last_name'] ?? ''));
+            if ($name === '') {
+                $name = trim((string) ($invite['email'] ?? ''));
+            }
+            if ($name === '') {
+                $name = 'User #' . $userId;
+            }
+
+            $inviteMeta = is_array($invite['invite'] ?? null) ? $invite['invite'] : User::inviteStatus($invite);
+            $meta = (string) ($inviteMeta['label'] ?? 'Invited');
+            if (!empty($inviteMeta['expires_at'])) {
+                $meta .= ' · Expires ' . format_datetime((string) $inviteMeta['expires_at']);
+            }
+
+            $alerts[] = [
+                'type' => 'user_invite',
+                'label' => $name,
+                'meta' => $meta,
+                'url' => '/users/' . $userId,
+            ];
+        }
+
         return $alerts;
     }
 
@@ -541,6 +577,8 @@ final class Dashboard
                 'prospects_follow_up_due' => (int) ($overview['counts']['prospects_follow_up_due'] ?? 0),
                 'jobs_pending' => (int) ($overview['counts']['jobs_pending'] ?? 0),
                 'jobs_active' => (int) ($overview['counts']['jobs_active'] ?? 0),
+                'pending_invites' => (int) ($overview['invites']['summary']['outstanding_count'] ?? 0),
+                'expired_invites' => (int) ($overview['invites']['summary']['expired_count'] ?? 0),
             ],
             'totals' => [
                 'sales_gross_mtd' => (float) ($overview['revenue']['sales']['gross_mtd'] ?? 0),

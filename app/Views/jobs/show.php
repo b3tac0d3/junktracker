@@ -35,6 +35,8 @@
     $attachments = is_array($attachments ?? null) ? $attachments : [];
     $isDeleted = !empty($job['deleted_at']) || (isset($job['active']) && (int) $job['active'] === 0);
     $jobPath = '/jobs/' . (string) ($job['id'] ?? '');
+    $scheduledStartAt = (string) ($job['scheduled_start_at'] ?? ($job['scheduled_date'] ?? ''));
+    $scheduledEndAt = (string) ($job['scheduled_end_at'] ?? '');
 
     $formatTime = static function (?string $value): string {
         if ($value === null || $value === '') {
@@ -54,6 +56,24 @@
         $remaining = $minutes % 60;
         return $hours . 'h ' . str_pad((string) $remaining, 2, '0', STR_PAD_LEFT) . 'm';
     };
+
+    $diffMinutes = static function (?string $start, ?string $end): ?int {
+        if (!$start || !$end) {
+            return null;
+        }
+        $startTs = strtotime($start);
+        $endTs = strtotime($end);
+        if ($startTs === false || $endTs === false || $endTs < $startTs) {
+            return null;
+        }
+        return (int) floor(($endTs - $startTs) / 60);
+    };
+
+    $scheduledDurationMinutes = $diffMinutes($scheduledStartAt, $scheduledEndAt);
+    $actualDurationMinutes = $diffMinutes((string) ($job['start_date'] ?? ''), (string) ($job['end_date'] ?? ''));
+    $durationDeltaMinutes = ($scheduledDurationMinutes !== null && $actualDurationMinutes !== null)
+        ? ($actualDurationMinutes - $scheduledDurationMinutes)
+        : null;
 ?>
 <div class="container-fluid px-4">
     <div class="d-flex flex-wrap align-items-center justify-content-between mt-4 mb-3 gap-3">
@@ -96,8 +116,8 @@
         <div class="col-md-3">
             <div class="card bg-info text-white h-100">
                 <div class="card-body">
-                    <div class="small text-uppercase">Scheduled</div>
-                    <div class="fs-5 fw-semibold"><?= e(format_datetime($job['scheduled_date'] ?? null)) ?></div>
+                    <div class="small text-uppercase">Scheduled Start</div>
+                    <div class="fs-5 fw-semibold"><?= e(format_datetime($scheduledStartAt !== '' ? $scheduledStartAt : null)) ?></div>
                 </div>
             </div>
         </div>
@@ -191,15 +211,19 @@
                             <div class="fw-semibold"><?= e(format_datetime($job['quote_date'] ?? null)) ?></div>
                         </div>
                         <div class="col-md-4">
-                            <div class="text-muted small">Scheduled Date</div>
-                            <div class="fw-semibold"><?= e(format_datetime($job['scheduled_date'] ?? null)) ?></div>
+                            <div class="text-muted small">Scheduled Start</div>
+                            <div class="fw-semibold"><?= e(format_datetime($scheduledStartAt !== '' ? $scheduledStartAt : null)) ?></div>
                         </div>
                         <div class="col-md-4">
-                            <div class="text-muted small">Start Date</div>
+                            <div class="text-muted small">Scheduled End</div>
+                            <div class="fw-semibold"><?= e(format_datetime($scheduledEndAt !== '' ? $scheduledEndAt : null)) ?></div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="text-muted small">Actual Start</div>
                             <div class="fw-semibold"><?= e(format_datetime($job['start_date'] ?? null)) ?></div>
                         </div>
                         <div class="col-md-4">
-                            <div class="text-muted small">End Date</div>
+                            <div class="text-muted small">Actual End</div>
                             <div class="fw-semibold"><?= e(format_datetime($job['end_date'] ?? null)) ?></div>
                         </div>
                         <div class="col-md-4">
@@ -209,6 +233,20 @@
                         <div class="col-md-4">
                             <div class="text-muted small">Paid Date</div>
                             <div class="fw-semibold"><?= e(format_datetime($job['paid_date'] ?? null)) ?></div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="text-muted small">Scheduled Duration</div>
+                            <div class="fw-semibold"><?= e($scheduledDurationMinutes !== null ? $formatMinutes($scheduledDurationMinutes) : '—') ?></div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="text-muted small">Actual Duration</div>
+                            <div class="fw-semibold"><?= e($actualDurationMinutes !== null ? $formatMinutes($actualDurationMinutes) : '—') ?></div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="text-muted small">Variance</div>
+                            <div class="fw-semibold <?= $durationDeltaMinutes !== null && $durationDeltaMinutes > 0 ? 'text-danger' : ($durationDeltaMinutes !== null && $durationDeltaMinutes < 0 ? 'text-success' : '') ?>">
+                                <?= e($durationDeltaMinutes !== null ? ($durationDeltaMinutes > 0 ? '+' : ($durationDeltaMinutes < 0 ? '-' : '')) . $formatMinutes(abs($durationDeltaMinutes)) : '—') ?>
+                            </div>
                         </div>
                     </div>
                 </div>

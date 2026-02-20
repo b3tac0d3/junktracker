@@ -53,6 +53,8 @@ $router->get('/set-password', [AuthController::class, 'showSetPassword']);
 $router->post('/set-password', [AuthController::class, 'storeSetPassword']);
 $router->get('/register', [AuthController::class, 'register']);
 $router->get('/forgot-password', [AuthController::class, 'forgot']);
+$router->get('/privacy-policy', [PagesController::class, 'privacyPolicy']);
+$router->get('/terms-and-conditions', [PagesController::class, 'termsAndConditions']);
 $router->post('/logout', [AuthController::class, 'logout']);
 $router->post('/filter-presets/save', [FilterPresetsController::class, 'save']);
 $router->post('/filter-presets/{id}/delete', [FilterPresetsController::class, 'delete']);
@@ -201,6 +203,7 @@ $router->post('/users', [UsersController::class, 'store']);
 $router->post('/users/{id}', [UsersController::class, 'update']);
 $router->post('/users/{id}/employee-link', [UsersController::class, 'linkEmployee']);
 $router->post('/users/{id}/employee-unlink', [UsersController::class, 'unlinkEmployee']);
+$router->post('/users/{id}/invite-auto-accept', [UsersController::class, 'autoAcceptInvite']);
 $router->post('/users/{id}/deactivate', [UsersController::class, 'deactivate']);
 
 $router->get('/clients', [ClientsController::class, 'index']);

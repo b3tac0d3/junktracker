@@ -328,6 +328,9 @@ final class Job
                             ON DUPLICATE KEY UPDATE ' . implode(', ', $updates);
             $scheduleStmt = Database::connection()->prepare($scheduleSql);
             $scheduleStmt->execute($scheduleParams);
+        } else {
+            $deleteScheduleStmt = Database::connection()->prepare('DELETE FROM job_schedule_windows WHERE job_id = :job_id');
+            $deleteScheduleStmt->execute(['job_id' => $jobId]);
         }
 
         return $stmt->rowCount() > 0;
@@ -536,8 +539,11 @@ final class Job
     public static function findById(int $id): ?array
     {
         self::ensureOwnerColumns();
+        self::ensureScheduleWindowTable();
 
         $sql = 'SELECT j.*,
+                       COALESCE(jsw.scheduled_start_at, j.scheduled_date) AS scheduled_start_at,
+                       jsw.scheduled_end_at,
                        c.first_name AS client_first_name,
                        c.last_name AS client_last_name,
                        c.business_name AS client_business_name,
@@ -571,6 +577,7 @@ final class Job
                            CONCAT(\'Client #\', cc.id)
                        ) AS contact_display_name
                 FROM jobs j
+                LEFT JOIN job_schedule_windows jsw ON jsw.job_id = j.id
                 LEFT JOIN clients c ON c.id = j.client_id
                 LEFT JOIN clients cc ON cc.id = COALESCE(j.contact_client_id, j.client_id)
                 LEFT JOIN clients oc ON oc.id = COALESCE(
@@ -698,6 +705,7 @@ final class Job
         $stmt->execute($params);
 
         $jobId = (int) Database::connection()->lastInsertId();
+        self::updateScheduledDate($jobId, $data['scheduled_date'], $actorId, $data['scheduled_end_at'] ?? null);
         self::syncPaidStatus($jobId);
 
         return $jobId;
@@ -771,6 +779,7 @@ final class Job
         $stmt = Database::connection()->prepare($sql);
         $stmt->execute($params);
 
+        self::updateScheduledDate($id, $data['scheduled_date'], $actorId, $data['scheduled_end_at'] ?? null);
         self::syncPaidStatus($id);
     }
 

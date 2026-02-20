@@ -11507,3 +11507,33 @@ main .card.user-punch-link-card #user_employee_suggestions {
   font-size: 1.15rem;
   font-weight: 700;
 }
+
+.attachments-panel-card .attachments-upload-form .btn {
+  min-height: 3rem;
+}
+
+.attachments-panel-card .attachments-table {
+  min-width: 58rem;
+}
+
+.attachments-panel-card .attachments-table th,
+.attachments-panel-card .attachments-table td {
+  white-space: nowrap;
+}
+
+.attachments-panel-card .attachments-table .attachments-file-cell {
+  min-width: 18rem;
+  white-space: normal;
+}
+
+.attachments-panel-card .attachments-file-name {
+  display: block;
+  max-width: 30rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.attachments-panel-card .attachments-table .small.text-muted {
+  white-space: normal;
+}
