@@ -79,11 +79,12 @@ window.addEventListener('DOMContentLoaded', () => {
         toastInstance?.show();
     };
 
-    const persistSchedule = async (jobId, startDate) => {
+    const persistSchedule = async (jobId, startDate, endDate = null) => {
         const payload = new URLSearchParams();
         payload.set('csrf_token', csrfToken);
         payload.set('job_id', String(jobId));
         payload.set('scheduled_date', toSqlDateTime(startDate));
+        payload.set('end_date', toSqlDateTime(endDate));
 
         const response = await fetch(updateUrl, {
             method: 'POST',
@@ -101,6 +102,144 @@ window.addEventListener('DOMContentLoaded', () => {
 
         return data;
     };
+
+    const parseTime = (value) => {
+        const match = /^([01]?\d|2[0-3]):([0-5]\d)$/.exec((value || '').trim());
+        if (!match) {
+            return null;
+        }
+
+        return {
+            hour: parseInt(match[1], 10),
+            minute: parseInt(match[2], 10),
+        };
+    };
+
+    const dateAtTime = (baseDate, timeText) => {
+        const parsed = parseTime(timeText);
+        if (!parsed || !(baseDate instanceof Date) || Number.isNaN(baseDate.getTime())) {
+            return null;
+        }
+
+        return new Date(
+            baseDate.getFullYear(),
+            baseDate.getMonth(),
+            baseDate.getDate(),
+            parsed.hour,
+            parsed.minute,
+            0,
+            0
+        );
+    };
+
+    const formatInputTime = (date) => {
+        if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
+            return '09:00';
+        }
+        return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+    };
+
+    const scheduleWindowModal = () => {
+        const id = 'scheduleWindowModal';
+        let modalEl = document.getElementById(id);
+        if (!modalEl) {
+            modalEl = document.createElement('div');
+            modalEl.className = 'modal fade';
+            modalEl.id = id;
+            modalEl.tabIndex = -1;
+            modalEl.setAttribute('aria-hidden', 'true');
+            modalEl.innerHTML = `
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">Set Schedule Time</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <p class="small text-muted mb-3" id="scheduleWindowLabel"></p>
+                            <div class="row g-2">
+                                <div class="col-6">
+                                    <label class="form-label" for="scheduleStartTimeInput">Start</label>
+                                    <input type="time" class="form-control" id="scheduleStartTimeInput" />
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label" for="scheduleEndTimeInput">End</label>
+                                    <input type="time" class="form-control" id="scheduleEndTimeInput" />
+                                </div>
+                            </div>
+                            <div class="small text-danger mt-2 d-none" id="scheduleWindowError">End time must be after start time.</div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                            <button type="button" class="btn btn-primary" id="scheduleWindowSaveBtn">Save Time</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modalEl);
+        }
+
+        return modalEl;
+    };
+
+    const askScheduleWindow = (baseDate, titleText) => new Promise((resolve) => {
+        const modalEl = scheduleWindowModal();
+        const label = modalEl.querySelector('#scheduleWindowLabel');
+        const startInput = modalEl.querySelector('#scheduleStartTimeInput');
+        const endInput = modalEl.querySelector('#scheduleEndTimeInput');
+        const saveButton = modalEl.querySelector('#scheduleWindowSaveBtn');
+        const errorEl = modalEl.querySelector('#scheduleWindowError');
+
+        if (!label || !startInput || !endInput || !saveButton || !errorEl) {
+            resolve(null);
+            return;
+        }
+
+        const defaultStart = new Date(baseDate);
+        if (defaultStart.getHours() === 0 && defaultStart.getMinutes() === 0) {
+            defaultStart.setHours(9, 0, 0, 0);
+        }
+        const defaultEnd = new Date(defaultStart.getTime() + (60 * 60 * 1000));
+
+        label.textContent = `Set start and end for ${titleText || 'this job'} on ${defaultStart.toLocaleDateString()}.`;
+        startInput.value = formatInputTime(defaultStart);
+        endInput.value = formatInputTime(defaultEnd);
+        errorEl.classList.add('d-none');
+
+        const modal = window.bootstrap?.Modal?.getOrCreateInstance(modalEl);
+        if (!modal) {
+            resolve(null);
+            return;
+        }
+
+        let closed = false;
+        const finalize = (value) => {
+            if (closed) {
+                return;
+            }
+            closed = true;
+            saveButton.removeEventListener('click', onSave);
+            modalEl.removeEventListener('hidden.bs.modal', onHidden);
+            resolve(value);
+        };
+
+        const onHidden = () => finalize(null);
+        const onSave = () => {
+            const startDate = dateAtTime(defaultStart, startInput.value);
+            const endDate = dateAtTime(defaultStart, endInput.value);
+            if (!startDate || !endDate || endDate <= startDate) {
+                errorEl.classList.remove('d-none');
+                return;
+            }
+
+            modal.hide();
+            finalize({ start: startDate, end: endDate });
+        };
+
+        saveButton.addEventListener('click', onSave);
+        modalEl.addEventListener('hidden.bs.modal', onHidden, { once: true });
+        modal.show();
+    });
 
     if (unscheduledList && window.FullCalendar.Draggable) {
         new window.FullCalendar.Draggable(unscheduledList, {
@@ -173,7 +312,8 @@ window.addEventListener('DOMContentLoaded', () => {
             }
 
             try {
-                await persistSchedule(jobId, info.event.start);
+                await persistSchedule(jobId, info.event.start, info.event.end);
+                calendar.refetchEvents();
                 showToast('Schedule updated.');
             } catch (error) {
                 info.revert();
@@ -189,12 +329,22 @@ window.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
+            const scheduleWindow = await askScheduleWindow(info.event.start, info.event.title);
+            if (!scheduleWindow) {
+                info.event.remove();
+                return;
+            }
+
+            info.event.setDates(scheduleWindow.start, scheduleWindow.end, { allDay: false });
+
             try {
-                await persistSchedule(jobId, info.event.start);
+                await persistSchedule(jobId, scheduleWindow.start, scheduleWindow.end);
                 if (dragged && dragged.parentElement) {
                     dragged.parentElement.removeChild(dragged);
                     updateCount();
                 }
+                info.event.remove();
+                calendar.refetchEvents();
                 showToast('Job added to calendar.');
             } catch (error) {
                 info.event.remove();

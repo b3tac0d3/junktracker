@@ -78,6 +78,19 @@ final class SchedulingController extends Controller
             return;
         }
 
+        $scheduledEndAt = $this->toDateTimeOrNull($_POST['end_date'] ?? null);
+        if ($scheduledEndAt !== null) {
+            $startTs = strtotime($scheduledAt);
+            $endTs = strtotime($scheduledEndAt);
+            if ($startTs === false || $endTs === false || $endTs <= $startTs) {
+                json_response([
+                    'success' => false,
+                    'message' => 'End time must be after start time.',
+                ], 422);
+                return;
+            }
+        }
+
         $job = Job::findById($jobId);
         if (!$job || !empty($job['deleted_at']) || (int) ($job['active'] ?? 1) !== 1) {
             json_response([
@@ -87,7 +100,7 @@ final class SchedulingController extends Controller
             return;
         }
 
-        $updated = Job::updateScheduledDate($jobId, $scheduledAt, auth_user_id());
+        $updated = Job::updateScheduledDate($jobId, $scheduledAt, auth_user_id(), $scheduledEndAt);
         if (!$updated) {
             json_response([
                 'success' => false,
@@ -97,19 +110,28 @@ final class SchedulingController extends Controller
         }
 
         $jobName = trim((string) ($job['name'] ?? ('Job #' . $jobId)));
+        $windowNote = $scheduledEndAt !== null
+            ? ('Scheduled date set to ' . $scheduledAt . ' - ' . $scheduledEndAt . ' from scheduling board.')
+            : ('Scheduled date set to ' . $scheduledAt . ' from scheduling board.');
         Job::createAction($jobId, [
             'action_type' => 'schedule_updated',
             'action_at' => date('Y-m-d H:i:s'),
             'amount' => null,
             'ref_table' => 'jobs',
             'ref_id' => $jobId,
-            'note' => 'Scheduled date set to ' . $scheduledAt . ' from scheduling board.',
+            'note' => $windowNote,
         ], auth_user_id());
-        log_user_action('job_rescheduled', 'jobs', $jobId, 'Rescheduled ' . $jobName . ' to ' . $scheduledAt . '.');
+        log_user_action(
+            'job_rescheduled',
+            'jobs',
+            $jobId,
+            'Rescheduled ' . $jobName . ' to ' . $scheduledAt . ($scheduledEndAt !== null ? (' - ' . $scheduledEndAt) : '') . '.'
+        );
 
         json_response([
             'success' => true,
             'scheduled_date' => $scheduledAt,
+            'end_date' => $scheduledEndAt,
             'message' => 'Job rescheduled.',
         ]);
     }

@@ -87,10 +87,13 @@ final class Job
         array $statuses = [],
         string $recordStatus = 'active'
     ): array {
+        self::ensureScheduleWindowTable();
+
         $sql = 'SELECT j.id,
                        j.name,
                        j.job_status,
-                       j.scheduled_date,
+                       COALESCE(jsw.scheduled_start_at, j.scheduled_date) AS scheduled_at,
+                       jsw.scheduled_end_at,
                        j.city,
                        j.state,
                        COALESCE(
@@ -99,8 +102,9 @@ final class Job
                            CONCAT(\'Client #\', c.id)
                        ) AS client_name
                 FROM jobs j
+                LEFT JOIN job_schedule_windows jsw ON jsw.job_id = j.id
                 LEFT JOIN clients c ON c.id = j.client_id
-                WHERE j.scheduled_date IS NOT NULL';
+                WHERE COALESCE(jsw.scheduled_start_at, j.scheduled_date) IS NOT NULL';
 
         $params = [];
 
@@ -127,17 +131,17 @@ final class Job
 
         $startDate = self::normalizeDateTimeForQuery($start);
         if ($startDate !== null) {
-            $sql .= ' AND j.scheduled_date >= :start_date';
+            $sql .= ' AND COALESCE(jsw.scheduled_start_at, j.scheduled_date) >= :start_date';
             $params['start_date'] = $startDate;
         }
 
         $endDate = self::normalizeDateTimeForQuery($end);
         if ($endDate !== null) {
-            $sql .= ' AND j.scheduled_date < :end_date';
+            $sql .= ' AND COALESCE(jsw.scheduled_start_at, j.scheduled_date) < :end_date';
             $params['end_date'] = $endDate;
         }
 
-        $sql .= ' ORDER BY j.scheduled_date ASC, j.id ASC';
+        $sql .= ' ORDER BY COALESCE(jsw.scheduled_start_at, j.scheduled_date) ASC, j.id ASC';
 
         $stmt = Database::connection()->prepare($sql);
         $stmt->execute($params);
@@ -154,7 +158,7 @@ final class Job
             }
 
             $status = strtolower(trim((string) ($row['job_status'] ?? 'pending')));
-            $scheduledAt = trim((string) ($row['scheduled_date'] ?? ''));
+            $scheduledAt = trim((string) ($row['scheduled_at'] ?? ''));
             if ($scheduledAt === '') {
                 continue;
             }
@@ -191,6 +195,14 @@ final class Job
                     'location' => $location,
                 ],
             ];
+
+            $endAt = trim((string) ($row['scheduled_end_at'] ?? ''));
+            if ($endAt !== '') {
+                $endTime = strtotime($endAt);
+                if ($endTime !== false && $endTime > $time) {
+                    $events[array_key_last($events)]['end'] = date('c', $endTime);
+                }
+            }
         }
 
         return $events;
@@ -262,11 +274,13 @@ final class Job
         return $stmt->fetchAll();
     }
 
-    public static function updateScheduledDate(int $jobId, ?string $scheduledDate, ?int $actorId = null): bool
+    public static function updateScheduledDate(int $jobId, ?string $scheduledDate, ?int $actorId = null, ?string $scheduledEndDate = null): bool
     {
         if ($jobId <= 0) {
             return false;
         }
+
+        self::ensureScheduleWindowTable();
 
         $sets = ['scheduled_date = :scheduled_date', 'updated_at = NOW()'];
         $params = [
@@ -287,6 +301,35 @@ final class Job
 
         $stmt = Database::connection()->prepare($sql);
         $stmt->execute($params);
+
+        if ($scheduledDate !== null) {
+            $columns = ['job_id', 'scheduled_start_at', 'scheduled_end_at', 'updated_at'];
+            $values = [':job_id', ':scheduled_start_at', ':scheduled_end_at', 'NOW()'];
+            $updates = [
+                'scheduled_start_at = VALUES(scheduled_start_at)',
+                'scheduled_end_at = VALUES(scheduled_end_at)',
+                'updated_at = NOW()',
+            ];
+            $scheduleParams = [
+                'job_id' => $jobId,
+                'scheduled_start_at' => $scheduledDate,
+                'scheduled_end_at' => $scheduledEndDate,
+            ];
+
+            if ($actorId !== null && Schema::hasColumn('job_schedule_windows', 'updated_by')) {
+                $columns[] = 'updated_by';
+                $values[] = ':updated_by';
+                $updates[] = 'updated_by = VALUES(updated_by)';
+                $scheduleParams['updated_by'] = $actorId;
+            }
+
+            $scheduleSql = 'INSERT INTO job_schedule_windows (' . implode(', ', $columns) . ')
+                            VALUES (' . implode(', ', $values) . ')
+                            ON DUPLICATE KEY UPDATE ' . implode(', ', $updates);
+            $scheduleStmt = Database::connection()->prepare($scheduleSql);
+            $scheduleStmt->execute($scheduleParams);
+        }
+
         return $stmt->rowCount() > 0;
     }
 
@@ -1884,6 +1927,78 @@ final class Job
         );
 
         $ensured = true;
+    }
+
+    private static function ensureScheduleWindowTable(): void
+    {
+        static $ensured = false;
+        if ($ensured) {
+            return;
+        }
+
+        Database::connection()->exec(
+            'CREATE TABLE IF NOT EXISTS job_schedule_windows (
+                job_id BIGINT UNSIGNED NOT NULL,
+                scheduled_start_at DATETIME NOT NULL,
+                scheduled_end_at DATETIME NULL,
+                updated_by BIGINT UNSIGNED NULL,
+                updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                PRIMARY KEY (job_id),
+                KEY idx_job_schedule_windows_start (scheduled_start_at),
+                KEY idx_job_schedule_windows_updated_by (updated_by)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci'
+        );
+
+        $schema = trim((string) config('database.database', ''));
+        if ($schema !== '') {
+            self::ensureScheduleWindowForeignKey(
+                'fk_job_schedule_windows_job',
+                'ALTER TABLE job_schedule_windows
+                 ADD CONSTRAINT fk_job_schedule_windows_job
+                 FOREIGN KEY (job_id)
+                 REFERENCES jobs(id)
+                 ON DELETE CASCADE
+                 ON UPDATE CASCADE',
+                $schema
+            );
+            self::ensureScheduleWindowForeignKey(
+                'fk_job_schedule_windows_updated_by',
+                'ALTER TABLE job_schedule_windows
+                 ADD CONSTRAINT fk_job_schedule_windows_updated_by
+                 FOREIGN KEY (updated_by)
+                 REFERENCES users(id)
+                 ON DELETE SET NULL
+                 ON UPDATE CASCADE',
+                $schema
+            );
+        }
+
+        $ensured = true;
+    }
+
+    private static function ensureScheduleWindowForeignKey(string $constraintName, string $sql, string $schema): void
+    {
+        $stmt = Database::connection()->prepare(
+            'SELECT 1
+             FROM information_schema.REFERENTIAL_CONSTRAINTS
+             WHERE CONSTRAINT_SCHEMA = :schema
+               AND CONSTRAINT_NAME = :constraint
+             LIMIT 1'
+        );
+        $stmt->execute([
+            'schema' => $schema,
+            'constraint' => $constraintName,
+        ]);
+
+        if ($stmt->fetch()) {
+            return;
+        }
+
+        try {
+            Database::connection()->exec($sql);
+        } catch (\Throwable) {
+            // Keep runtime stable when constraints cannot be applied on an existing environment.
+        }
     }
 
     private static function normalizeDateTimeForQuery(?string $value): ?string
