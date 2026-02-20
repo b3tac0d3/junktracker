@@ -115,9 +115,7 @@ final class AuthController extends Controller
             $this->redirectLoginError('invalid_credentials', $email);
         }
 
-        $twoFactorEnabled = function_exists('is_two_factor_enabled')
-            ? is_two_factor_enabled()
-            : (bool) config('app.two_factor_enabled', true);
+        $twoFactorEnabled = User::isTwoFactorEnabledForUser($user);
 
         if (!$twoFactorEnabled) {
             User::clearTwoFactorCode((int) $user['id'], false);

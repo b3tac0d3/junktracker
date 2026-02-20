@@ -391,7 +391,12 @@ function require_role(int $minimumRole): void
 
 function is_two_factor_enabled(): bool
 {
-    return setting_bool('security.two_factor_enabled', (bool) config('app.two_factor_enabled', true));
+    $configEnabled = (bool) config('app.two_factor_enabled', true);
+    if (!$configEnabled) {
+        return false;
+    }
+
+    return setting_bool('security.two_factor_enabled', $configEnabled);
 }
 
 function can_access(string $module, string $action = 'view'): bool

@@ -32,6 +32,7 @@ final class User
             'last_failed_login_ip' => 'ALTER TABLE users ADD COLUMN last_failed_login_ip VARCHAR(45) NULL AFTER last_failed_login_at',
             'locked_until' => 'ALTER TABLE users ADD COLUMN locked_until DATETIME NULL AFTER last_failed_login_ip',
             'last_login_at' => 'ALTER TABLE users ADD COLUMN last_login_at DATETIME NULL AFTER locked_until',
+            'two_factor_enabled' => 'ALTER TABLE users ADD COLUMN two_factor_enabled TINYINT(1) NOT NULL DEFAULT 1 AFTER last_login_at',
         ];
 
         foreach ($columns as $column => $sql) {
@@ -76,7 +77,8 @@ final class User
                        last_failed_login_at,
                        last_failed_login_ip,
                        locked_until,
-                       last_login_at
+                       last_login_at,
+                       two_factor_enabled
                 FROM users
                 WHERE email = :email
                 LIMIT 1';
@@ -117,7 +119,8 @@ final class User
                        last_failed_login_at,
                        last_failed_login_ip,
                        locked_until,
-                       last_login_at
+                       last_login_at,
+                       two_factor_enabled
                 FROM users
                 WHERE id = :id
                 LIMIT 1';
@@ -151,7 +154,8 @@ final class User
                        last_failed_login_at,
                        last_failed_login_ip,
                        locked_until,
-                       last_login_at
+                       last_login_at,
+                       two_factor_enabled
                 FROM users
                 WHERE id = :id
                 LIMIT 1';
@@ -184,7 +188,8 @@ final class User
                        last_failed_login_at,
                        last_failed_login_ip,
                        locked_until,
-                       last_login_at
+                       last_login_at,
+                       two_factor_enabled
                 FROM users';
         $params = [];
         $where = [];
@@ -250,6 +255,13 @@ final class User
             'password_hash' => $passwordHash,
             'is_active' => $data['is_active'],
         ];
+        if (Schema::hasColumn('users', 'two_factor_enabled')) {
+            $columns[] = 'two_factor_enabled';
+            $values[] = ':two_factor_enabled';
+            $params['two_factor_enabled'] = array_key_exists('two_factor_enabled', $data)
+                ? (int) ((int) $data['two_factor_enabled'] === 1)
+                : 1;
+        }
 
         if ($actorId !== null && Schema::hasColumn('users', 'created_by')) {
             $columns[] = 'created_by';
@@ -546,6 +558,10 @@ final class User
                     last_name = :last_name,
                     email = :email,
                     updated_at = NOW()';
+        if (Schema::hasColumn('users', 'two_factor_enabled') && array_key_exists('two_factor_enabled', $data)) {
+            $sql .= ', two_factor_enabled = :two_factor_enabled';
+            $fields['two_factor_enabled'] = (int) ((int) $data['two_factor_enabled'] === 1);
+        }
 
         if (!empty($data['password'])) {
             $sql .= ', password_hash = :password_hash';
@@ -561,6 +577,26 @@ final class User
 
         $stmt = Database::connection()->prepare($sql);
         $stmt->execute($fields);
+    }
+
+    public static function isTwoFactorEnabledForUser(array $user): bool
+    {
+        self::ensureAuthColumns();
+
+        if (!is_two_factor_enabled()) {
+            return false;
+        }
+
+        if (!Schema::hasColumn('users', 'two_factor_enabled')) {
+            return true;
+        }
+
+        $raw = $user['two_factor_enabled'] ?? null;
+        if ($raw === null || $raw === '') {
+            return true;
+        }
+
+        return (int) $raw === 1;
     }
 
     public static function deactivate(int $id, ?int $actorId = null): void
