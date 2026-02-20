@@ -77,7 +77,7 @@
             <?php if (empty($prospects ?? [])): ?>
                 <div class="text-muted">No prospects found.</div>
             <?php else: ?>
-                <table id="prospectsTable">
+                <table id="prospectsTable" class="js-card-list-source">
                     <thead>
                         <tr>
                             <th>ID</th>

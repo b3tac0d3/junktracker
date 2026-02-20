@@ -1,5 +1,7 @@
 <?php
     $displayName = trim((string) (($user['first_name'] ?? '') . ' ' . ($user['last_name'] ?? '')));
+    $globalTwoFactorEnabled = !array_key_exists('globalTwoFactorEnabled', get_defined_vars()) || !empty($globalTwoFactorEnabled);
+    $userTwoFactorEnabled = !array_key_exists('two_factor_enabled', $user) || (int) ($user['two_factor_enabled'] ?? 1) === 1;
 ?>
 <div class="container-fluid px-4">
     <div class="d-flex flex-wrap align-items-center justify-content-between mt-4 mb-3 gap-3">
@@ -10,7 +12,7 @@
                 <li class="breadcrumb-item active">Settings</li>
             </ol>
         </div>
-        <div class="d-flex gap-2">
+        <div class="d-flex gap-2 mobile-two-col-buttons">
             <?php if (can_access('admin_settings', 'view')): ?>
                 <a class="btn btn-outline-primary" href="<?= url('/admin/settings') ?>">Admin Settings</a>
             <?php endif; ?>
@@ -69,7 +71,29 @@
                         <label class="form-label" for="email">Email</label>
                         <input class="form-control" id="email" name="email" type="email" value="<?= e(old('email', $user['email'] ?? '')) ?>" />
                     </div>
-                    <div class="col-md-6"></div>
+                    <div class="col-md-6">
+                        <label class="form-label d-block">Login Security</label>
+                        <?php $twoFactorInputValue = (string) old('two_factor_enabled', $userTwoFactorEnabled ? '1' : '0'); ?>
+                        <?php $twoFactorHiddenValue = $globalTwoFactorEnabled ? '0' : ($twoFactorInputValue === '1' ? '1' : '0'); ?>
+                        <input type="hidden" name="two_factor_enabled" value="<?= e($twoFactorHiddenValue) ?>" />
+                        <div class="form-check form-switch mt-2">
+                            <input
+                                class="form-check-input"
+                                id="two_factor_enabled"
+                                name="two_factor_enabled"
+                                type="checkbox"
+                                value="1"
+                                <?= $twoFactorInputValue === '1' ? 'checked' : '' ?>
+                                <?= $globalTwoFactorEnabled ? '' : 'disabled' ?>
+                            />
+                            <label class="form-check-label" for="two_factor_enabled">Require email 2FA on my login</label>
+                        </div>
+                        <?php if ($globalTwoFactorEnabled): ?>
+                            <div class="form-text">You can disable or enable 2FA for your own account here.</div>
+                        <?php else: ?>
+                            <div class="form-text text-warning">Global 2FA is currently disabled by admin settings.</div>
+                        <?php endif; ?>
+                    </div>
                     <div class="col-md-6">
                         <label class="form-label" for="password">New Password (optional)</label>
                         <input class="form-control" id="password" name="password" type="password" />
@@ -79,7 +103,7 @@
                         <input class="form-control" id="password_confirm" name="password_confirm" type="password" />
                     </div>
                 </div>
-                <div class="mt-4 d-flex gap-2">
+                <div class="mt-4 d-flex gap-2 mobile-two-col-buttons">
                     <button class="btn btn-primary" type="submit">
                         <i class="fas fa-save me-1"></i>
                         Save Settings

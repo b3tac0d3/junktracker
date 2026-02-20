@@ -24,6 +24,10 @@ final class UsersController extends Controller
         }
 
         $users = User::search($query, $status);
+        foreach ($users as &$user) {
+            $user['invite'] = User::inviteStatus($user);
+        }
+        unset($user);
 
         $pageScripts = implode("\n", [
             '<script src="https://cdn.jsdelivr.net/npm/simple-datatables@7.1.2/dist/umd/simple-datatables.min.js" crossorigin="anonymous"></script>',
@@ -64,6 +68,8 @@ final class UsersController extends Controller
             }
         }
 
+        $inviteStatus = User::inviteStatus($user);
+
         $pageScripts = '';
         if ($canManageEmployeeLink && $employeeLinkSupported) {
             $pageScripts = '<script src="' . asset('js/user-employee-link.js') . '"></script>';
@@ -77,6 +83,7 @@ final class UsersController extends Controller
             'employeeLinkSupported' => $employeeLinkSupported,
             'linkedEmployee' => $linkedEmployee,
             'canDeactivate' => $canDeactivate,
+            'inviteStatus' => $inviteStatus,
             'pageScripts' => $pageScripts,
         ]);
     }
@@ -216,6 +223,9 @@ final class UsersController extends Controller
 
         $this->render('users/create', [
             'pageTitle' => 'Add User',
+            'employeeLinkReview' => null,
+            'employeeLinkSupported' => Employee::supportsUserLinking() && has_role(2),
+            'canCreateEmployee' => can_access('employees', 'create'),
         ]);
 
         clear_old();
@@ -239,10 +249,54 @@ final class UsersController extends Controller
             redirect('/users/new');
         }
 
+        $employeeLinkSupported = Employee::supportsUserLinking() && has_role(2);
+        $canCreateEmployee = can_access('employees', 'create');
+        $employeeCandidates = $employeeLinkSupported ? Employee::findUserLinkCandidates($data) : [];
+        $employeeLinkReviewed = isset($_POST['employee_link_reviewed']) && (string) ($_POST['employee_link_reviewed'] ?? '') === '1';
+        $employeeLinkDecision = trim((string) ($_POST['employee_link_decision'] ?? ''));
+
+        if ($employeeLinkSupported) {
+            if (!$employeeLinkReviewed) {
+                $this->render('users/create', [
+                    'pageTitle' => 'Add User',
+                    'formValues' => $data,
+                    'employeeLinkReview' => $this->buildEmployeeLinkReview($data, $employeeCandidates, '', $canCreateEmployee),
+                    'employeeLinkSupported' => $employeeLinkSupported,
+                    'canCreateEmployee' => $canCreateEmployee,
+                ]);
+                return;
+            }
+
+            $decisionError = $this->validateEmployeeLinkDecision($employeeLinkDecision, $employeeCandidates, $canCreateEmployee);
+            if ($decisionError !== null) {
+                flash('error', $decisionError);
+                $this->render('users/create', [
+                    'pageTitle' => 'Add User',
+                    'formValues' => $data,
+                    'employeeLinkReview' => $this->buildEmployeeLinkReview($data, $employeeCandidates, $employeeLinkDecision, $canCreateEmployee),
+                    'employeeLinkSupported' => $employeeLinkSupported,
+                    'canCreateEmployee' => $canCreateEmployee,
+                ]);
+                return;
+            }
+        }
+
         $data['password'] = '';
         $data['password_confirm'] = '';
         $userId = User::create($data, auth_user_id());
+
+        $linkMessage = '';
+        if ($employeeLinkSupported) {
+            $linkMessage = $this->processEmployeeLinkDecision($employeeLinkDecision, $employeeCandidates, $data, $userId);
+        }
+
         $inviteSent = $this->sendSetupInvite($userId, $data['email'], trim($data['first_name'] . ' ' . $data['last_name']));
+        $savedUser = User::findById($userId);
+        $inviteState = $savedUser ? User::inviteStatus($savedUser) : null;
+        $inviteExpiryLabel = '';
+        if ($inviteState && !empty($inviteState['expires_at'])) {
+            $inviteExpiryLabel = ' Invite expires: ' . format_datetime((string) $inviteState['expires_at']) . '.';
+        }
         $fullName = trim($data['first_name'] . ' ' . $data['last_name']);
         log_user_action(
             'user_created',
@@ -251,9 +305,9 @@ final class UsersController extends Controller
             'Created user #' . $userId . ' (' . ($fullName !== '' ? $fullName : $data['email']) . ').'
         );
         if ($inviteSent) {
-            flash('success', 'User created and setup email sent.');
+            flash('success', trim('User created and setup email sent.' . $inviteExpiryLabel . ' ' . $linkMessage));
         } else {
-            flash('error', 'User created, but setup email could not be sent. Check mail settings/logs.');
+            flash('error', trim('User created, but setup email could not be sent. Check mail settings/logs.' . $inviteExpiryLabel . ' ' . $linkMessage));
         }
         redirect('/users/' . $userId);
     }
@@ -309,6 +363,53 @@ final class UsersController extends Controller
 
         User::deactivate($id, auth_user_id());
         log_user_action('user_deactivated', 'users', $id, 'Deactivated user #' . $id . '.');
+        redirect('/users/' . $id);
+    }
+
+    public function autoAcceptInvite(array $params): void
+    {
+        require_permission('users', 'edit');
+
+        if (!verify_csrf($_POST['csrf_token'] ?? null)) {
+            flash('error', 'Your session expired. Please try again.');
+            redirect('/users/' . ($params['id'] ?? ''));
+        }
+
+        $id = isset($params['id']) ? (int) $params['id'] : 0;
+        if ($id <= 0) {
+            redirect('/users');
+        }
+
+        $user = User::findById($id);
+        if (!$user) {
+            http_response_code(404);
+            if (class_exists('App\\Controllers\\ErrorController')) {
+                (new \App\Controllers\ErrorController())->notFound();
+                return;
+            }
+
+            echo '404 Not Found';
+            return;
+        }
+
+        $invite = User::inviteStatus($user);
+        if (!in_array((string) ($invite['status'] ?? ''), ['invited', 'expired'], true)) {
+            flash('error', 'This user does not have an outstanding invite.');
+            redirect('/users/' . $id);
+        }
+
+        $temporaryPassword = $this->generateTemporaryPassword();
+        $accepted = User::autoAcceptInvite($id, $temporaryPassword, auth_user_id());
+        if (!$accepted) {
+            flash('error', 'Unable to auto-accept this invite. Refresh and try again.');
+            redirect('/users/' . $id);
+        }
+
+        log_user_action('user_invite_auto_accepted', 'users', $id, 'Auto-accepted invite for user #' . $id . '.');
+        flash(
+            'success',
+            'Invite auto-accepted. Temporary password: ' . $temporaryPassword . ' (share securely and have them change it immediately).'
+        );
         redirect('/users/' . $id);
     }
 
@@ -498,5 +599,171 @@ final class UsersController extends Controller
         if (!has_role(2)) {
             redirect('/401');
         }
+    }
+
+    private function buildEmployeeLinkReview(
+        array $userData,
+        array $candidates,
+        string $selectedDecision,
+        bool $canCreateEmployee
+    ): array {
+        $email = strtolower(trim((string) ($userData['email'] ?? '')));
+        $firstName = strtolower(trim((string) ($userData['first_name'] ?? '')));
+        $lastName = strtolower(trim((string) ($userData['last_name'] ?? '')));
+
+        $normalizedCandidates = [];
+        foreach ($candidates as $candidate) {
+            $candidateId = (int) ($candidate['id'] ?? 0);
+            if ($candidateId <= 0) {
+                continue;
+            }
+
+            $reasons = [];
+            $candidateEmail = strtolower(trim((string) ($candidate['email'] ?? '')));
+            $candidateFirst = strtolower(trim((string) ($candidate['first_name'] ?? '')));
+            $candidateLast = strtolower(trim((string) ($candidate['last_name'] ?? '')));
+
+            if ($email !== '' && $candidateEmail !== '' && $candidateEmail === $email) {
+                $reasons[] = 'email';
+            }
+            if ($firstName !== '' && $lastName !== '' && $candidateFirst === $firstName && $candidateLast === $lastName) {
+                $reasons[] = 'name';
+            }
+            if (empty($reasons)) {
+                $reasons[] = 'possible';
+            }
+
+            $candidate['match_reason'] = implode(' + ', $reasons);
+            $normalizedCandidates[] = $candidate;
+        }
+
+        return [
+            'has_candidates' => !empty($normalizedCandidates),
+            'candidates' => $normalizedCandidates,
+            'selected_decision' => $selectedDecision,
+            'can_create_employee' => $canCreateEmployee,
+        ];
+    }
+
+    private function validateEmployeeLinkDecision(string $decision, array $candidates, bool $canCreateEmployee): ?string
+    {
+        if ($decision === '') {
+            return 'Choose how this user should be linked for punch in/out before saving.';
+        }
+
+        if ($decision === 'skip') {
+            return null;
+        }
+
+        if ($decision === 'create_new') {
+            return $canCreateEmployee ? null : 'You do not have permission to create employees.';
+        }
+
+        if (str_starts_with($decision, 'employee:')) {
+            $employeeId = $this->parseEmployeeDecisionEmployeeId($decision);
+            if ($employeeId === null) {
+                return 'Select a valid employee match.';
+            }
+
+            foreach ($candidates as $candidate) {
+                if ((int) ($candidate['id'] ?? 0) === $employeeId) {
+                    return null;
+                }
+            }
+
+            return 'Selected employee match is no longer valid. Please select again.';
+        }
+
+        return 'Invalid employee link decision.';
+    }
+
+    private function processEmployeeLinkDecision(string $decision, array $candidates, array $userData, int $userId): string
+    {
+        if ($decision === '' || $decision === 'skip') {
+            return 'Employee link skipped.';
+        }
+
+        try {
+            if (str_starts_with($decision, 'employee:')) {
+                $employeeId = $this->parseEmployeeDecisionEmployeeId($decision);
+                if ($employeeId === null) {
+                    return 'Employee link skipped.';
+                }
+
+                $selected = null;
+                foreach ($candidates as $candidate) {
+                    if ((int) ($candidate['id'] ?? 0) === $employeeId) {
+                        $selected = $candidate;
+                        break;
+                    }
+                }
+
+                if ($selected === null) {
+                    return 'Employee link skipped.';
+                }
+
+                Employee::assignToUser($employeeId, $userId, auth_user_id());
+                $employeeName = trim((string) ($selected['name'] ?? ''));
+                $label = $employeeName !== '' ? $employeeName : ('Employee #' . $employeeId);
+                log_user_action('user_employee_linked', 'employees', $employeeId, 'Linked ' . $label . ' to user #' . $userId . ' during user creation.');
+
+                return 'Linked to existing employee: ' . $label . '.';
+            }
+
+            if ($decision === 'create_new' && can_access('employees', 'create')) {
+                $employeeData = [
+                    'first_name' => trim((string) ($userData['first_name'] ?? '')),
+                    'last_name' => trim((string) ($userData['last_name'] ?? '')),
+                    'phone' => '',
+                    'email' => trim((string) ($userData['email'] ?? '')),
+                    'hire_date' => date('Y-m-d'),
+                    'fire_date' => null,
+                    'wage_type' => 'hourly',
+                    'pay_rate' => null,
+                    'note' => 'Auto-created when user #' . $userId . ' was added.',
+                    'active' => 1,
+                ];
+
+                $employeeId = Employee::create($employeeData, auth_user_id());
+                Employee::assignToUser($employeeId, $userId, auth_user_id());
+
+                $employeeName = trim($employeeData['first_name'] . ' ' . $employeeData['last_name']);
+                $label = $employeeName !== '' ? $employeeName : ('Employee #' . $employeeId);
+                log_user_action('employee_created', 'employees', $employeeId, 'Auto-created employee for user #' . $userId . '.');
+                log_user_action('user_employee_linked', 'employees', $employeeId, 'Linked auto-created employee to user #' . $userId . '.');
+
+                return 'Created and linked new employee: ' . $label . '.';
+            }
+        } catch (\Throwable) {
+            return 'Could not complete employee linking automatically.';
+        }
+
+        return 'Employee link skipped.';
+    }
+
+    private function parseEmployeeDecisionEmployeeId(string $decision): ?int
+    {
+        if (!str_starts_with($decision, 'employee:')) {
+            return null;
+        }
+
+        $raw = substr($decision, strlen('employee:'));
+        if ($raw === '' || !ctype_digit($raw)) {
+            return null;
+        }
+
+        $id = (int) $raw;
+        return $id > 0 ? $id : null;
+    }
+
+    private function generateTemporaryPassword(): string
+    {
+        try {
+            $random = bin2hex(random_bytes(6));
+        } catch (\Throwable) {
+            $random = substr(hash('sha256', uniqid('junktracker', true)), 0, 12);
+        }
+
+        return 'JT!' . strtoupper(substr($random, 0, 4)) . '-' . substr($random, 4, 8);
     }
 }

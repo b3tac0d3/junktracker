@@ -81,6 +81,261 @@ final class Job
         return $stmt->fetchAll();
     }
 
+    public static function calendarEvents(
+        ?string $start,
+        ?string $end,
+        array $statuses = [],
+        string $recordStatus = 'active'
+    ): array {
+        self::ensureScheduleWindowTable();
+
+        $sql = 'SELECT j.id,
+                       j.name,
+                       j.job_status,
+                       COALESCE(jsw.scheduled_start_at, j.scheduled_date) AS scheduled_at,
+                       jsw.scheduled_end_at,
+                       j.city,
+                       j.state,
+                       COALESCE(
+                           NULLIF(c.business_name, \'\'),
+                           NULLIF(TRIM(CONCAT_WS(\' \', c.first_name, c.last_name)), \'\'),
+                           CONCAT(\'Client #\', c.id)
+                       ) AS client_name
+                FROM jobs j
+                LEFT JOIN job_schedule_windows jsw ON jsw.job_id = j.id
+                LEFT JOIN clients c ON c.id = j.client_id
+                WHERE COALESCE(jsw.scheduled_start_at, j.scheduled_date) IS NOT NULL';
+
+        $params = [];
+
+        if ($recordStatus === 'active') {
+            $sql .= ' AND j.deleted_at IS NULL AND COALESCE(j.active, 1) = 1';
+        } elseif ($recordStatus === 'deleted') {
+            $sql .= ' AND (j.deleted_at IS NOT NULL OR j.active = 0)';
+        }
+
+        $statusList = array_values(array_filter(array_map(
+            static fn (mixed $status): string => strtolower(trim((string) $status)),
+            $statuses
+        ), static fn (string $status): bool => $status !== ''));
+
+        if (!empty($statusList)) {
+            $placeholders = [];
+            foreach ($statusList as $index => $status) {
+                $key = 'status_' . $index;
+                $placeholders[] = ':' . $key;
+                $params[$key] = $status;
+            }
+            $sql .= ' AND LOWER(TRIM(COALESCE(j.job_status, \'\'))) IN (' . implode(', ', $placeholders) . ')';
+        }
+
+        $startDate = self::normalizeDateTimeForQuery($start);
+        if ($startDate !== null) {
+            $sql .= ' AND COALESCE(jsw.scheduled_start_at, j.scheduled_date) >= :start_date';
+            $params['start_date'] = $startDate;
+        }
+
+        $endDate = self::normalizeDateTimeForQuery($end);
+        if ($endDate !== null) {
+            $sql .= ' AND COALESCE(jsw.scheduled_start_at, j.scheduled_date) < :end_date';
+            $params['end_date'] = $endDate;
+        }
+
+        $sql .= ' ORDER BY COALESCE(jsw.scheduled_start_at, j.scheduled_date) ASC, j.id ASC';
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute($params);
+        $rows = $stmt->fetchAll();
+        if (empty($rows)) {
+            return [];
+        }
+
+        $events = [];
+        foreach ($rows as $row) {
+            $jobId = (int) ($row['id'] ?? 0);
+            if ($jobId <= 0) {
+                continue;
+            }
+
+            $status = strtolower(trim((string) ($row['job_status'] ?? 'pending')));
+            $scheduledAt = trim((string) ($row['scheduled_at'] ?? ''));
+            if ($scheduledAt === '') {
+                continue;
+            }
+
+            $time = strtotime($scheduledAt);
+            if ($time === false) {
+                continue;
+            }
+
+            $title = '#' . $jobId . ' - ' . trim((string) ($row['name'] ?? ('Job #' . $jobId)));
+            $clientName = trim((string) ($row['client_name'] ?? ''));
+            $location = trim((string) ($row['city'] ?? ''));
+            $state = trim((string) ($row['state'] ?? ''));
+            if ($location !== '' && $state !== '') {
+                $location .= ', ' . $state;
+            } elseif ($location === '') {
+                $location = $state;
+            }
+
+            $color = self::calendarColorForStatus($status);
+            $events[] = [
+                'id' => (string) $jobId,
+                'title' => $title,
+                'start' => date('c', $time),
+                'allDay' => false,
+                'url' => '/jobs/' . $jobId,
+                'backgroundColor' => $color,
+                'borderColor' => $color,
+                'textColor' => '#ffffff',
+                'extendedProps' => [
+                    'job_id' => $jobId,
+                    'job_status' => $status,
+                    'client_name' => $clientName,
+                    'location' => $location,
+                ],
+            ];
+
+            $endAt = trim((string) ($row['scheduled_end_at'] ?? ''));
+            if ($endAt !== '') {
+                $endTime = strtotime($endAt);
+                if ($endTime !== false && $endTime > $time) {
+                    $events[array_key_last($events)]['end'] = date('c', $endTime);
+                }
+            }
+        }
+
+        return $events;
+    }
+
+    public static function unscheduledForBoard(
+        array $statuses = [],
+        string $recordStatus = 'active',
+        int $limit = 200,
+        string $search = ''
+    ): array {
+        $sql = 'SELECT j.id,
+                       j.name,
+                       j.job_status,
+                       j.city,
+                       j.state,
+                       COALESCE(
+                           NULLIF(c.business_name, \'\'),
+                           NULLIF(TRIM(CONCAT_WS(\' \', c.first_name, c.last_name)), \'\'),
+                           CONCAT(\'Client #\', c.id)
+                       ) AS client_name,
+                       COALESCE(j.updated_at, j.created_at) AS sort_date
+                FROM jobs j
+                LEFT JOIN clients c ON c.id = j.client_id
+                WHERE j.scheduled_date IS NULL';
+
+        $params = [];
+
+        if ($recordStatus === 'active') {
+            $sql .= ' AND j.deleted_at IS NULL AND COALESCE(j.active, 1) = 1';
+        } elseif ($recordStatus === 'deleted') {
+            $sql .= ' AND (j.deleted_at IS NOT NULL OR j.active = 0)';
+        }
+
+        $statusList = array_values(array_filter(array_map(
+            static fn (mixed $status): string => strtolower(trim((string) $status)),
+            $statuses
+        ), static fn (string $status): bool => $status !== ''));
+
+        if (!empty($statusList)) {
+            $placeholders = [];
+            foreach ($statusList as $index => $status) {
+                $key = 'unscheduled_status_' . $index;
+                $placeholders[] = ':' . $key;
+                $params[$key] = $status;
+            }
+            $sql .= ' AND LOWER(TRIM(COALESCE(j.job_status, \'\'))) IN (' . implode(', ', $placeholders) . ')';
+        }
+
+        $query = trim($search);
+        if ($query !== '') {
+            $sql .= ' AND (
+                CAST(j.id AS CHAR) LIKE :q
+                OR j.name LIKE :q
+                OR COALESCE(c.first_name, \'\') LIKE :q
+                OR COALESCE(c.last_name, \'\') LIKE :q
+                OR COALESCE(c.business_name, \'\') LIKE :q
+                OR COALESCE(j.city, \'\') LIKE :q
+                OR COALESCE(j.state, \'\') LIKE :q
+            )';
+            $params['q'] = '%' . $query . '%';
+        }
+
+        $limit = max(10, min($limit, 500));
+        $sql .= ' ORDER BY sort_date DESC, j.id DESC LIMIT ' . $limit;
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute($params);
+        return $stmt->fetchAll();
+    }
+
+    public static function updateScheduledDate(int $jobId, ?string $scheduledDate, ?int $actorId = null, ?string $scheduledEndDate = null): bool
+    {
+        if ($jobId <= 0) {
+            return false;
+        }
+
+        self::ensureScheduleWindowTable();
+
+        $sets = ['scheduled_date = :scheduled_date', 'updated_at = NOW()'];
+        $params = [
+            'id' => $jobId,
+            'scheduled_date' => $scheduledDate,
+        ];
+
+        if ($actorId !== null && Schema::hasColumn('jobs', 'updated_by')) {
+            $sets[] = 'updated_by = :updated_by';
+            $params['updated_by'] = $actorId;
+        }
+
+        $sql = 'UPDATE jobs
+                SET ' . implode(', ', $sets) . '
+                WHERE id = :id
+                  AND deleted_at IS NULL
+                  AND COALESCE(active, 1) = 1';
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute($params);
+
+        if ($scheduledDate !== null) {
+            $columns = ['job_id', 'scheduled_start_at', 'scheduled_end_at', 'updated_at'];
+            $values = [':job_id', ':scheduled_start_at', ':scheduled_end_at', 'NOW()'];
+            $updates = [
+                'scheduled_start_at = VALUES(scheduled_start_at)',
+                'scheduled_end_at = VALUES(scheduled_end_at)',
+                'updated_at = NOW()',
+            ];
+            $scheduleParams = [
+                'job_id' => $jobId,
+                'scheduled_start_at' => $scheduledDate,
+                'scheduled_end_at' => $scheduledEndDate,
+            ];
+
+            if ($actorId !== null && Schema::hasColumn('job_schedule_windows', 'updated_by')) {
+                $columns[] = 'updated_by';
+                $values[] = ':updated_by';
+                $updates[] = 'updated_by = VALUES(updated_by)';
+                $scheduleParams['updated_by'] = $actorId;
+            }
+
+            $scheduleSql = 'INSERT INTO job_schedule_windows (' . implode(', ', $columns) . ')
+                            VALUES (' . implode(', ', $values) . ')
+                            ON DUPLICATE KEY UPDATE ' . implode(', ', $updates);
+            $scheduleStmt = Database::connection()->prepare($scheduleSql);
+            $scheduleStmt->execute($scheduleParams);
+        } else {
+            $deleteScheduleStmt = Database::connection()->prepare('DELETE FROM job_schedule_windows WHERE job_id = :job_id');
+            $deleteScheduleStmt->execute(['job_id' => $jobId]);
+        }
+
+        return $stmt->rowCount() > 0;
+    }
+
     public static function findPotentialDuplicates(array $data, ?int $excludeId = null, int $limit = 8): array
     {
         $name = strtolower(trim((string) ($data['name'] ?? '')));
@@ -284,8 +539,11 @@ final class Job
     public static function findById(int $id): ?array
     {
         self::ensureOwnerColumns();
+        self::ensureScheduleWindowTable();
 
         $sql = 'SELECT j.*,
+                       COALESCE(jsw.scheduled_start_at, j.scheduled_date) AS scheduled_start_at,
+                       jsw.scheduled_end_at,
                        c.first_name AS client_first_name,
                        c.last_name AS client_last_name,
                        c.business_name AS client_business_name,
@@ -319,6 +577,7 @@ final class Job
                            CONCAT(\'Client #\', cc.id)
                        ) AS contact_display_name
                 FROM jobs j
+                LEFT JOIN job_schedule_windows jsw ON jsw.job_id = j.id
                 LEFT JOIN clients c ON c.id = j.client_id
                 LEFT JOIN clients cc ON cc.id = COALESCE(j.contact_client_id, j.client_id)
                 LEFT JOIN clients oc ON oc.id = COALESCE(
@@ -446,6 +705,7 @@ final class Job
         $stmt->execute($params);
 
         $jobId = (int) Database::connection()->lastInsertId();
+        self::updateScheduledDate($jobId, $data['scheduled_date'], $actorId, $data['scheduled_end_at'] ?? null);
         self::syncPaidStatus($jobId);
 
         return $jobId;
@@ -519,6 +779,7 @@ final class Job
         $stmt = Database::connection()->prepare($sql);
         $stmt->execute($params);
 
+        self::updateScheduledDate($id, $data['scheduled_date'], $actorId, $data['scheduled_end_at'] ?? null);
         self::syncPaidStatus($id);
     }
 
@@ -1675,6 +1936,103 @@ final class Job
         );
 
         $ensured = true;
+    }
+
+    private static function ensureScheduleWindowTable(): void
+    {
+        static $ensured = false;
+        if ($ensured) {
+            return;
+        }
+
+        Database::connection()->exec(
+            'CREATE TABLE IF NOT EXISTS job_schedule_windows (
+                job_id BIGINT UNSIGNED NOT NULL,
+                scheduled_start_at DATETIME NOT NULL,
+                scheduled_end_at DATETIME NULL,
+                updated_by BIGINT UNSIGNED NULL,
+                updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                PRIMARY KEY (job_id),
+                KEY idx_job_schedule_windows_start (scheduled_start_at),
+                KEY idx_job_schedule_windows_updated_by (updated_by)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci'
+        );
+
+        $schema = trim((string) config('database.database', ''));
+        if ($schema !== '') {
+            self::ensureScheduleWindowForeignKey(
+                'fk_job_schedule_windows_job',
+                'ALTER TABLE job_schedule_windows
+                 ADD CONSTRAINT fk_job_schedule_windows_job
+                 FOREIGN KEY (job_id)
+                 REFERENCES jobs(id)
+                 ON DELETE CASCADE
+                 ON UPDATE CASCADE',
+                $schema
+            );
+            self::ensureScheduleWindowForeignKey(
+                'fk_job_schedule_windows_updated_by',
+                'ALTER TABLE job_schedule_windows
+                 ADD CONSTRAINT fk_job_schedule_windows_updated_by
+                 FOREIGN KEY (updated_by)
+                 REFERENCES users(id)
+                 ON DELETE SET NULL
+                 ON UPDATE CASCADE',
+                $schema
+            );
+        }
+
+        $ensured = true;
+    }
+
+    private static function ensureScheduleWindowForeignKey(string $constraintName, string $sql, string $schema): void
+    {
+        $stmt = Database::connection()->prepare(
+            'SELECT 1
+             FROM information_schema.REFERENTIAL_CONSTRAINTS
+             WHERE CONSTRAINT_SCHEMA = :schema
+               AND CONSTRAINT_NAME = :constraint
+             LIMIT 1'
+        );
+        $stmt->execute([
+            'schema' => $schema,
+            'constraint' => $constraintName,
+        ]);
+
+        if ($stmt->fetch()) {
+            return;
+        }
+
+        try {
+            Database::connection()->exec($sql);
+        } catch (\Throwable) {
+            // Keep runtime stable when constraints cannot be applied on an existing environment.
+        }
+    }
+
+    private static function normalizeDateTimeForQuery(?string $value): ?string
+    {
+        $raw = trim((string) ($value ?? ''));
+        if ($raw === '') {
+            return null;
+        }
+
+        $time = strtotime($raw);
+        if ($time === false) {
+            return null;
+        }
+
+        return date('Y-m-d H:i:s', $time);
+    }
+
+    private static function calendarColorForStatus(string $status): string
+    {
+        return match ($status) {
+            'active' => '#2563eb',
+            'complete' => '#16a34a',
+            'cancelled' => '#64748b',
+            default => '#f59e0b',
+        };
     }
 
     private static function normalizePhone(string $value): string

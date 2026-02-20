@@ -4,7 +4,7 @@
     $rowId = (int) ($row['id'] ?? 0);
 ?>
 <div class="container-fluid px-4">
-    <div class="d-flex flex-wrap justify-content-between align-items-center mt-4 mb-3 gap-2">
+    <div class="d-flex flex-wrap justify-content-between align-items-center mt-4 mb-3 gap-2 mobile-two-col-buttons">
         <div>
             <h1 class="mb-1">Edit Lookup Option</h1>
             <ol class="breadcrumb mb-0">
@@ -25,7 +25,7 @@
         <div class="card-body">
             <?php require __DIR__ . '/_form.php'; ?>
         </div>
-        <div class="card-footer d-flex gap-2">
+        <div class="card-footer d-flex gap-2 mobile-two-col-buttons">
             <button class="btn btn-primary" type="submit">Save Changes</button>
             <a class="btn btn-outline-secondary" href="<?= url('/admin/lookups?group=' . urlencode($selectedGroup)) ?>">Cancel</a>
         </div>

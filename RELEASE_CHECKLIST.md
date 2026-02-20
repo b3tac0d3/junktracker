@@ -8,6 +8,19 @@ Use this checklist for each beta/live deployment.
 - Run PHP lint on changed files.
 - Export a fresh DB backup from source and target environments.
 
+## 1.5) Build Release Bundle
+- Full bundle:
+  - `scripts/build_release_bundle.sh --version beta_1.3.0`
+- Delta bundle (only changed/added files since a ref):
+  - `scripts/build_release_bundle.sh --version beta_1.3.0_patch --mode delta --from origin/main`
+- Live profile with DB override file generation:
+  - `JT_LIVE_DB_HOST=127.0.0.1 JT_LIVE_DB_NAME=... JT_LIVE_DB_USER=... JT_LIVE_DB_PASS=... scripts/build_release_bundle.sh --version beta_1.3.0 --profile live`
+- Upload output:
+  - `junktracker_live_releases/junktracker_<version>/upload`
+- Non-upload docs/sql:
+  - `junktracker_live_releases/junktracker_<version>/non-upload`
+- If `deleted_paths.txt` has entries in delta mode, remove those paths on live.
+
 ## 2) Database Migrations
 - In phpMyAdmin, run pending scripts from `database/migrations/` in order.
 - Verify `schema_migrations` exists and has the latest migration keys.

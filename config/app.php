@@ -4,10 +4,11 @@ declare(strict_types=1);
 
 return [
     'name' => 'JunkTracker',
-    'version' => '1.2.1 (beta)',
-    'env' => 'local',
+    'version' => '1.3.2 (beta)',
+    'env' => getenv('APP_ENV') ?: 'local',
     'key' => getenv('APP_KEY') ?: 'local-dev-key-change-me',
-    'url' => getenv('APP_URL') ?: 'http://localhost/junktracker',
+    // Keep blank by default so absolute links use the current request host.
+    'url' => rtrim((string) (getenv('APP_URL') ?: ''), '/'),
     // Default to noindex for this app so it never gets indexed accidentally.
     'noindex' => getenv('APP_NOINDEX') !== '0',
     'two_factor_enabled' => getenv('APP_2FA_ENABLED') !== '0',

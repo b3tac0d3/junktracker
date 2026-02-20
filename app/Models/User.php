@@ -32,6 +32,7 @@ final class User
             'last_failed_login_ip' => 'ALTER TABLE users ADD COLUMN last_failed_login_ip VARCHAR(45) NULL AFTER last_failed_login_at',
             'locked_until' => 'ALTER TABLE users ADD COLUMN locked_until DATETIME NULL AFTER last_failed_login_ip',
             'last_login_at' => 'ALTER TABLE users ADD COLUMN last_login_at DATETIME NULL AFTER locked_until',
+            'two_factor_enabled' => 'ALTER TABLE users ADD COLUMN two_factor_enabled TINYINT(1) NOT NULL DEFAULT 1 AFTER last_login_at',
         ];
 
         foreach ($columns as $column => $sql) {
@@ -76,7 +77,8 @@ final class User
                        last_failed_login_at,
                        last_failed_login_ip,
                        locked_until,
-                       last_login_at
+                       last_login_at,
+                       two_factor_enabled
                 FROM users
                 WHERE email = :email
                 LIMIT 1';
@@ -101,6 +103,7 @@ final class User
                        first_name,
                        last_name,
                        role,
+                       password_hash,
                        is_active,
                        created_at,
                        ' . $createdBySelect . ' AS created_by,
@@ -116,7 +119,8 @@ final class User
                        last_failed_login_at,
                        last_failed_login_ip,
                        locked_until,
-                       last_login_at
+                       last_login_at,
+                       two_factor_enabled
                 FROM users
                 WHERE id = :id
                 LIMIT 1';
@@ -150,7 +154,8 @@ final class User
                        last_failed_login_at,
                        last_failed_login_ip,
                        locked_until,
-                       last_login_at
+                       last_login_at,
+                       two_factor_enabled
                 FROM users
                 WHERE id = :id
                 LIMIT 1';
@@ -170,6 +175,7 @@ final class User
                        last_name,
                        email,
                        role,
+                       password_hash,
                        is_active,
                        created_at,
                        updated_at,
@@ -182,7 +188,8 @@ final class User
                        last_failed_login_at,
                        last_failed_login_ip,
                        locked_until,
-                       last_login_at
+                       last_login_at,
+                       two_factor_enabled
                 FROM users';
         $params = [];
         $where = [];
@@ -248,6 +255,13 @@ final class User
             'password_hash' => $passwordHash,
             'is_active' => $data['is_active'],
         ];
+        if (Schema::hasColumn('users', 'two_factor_enabled')) {
+            $columns[] = 'two_factor_enabled';
+            $values[] = ':two_factor_enabled';
+            $params['two_factor_enabled'] = array_key_exists('two_factor_enabled', $data)
+                ? (int) ((int) $data['two_factor_enabled'] === 1)
+                : 1;
+        }
 
         if ($actorId !== null && Schema::hasColumn('users', 'created_by')) {
             $columns[] = 'created_by';
@@ -544,6 +558,10 @@ final class User
                     last_name = :last_name,
                     email = :email,
                     updated_at = NOW()';
+        if (Schema::hasColumn('users', 'two_factor_enabled') && array_key_exists('two_factor_enabled', $data)) {
+            $sql .= ', two_factor_enabled = :two_factor_enabled';
+            $fields['two_factor_enabled'] = (int) ((int) $data['two_factor_enabled'] === 1);
+        }
 
         if (!empty($data['password'])) {
             $sql .= ', password_hash = :password_hash';
@@ -559,6 +577,26 @@ final class User
 
         $stmt = Database::connection()->prepare($sql);
         $stmt->execute($fields);
+    }
+
+    public static function isTwoFactorEnabledForUser(array $user): bool
+    {
+        self::ensureAuthColumns();
+
+        if (!is_two_factor_enabled()) {
+            return false;
+        }
+
+        if (!Schema::hasColumn('users', 'two_factor_enabled')) {
+            return true;
+        }
+
+        $raw = $user['two_factor_enabled'] ?? null;
+        if ($raw === null || $raw === '') {
+            return true;
+        }
+
+        return (int) $raw === 1;
     }
 
     public static function deactivate(int $id, ?int $actorId = null): void
@@ -586,6 +624,187 @@ final class User
         $sql = 'UPDATE users SET ' . implode(', ', $sets) . ' WHERE id = :id';
         $stmt = Database::connection()->prepare($sql);
         $stmt->execute($params);
+    }
+
+    public static function inviteStatus(array $user): array
+    {
+        self::ensureAuthColumns();
+
+        $sentAt = trim((string) ($user['password_setup_sent_at'] ?? ''));
+        $expiresAt = trim((string) ($user['password_setup_expires_at'] ?? ''));
+        $usedAt = trim((string) ($user['password_setup_used_at'] ?? ''));
+        $passwordHash = trim((string) ($user['password_hash'] ?? ''));
+
+        if ($sentAt === '') {
+            return [
+                'status' => 'none',
+                'label' => 'N/A',
+                'badge_class' => 'bg-secondary',
+                'sent_at' => null,
+                'expires_at' => null,
+                'accepted_at' => null,
+                'is_outstanding' => false,
+            ];
+        }
+
+        $acceptedAt = $usedAt !== '' ? $usedAt : null;
+        if ($acceptedAt === null && $passwordHash !== '') {
+            $acceptedAt = trim((string) ($user['last_login_at'] ?? '')) !== ''
+                ? trim((string) ($user['last_login_at'] ?? ''))
+                : trim((string) ($user['updated_at'] ?? ''));
+            $acceptedAt = $acceptedAt !== '' ? $acceptedAt : null;
+        }
+
+        if ($acceptedAt !== null) {
+            return [
+                'status' => 'accepted',
+                'label' => 'Accepted',
+                'badge_class' => 'bg-success',
+                'sent_at' => $sentAt,
+                'expires_at' => $expiresAt !== '' ? $expiresAt : null,
+                'accepted_at' => $acceptedAt,
+                'is_outstanding' => false,
+            ];
+        }
+
+        $expired = false;
+        if ($expiresAt !== '') {
+            $expiresTs = strtotime($expiresAt);
+            $expired = $expiresTs !== false && $expiresTs < time();
+        }
+
+        return [
+            'status' => $expired ? 'expired' : 'invited',
+            'label' => $expired ? 'Invite Expired' : 'Invited',
+            'badge_class' => $expired ? 'bg-danger' : 'bg-warning text-dark',
+            'sent_at' => $sentAt,
+            'expires_at' => $expiresAt !== '' ? $expiresAt : null,
+            'accepted_at' => null,
+            'is_outstanding' => true,
+        ];
+    }
+
+    public static function outstandingInvites(int $limit = 10): array
+    {
+        self::ensureAuthColumns();
+
+        $capped = max(1, min($limit, 100));
+        $sql = 'SELECT id,
+                       first_name,
+                       last_name,
+                       email,
+                       role,
+                       is_active,
+                       password_hash,
+                       password_setup_sent_at,
+                       password_setup_expires_at,
+                       password_setup_used_at,
+                       created_at,
+                       updated_at
+                FROM users
+                WHERE is_active = 1
+                  AND password_setup_sent_at IS NOT NULL
+                  AND COALESCE(password_setup_used_at, \'\') = \'\'
+                  AND COALESCE(password_hash, \'\') = \'\'
+                ORDER BY
+                  CASE
+                    WHEN password_setup_expires_at IS NULL THEN 1
+                    WHEN password_setup_expires_at < NOW() THEN 0
+                    ELSE 1
+                  END ASC,
+                  password_setup_expires_at ASC,
+                  id DESC
+                LIMIT ' . $capped;
+
+        $rows = Database::connection()->query($sql)->fetchAll();
+        foreach ($rows as &$row) {
+            $row['invite'] = self::inviteStatus($row);
+        }
+        unset($row);
+
+        return $rows;
+    }
+
+    public static function outstandingInviteSummary(): array
+    {
+        self::ensureAuthColumns();
+
+        $sql = 'SELECT
+                    COALESCE(SUM(
+                        CASE
+                            WHEN is_active = 1
+                             AND password_setup_sent_at IS NOT NULL
+                             AND COALESCE(password_setup_used_at, \'\') = \'\'
+                             AND COALESCE(password_hash, \'\') = \'\'
+                             AND (
+                                 password_setup_expires_at IS NULL
+                                 OR password_setup_expires_at >= NOW()
+                             )
+                            THEN 1
+                            ELSE 0
+                        END
+                    ), 0) AS invited_count,
+                    COALESCE(SUM(
+                        CASE
+                            WHEN is_active = 1
+                             AND password_setup_sent_at IS NOT NULL
+                             AND COALESCE(password_setup_used_at, \'\') = \'\'
+                             AND COALESCE(password_hash, \'\') = \'\'
+                             AND password_setup_expires_at IS NOT NULL
+                             AND password_setup_expires_at < NOW()
+                            THEN 1
+                            ELSE 0
+                        END
+                    ), 0) AS expired_count
+                FROM users';
+        $row = Database::connection()->query($sql)->fetch();
+
+        $invited = (int) ($row['invited_count'] ?? 0);
+        $expired = (int) ($row['expired_count'] ?? 0);
+
+        return [
+            'invited_count' => $invited,
+            'expired_count' => $expired,
+            'outstanding_count' => $invited + $expired,
+        ];
+    }
+
+    public static function autoAcceptInvite(int $id, string $temporaryPassword, ?int $actorId = null): bool
+    {
+        self::ensureAuthColumns();
+
+        if ($id <= 0 || trim($temporaryPassword) === '') {
+            return false;
+        }
+
+        $sql = 'UPDATE users
+                SET password_hash = :password_hash,
+                    password_setup_token_hash = NULL,
+                    password_setup_expires_at = NULL,
+                    password_setup_used_at = NOW(),
+                    failed_login_count = 0,
+                    locked_until = NULL,
+                    updated_at = NOW()';
+        $params = [
+            'id' => $id,
+            'password_hash' => password_hash($temporaryPassword, PASSWORD_BCRYPT),
+        ];
+
+        if ($actorId !== null && Schema::hasColumn('users', 'updated_by')) {
+            $sql .= ', updated_by = :updated_by';
+            $params['updated_by'] = $actorId;
+        }
+
+        $sql .= ' WHERE id = :id
+                  AND is_active = 1
+                  AND password_setup_sent_at IS NOT NULL
+                  AND COALESCE(password_setup_used_at, \'\') = \'\'
+                  AND COALESCE(password_hash, \'\') = \'\'';
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute($params);
+
+        return $stmt->rowCount() > 0;
     }
 
     private static function tokenHash(string $raw): string

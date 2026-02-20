@@ -79,8 +79,12 @@
             <input class="form-control" id="quote_date" name="quote_date" type="datetime-local" value="<?= e((string) old('quote_date', format_datetime_local($job['quote_date'] ?? null))) ?>" />
         </div>
         <div class="col-md-3">
-            <label class="form-label" for="scheduled_date">Scheduled Date</label>
-            <input class="form-control" id="scheduled_date" name="scheduled_date" type="datetime-local" value="<?= e((string) old('scheduled_date', format_datetime_local($job['scheduled_date'] ?? null))) ?>" />
+            <label class="form-label" for="scheduled_start_at">Scheduled Start</label>
+            <input class="form-control" id="scheduled_start_at" name="scheduled_start_at" type="datetime-local" value="<?= e((string) old('scheduled_start_at', format_datetime_local($job['scheduled_start_at'] ?? ($job['scheduled_date'] ?? null)))) ?>" />
+        </div>
+        <div class="col-md-3">
+            <label class="form-label" for="scheduled_end_at">Scheduled End</label>
+            <input class="form-control" id="scheduled_end_at" name="scheduled_end_at" type="datetime-local" value="<?= e((string) old('scheduled_end_at', format_datetime_local($job['scheduled_end_at'] ?? null))) ?>" />
         </div>
         <div class="col-md-3">
             <label class="form-label" for="start_date">Start Date</label>
@@ -147,7 +151,7 @@
             </div>
         </div>
     </div>
-    <div class="mt-4 d-flex gap-2">
+    <div class="mt-4 d-flex gap-2 mobile-two-col-buttons">
         <button class="btn btn-primary" type="submit">Save Job</button>
         <a class="btn btn-outline-secondary" href="<?= $cancelUrl ?>">Cancel</a>
     </div>

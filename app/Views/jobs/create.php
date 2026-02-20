@@ -8,7 +8,7 @@
                 <li class="breadcrumb-item active">New</li>
             </ol>
         </div>
-        <div class="d-flex gap-2">
+        <div class="d-flex gap-2 mobile-two-col-buttons">
             <a class="btn btn-outline-secondary" href="<?= url('/jobs') ?>">Back to Jobs</a>
         </div>
     </div>

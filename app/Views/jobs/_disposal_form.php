@@ -44,7 +44,7 @@
             <textarea class="form-control" id="note" name="note" rows="4"><?= e($note) ?></textarea>
         </div>
     </div>
-    <div class="mt-4 d-flex gap-2">
+    <div class="mt-4 d-flex gap-2 mobile-two-col-buttons">
         <button class="btn btn-primary" type="submit"><?= $isEdit ? 'Update Disposal' : 'Save Disposal' ?></button>
         <a class="btn btn-outline-secondary" href="<?= url('/jobs/' . ($job['id'] ?? '')) ?>">Cancel</a>
     </div>

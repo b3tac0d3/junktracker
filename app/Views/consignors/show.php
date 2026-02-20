@@ -50,7 +50,7 @@
                 <li class="breadcrumb-item active">#<?= e((string) ($consignor['id'] ?? '')) ?></li>
             </ol>
         </div>
-        <div class="d-flex gap-2">
+        <div class="d-flex gap-2 mobile-two-col-buttons">
             <a class="btn btn-warning" href="<?= url('/consignors/' . ((int) ($consignor['id'] ?? 0)) . '/edit') ?>">
                 <i class="fas fa-pen me-1"></i>
                 Edit Consignor

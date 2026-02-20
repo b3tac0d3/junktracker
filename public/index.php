@@ -53,6 +53,8 @@ $publicPaths = [
     '/set-password',
     '/register',
     '/forgot-password',
+    '/privacy-policy',
+    '/terms-and-conditions',
 ];
 
 if (!is_authenticated()) {

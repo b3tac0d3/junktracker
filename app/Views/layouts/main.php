@@ -3,6 +3,14 @@
     $currentUser = auth_user();
     $displayName = $currentUser ? trim(($currentUser['first_name'] ?? '') . ' ' . ($currentUser['last_name'] ?? '')) : 'Guest';
     $appVersion = trim((string) config('app.version', ''));
+    $notificationUnread = 0;
+    if ($currentUser && can_access('notifications', 'view')) {
+        try {
+            $notificationUnread = \App\Models\NotificationCenter::unreadCount((int) ($currentUser['id'] ?? 0));
+        } catch (\Throwable) {
+            $notificationUnread = 0;
+        }
+    }
     $canViewCustomersSection = can_access('customers', 'view')
         || can_access('clients', 'view')
         || can_access('estates', 'view')
@@ -25,6 +33,7 @@
         <title><?= e($pageTitle) ?> - JunkTracker</title>
         <link href="https://cdn.jsdelivr.net/npm/simple-datatables@7.1.2/dist/style.min.css" rel="stylesheet" />
         <link href="<?= asset('css/styles.css') ?>" rel="stylesheet" />
+        <?= $pageStyles ?? '' ?>
         <script src="https://use.fontawesome.com/releases/v6.3.0/js/all.js" crossorigin="anonymous"></script>
     </head>
     <body class="sb-nav-fixed">
@@ -47,6 +56,18 @@
                 </div>
             </form>
             <ul class="navbar-nav ms-auto ms-md-0 me-3 me-lg-4">
+                <?php if (can_access('notifications', 'view')): ?>
+                    <li class="nav-item">
+                        <a class="nav-link position-relative nav-notification-link" href="<?= url('/notifications') ?>" title="Notifications">
+                            <i class="fas fa-bell fa-fw"></i>
+                            <?php if ($notificationUnread > 0): ?>
+                                <span class="badge rounded-pill bg-danger nav-notification-badge">
+                                    <?= e((string) $notificationUnread) ?>
+                                </span>
+                            <?php endif; ?>
+                        </a>
+                    </li>
+                <?php endif; ?>
                 <li class="nav-item dropdown">
                     <a class="nav-link dropdown-toggle" id="navbarDropdown" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false"><i class="fas fa-user fa-fw"></i></a>
                     <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="navbarDropdown">
@@ -74,10 +95,23 @@
                                     Dashboard
                                 </a>
                             <?php endif; ?>
+                            <?php if (can_access('notifications', 'view')): ?>
+                                <a class="nav-link" href="<?= url('/notifications') ?>">
+                                    <div class="sb-nav-link-icon"><i class="fas fa-bell"></i></div>
+                                    Notifications
+                                    <?php if ($notificationUnread > 0): ?>
+                                        <span class="badge bg-danger ms-auto"><?= e((string) $notificationUnread) ?></span>
+                                    <?php endif; ?>
+                                </a>
+                            <?php endif; ?>
                             <?php if (can_access('jobs', 'view')): ?>
                                 <a class="nav-link" href="<?= url('/jobs') ?>">
                                     <div class="sb-nav-link-icon"><i class="fas fa-briefcase"></i></div>
                                     Jobs
+                                </a>
+                                <a class="nav-link" href="<?= url('/jobs/schedule') ?>">
+                                    <div class="sb-nav-link-icon"><i class="fas fa-calendar-days"></i></div>
+                                    Schedule Board
                                 </a>
                             <?php endif; ?>
                             <?php if (can_access('prospects', 'view')): ?>
@@ -143,6 +177,12 @@
                                 <a class="nav-link" href="<?= url('/expenses') ?>">
                                     <div class="sb-nav-link-icon"><i class="fas fa-receipt"></i></div>
                                     Expenses
+                                </a>
+                            <?php endif; ?>
+                            <?php if (can_access('reports', 'view')): ?>
+                                <a class="nav-link" href="<?= url('/reports') ?>">
+                                    <div class="sb-nav-link-icon"><i class="fas fa-chart-line"></i></div>
+                                    Reports
                                 </a>
                             <?php endif; ?>
                             <?php if (can_access('tasks', 'view')): ?>
@@ -234,9 +274,9 @@
                                 <?php endif; ?>
                             </div>
                             <div>
-                                <a href="#">Privacy Policy</a>
+                                <a href="<?= url('/privacy-policy') ?>">Privacy Policy</a>
                                 &middot;
-                                <a href="#">Terms &amp; Conditions</a>
+                                <a href="<?= url('/terms-and-conditions') ?>">Terms &amp; Conditions</a>
                             </div>
                         </div>
                     </div>
@@ -246,6 +286,8 @@
         <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js" crossorigin="anonymous"></script>
         <script src="<?= asset('js/scripts.js') ?>"></script>
         <script src="<?= asset('js/ajax-actions.js') ?>"></script>
+        <script src="<?= asset('js/card-list-component.js') ?>"></script>
+        <script src="<?= asset('js/mobile-filter-accordion.js') ?>"></script>
         <script>
             (function () {
                 const searchInput = document.getElementById('globalNavSearchInput');

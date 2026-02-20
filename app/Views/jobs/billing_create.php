@@ -9,7 +9,7 @@
                 <li class="breadcrumb-item active">Billing</li>
             </ol>
         </div>
-        <div class="d-flex gap-2">
+        <div class="d-flex gap-2 mobile-two-col-buttons">
             <a class="btn btn-outline-secondary" href="<?= url('/jobs/' . ($job['id'] ?? '')) ?>">Back to Job</a>
         </div>
     </div>

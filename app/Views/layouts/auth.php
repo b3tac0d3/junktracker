@@ -36,9 +36,9 @@
                                 <?php endif; ?>
                             </div>
                             <div>
-                                <a href="#">Privacy Policy</a>
+                                <a href="<?= url('/privacy-policy') ?>">Privacy Policy</a>
                                 &middot;
-                                <a href="#">Terms &amp; Conditions</a>
+                                <a href="<?= url('/terms-and-conditions') ?>">Terms &amp; Conditions</a>
                             </div>
                         </div>
                     </div>

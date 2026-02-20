@@ -30,8 +30,13 @@
     $openByEmployee = $openByEmployee ?? [];
     $openElsewhereByEmployee = $openElsewhereByEmployee ?? [];
     $tasks = $tasks ?? [];
+    $documents = is_array($documents ?? null) ? $documents : [];
+    $documentSummary = is_array($documentSummary ?? null) ? $documentSummary : [];
+    $attachments = is_array($attachments ?? null) ? $attachments : [];
     $isDeleted = !empty($job['deleted_at']) || (isset($job['active']) && (int) $job['active'] === 0);
     $jobPath = '/jobs/' . (string) ($job['id'] ?? '');
+    $scheduledStartAt = (string) ($job['scheduled_start_at'] ?? ($job['scheduled_date'] ?? ''));
+    $scheduledEndAt = (string) ($job['scheduled_end_at'] ?? '');
 
     $formatTime = static function (?string $value): string {
         if ($value === null || $value === '') {
@@ -51,6 +56,24 @@
         $remaining = $minutes % 60;
         return $hours . 'h ' . str_pad((string) $remaining, 2, '0', STR_PAD_LEFT) . 'm';
     };
+
+    $diffMinutes = static function (?string $start, ?string $end): ?int {
+        if (!$start || !$end) {
+            return null;
+        }
+        $startTs = strtotime($start);
+        $endTs = strtotime($end);
+        if ($startTs === false || $endTs === false || $endTs < $startTs) {
+            return null;
+        }
+        return (int) floor(($endTs - $startTs) / 60);
+    };
+
+    $scheduledDurationMinutes = $diffMinutes($scheduledStartAt, $scheduledEndAt);
+    $actualDurationMinutes = $diffMinutes((string) ($job['start_date'] ?? ''), (string) ($job['end_date'] ?? ''));
+    $durationDeltaMinutes = ($scheduledDurationMinutes !== null && $actualDurationMinutes !== null)
+        ? ($actualDurationMinutes - $scheduledDurationMinutes)
+        : null;
 ?>
 <div class="container-fluid px-4">
     <div class="d-flex flex-wrap align-items-center justify-content-between mt-4 mb-3 gap-3">
@@ -62,7 +85,7 @@
                 <li class="breadcrumb-item active"><?= e($job['name'] ?? 'Job') ?></li>
             </ol>
         </div>
-        <div class="d-flex gap-2">
+        <div class="d-flex gap-2 mobile-two-col-buttons">
             <?php if (!$isDeleted): ?>
                 <button class="btn btn-danger" type="button" data-bs-toggle="modal" data-bs-target="#deleteJobModal">
                     <i class="fas fa-trash"></i>
@@ -93,8 +116,8 @@
         <div class="col-md-3">
             <div class="card bg-info text-white h-100">
                 <div class="card-body">
-                    <div class="small text-uppercase">Scheduled</div>
-                    <div class="fs-5 fw-semibold"><?= e(format_datetime($job['scheduled_date'] ?? null)) ?></div>
+                    <div class="small text-uppercase">Scheduled Start</div>
+                    <div class="fs-5 fw-semibold"><?= e(format_datetime($scheduledStartAt !== '' ? $scheduledStartAt : null)) ?></div>
                 </div>
             </div>
         </div>
@@ -119,12 +142,12 @@
     <div class="row g-4">
         <div class="col-12 col-xl-8">
             <div class="card mb-4" id="crew-punch">
-                <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+                <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2 mobile-two-col-buttons">
                     <div>
                         <i class="fas fa-briefcase me-1"></i>
                         Job Overview
                     </div>
-                    <div class="d-flex align-items-center gap-2">
+                    <div class="d-flex align-items-center gap-2 mobile-two-col-buttons">
                         <span class="badge <?= $statusClass ?> text-uppercase"><?= e($status !== '' ? $status : 'pending') ?></span>
                         <a class="btn btn-sm btn-warning" href="<?= url('/jobs/' . ($job['id'] ?? '') . '/edit') ?>" title="Edit job" aria-label="Edit job">
                             <i class="fas fa-pen"></i>
@@ -188,15 +211,19 @@
                             <div class="fw-semibold"><?= e(format_datetime($job['quote_date'] ?? null)) ?></div>
                         </div>
                         <div class="col-md-4">
-                            <div class="text-muted small">Scheduled Date</div>
-                            <div class="fw-semibold"><?= e(format_datetime($job['scheduled_date'] ?? null)) ?></div>
+                            <div class="text-muted small">Scheduled Start</div>
+                            <div class="fw-semibold"><?= e(format_datetime($scheduledStartAt !== '' ? $scheduledStartAt : null)) ?></div>
                         </div>
                         <div class="col-md-4">
-                            <div class="text-muted small">Start Date</div>
+                            <div class="text-muted small">Scheduled End</div>
+                            <div class="fw-semibold"><?= e(format_datetime($scheduledEndAt !== '' ? $scheduledEndAt : null)) ?></div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="text-muted small">Actual Start</div>
                             <div class="fw-semibold"><?= e(format_datetime($job['start_date'] ?? null)) ?></div>
                         </div>
                         <div class="col-md-4">
-                            <div class="text-muted small">End Date</div>
+                            <div class="text-muted small">Actual End</div>
                             <div class="fw-semibold"><?= e(format_datetime($job['end_date'] ?? null)) ?></div>
                         </div>
                         <div class="col-md-4">
@@ -207,12 +234,26 @@
                             <div class="text-muted small">Paid Date</div>
                             <div class="fw-semibold"><?= e(format_datetime($job['paid_date'] ?? null)) ?></div>
                         </div>
+                        <div class="col-md-4">
+                            <div class="text-muted small">Scheduled Duration</div>
+                            <div class="fw-semibold"><?= e($scheduledDurationMinutes !== null ? $formatMinutes($scheduledDurationMinutes) : '—') ?></div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="text-muted small">Actual Duration</div>
+                            <div class="fw-semibold"><?= e($actualDurationMinutes !== null ? $formatMinutes($actualDurationMinutes) : '—') ?></div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="text-muted small">Variance</div>
+                            <div class="fw-semibold <?= $durationDeltaMinutes !== null && $durationDeltaMinutes > 0 ? 'text-danger' : ($durationDeltaMinutes !== null && $durationDeltaMinutes < 0 ? 'text-success' : '') ?>">
+                                <?= e($durationDeltaMinutes !== null ? ($durationDeltaMinutes > 0 ? '+' : ($durationDeltaMinutes < 0 ? '-' : '')) . $formatMinutes(abs($durationDeltaMinutes)) : '—') ?>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
 
             <div class="card mb-4">
-                <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+                <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2 mobile-two-col-buttons">
                     <div>
                     <i class="fas fa-truck-loading me-1"></i>
                     Disposal Record
@@ -269,7 +310,7 @@
             </div>
 
             <div class="card mb-4">
-                <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+                <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2 mobile-two-col-buttons">
                     <div>
                     <i class="fas fa-receipt me-1"></i>
                     Expense Record
@@ -326,7 +367,7 @@
             </div>
 
             <div class="card mb-4">
-                <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+                <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2 mobile-two-col-buttons">
                     <div>
                         <i class="fas fa-clock me-1"></i>
                         Hours
@@ -534,7 +575,7 @@
                 </div>
             </div>
             <div class="card mb-4">
-                <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+                <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2 mobile-two-col-buttons">
                     <div>
                         <i class="fas fa-list-check me-1"></i>
                         Job Actions
@@ -620,12 +661,12 @@
             </div>
 
             <div class="card mb-4">
-                <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+                <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2 mobile-two-col-buttons">
                     <div>
                         <i class="fas fa-file-invoice-dollar me-1"></i>
                         Billing Snapshot
                     </div>
-                    <div class="d-flex align-items-center gap-2">
+                    <div class="d-flex align-items-center gap-2 mobile-two-col-buttons">
                         <?php if (empty($job['paid'])): ?>
                             <form method="post" action="<?= url('/jobs/' . ($job['id'] ?? '') . '/mark-paid') ?>">
                                 <?= csrf_field() ?>
@@ -711,6 +752,85 @@
                 </div>
             </div>
 
+            <div class="card mb-4" id="estimate-invoice">
+                <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2 mobile-two-col-buttons">
+                    <div>
+                        <i class="fas fa-file-signature me-1"></i>
+                        Estimate / Invoice Workflow
+                    </div>
+                    <div class="d-flex gap-2 mobile-two-col-buttons">
+                        <a class="btn btn-sm btn-outline-primary" href="<?= url('/jobs/' . ($job['id'] ?? '') . '/documents/new?type=estimate') ?>">
+                            <i class="fas fa-plus me-1"></i>
+                            Add Estimate
+                        </a>
+                        <a class="btn btn-sm btn-primary" href="<?= url('/jobs/' . ($job['id'] ?? '') . '/documents/new?type=invoice') ?>">
+                            <i class="fas fa-plus me-1"></i>
+                            Add Invoice
+                        </a>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3 mb-3">
+                        <div class="col-6">
+                            <div class="text-muted small">Documents</div>
+                            <div class="fw-semibold"><?= e((string) ((int) ($documentSummary['total_count'] ?? 0))) ?></div>
+                        </div>
+                        <div class="col-6">
+                            <div class="text-muted small">Estimates</div>
+                            <div class="fw-semibold"><?= e((string) ((int) ($documentSummary['estimate_count'] ?? 0))) ?></div>
+                        </div>
+                        <div class="col-6">
+                            <div class="text-muted small">Invoices</div>
+                            <div class="fw-semibold"><?= e((string) ((int) ($documentSummary['invoice_count'] ?? 0))) ?></div>
+                        </div>
+                        <div class="col-6">
+                            <div class="text-muted small">Paid</div>
+                            <div class="fw-semibold text-success"><?= e((string) ((int) ($documentSummary['paid_count'] ?? 0))) ?></div>
+                        </div>
+                    </div>
+
+                    <div class="table-responsive">
+                        <table class="table table-sm table-striped align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Type</th>
+                                    <th>Title</th>
+                                    <th>Status</th>
+                                    <th>Amount</th>
+                                    <th>Issued</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php if (empty($documents)): ?>
+                                    <tr>
+                                        <td colspan="5" class="text-muted">No estimates/invoices yet.</td>
+                                    </tr>
+                                <?php else: ?>
+                                    <?php foreach ($documents as $document): ?>
+                                        <?php
+                                            $docId = (int) ($document['id'] ?? 0);
+                                            $docType = \App\Models\JobDocument::typeLabel((string) ($document['document_type'] ?? 'document'));
+                                            $docStatus = \App\Models\JobDocument::statusLabel((string) ($document['status'] ?? 'draft'));
+                                        ?>
+                                        <tr>
+                                            <td><?= e($docType) ?></td>
+                                            <td>
+                                                <a class="text-decoration-none" href="<?= url('/jobs/' . ($job['id'] ?? '') . '/documents/' . $docId) ?>">
+                                                    <?= e((string) (($document['title'] ?? '') !== '' ? $document['title'] : ('Document #' . $docId))) ?>
+                                                </a>
+                                            </td>
+                                            <td><?= e($docStatus) ?></td>
+                                            <td><?= isset($document['amount']) && $document['amount'] !== null ? e('$' . number_format((float) $document['amount'], 2)) : '—' ?></td>
+                                            <td><?= e(format_datetime($document['issued_at'] ?? null)) ?></td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                <?php endif; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
             <div class="card mb-4">
                 <div class="card-header">
                     <i class="fas fa-chart-pie me-1"></i>
@@ -739,7 +859,7 @@
             </div>
 
             <div class="card mb-4">
-                <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+                <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2 mobile-two-col-buttons">
                     <div>
                         <i class="fas fa-list-check me-1"></i>
                         Tasks
@@ -800,6 +920,14 @@
                     </div>
                 </div>
             </div>
+
+            <?php
+                $attachmentPanelTitle = 'Attachments';
+                $attachmentLinkType = 'job';
+                $attachmentLinkId = (int) ($job['id'] ?? 0);
+                $attachmentReturnTo = $jobPath;
+                require __DIR__ . '/../partials/attachments_panel.php';
+            ?>
 
             <div class="card mb-4">
                 <div class="card-header">

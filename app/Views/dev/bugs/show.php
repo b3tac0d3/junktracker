@@ -105,7 +105,7 @@
                                 <label class="form-label">Details</label>
                                 <textarea class="form-control" name="details" rows="10"><?= e((string) old('details', (string) ($bug['details'] ?? ''))) ?></textarea>
                             </div>
-                            <div class="col-12 d-flex flex-wrap justify-content-between gap-2">
+                            <div class="col-12 d-flex flex-wrap justify-content-between gap-2 mobile-two-col-buttons">
                                 <button class="btn btn-primary" type="submit">
                                     <i class="fas fa-save me-1"></i>
                                     Save Changes

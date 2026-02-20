@@ -1,5 +1,4 @@
 <?php
-    $bugSummary = is_array($bugSummary ?? null) ? $bugSummary : [];
     $recentBugs = is_array($recentBugs ?? null) ? $recentBugs : [];
     $health = is_array($health ?? null) ? $health : [];
     $systemStatus = is_array($systemStatus ?? null) ? $systemStatus : [];
@@ -13,7 +12,7 @@
                 <li class="breadcrumb-item active">Dev</li>
             </ol>
         </div>
-        <div class="d-flex gap-2">
+        <div class="d-flex gap-2 mobile-two-col-buttons">
             <a class="btn btn-primary" href="<?= url('/dev/bugs') ?>">
                 <i class="fas fa-bug me-1"></i>
                 Bug Board
@@ -32,41 +31,6 @@
         <div class="alert alert-danger"><?= e($error) ?></div>
     <?php endif; ?>
 
-    <div class="row g-3 mb-4">
-        <div class="col-md-6 col-xl-3">
-            <div class="card border-0 shadow-sm h-100">
-                <div class="card-body">
-                    <div class="text-uppercase small text-muted">Open Bugs</div>
-                    <div class="h4 mb-0 text-danger"><?= e((string) ((int) ($bugSummary['open_count'] ?? 0))) ?></div>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-6 col-xl-3">
-            <div class="card border-0 shadow-sm h-100">
-                <div class="card-body">
-                    <div class="text-uppercase small text-muted">In Progress</div>
-                    <div class="h4 mb-0 text-warning"><?= e((string) ((int) ($bugSummary['in_progress_count'] ?? 0))) ?></div>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-6 col-xl-3">
-            <div class="card border-0 shadow-sm h-100">
-                <div class="card-body">
-                    <div class="text-uppercase small text-muted">Fixed</div>
-                    <div class="h4 mb-0 text-success"><?= e((string) ((int) ($bugSummary['fixed_count'] ?? 0))) ?></div>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-6 col-xl-3">
-            <div class="card border-0 shadow-sm h-100">
-                <div class="card-body">
-                    <div class="text-uppercase small text-muted">Total Logged</div>
-                    <div class="h4 mb-0"><?= e((string) ((int) ($bugSummary['total_count'] ?? 0))) ?></div>
-                </div>
-            </div>
-        </div>
-    </div>
-
     <div class="row g-4">
         <div class="col-12 col-xl-7">
             <div class="card h-100">
@@ -76,7 +40,7 @@
                 </div>
                 <div class="card-body p-0">
                     <div class="table-responsive">
-                        <table class="table table-striped table-hover align-middle mb-0">
+                        <table class="table table-striped table-hover align-middle mb-0 js-card-list-source">
                             <thead>
                                 <tr>
                                     <th>ID</th>
@@ -185,4 +149,3 @@
         </div>
     </div>
 </div>
-

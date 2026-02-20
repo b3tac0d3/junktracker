@@ -64,7 +64,7 @@
             Company Directory
         </div>
         <div class="card-body">
-            <table id="companiesTable">
+            <table id="companiesTable" class="js-card-list-source">
                 <thead>
                     <tr>
                         <th>ID</th>

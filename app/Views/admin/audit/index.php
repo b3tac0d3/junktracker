@@ -6,12 +6,9 @@
     $userOptions = is_array($userOptions ?? null) ? $userOptions : [];
     $isReady = !empty($isReady);
     $preset = (string) ($preset ?? 'all');
-    $exportParams = $filters;
-    $exportParams['preset'] = $preset;
-    $exportParams['export'] = 'csv';
 ?>
 <div class="container-fluid px-4">
-    <div class="d-flex flex-wrap justify-content-between align-items-center mt-4 mb-3 gap-2">
+    <div class="d-flex flex-wrap justify-content-between align-items-center mt-4 mb-3 gap-2 mobile-two-col-buttons">
         <div>
             <h1 class="mb-1">Audit Log</h1>
             <ol class="breadcrumb mb-0">
@@ -19,10 +16,7 @@
                 <li class="breadcrumb-item active">Audit Log</li>
             </ol>
         </div>
-        <div class="d-flex gap-2">
-            <a class="btn btn-outline-primary" href="<?= url('/admin/audit?' . http_build_query($exportParams)) ?>">
-                <i class="fas fa-file-csv me-1"></i>Export CSV
-            </a>
+        <div class="d-flex gap-2 mobile-two-col-buttons">
             <a class="btn btn-outline-secondary" href="<?= url('/admin') ?>">Back to Admin</a>
         </div>
     </div>
@@ -106,7 +100,7 @@
             <?php if (empty($actions)): ?>
                 <div class="text-muted">No matching actions found.</div>
             <?php else: ?>
-                <table id="userActivityTable">
+                <table id="userActivityTable" class="js-card-list-source">
                     <thead>
                         <tr>
                             <th>When</th>

@@ -19,6 +19,9 @@
     $tasksOutstanding = is_array($overview['tasks_outstanding'] ?? null) ? $overview['tasks_outstanding'] : [];
     $overdueTasks = is_array($tasksOutstanding['overdue'] ?? null) ? $tasksOutstanding['overdue'] : [];
     $upcomingTasks = is_array($tasksOutstanding['upcoming'] ?? null) ? $tasksOutstanding['upcoming'] : [];
+    $invites = is_array($overview['invites'] ?? null) ? $overview['invites'] : [];
+    $inviteSummary = is_array($invites['summary'] ?? null) ? $invites['summary'] : [];
+    $inviteRows = is_array($invites['rows'] ?? null) ? $invites['rows'] : [];
     $completedUnbilled = is_array($overview['completed_unbilled_jobs'] ?? null) ? $overview['completed_unbilled_jobs'] : [];
     $completedUnbilledRows = is_array($completedUnbilled['rows'] ?? null) ? $completedUnbilled['rows'] : [];
     $completedUnbilledSummary = is_array($completedUnbilled['summary'] ?? null) ? $completedUnbilled['summary'] : [];
@@ -38,6 +41,8 @@
     $tasksOpenUrl = url('/tasks?status=open');
     $tasksOverdueUrl = url('/tasks?status=overdue');
     $consignorsUrl = url('/consignors');
+    $usersUrl = url('/users');
+    $canViewUsers = can_access('users', 'view');
     $selfPunch = is_array($selfPunch ?? null) ? $selfPunch : [];
     $selfEmployee = is_array($selfPunch['employee'] ?? null) ? $selfPunch['employee'] : null;
     $selfOpenEntry = is_array($selfPunch['open_entry'] ?? null) ? $selfPunch['open_entry'] : null;
@@ -58,7 +63,7 @@
         return intdiv($total, 60) . 'h ' . str_pad((string) ($total % 60), 2, '0', STR_PAD_LEFT) . 'm';
     };
 ?>
-<div class="container-fluid px-4">
+<div class="container-fluid px-4 dashboard-page">
     <div class="d-flex flex-wrap align-items-center justify-content-between mt-4 mb-3 gap-3">
         <div>
             <h1 class="mb-1">Dashboard</h1>
@@ -74,55 +79,98 @@
     </div>
 
     <?php if ($selfCanManage): ?>
-        <div class="card border-0 shadow-sm mb-4">
-            <div class="card-body d-flex flex-wrap align-items-center justify-content-between gap-3">
-                <div>
-                    <div class="text-uppercase small text-muted">My Punch Clock</div>
-                    <?php if ($selfEmployee): ?>
-                        <div class="fw-semibold">
-                            <?= e((string) ($selfEmployee['name'] ?? 'Employee')) ?>
-                            <?php if ($selfOpenEntry): ?>
-                                <span class="badge bg-success ms-2">Punched In</span>
-                            <?php else: ?>
-                                <span class="badge bg-secondary ms-2">Punched Out</span>
-                            <?php endif; ?>
+        <div class="row g-3 mb-4">
+            <div class="col-12 col-xl-8">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-header d-flex align-items-center justify-content-between">
+                        <div><i class="fas fa-bolt me-1"></i>Quick Actions</div>
+                        <span class="small text-muted">Daily workflow</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="dashboard-top-actions-buttons">
+                            <a class="btn btn-primary" href="<?= url('/jobs/new') ?>"><i class="fas fa-plus me-1"></i>Add Job</a>
+                            <a class="btn btn-warning text-dark" href="<?= url('/prospects/new') ?>"><i class="fas fa-user-plus me-1"></i>Add Prospect</a>
+                            <a class="btn btn-success" href="<?= url('/time-tracking/open') ?>"><i class="fas fa-user-clock me-1"></i>Open Punch Clock</a>
+                            <a class="btn btn-info text-white" href="<?= url('/expenses/new') ?>"><i class="fas fa-receipt me-1"></i>Add Expense</a>
+                            <a class="btn btn-outline-secondary" href="<?= url('/sales/new') ?>"><i class="fas fa-sack-dollar me-1"></i>Add Sale</a>
+                            <a class="btn btn-outline-dark" href="<?= url('/tasks/new') ?>"><i class="fas fa-list-check me-1"></i>Add Task</a>
                         </div>
-                        <?php if ($selfOpenEntry): ?>
-                            <div class="small text-muted">
-                                On: <?= e($selfOpenLabel !== '' ? $selfOpenLabel : 'Non-Job Time') ?>
-                                &nbsp;•&nbsp;
-                                Since: <?= e(format_datetime((string) ($selfOpenEntry['work_date'] ?? '') . ' ' . (string) ($selfOpenEntry['start_time'] ?? ''))) ?>
-                            </div>
-                        <?php else: ?>
-                            <div class="small text-muted">Use Punch Me In to select Job Time or Non-Job Time.</div>
-                        <?php endif; ?>
-                    <?php else: ?>
-                        <div class="fw-semibold text-danger"><?= e($selfMessage !== '' ? $selfMessage : 'No linked employee profile found.') ?></div>
-                        <div class="small text-muted">Set employee email to match your login (or add an employee profile).</div>
-                    <?php endif; ?>
+                    </div>
                 </div>
-                <div class="d-flex flex-wrap gap-2">
-                    <?php if ($selfCanPunchOut && $selfEmployee): ?>
-                        <form method="post" action="<?= url('/dashboard/punch-out') ?>">
-                            <?= csrf_field() ?>
-                            <button class="btn btn-danger" type="submit">
-                                <i class="fas fa-stop-circle me-1"></i>
-                                Punch Me Out
-                            </button>
-                        </form>
-                    <?php elseif ($selfCanPunchIn && $selfEmployee): ?>
-                        <button class="btn btn-success" type="button" data-bs-toggle="modal" data-bs-target="#dashboardPunchInModal">
-                            <i class="fas fa-play-circle me-1"></i>
-                            Punch Me In
-                        </button>
-                    <?php endif; ?>
+            </div>
+            <div class="col-12 col-xl-4">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-header d-flex align-items-center justify-content-between">
+                        <div><i class="fas fa-user-clock me-1"></i>My Punch Clock</div>
+                        <?php if ($selfEmployee): ?>
+                            <?php if ($selfOpenEntry): ?>
+                                <span class="badge bg-success">Punched In</span>
+                            <?php else: ?>
+                                <span class="badge bg-secondary">Punched Out</span>
+                            <?php endif; ?>
+                        <?php endif; ?>
+                    </div>
+                    <div class="card-body">
+                        <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
+                            <div>
+                                <?php if ($selfEmployee): ?>
+                                    <div class="fw-semibold"><?= e((string) ($selfEmployee['name'] ?? 'Employee')) ?></div>
+                                    <?php if ($selfOpenEntry): ?>
+                                        <div class="small text-muted">
+                                            On: <?= e($selfOpenLabel !== '' ? $selfOpenLabel : 'Non-Job Time') ?>
+                                            &nbsp;•&nbsp;
+                                            Since: <?= e(format_datetime((string) ($selfOpenEntry['work_date'] ?? '') . ' ' . (string) ($selfOpenEntry['start_time'] ?? ''))) ?>
+                                        </div>
+                                    <?php else: ?>
+                                        <div class="small text-muted">Quick Punch In / Out</div>
+                                    <?php endif; ?>
+                                <?php else: ?>
+                                    <div class="fw-semibold text-danger"><?= e($selfMessage !== '' ? $selfMessage : 'No linked employee profile found.') ?></div>
+                                    <div class="small text-muted">Set employee email to match your login (or add an employee profile).</div>
+                                <?php endif; ?>
+                            </div>
+                            <div class="d-flex flex-wrap gap-2 mobile-two-col-buttons">
+                                <?php if ($selfCanPunchOut && $selfEmployee): ?>
+                                    <form method="post" action="<?= url('/dashboard/punch-out') ?>">
+                                        <?= csrf_field() ?>
+                                        <button class="btn btn-danger" type="submit">
+                                            <i class="fas fa-stop-circle me-1"></i>
+                                            Punch Me Out
+                                        </button>
+                                    </form>
+                                <?php elseif ($selfCanPunchIn && $selfEmployee): ?>
+                                    <button class="btn btn-success" type="button" data-bs-toggle="modal" data-bs-target="#dashboardPunchInModal">
+                                        <i class="fas fa-play-circle me-1"></i>
+                                        Punch Me In
+                                    </button>
+                                <?php endif; ?>
 
-                    <?php if ($selfEmployee): ?>
-                        <a class="btn btn-outline-secondary" href="<?= url('/time-tracking/new') ?>">
-                            <i class="fas fa-clock me-1"></i>
-                            Time Tracking
-                        </a>
-                    <?php endif; ?>
+                                <?php if ($selfEmployee): ?>
+                                    <a class="btn btn-outline-secondary" href="<?= url('/time-tracking/new') ?>">
+                                        <i class="fas fa-clock me-1"></i>
+                                        Time Tracking
+                                    </a>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    <?php else: ?>
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header d-flex align-items-center justify-content-between">
+                <div><i class="fas fa-bolt me-1"></i>Quick Actions</div>
+                <span class="small text-muted">Daily workflow</span>
+            </div>
+            <div class="card-body">
+                <div class="dashboard-top-actions-buttons">
+                    <a class="btn btn-primary" href="<?= url('/jobs/new') ?>"><i class="fas fa-plus me-1"></i>Add Job</a>
+                    <a class="btn btn-warning text-dark" href="<?= url('/prospects/new') ?>"><i class="fas fa-user-plus me-1"></i>Add Prospect</a>
+                    <a class="btn btn-success" href="<?= url('/time-tracking/open') ?>"><i class="fas fa-user-clock me-1"></i>Open Punch Clock</a>
+                    <a class="btn btn-info text-white" href="<?= url('/expenses/new') ?>"><i class="fas fa-receipt me-1"></i>Add Expense</a>
+                    <a class="btn btn-outline-secondary" href="<?= url('/sales/new') ?>"><i class="fas fa-sack-dollar me-1"></i>Add Sale</a>
+                    <a class="btn btn-outline-dark" href="<?= url('/tasks/new') ?>"><i class="fas fa-list-check me-1"></i>Add Task</a>
                 </div>
             </div>
         </div>
@@ -244,7 +292,7 @@
     <div class="card mb-4">
         <div class="card-header d-flex align-items-center justify-content-between">
             <div><i class="fas fa-triangle-exclamation me-1"></i>Alert Queue</div>
-            <div class="d-flex gap-2 flex-wrap">
+            <div class="d-flex gap-2 flex-wrap mobile-two-col-buttons">
                 <a class="badge text-bg-danger text-decoration-none" href="<?= url('/tasks?status=overdue') ?>">Overdue Tasks: <?= e((string) ((int) ($tasks['overdue_count'] ?? 0))) ?></a>
                 <a class="badge text-bg-warning text-decoration-none" href="<?= url('/jobs?status=complete&billing_state=unbilled') ?>">Completed Unbilled Jobs: <?= e((string) ((int) ($completedUnbilledSummary['count_total'] ?? 0))) ?></a>
                 <a class="badge text-bg-primary text-decoration-none" href="<?= url('/consignors') ?>">Consignor Payments Due: <?= e((string) ((int) ($consignorPaymentSummary['due_now_count'] ?? 0))) ?></a>
@@ -265,6 +313,57 @@
             <?php endif; ?>
         </div>
     </div>
+
+    <?php if ($canViewUsers && (int) ($inviteSummary['outstanding_count'] ?? 0) > 0): ?>
+        <div class="card mb-4">
+            <div class="card-header d-flex align-items-center justify-content-between">
+                <div><i class="fas fa-user-clock me-1"></i>Outstanding User Invites</div>
+                <a class="small text-decoration-none" href="<?= e($usersUrl) ?>">Open Users</a>
+            </div>
+            <div class="card-body p-0">
+                <div class="px-3 py-2 border-bottom">
+                    <span class="badge text-bg-warning">Invited: <?= e((string) ((int) ($inviteSummary['invited_count'] ?? 0))) ?></span>
+                    <span class="badge text-bg-danger ms-1">Expired: <?= e((string) ((int) ($inviteSummary['expired_count'] ?? 0))) ?></span>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover align-middle mb-0 js-card-list-source">
+                        <thead>
+                            <tr>
+                                <th>User</th>
+                                <th>Email</th>
+                                <th>Status</th>
+                                <th>Invited</th>
+                                <th>Expires</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($inviteRows as $inviteRow): ?>
+                                <?php
+                                    $inviteUserId = (int) ($inviteRow['id'] ?? 0);
+                                    $inviteName = trim((string) ($inviteRow['first_name'] ?? '') . ' ' . (string) ($inviteRow['last_name'] ?? ''));
+                                    if ($inviteName === '') {
+                                        $inviteName = 'User #' . $inviteUserId;
+                                    }
+                                    $inviteMeta = is_array($inviteRow['invite'] ?? null) ? $inviteRow['invite'] : [];
+                                ?>
+                                <tr>
+                                    <td><a class="text-decoration-none" href="<?= url('/users/' . $inviteUserId) ?>"><?= e($inviteName) ?></a></td>
+                                    <td><?= e((string) ($inviteRow['email'] ?? '')) ?></td>
+                                    <td>
+                                        <span class="badge <?= e((string) ($inviteMeta['badge_class'] ?? 'bg-secondary')) ?>">
+                                            <?= e((string) ($inviteMeta['label'] ?? 'Invited')) ?>
+                                        </span>
+                                    </td>
+                                    <td><?= e(format_datetime($inviteMeta['sent_at'] ?? null)) ?></td>
+                                    <td><?= e(format_datetime($inviteMeta['expires_at'] ?? null)) ?></td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    <?php endif; ?>
 
     <div class="row g-3 mb-4">
         <div class="col-lg-4">
@@ -379,7 +478,7 @@
     </div>
 
     <div class="row g-3 mb-4">
-        <div class="col-12 col-xl-8">
+        <div class="col-12">
             <div class="card h-100">
                 <div class="card-header d-flex align-items-center justify-content-between">
                     <div><i class="fas fa-list-check me-1"></i>Outstanding Tasks</div>
@@ -387,7 +486,7 @@
                 </div>
                 <div class="card-body p-0">
                     <div class="table-responsive">
-                        <table class="table table-striped table-hover align-middle mb-0">
+                        <table class="table table-striped table-hover align-middle mb-0 js-card-list-source">
                             <thead>
                                 <tr>
                                     <th>Done</th>
@@ -474,22 +573,6 @@
                 </div>
             </div>
         </div>
-        <div class="col-12 col-xl-4">
-            <div class="card h-100">
-                <div class="card-header d-flex align-items-center justify-content-between">
-                    <div><i class="fas fa-bolt me-1"></i>Quick Actions</div>
-                    <span class="small text-muted">Daily workflow</span>
-                </div>
-                <div class="card-body d-grid gap-2">
-                    <a class="btn btn-primary" href="<?= url('/jobs/new') ?>"><i class="fas fa-plus me-1"></i>Add Job</a>
-                    <a class="btn btn-warning text-dark" href="<?= url('/prospects/new') ?>"><i class="fas fa-user-plus me-1"></i>Add Prospect</a>
-                    <a class="btn btn-success" href="<?= url('/time-tracking/open') ?>"><i class="fas fa-user-clock me-1"></i>Open Punch Clock</a>
-                    <a class="btn btn-info text-white" href="<?= url('/expenses/new') ?>"><i class="fas fa-receipt me-1"></i>Add Expense</a>
-                    <a class="btn btn-outline-secondary" href="<?= url('/sales/new') ?>"><i class="fas fa-sack-dollar me-1"></i>Add Sale</a>
-                    <a class="btn btn-outline-dark" href="<?= url('/tasks/new') ?>"><i class="fas fa-list-check me-1"></i>Add Task</a>
-                </div>
-            </div>
-        </div>
         <div class="col-12 col-xl-6">
             <div class="card h-100">
                 <div class="card-header d-flex align-items-center justify-content-between">
@@ -498,7 +581,7 @@
                 </div>
                 <div class="card-body p-0">
                     <div class="table-responsive">
-                        <table class="table table-striped table-hover align-middle mb-0">
+                        <table class="table table-striped table-hover align-middle mb-0 js-card-list-source">
                             <thead>
                                 <tr>
                                     <th>Consignor</th>
@@ -556,7 +639,7 @@
                 </div>
                 <div class="card-body p-0">
                     <div class="table-responsive">
-                        <table class="table table-striped table-hover align-middle mb-0">
+                        <table class="table table-striped table-hover align-middle mb-0 js-card-list-source">
                             <thead>
                                 <tr>
                                     <th>Employee</th>
@@ -620,7 +703,7 @@
                 </div>
                 <div class="card-body p-0">
                     <div class="table-responsive">
-                        <table class="table table-striped table-hover align-middle mb-0">
+                        <table class="table table-striped table-hover align-middle mb-0 js-card-list-source">
                             <thead>
                                 <tr>
                                     <th>Prospect</th>
@@ -666,7 +749,7 @@
                 </div>
                 <div class="card-body p-0">
                     <div class="table-responsive">
-                        <table class="table table-striped table-hover align-middle mb-0">
+                        <table class="table table-striped table-hover align-middle mb-0 js-card-list-source">
                             <thead>
                                 <tr>
                                     <th>Job</th>
@@ -709,7 +792,7 @@
                 </div>
                 <div class="card-body p-0">
                     <div class="table-responsive">
-                        <table class="table table-striped table-hover align-middle mb-0">
+                        <table class="table table-striped table-hover align-middle mb-0 js-card-list-source">
                             <thead>
                                 <tr>
                                     <th>Job</th>

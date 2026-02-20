@@ -3,7 +3,7 @@
     $isReady = !empty($isReady);
 ?>
 <div class="container-fluid px-4">
-    <div class="d-flex flex-wrap justify-content-between align-items-center mt-4 mb-3 gap-2">
+    <div class="d-flex flex-wrap justify-content-between align-items-center mt-4 mb-3 gap-2 mobile-two-col-buttons">
         <div>
             <h1 class="mb-1">Admin Settings</h1>
             <ol class="breadcrumb mb-0">

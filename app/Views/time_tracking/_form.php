@@ -153,7 +153,7 @@
         </div>
     </div>
 
-    <div class="mt-4 d-flex gap-2">
+    <div class="mt-4 d-flex gap-2 mobile-two-col-buttons">
         <button class="btn btn-primary" type="submit" name="entry_mode" value="save"><?= !empty($entry['id']) ? 'Update Time Entry' : 'Save Time Entry' ?></button>
         <?php if (empty($entry['id'])): ?>
             <button class="btn btn-success" type="submit" name="entry_mode" value="punch_in_now">Punch In Now</button>

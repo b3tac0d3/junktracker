@@ -26,7 +26,7 @@
             Active Categories
         </div>
         <div class="card-body">
-            <table id="expenseCategoriesTable">
+            <table id="expenseCategoriesTable" class="js-card-list-source">
                 <thead>
                     <tr>
                         <th>ID</th>

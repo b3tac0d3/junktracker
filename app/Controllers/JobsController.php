@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use Core\Controller;
+use App\Models\Attachment;
 use App\Models\Client;
 use App\Models\ExpenseCategory;
 use App\Models\Job;
+use App\Models\JobDocument;
 use App\Models\Prospect;
 use App\Models\Task;
 use App\Models\TimeEntry;
@@ -169,6 +171,8 @@ final class JobsController extends Controller
             : null;
 
         $estateId = $ownerType === 'estate' ? $ownerId : null;
+        $scheduledStartAt = $this->toDateTimeOrNull($_POST['scheduled_start_at'] ?? ($_POST['scheduled_date'] ?? null));
+        $scheduledEndAt = $this->toDateTimeOrNull($_POST['scheduled_end_at'] ?? null);
 
         $data = [
             'client_id' => $contactClientId,
@@ -186,7 +190,8 @@ final class JobsController extends Controller
             'phone' => trim((string) ($_POST['phone'] ?? '')),
             'email' => trim((string) ($_POST['email'] ?? '')),
             'quote_date' => $this->toDateTimeOrNull($_POST['quote_date'] ?? null),
-            'scheduled_date' => $this->toDateTimeOrNull($_POST['scheduled_date'] ?? null),
+            'scheduled_date' => $scheduledStartAt,
+            'scheduled_end_at' => $scheduledEndAt,
             'start_date' => $this->toDateTimeOrNull($_POST['start_date'] ?? null),
             'end_date' => $this->toDateTimeOrNull($_POST['end_date'] ?? null),
             'billed_date' => $this->toDateTimeOrNull($_POST['billed_date'] ?? null),
@@ -209,6 +214,15 @@ final class JobsController extends Controller
         }
         if ($data['client_id'] === null || $data['client_id'] <= 0) {
             $errors[] = 'A client contact is required.';
+        }
+        if ($scheduledEndAt !== null && $scheduledStartAt === null) {
+            $errors[] = 'Scheduled end requires a scheduled start.';
+        } elseif ($scheduledStartAt !== null && $scheduledEndAt !== null) {
+            $scheduledStartTs = strtotime($scheduledStartAt);
+            $scheduledEndTs = strtotime($scheduledEndAt);
+            if ($scheduledStartTs === false || $scheduledEndTs === false || $scheduledEndTs <= $scheduledStartTs) {
+                $errors[] = 'Scheduled end must be after scheduled start.';
+            }
         }
         $duplicateMatches = Job::findPotentialDuplicates($data, null, 5);
         if (!$ignoreDuplicateWarning && !empty($duplicateMatches)) {
@@ -296,6 +310,8 @@ final class JobsController extends Controller
             'pageTitle' => 'Job Details',
             'job' => $job,
             'actions' => Job::actions($id),
+            'documents' => JobDocument::forJob($id),
+            'documentSummary' => JobDocument::summaryForJob($id),
             'disposals' => Job::disposals($id),
             'expenses' => Job::expenses($id),
             'summary' => Job::summary($id),
@@ -304,6 +320,7 @@ final class JobsController extends Controller
             'timeEntries' => TimeEntry::forJob($id),
             'timeSummary' => TimeEntry::summaryForJob($id),
             'tasks' => Task::forLinkedRecord('job', $id),
+            'attachments' => Attachment::forLink('job', $id),
             'crewEmployees' => $crewEmployees,
             'openByEmployee' => $openByEmployee,
             'openElsewhereByEmployee' => $openElsewhereByEmployee,
@@ -670,6 +687,8 @@ final class JobsController extends Controller
             : null;
 
         $estateId = $ownerType === 'estate' ? $ownerId : null;
+        $scheduledStartAt = $this->toDateTimeOrNull($_POST['scheduled_start_at'] ?? ($_POST['scheduled_date'] ?? null));
+        $scheduledEndAt = $this->toDateTimeOrNull($_POST['scheduled_end_at'] ?? null);
 
         $data = [
             'client_id' => $contactClientId,
@@ -687,7 +706,8 @@ final class JobsController extends Controller
             'phone' => trim((string) ($_POST['phone'] ?? '')),
             'email' => trim((string) ($_POST['email'] ?? '')),
             'quote_date' => $this->toDateTimeOrNull($_POST['quote_date'] ?? null),
-            'scheduled_date' => $this->toDateTimeOrNull($_POST['scheduled_date'] ?? null),
+            'scheduled_date' => $scheduledStartAt,
+            'scheduled_end_at' => $scheduledEndAt,
             'start_date' => $this->toDateTimeOrNull($_POST['start_date'] ?? null),
             'end_date' => $this->toDateTimeOrNull($_POST['end_date'] ?? null),
             'billed_date' => $this->toDateTimeOrNull($_POST['billed_date'] ?? null),
@@ -710,6 +730,15 @@ final class JobsController extends Controller
         }
         if ($data['client_id'] === null || $data['client_id'] <= 0) {
             $errors[] = 'A client contact is required.';
+        }
+        if ($scheduledEndAt !== null && $scheduledStartAt === null) {
+            $errors[] = 'Scheduled end requires a scheduled start.';
+        } elseif ($scheduledStartAt !== null && $scheduledEndAt !== null) {
+            $scheduledStartTs = strtotime($scheduledStartAt);
+            $scheduledEndTs = strtotime($scheduledEndAt);
+            if ($scheduledStartTs === false || $scheduledEndTs === false || $scheduledEndTs <= $scheduledStartTs) {
+                $errors[] = 'Scheduled end must be after scheduled start.';
+            }
         }
         $duplicateMatches = Job::findPotentialDuplicates($data, $id, 5);
         if (!$ignoreDuplicateWarning && !empty($duplicateMatches)) {

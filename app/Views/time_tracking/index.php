@@ -1,29 +1,12 @@
 <?php
     $filters = $filters ?? [];
     $entries = $entries ?? [];
-    $summary = $summary ?? [];
     $byEmployee = $byEmployee ?? [];
     $employees = $employees ?? [];
     $jobs = $jobs ?? [];
     $savedPresets = is_array($savedPresets ?? null) ? $savedPresets : [];
     $selectedPresetId = isset($selectedPresetId) ? (int) $selectedPresetId : 0;
     $filterPresetModule = (string) ($filterPresetModule ?? 'time_tracking');
-
-    $totalMinutes = (int) ($summary['total_minutes'] ?? 0);
-    $totalHours = $totalMinutes / 60;
-    $totalPaid = (float) ($summary['total_paid'] ?? 0);
-    $entryCount = (int) ($summary['entry_count'] ?? 0);
-    $avgRate = $totalMinutes > 0 ? ($totalPaid / ($totalMinutes / 60)) : 0;
-
-    $formatMinutes = static function (int $minutes): string {
-        if ($minutes <= 0) {
-            return '0h 00m';
-        }
-
-        $hours = intdiv($minutes, 60);
-        $remaining = $minutes % 60;
-        return $hours . 'h ' . str_pad((string) $remaining, 2, '0', STR_PAD_LEFT) . 'm';
-    };
 
     $formatTime = static function (?string $value): string {
         if ($value === null || $value === '') {
@@ -44,8 +27,6 @@
     $currentPath = '/time-tracking';
     $currentQuery = (string) ($_SERVER['QUERY_STRING'] ?? '');
     $currentReturnTo = $currentPath . ($currentQuery !== '' ? '?' . $currentQuery : '');
-    $exportParams = array_merge($currentFilters, ['preset_id' => $selectedPresetId > 0 ? (string) $selectedPresetId : '', 'export' => 'csv']);
-    $exportParams = array_filter($exportParams, static fn (mixed $value): bool => (string) $value !== '');
 ?>
 <div class="container-fluid px-4">
     <div class="d-flex flex-wrap align-items-center justify-content-between mt-4 mb-3 gap-3">
@@ -56,7 +37,7 @@
                 <li class="breadcrumb-item active">Time Tracking</li>
             </ol>
         </div>
-        <div class="d-flex gap-2">
+        <div class="d-flex gap-2 mobile-two-col-buttons">
             <a class="btn btn-outline-primary" href="<?= url('/time-tracking/open') ?>">
                 <i class="fas fa-user-clock me-1"></i>
                 Currently Punched In
@@ -74,97 +55,6 @@
     <?php if ($error = flash('error')): ?>
         <div class="alert alert-danger"><?= e($error) ?></div>
     <?php endif; ?>
-
-    <div class="card mb-4">
-        <div class="card-body">
-            <div class="row g-2 align-items-end">
-                <div class="col-12 col-lg-5">
-                    <form method="get" action="<?= url('/time-tracking') ?>">
-                        <label class="form-label">Saved Filters</label>
-                        <div class="input-group">
-                            <select class="form-select" name="preset_id">
-                                <option value="">Choose preset...</option>
-                                <?php foreach ($savedPresets as $preset): ?>
-                                    <?php $presetId = (int) ($preset['id'] ?? 0); ?>
-                                    <option value="<?= e((string) $presetId) ?>" <?= $selectedPresetId === $presetId ? 'selected' : '' ?>>
-                                        <?= e((string) ($preset['preset_name'] ?? ('Preset #' . $presetId))) ?>
-                                    </option>
-                                <?php endforeach; ?>
-                            </select>
-                            <button class="btn btn-outline-primary" type="submit">Load</button>
-                            <a class="btn btn-outline-secondary" href="<?= url('/time-tracking') ?>">Reset</a>
-                        </div>
-                    </form>
-                </div>
-                <div class="col-12 col-lg-4">
-                    <form method="post" action="<?= url('/filter-presets/save') ?>">
-                        <?= csrf_field() ?>
-                        <input type="hidden" name="module_key" value="<?= e($filterPresetModule) ?>" />
-                        <input type="hidden" name="return_to" value="<?= e($currentReturnTo) ?>" />
-                        <input type="hidden" name="filters_json" value='<?= e((string) json_encode($currentFilters)) ?>' />
-                        <label class="form-label">Save Current Filters</label>
-                        <div class="input-group">
-                            <input class="form-control" type="text" name="preset_name" placeholder="Preset name..." />
-                            <button class="btn btn-outline-success" type="submit">Save</button>
-                        </div>
-                    </form>
-                </div>
-                <div class="col-12 col-lg-3 d-flex gap-2 justify-content-lg-end">
-                    <?php if ($selectedPresetId > 0): ?>
-                        <form method="post" action="<?= url('/filter-presets/' . $selectedPresetId . '/delete') ?>" onsubmit="return confirm('Delete this preset?');">
-                            <?= csrf_field() ?>
-                            <input type="hidden" name="module_key" value="<?= e($filterPresetModule) ?>" />
-                            <input type="hidden" name="return_to" value="<?= e('/time-tracking') ?>" />
-                            <button class="btn btn-outline-danger" type="submit">Delete Preset</button>
-                        </form>
-                    <?php endif; ?>
-                    <a class="btn btn-outline-primary" href="<?= url('/time-tracking?' . http_build_query($exportParams)) ?>">
-                        <i class="fas fa-file-csv me-1"></i>
-                        Export CSV
-                    </a>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <div class="row g-3 mb-4">
-        <div class="col-md-6 col-xl-3">
-            <div class="card border-0 shadow-sm h-100">
-                <div class="card-body">
-                    <div class="text-uppercase small text-muted">Total Hours</div>
-                    <div class="h4 mb-1 text-primary"><?= e(number_format($totalHours, 2)) ?></div>
-                    <div class="small text-muted"><?= e($formatMinutes($totalMinutes)) ?></div>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-6 col-xl-3">
-            <div class="card border-0 shadow-sm h-100">
-                <div class="card-body">
-                    <div class="text-uppercase small text-muted">Labor Owed</div>
-                    <div class="h4 mb-1 text-danger"><?= e('$' . number_format($totalPaid, 2)) ?></div>
-                    <div class="small text-muted">Current filter range</div>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-6 col-xl-3">
-            <div class="card border-0 shadow-sm h-100">
-                <div class="card-body">
-                    <div class="text-uppercase small text-muted">Entries</div>
-                    <div class="h4 mb-1 text-success"><?= e((string) $entryCount) ?></div>
-                    <div class="small text-muted">Time records</div>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-6 col-xl-3">
-            <div class="card border-0 shadow-sm h-100">
-                <div class="card-body">
-                    <div class="text-uppercase small text-muted">Avg Hourly Cost</div>
-                    <div class="h4 mb-1 text-warning"><?= e('$' . number_format($avgRate, 2)) ?></div>
-                    <div class="small text-muted">Based on logged minutes</div>
-                </div>
-            </div>
-        </div>
-    </div>
 
     <div class="card mb-4">
         <div class="card-body">
@@ -227,12 +117,57 @@
                             <option value="all" <?= ($filters['record_status'] ?? '') === 'all' ? 'selected' : '' ?>>All</option>
                         </select>
                     </div>
-                    <div class="col-12 d-flex gap-2">
+                    <div class="col-12 d-flex gap-2 mobile-two-col-buttons">
                         <button class="btn btn-primary" type="submit">Apply Filters</button>
                         <a class="btn btn-outline-secondary" href="<?= url('/time-tracking') ?>">Clear</a>
                     </div>
                 </div>
             </form>
+            <div class="filter-presets-section border-top mt-4 pt-3">
+                <div class="row g-2 align-items-end">
+                    <div class="col-12 col-lg-5">
+                        <form method="get" action="<?= url('/time-tracking') ?>">
+                            <label class="form-label">Saved Filters</label>
+                            <div class="input-group">
+                                <select class="form-select" name="preset_id">
+                                    <option value="">Choose preset...</option>
+                                    <?php foreach ($savedPresets as $preset): ?>
+                                        <?php $presetId = (int) ($preset['id'] ?? 0); ?>
+                                        <option value="<?= e((string) $presetId) ?>" <?= $selectedPresetId === $presetId ? 'selected' : '' ?>>
+                                            <?= e((string) ($preset['preset_name'] ?? ('Preset #' . $presetId))) ?>
+                                        </option>
+                                    <?php endforeach; ?>
+                                </select>
+                                <button class="btn btn-outline-primary" type="submit">Load</button>
+                                <a class="btn btn-outline-secondary" href="<?= url('/time-tracking') ?>">Reset</a>
+                            </div>
+                        </form>
+                    </div>
+                    <div class="col-12 col-lg-4">
+                        <form method="post" action="<?= url('/filter-presets/save') ?>">
+                            <?= csrf_field() ?>
+                            <input type="hidden" name="module_key" value="<?= e($filterPresetModule) ?>" />
+                            <input type="hidden" name="return_to" value="<?= e($currentReturnTo) ?>" />
+                            <input type="hidden" name="filters_json" value='<?= e((string) json_encode($currentFilters)) ?>' />
+                            <label class="form-label">Save Current Filters</label>
+                            <div class="input-group">
+                                <input class="form-control" type="text" name="preset_name" placeholder="Preset name..." />
+                                <button class="btn btn-outline-success" type="submit">Save</button>
+                            </div>
+                        </form>
+                    </div>
+                    <div class="col-12 col-lg-3 d-flex gap-2 justify-content-lg-end mobile-two-col-buttons">
+                        <?php if ($selectedPresetId > 0): ?>
+                            <form method="post" action="<?= url('/filter-presets/' . $selectedPresetId . '/delete') ?>" onsubmit="return confirm('Delete this preset?');">
+                                <?= csrf_field() ?>
+                                <input type="hidden" name="module_key" value="<?= e($filterPresetModule) ?>" />
+                                <input type="hidden" name="return_to" value="<?= e('/time-tracking') ?>" />
+                                <button class="btn btn-outline-danger" type="submit">Delete Preset</button>
+                            </form>
+                        <?php endif; ?>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -245,7 +180,7 @@
             <?php if (empty($entries)): ?>
                 <div class="text-muted">No time entries found for this filter set.</div>
             <?php else: ?>
-                <table id="timeTrackingTable">
+                <table id="timeTrackingTable" class="js-card-list-source">
                     <thead>
                         <tr>
                             <th>Date</th>
@@ -325,7 +260,7 @@
                 <div class="text-muted">No employee totals for this filter set.</div>
             <?php else: ?>
                 <div class="table-responsive">
-                    <table class="table table-striped align-middle mb-0">
+                    <table class="table table-striped align-middle mb-0 js-card-list-source">
                         <thead>
                             <tr>
                                 <th>Employee</th>

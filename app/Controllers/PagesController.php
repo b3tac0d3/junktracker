@@ -8,6 +8,22 @@ use Core\Controller;
 
 final class PagesController extends Controller
 {
+    public function privacyPolicy(): void
+    {
+        $this->render('pages/privacy_policy', [
+            'pageTitle' => 'Privacy Policy',
+            'effectiveDate' => 'February 20, 2026',
+        ], is_authenticated() ? 'main' : 'auth');
+    }
+
+    public function termsAndConditions(): void
+    {
+        $this->render('pages/terms_conditions', [
+            'pageTitle' => 'Terms & Conditions',
+            'effectiveDate' => 'February 20, 2026',
+        ], is_authenticated() ? 'main' : 'auth');
+    }
+
     public function charts(): void
     {
         $pageScripts = implode("\n", [

@@ -5,7 +5,7 @@
     $isReady = !empty($isReady);
 ?>
 <div class="container-fluid px-4">
-    <div class="d-flex flex-wrap justify-content-between align-items-center mt-4 mb-3 gap-2">
+    <div class="d-flex flex-wrap justify-content-between align-items-center mt-4 mb-3 gap-2 mobile-two-col-buttons">
         <div>
             <h1 class="mb-1">Permission Matrix</h1>
             <ol class="breadcrumb mb-0">
@@ -53,7 +53,7 @@
             <button class="btn btn-sm btn-primary" type="submit" <?= !$isReady ? 'disabled' : '' ?>>Save Permissions</button>
         </div>
         <div class="card-body table-responsive">
-            <table class="table table-striped align-middle mb-0">
+            <table class="table table-striped align-middle mb-0 js-card-list-source">
                 <thead>
                     <tr>
                         <th>Module</th>

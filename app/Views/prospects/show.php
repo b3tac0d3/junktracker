@@ -18,6 +18,8 @@
     };
     $isActive = empty($prospect['deleted_at']) && !empty($prospect['active']);
     $contacts = $contacts ?? [];
+    $attachments = is_array($attachments ?? null) ? $attachments : [];
+    $prospectPath = '/prospects/' . (string) ($prospect['id'] ?? '');
 ?>
 <div class="container-fluid px-4">
     <div class="d-flex flex-wrap align-items-center justify-content-between mt-4 mb-3 gap-3">
@@ -29,7 +31,7 @@
                 <li class="breadcrumb-item active">#<?= e((string) ($prospect['id'] ?? '')) ?></li>
             </ol>
         </div>
-        <div class="d-flex gap-2">
+        <div class="d-flex gap-2 mobile-two-col-buttons">
             <a class="btn btn-primary" href="<?= url('/client-contacts/new?prospect_id=' . ($prospect['id'] ?? '')) ?>">
                 <i class="fas fa-phone me-1"></i>
                 Log Contact
@@ -116,7 +118,7 @@
     </div>
 
     <div class="card mb-4">
-        <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+        <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2 mobile-two-col-buttons">
             <div>
                 <i class="fas fa-address-book me-1"></i>
                 Contact History
@@ -180,6 +182,14 @@
             </div>
         </div>
     </div>
+
+    <?php
+        $attachmentPanelTitle = 'Attachments';
+        $attachmentLinkType = 'prospect';
+        $attachmentLinkId = (int) ($prospect['id'] ?? 0);
+        $attachmentReturnTo = $prospectPath;
+        require __DIR__ . '/../partials/attachments_panel.php';
+    ?>
 
     <div class="card mb-4">
         <div class="card-header">

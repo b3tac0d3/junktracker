@@ -26,7 +26,7 @@
             Active Locations
         </div>
         <div class="card-body">
-            <table id="disposalLocationsTable">
+            <table id="disposalLocationsTable" class="js-card-list-source">
                 <thead>
                     <tr>
                         <th>ID</th>

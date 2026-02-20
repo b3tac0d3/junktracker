@@ -64,7 +64,7 @@
             Estate Directory
         </div>
         <div class="card-body">
-            <table id="estatesTable">
+            <table id="estatesTable" class="js-card-list-source">
                 <thead>
                     <tr>
                         <th>ID</th>

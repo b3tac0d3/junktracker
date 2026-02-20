@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Controllers;
 
+use App\Models\Attachment;
 use App\Models\DisposalLocation;
 use App\Models\Job;
 use App\Models\Sale;
@@ -82,6 +83,7 @@ final class SalesController extends Controller
         $this->render('sales/show', [
             'pageTitle' => 'Sale Details',
             'sale' => $sale,
+            'attachments' => Attachment::forLink('sale', $id),
         ]);
     }
 

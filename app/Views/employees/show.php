@@ -25,7 +25,7 @@
                 <li class="breadcrumb-item active">#<?= e((string) ($employee['id'] ?? '')) ?></li>
             </ol>
         </div>
-        <div class="d-flex gap-2">
+        <div class="d-flex gap-2 mobile-two-col-buttons">
             <a class="btn btn-warning" href="<?= url('/employees/' . ($employee['id'] ?? '') . '/edit') ?>">
                 <i class="fas fa-pen me-1"></i>
                 Edit Employee
@@ -42,7 +42,7 @@
     <?php endif; ?>
 
     <div class="card mb-4">
-        <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2 mobile-two-col-buttons">
             <div>
                 <i class="fas fa-user-clock me-1"></i>
                 Punch Clock

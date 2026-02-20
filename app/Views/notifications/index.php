@@ -1,0 +1,135 @@
+<?php
+    $scope = (string) ($scope ?? 'open');
+    $notifications = is_array($notifications ?? null) ? $notifications : [];
+    $scopes = [
+        'open' => 'Open',
+        'unread' => 'Unread',
+        'dismissed' => 'Dismissed',
+        'all' => 'All',
+    ];
+?>
+<div class="container-fluid px-4">
+    <div class="d-flex flex-wrap align-items-center justify-content-between mt-4 mb-3 gap-3">
+        <div>
+            <h1 class="mb-1">Notification Center</h1>
+            <ol class="breadcrumb mb-0">
+                <li class="breadcrumb-item"><a href="<?= url('/') ?>">Dashboard</a></li>
+                <li class="breadcrumb-item active">Notifications</li>
+            </ol>
+        </div>
+        <a class="btn btn-outline-secondary" href="<?= url('/') ?>">Back to Dashboard</a>
+    </div>
+
+    <?php if ($success = flash('success')): ?>
+        <div class="alert alert-success"><?= e($success) ?></div>
+    <?php endif; ?>
+    <?php if ($error = flash('error')): ?>
+        <div class="alert alert-danger"><?= e($error) ?></div>
+    <?php endif; ?>
+
+    <div class="card mb-4">
+        <div class="card-body">
+            <form class="row g-2 align-items-end" method="get" action="<?= url('/notifications') ?>">
+                <div class="col-md-4">
+                    <label class="form-label" for="scope">Filter</label>
+                    <select class="form-select" id="scope" name="scope">
+                        <?php foreach ($scopes as $scopeKey => $scopeLabel): ?>
+                            <option value="<?= e($scopeKey) ?>" <?= $scope === $scopeKey ? 'selected' : '' ?>><?= e($scopeLabel) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="col-md-8 d-flex gap-2 mobile-two-col-buttons">
+                    <button class="btn btn-primary" type="submit">Apply</button>
+                    <a class="btn btn-outline-secondary" href="<?= url('/notifications') ?>">Reset</a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-header d-flex align-items-center justify-content-between">
+            <span><i class="fas fa-bell me-1"></i>Alerts</span>
+            <span class="small text-muted">Click a title to open the linked record</span>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-striped table-hover align-middle mb-0 js-card-list-source">
+                    <thead>
+                        <tr>
+                            <th>Status</th>
+                            <th>Type</th>
+                            <th>Alert</th>
+                            <th>Due</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php if (empty($notifications)): ?>
+                            <tr>
+                                <td colspan="5" class="text-muted">No notifications in this view.</td>
+                            </tr>
+                        <?php else: ?>
+                            <?php foreach ($notifications as $row): ?>
+                                <?php
+                                    $severity = strtolower((string) ($row['severity'] ?? 'info'));
+                                    $badgeClass = match ($severity) {
+                                        'danger' => 'bg-danger',
+                                        'warning' => 'bg-warning text-dark',
+                                        'primary' => 'bg-primary',
+                                        default => 'bg-info text-dark',
+                                    };
+                                    $isRead = !empty($row['is_read']);
+                                    $isDismissed = !empty($row['is_dismissed']);
+                                    $url = trim((string) ($row['url'] ?? ''));
+                                ?>
+                                <tr>
+                                    <td>
+                                        <?php if ($isDismissed): ?>
+                                            <span class="badge bg-secondary">Dismissed</span>
+                                        <?php elseif ($isRead): ?>
+                                            <span class="badge bg-success">Read</span>
+                                        <?php else: ?>
+                                            <span class="badge bg-danger">Unread</span>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td><span class="badge <?= e($badgeClass) ?>"><?= e(ucwords(str_replace('_', ' ', (string) ($row['type'] ?? 'alert')))) ?></span></td>
+                                    <td>
+                                        <?php if ($url !== ''): ?>
+                                            <a class="text-decoration-none fw-semibold" href="<?= url($url) ?>"><?= e((string) ($row['title'] ?? 'Alert')) ?></a>
+                                        <?php else: ?>
+                                            <span class="fw-semibold"><?= e((string) ($row['title'] ?? 'Alert')) ?></span>
+                                        <?php endif; ?>
+                                        <div class="small text-muted"><?= e((string) ($row['message'] ?? '')) ?></div>
+                                    </td>
+                                    <td><?= e(format_datetime($row['due_at'] ?? null)) ?></td>
+                                    <td class="text-end">
+                                        <div class="d-inline-flex gap-1">
+                                            <form method="post" action="<?= url('/notifications/read') ?>">
+                                                <?= csrf_field() ?>
+                                                <input type="hidden" name="notification_key" value="<?= e((string) ($row['key'] ?? '')) ?>" />
+                                                <input type="hidden" name="is_read" value="<?= $isRead ? '0' : '1' ?>" />
+                                                <input type="hidden" name="return_to" value="<?= e('/notifications?scope=' . $scope) ?>" />
+                                                <button class="btn btn-sm <?= $isRead ? 'btn-outline-secondary' : 'btn-outline-success' ?>" type="submit" title="Toggle read">
+                                                    <i class="fas <?= $isRead ? 'fa-envelope' : 'fa-envelope-open' ?>"></i>
+                                                </button>
+                                            </form>
+                                            <form method="post" action="<?= url('/notifications/dismiss') ?>">
+                                                <?= csrf_field() ?>
+                                                <input type="hidden" name="notification_key" value="<?= e((string) ($row['key'] ?? '')) ?>" />
+                                                <input type="hidden" name="dismiss" value="<?= $isDismissed ? '0' : '1' ?>" />
+                                                <input type="hidden" name="return_to" value="<?= e('/notifications?scope=' . $scope) ?>" />
+                                                <button class="btn btn-sm <?= $isDismissed ? 'btn-outline-primary' : 'btn-outline-danger' ?>" type="submit" title="Toggle dismiss">
+                                                    <i class="fas <?= $isDismissed ? 'fa-rotate-left' : 'fa-xmark' ?>"></i>
+                                                </button>
+                                            </form>
+                                        </div>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                        <?php endif; ?>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>

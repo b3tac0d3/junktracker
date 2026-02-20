@@ -27,6 +27,7 @@
             'sub' => 'Expired: ' . (int) ($health['expired_invites'] ?? 0),
             'tone' => 'neutral',
             'icon' => 'fa-envelope-open-text',
+            'url' => url('/users?status=all'),
         ],
         [
             'label' => 'Failed Mail (24h)',
@@ -34,6 +35,7 @@
             'sub' => 'Delivery issues',
             'tone' => 'danger',
             'icon' => 'fa-triangle-exclamation',
+            'url' => url('/admin/settings'),
         ],
         [
             'label' => 'Failed Logins (24h)',
@@ -41,6 +43,7 @@
             'sub' => 'Security signal',
             'tone' => 'danger',
             'icon' => 'fa-user-lock',
+            'url' => url('/admin/audit?preset=security&q=login'),
         ],
         [
             'label' => 'Active Sessions',
@@ -48,6 +51,7 @@
             'sub' => 'Current active session files',
             'tone' => 'info',
             'icon' => 'fa-users',
+            'url' => url('/admin/audit?preset=security'),
         ],
         [
             'label' => 'Overdue Tasks',
@@ -55,6 +59,7 @@
             'sub' => 'Needs follow-up',
             'tone' => 'warning',
             'icon' => 'fa-list-check',
+            'url' => url('/tasks?status=overdue'),
         ],
     ];
 ?>
@@ -88,6 +93,7 @@
     }
 
     .admin-shell .metric-body {
+        position: relative;
         padding: 1rem 1.25rem 1.1rem;
     }
 
@@ -133,6 +139,10 @@
     .admin-shell .metric-card.metric-warning .metric-icon {
         color: #9f6500;
         background: #fff6dc;
+    }
+
+    .admin-shell .metric-card .stretched-link {
+        border-radius: 1rem;
     }
 
     .admin-shell .health-panel {
@@ -231,6 +241,11 @@
                         </div>
                         <div class="metric-value"><?= e((string) $card['value']) ?></div>
                         <div class="metric-sub"><?= e((string) $card['sub']) ?></div>
+                        <a
+                            class="stretched-link"
+                            href="<?= e((string) ($card['url'] ?? url('/admin'))) ?>"
+                            aria-label="<?= e('Open ' . (string) ($card['label'] ?? 'details')) ?>"
+                        ></a>
                     </div>
                 </div>
             </div>
@@ -406,6 +421,26 @@
                     <h5 class="card-title mb-2"><i class="fas fa-scroll me-2 text-primary"></i>Audit Log</h5>
                     <p class="card-text text-muted mb-4">Search user actions by user, table, action key, and date range.</p>
                     <a class="btn btn-outline-primary mt-auto" href="<?= url('/admin/audit') ?>">Open Audit Log</a>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-6">
+            <div class="card h-100 admin-link-card">
+                <div class="card-body d-flex flex-column">
+                    <h5 class="card-title mb-2"><i class="fas fa-clone me-2 text-dark"></i>Data Quality</h5>
+                    <p class="card-text text-muted mb-4">Review duplicate queues for clients, companies, and jobs, then merge safely.</p>
+                    <a class="btn btn-outline-dark mt-auto" href="<?= url('/data-quality') ?>">Open Data Quality</a>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-6">
+            <div class="card h-100 admin-link-card">
+                <div class="card-body d-flex flex-column">
+                    <h5 class="card-title mb-2"><i class="fas fa-chart-line me-2 text-success"></i>Reporting Hub</h5>
+                    <p class="card-text text-muted mb-4">Open financial and operational reports, then save presets for recurring review.</p>
+                    <a class="btn btn-outline-success mt-auto" href="<?= url('/reports') ?>">Open Reports</a>
                 </div>
             </div>
         </div>

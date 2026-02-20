@@ -24,6 +24,7 @@ final class SettingsController extends Controller
         $this->render('settings/edit', [
             'pageTitle' => 'Settings',
             'user' => $user,
+            'globalTwoFactorEnabled' => is_two_factor_enabled(),
         ]);
 
         clear_old();
@@ -65,6 +66,9 @@ final class SettingsController extends Controller
         if ($data['password'] !== '') {
             $message .= ' Password changed.';
         }
+        if (array_key_exists('two_factor_enabled', $data)) {
+            $message .= ' 2FA preference ' . ($data['two_factor_enabled'] === 1 ? 'enabled' : 'disabled') . '.';
+        }
         log_user_action('settings_updated', 'users', $userId, $message);
 
         flash('success', 'Settings updated.');
@@ -79,6 +83,7 @@ final class SettingsController extends Controller
             'email' => trim((string) ($_POST['email'] ?? '')),
             'password' => (string) ($_POST['password'] ?? ''),
             'password_confirm' => (string) ($_POST['password_confirm'] ?? ''),
+            'two_factor_enabled' => !empty($_POST['two_factor_enabled']) ? 1 : 0,
         ];
     }
 

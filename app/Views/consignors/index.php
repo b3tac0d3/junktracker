@@ -60,7 +60,7 @@
             Consignor Directory
         </div>
         <div class="card-body">
-            <table id="consignorsTable">
+            <table id="consignorsTable" class="js-card-list-source">
                 <thead>
                     <tr>
                         <th>ID</th>
