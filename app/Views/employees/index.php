@@ -39,7 +39,7 @@
                             <option value="all" <?= ($status ?? '') === 'all' ? 'selected' : '' ?>>All</option>
                         </select>
                     </div>
-                    <div class="col-12 d-flex gap-2">
+                    <div class="col-12 d-flex gap-2 mobile-two-col-buttons">
                         <button class="btn btn-primary" type="submit">Apply</button>
                         <a class="btn btn-outline-secondary" href="<?= url('/employees') ?>">Clear</a>
                     </div>
@@ -57,7 +57,7 @@
             <?php if (empty($employees ?? [])): ?>
                 <div class="text-muted">No employees found.</div>
             <?php else: ?>
-                <table id="employeesTable">
+                <table id="employeesTable" class="js-card-list-source">
                     <thead>
                         <tr>
                             <th>ID</th>

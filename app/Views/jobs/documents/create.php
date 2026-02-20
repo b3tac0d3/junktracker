@@ -23,7 +23,7 @@
         <?= csrf_field() ?>
         <?php require __DIR__ . '/_form.php'; ?>
 
-        <div class="d-flex flex-wrap gap-2 mb-4">
+        <div class="d-flex flex-wrap gap-2 mb-4 mobile-two-col-buttons">
             <button class="btn btn-primary" type="submit">
                 <i class="fas fa-save me-1"></i>
                 Save Document

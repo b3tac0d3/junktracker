@@ -73,7 +73,7 @@
         </div>
     </div>
 
-    <div class="mt-4 d-flex gap-2">
+    <div class="mt-4 d-flex gap-2 mobile-two-col-buttons">
         <button class="btn btn-primary" type="submit"><?= $isEdit ? 'Update Employee' : 'Save Employee' ?></button>
         <?php if ($isEdit): ?>
             <a class="btn btn-outline-secondary" href="<?= url('/employees/' . ($employee['id'] ?? '')) ?>">Cancel</a>

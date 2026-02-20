@@ -42,7 +42,7 @@
                 <li class="breadcrumb-item active">Reports</li>
             </ol>
         </div>
-        <div class="d-flex gap-2">
+        <div class="d-flex gap-2 mobile-two-col-buttons">
             <a class="btn btn-outline-primary" href="<?= url('/reports?' . $queryForExport) ?>">
                 <i class="fas fa-file-csv me-1"></i>
                 Export Current CSV
@@ -77,7 +77,7 @@
                     <label class="form-label" for="end_date">End Date</label>
                     <input class="form-control" id="end_date" name="end_date" type="date" value="<?= e((string) ($range['end_date'] ?? '')) ?>" />
                 </div>
-                <div class="col-12 col-md-3 d-flex gap-2">
+                <div class="col-12 col-md-3 d-flex gap-2 mobile-two-col-buttons">
                     <button class="btn btn-primary" type="submit">Apply</button>
                     <a class="btn btn-outline-secondary" href="<?= url('/reports') ?>">Reset</a>
                 </div>
@@ -106,7 +106,7 @@
                 </div>
                 <div class="col-12 col-md-6 col-lg-5">
                     <label class="form-label" for="preset_id">Load Preset</label>
-                    <form method="get" action="<?= url('/reports') ?>" class="d-flex gap-2">
+                    <form method="get" action="<?= url('/reports') ?>" class="d-flex gap-2 mobile-two-col-buttons">
                         <select class="form-select" id="preset_id" name="preset_id">
                             <option value="">Choose preset...</option>
                             <?php foreach ($presets as $preset): ?>
@@ -123,7 +123,7 @@
             <?php if (!empty($presets)): ?>
                 <div class="mt-3">
                     <div class="small text-muted mb-1">Saved Presets</div>
-                    <div class="d-flex flex-wrap gap-2">
+                    <div class="d-flex flex-wrap gap-2 mobile-two-col-buttons">
                         <?php foreach ($presets as $preset): ?>
                             <?php $presetId = (int) ($preset['id'] ?? 0); ?>
                             <form method="post" action="<?= url('/reports/presets/' . $presetId . '/delete') ?>" class="d-inline-flex gap-1 align-items-center">
@@ -188,7 +188,7 @@
         </div>
         <div class="card-body p-0">
             <div class="table-responsive">
-                <table class="table table-striped table-hover align-middle mb-0">
+                <table class="table table-striped table-hover align-middle mb-0 js-card-list-source">
                     <thead>
                         <tr>
                             <th>Job</th>
@@ -235,7 +235,7 @@
         </div>
         <div class="card-body p-0">
             <div class="table-responsive">
-                <table class="table table-striped table-hover align-middle mb-0">
+                <table class="table table-striped table-hover align-middle mb-0 js-card-list-source">
                     <thead>
                         <tr>
                             <th>Location</th>
@@ -278,7 +278,7 @@
         </div>
         <div class="card-body p-0">
             <div class="table-responsive">
-                <table class="table table-striped table-hover align-middle mb-0">
+                <table class="table table-striped table-hover align-middle mb-0 js-card-list-source">
                     <thead>
                         <tr>
                             <th>Employee</th>
@@ -323,7 +323,7 @@
         </div>
         <div class="card-body p-0">
             <div class="table-responsive">
-                <table class="table table-striped table-hover align-middle mb-0">
+                <table class="table table-striped table-hover align-middle mb-0 js-card-list-source">
                     <thead>
                         <tr>
                             <th>Source</th>

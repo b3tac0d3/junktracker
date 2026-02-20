@@ -22,7 +22,7 @@
                 <li class="breadcrumb-item active"><?= e($typeLabel) ?> #<?= e((string) $documentId) ?></li>
             </ol>
         </div>
-        <div class="d-flex gap-2">
+        <div class="d-flex gap-2 mobile-two-col-buttons">
             <a class="btn btn-info text-white" href="<?= url('/jobs/' . $jobId . '/documents/' . $documentId . '/pdf') ?>" target="_blank" rel="noopener">
                 <i class="fas fa-file-pdf me-1"></i>
                 PDF / Print
@@ -49,7 +49,7 @@
     <div class="row g-4">
         <div class="col-12 col-xl-7">
             <div class="card mb-4">
-                <div class="card-header d-flex align-items-center justify-content-between gap-2">
+                <div class="card-header d-flex align-items-center justify-content-between gap-2 mobile-two-col-buttons">
                     <span><i class="fas fa-file-invoice-dollar me-1"></i>Document Overview</span>
                     <span class="badge <?= e($statusClass) ?>"><?= e($statusLabel) ?></span>
                 </div>

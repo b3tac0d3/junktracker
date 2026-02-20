@@ -11,7 +11,7 @@
                 <li class="breadcrumb-item active"><?= e($name !== '' ? $name : ('#' . ($user['id'] ?? ''))) ?></li>
             </ol>
         </div>
-        <div class="d-flex gap-2">
+        <div class="d-flex gap-2 mobile-two-col-buttons">
             <a class="btn btn-outline-secondary" href="<?= url('/users/' . ($user['id'] ?? '')) ?>">Back to User</a>
         </div>
     </div>

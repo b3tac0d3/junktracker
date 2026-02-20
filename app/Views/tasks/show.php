@@ -28,7 +28,7 @@
                 <li class="breadcrumb-item active">#<?= e((string) ($task['id'] ?? '')) ?></li>
             </ol>
         </div>
-        <div class="d-flex gap-2">
+        <div class="d-flex gap-2 mobile-two-col-buttons">
             <?php if ($isActive): ?>
                 <form method="post" action="<?= url('/tasks/' . ($task['id'] ?? '') . '/toggle-complete') ?>">
                     <?= csrf_field() ?>

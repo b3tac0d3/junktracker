@@ -17,7 +17,7 @@
                 <li class="breadcrumb-item active">Duplicate Merge Queue</li>
             </ol>
         </div>
-        <form method="get" action="<?= url('/data-quality') ?>" class="d-flex gap-2">
+        <form method="get" action="<?= url('/data-quality') ?>" class="d-flex gap-2 mobile-two-col-buttons">
             <input class="form-control" type="number" min="5" max="100" name="limit" value="<?= e((string) $limit) ?>" />
             <button class="btn btn-outline-primary" type="submit">Refresh Queue</button>
         </form>
@@ -77,7 +77,7 @@
                                 <div class="accordion-body">
                                     <ul class="list-group mb-3">
                                         <?php foreach ($records as $record): ?>
-                                            <li class="list-group-item d-flex justify-content-between align-items-start gap-2">
+                                            <li class="list-group-item d-flex justify-content-between align-items-start gap-2 mobile-two-col-buttons">
                                                 <div>
                                                     <a class="text-decoration-none fw-semibold" href="<?= url((string) ($record['url'] ?? '/clients')) ?>">
                                                         #<?= e((string) ($record['id'] ?? '')) ?> - <?= e((string) ($record['label'] ?? 'Record')) ?>
@@ -147,7 +147,7 @@
                                 <div class="accordion-body">
                                     <ul class="list-group mb-3">
                                         <?php foreach ($records as $record): ?>
-                                            <li class="list-group-item d-flex justify-content-between align-items-start gap-2">
+                                            <li class="list-group-item d-flex justify-content-between align-items-start gap-2 mobile-two-col-buttons">
                                                 <div>
                                                     <a class="text-decoration-none fw-semibold" href="<?= url((string) ($record['url'] ?? '/companies')) ?>">
                                                         #<?= e((string) ($record['id'] ?? '')) ?> - <?= e((string) ($record['label'] ?? 'Record')) ?>
@@ -217,7 +217,7 @@
                                 <div class="accordion-body">
                                     <ul class="list-group mb-3">
                                         <?php foreach ($records as $record): ?>
-                                            <li class="list-group-item d-flex justify-content-between align-items-start gap-2">
+                                            <li class="list-group-item d-flex justify-content-between align-items-start gap-2 mobile-two-col-buttons">
                                                 <div>
                                                     <a class="text-decoration-none fw-semibold" href="<?= url((string) ($record['url'] ?? '/jobs')) ?>">
                                                         #<?= e((string) ($record['id'] ?? '')) ?> - <?= e((string) ($record['label'] ?? 'Record')) ?>

@@ -7,7 +7,7 @@
                 <li class="breadcrumb-item active">Users</li>
             </ol>
         </div>
-        <div class="d-flex gap-2">
+        <div class="d-flex gap-2 mobile-two-col-buttons">
             <a class="btn btn-primary" href="<?= url('/users/new') ?>">
                 <i class="fas fa-user-plus me-1"></i>
                 Add User
@@ -47,7 +47,7 @@
             User Directory
         </div>
         <div class="card-body">
-            <table id="usersTable">
+            <table id="usersTable" class="js-card-list-source">
                 <thead>
                     <tr>
                         <th>ID</th>

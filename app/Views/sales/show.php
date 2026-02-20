@@ -23,7 +23,7 @@
                 <li class="breadcrumb-item active">#<?= e((string) ($sale['id'] ?? '')) ?></li>
             </ol>
         </div>
-        <div class="d-flex gap-2">
+        <div class="d-flex gap-2 mobile-two-col-buttons">
             <?php if ($isActive): ?>
                 <button class="btn btn-danger" type="button" data-bs-toggle="modal" data-bs-target="#deleteSaleModal">
                     <i class="fas fa-trash me-1"></i>

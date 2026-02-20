@@ -126,7 +126,7 @@
         </div>
     </div>
 
-    <div class="mt-4 d-flex flex-wrap gap-2">
+    <div class="mt-4 d-flex flex-wrap gap-2 mobile-two-col-buttons">
         <button class="btn btn-primary" type="submit">
             <i class="fas fa-save me-1"></i>
             Save Contact

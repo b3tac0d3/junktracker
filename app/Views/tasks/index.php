@@ -1,7 +1,6 @@
 <?php
     $filters = $filters ?? [];
     $tasks = $tasks ?? [];
-    $summary = $summary ?? [];
     $users = $users ?? [];
     $statusOptions = $statusOptions ?? ['open', 'in_progress', 'closed'];
     $linkTypes = $linkTypes ?? ['general'];
@@ -26,21 +25,6 @@
         'due_start' => (string) ($filters['due_start'] ?? ''),
         'due_end' => (string) ($filters['due_end'] ?? ''),
     ];
-    $exportParams = array_merge($currentFilters, ['preset_id' => $selectedPresetId > 0 ? (string) $selectedPresetId : '', 'export' => 'csv']);
-    $exportParams = array_filter($exportParams, static fn (mixed $value): bool => (string) $value !== '');
-    $summaryFilterBase = $currentFilters;
-    $summaryFilterBase['status'] = '';
-    if ($selectedPresetId > 0) {
-        $summaryFilterBase['preset_id'] = (string) $selectedPresetId;
-    }
-    $summaryFilterUrl = static function (array $base, string $status): string {
-        $params = $base;
-        $params['status'] = $status;
-        $params = array_filter($params, static fn (mixed $value): bool => (string) $value !== '');
-
-        return url('/tasks?' . http_build_query($params));
-    };
-    $activeStatus = (string) ($filters['status'] ?? 'open');
 ?>
 <div class="container-fluid px-4">
     <div class="d-flex flex-wrap align-items-center justify-content-between mt-4 mb-3 gap-3">
@@ -51,7 +35,7 @@
                 <li class="breadcrumb-item active">Tasks</li>
             </ol>
         </div>
-        <div class="d-flex gap-2">
+        <div class="d-flex gap-2 mobile-two-col-buttons">
             <?php if (($filters['status'] ?? 'all') === 'closed'): ?>
                 <a class="btn btn-outline-secondary" href="<?= url('/tasks') ?>">
                     <i class="fas fa-list-check me-1"></i>
@@ -76,101 +60,6 @@
     <?php if ($error = flash('error')): ?>
         <div class="alert alert-danger"><?= e($error) ?></div>
     <?php endif; ?>
-
-    <div class="card mb-4">
-        <div class="card-body">
-            <div class="row g-2 align-items-end">
-                <div class="col-12 col-lg-5">
-                    <form method="get" action="<?= url('/tasks') ?>">
-                        <label class="form-label">Saved Filters</label>
-                        <div class="input-group">
-                            <select class="form-select" name="preset_id">
-                                <option value="">Choose preset...</option>
-                                <?php foreach ($savedPresets as $preset): ?>
-                                    <?php $presetId = (int) ($preset['id'] ?? 0); ?>
-                                    <option value="<?= e((string) $presetId) ?>" <?= $selectedPresetId === $presetId ? 'selected' : '' ?>>
-                                        <?= e((string) ($preset['preset_name'] ?? ('Preset #' . $presetId))) ?>
-                                    </option>
-                                <?php endforeach; ?>
-                            </select>
-                            <button class="btn btn-outline-primary" type="submit">Load</button>
-                            <a class="btn btn-outline-secondary" href="<?= url('/tasks') ?>">Reset</a>
-                        </div>
-                    </form>
-                </div>
-                <div class="col-12 col-lg-4">
-                    <form method="post" action="<?= url('/filter-presets/save') ?>">
-                        <?= csrf_field() ?>
-                        <input type="hidden" name="module_key" value="<?= e($filterPresetModule) ?>" />
-                        <input type="hidden" name="return_to" value="<?= e($returnTo) ?>" />
-                        <input type="hidden" name="filters_json" value='<?= e((string) json_encode($currentFilters)) ?>' />
-                        <label class="form-label">Save Current Filters</label>
-                        <div class="input-group">
-                            <input class="form-control" type="text" name="preset_name" placeholder="Preset name..." />
-                            <button class="btn btn-outline-success" type="submit">Save</button>
-                        </div>
-                    </form>
-                </div>
-                <div class="col-12 col-lg-3 d-flex gap-2 justify-content-lg-end">
-                    <?php if ($selectedPresetId > 0): ?>
-                        <form method="post" action="<?= url('/filter-presets/' . $selectedPresetId . '/delete') ?>" onsubmit="return confirm('Delete this preset?');">
-                            <?= csrf_field() ?>
-                            <input type="hidden" name="module_key" value="<?= e($filterPresetModule) ?>" />
-                            <input type="hidden" name="return_to" value="<?= e('/tasks') ?>" />
-                            <button class="btn btn-outline-danger" type="submit">Delete Preset</button>
-                        </form>
-                    <?php endif; ?>
-                    <a class="btn btn-outline-primary" href="<?= url('/tasks?' . http_build_query($exportParams)) ?>">
-                        <i class="fas fa-file-csv me-1"></i>
-                        Export CSV
-                    </a>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <div class="row g-3 mb-4">
-        <div class="col-md-6 col-xl-3">
-            <a class="text-decoration-none text-reset d-block h-100" href="<?= e($summaryFilterUrl($summaryFilterBase, 'open')) ?>">
-            <div class="card border-0 shadow-sm h-100 <?= $activeStatus === 'open' ? 'border border-primary' : '' ?>">
-                <div class="card-body">
-                    <div class="text-uppercase small text-muted">Open</div>
-                    <div class="h4 mb-0"><?= e((string) ((int) ($summary['open_count'] ?? 0))) ?></div>
-                </div>
-            </div>
-            </a>
-        </div>
-        <div class="col-md-6 col-xl-3">
-            <a class="text-decoration-none text-reset d-block h-100" href="<?= e($summaryFilterUrl($summaryFilterBase, 'in_progress')) ?>">
-            <div class="card border-0 shadow-sm h-100 <?= $activeStatus === 'in_progress' ? 'border border-primary' : '' ?>">
-                <div class="card-body">
-                    <div class="text-uppercase small text-muted">In Progress</div>
-                    <div class="h4 mb-0 text-primary"><?= e((string) ((int) ($summary['in_progress_count'] ?? 0))) ?></div>
-                </div>
-            </div>
-            </a>
-        </div>
-        <div class="col-md-6 col-xl-3">
-            <a class="text-decoration-none text-reset d-block h-100" href="<?= e($summaryFilterUrl($summaryFilterBase, 'overdue')) ?>">
-            <div class="card border-0 shadow-sm h-100 <?= $activeStatus === 'overdue' ? 'border border-danger' : '' ?>">
-                <div class="card-body">
-                    <div class="text-uppercase small text-muted">Overdue</div>
-                    <div class="h4 mb-0 text-danger"><?= e((string) ((int) ($summary['overdue_count'] ?? 0))) ?></div>
-                </div>
-            </div>
-            </a>
-        </div>
-        <div class="col-md-6 col-xl-3">
-            <a class="text-decoration-none text-reset d-block h-100" href="<?= e($summaryFilterUrl($summaryFilterBase, 'all')) ?>">
-            <div class="card border-0 shadow-sm h-100 <?= $activeStatus === 'all' ? 'border border-primary' : '' ?>">
-                <div class="card-body">
-                    <div class="text-uppercase small text-muted">Total</div>
-                    <div class="h4 mb-0"><?= e((string) ((int) ($summary['total_count'] ?? 0))) ?></div>
-                </div>
-            </div>
-            </a>
-        </div>
-    </div>
 
     <div class="card mb-4">
         <div class="card-body">
@@ -267,12 +156,57 @@
                         <label class="form-label">Due End</label>
                         <input class="form-control" type="date" name="due_end" value="<?= e((string) ($filters['due_end'] ?? '')) ?>" />
                     </div>
-                    <div class="col-12 d-flex gap-2">
+                    <div class="col-12 d-flex gap-2 mobile-two-col-buttons">
                         <button class="btn btn-primary" type="submit">Apply Filters</button>
                         <a class="btn btn-outline-secondary" href="<?= url('/tasks') ?>">Clear</a>
                     </div>
                 </div>
             </form>
+            <div class="filter-presets-section border-top mt-4 pt-3">
+                <div class="row g-2 align-items-end">
+                    <div class="col-12 col-lg-5">
+                        <form method="get" action="<?= url('/tasks') ?>">
+                            <label class="form-label">Saved Filters</label>
+                            <div class="input-group">
+                                <select class="form-select" name="preset_id">
+                                    <option value="">Choose preset...</option>
+                                    <?php foreach ($savedPresets as $preset): ?>
+                                        <?php $presetId = (int) ($preset['id'] ?? 0); ?>
+                                        <option value="<?= e((string) $presetId) ?>" <?= $selectedPresetId === $presetId ? 'selected' : '' ?>>
+                                            <?= e((string) ($preset['preset_name'] ?? ('Preset #' . $presetId))) ?>
+                                        </option>
+                                    <?php endforeach; ?>
+                                </select>
+                                <button class="btn btn-outline-primary" type="submit">Load</button>
+                                <a class="btn btn-outline-secondary" href="<?= url('/tasks') ?>">Reset</a>
+                            </div>
+                        </form>
+                    </div>
+                    <div class="col-12 col-lg-4">
+                        <form method="post" action="<?= url('/filter-presets/save') ?>">
+                            <?= csrf_field() ?>
+                            <input type="hidden" name="module_key" value="<?= e($filterPresetModule) ?>" />
+                            <input type="hidden" name="return_to" value="<?= e($returnTo) ?>" />
+                            <input type="hidden" name="filters_json" value='<?= e((string) json_encode($currentFilters)) ?>' />
+                            <label class="form-label">Save Current Filters</label>
+                            <div class="input-group">
+                                <input class="form-control" type="text" name="preset_name" placeholder="Preset name..." />
+                                <button class="btn btn-outline-success" type="submit">Save</button>
+                            </div>
+                        </form>
+                    </div>
+                    <div class="col-12 col-lg-3 d-flex gap-2 justify-content-lg-end mobile-two-col-buttons">
+                        <?php if ($selectedPresetId > 0): ?>
+                            <form method="post" action="<?= url('/filter-presets/' . $selectedPresetId . '/delete') ?>" onsubmit="return confirm('Delete this preset?');">
+                                <?= csrf_field() ?>
+                                <input type="hidden" name="module_key" value="<?= e($filterPresetModule) ?>" />
+                                <input type="hidden" name="return_to" value="<?= e('/tasks') ?>" />
+                                <button class="btn btn-outline-danger" type="submit">Delete Preset</button>
+                            </form>
+                        <?php endif; ?>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -285,7 +219,7 @@
             <?php if (empty($tasks)): ?>
                 <div class="text-muted">No tasks found.</div>
             <?php else: ?>
-                <table id="tasksTable">
+                <table id="tasksTable" class="js-card-list-source">
                     <thead>
                         <tr>
                             <th>Done</th>

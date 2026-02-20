@@ -5,7 +5,7 @@
     $isReady = !empty($isReady);
 ?>
 <div class="container-fluid px-4">
-    <div class="d-flex flex-wrap justify-content-between align-items-center mt-4 mb-3 gap-2">
+    <div class="d-flex flex-wrap justify-content-between align-items-center mt-4 mb-3 gap-2 mobile-two-col-buttons">
         <div>
             <h1 class="mb-1">Lookups</h1>
             <ol class="breadcrumb mb-0">
@@ -13,7 +13,7 @@
                 <li class="breadcrumb-item active">Lookups</li>
             </ol>
         </div>
-        <div class="d-flex gap-2">
+        <div class="d-flex gap-2 mobile-two-col-buttons">
             <a class="btn btn-outline-secondary" href="<?= url('/admin') ?>">Back to Admin</a>
             <a class="btn btn-primary" href="<?= url('/admin/lookups/new?group=' . urlencode($selectedGroup)) ?>">
                 <i class="fas fa-plus me-1"></i>Add Option
@@ -59,7 +59,7 @@
                 <div class="text-muted">No options found for this group.</div>
             <?php else: ?>
                 <div class="table-responsive">
-                    <table class="table table-striped align-middle mb-0">
+                    <table class="table table-striped align-middle mb-0 js-card-list-source">
                         <thead>
                             <tr>
                                 <th>ID</th>
@@ -93,7 +93,7 @@
                                         <?php endif; ?>
                                     </td>
                                     <td><?= e(format_datetime($row['updated_at'] ?? null)) ?></td>
-                                    <td class="d-flex gap-2">
+                                    <td class="d-flex gap-2 mobile-two-col-buttons">
                                         <a class="btn btn-sm btn-outline-primary" href="<?= url('/admin/lookups/' . $rowId . '/edit') ?>">Edit</a>
                                         <?php if (!$deleted): ?>
                                             <form method="post" action="<?= url('/admin/lookups/' . $rowId . '/delete') ?>" onsubmit="return confirm('Delete this lookup option?');">

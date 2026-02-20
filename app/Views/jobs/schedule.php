@@ -13,7 +13,7 @@
                 <li class="breadcrumb-item active">Schedule</li>
             </ol>
         </div>
-        <div class="d-flex gap-2">
+        <div class="d-flex gap-2 mobile-two-col-buttons">
             <a class="btn btn-outline-secondary" href="<?= url('/jobs') ?>">
                 <i class="fas fa-list me-1"></i>
                 Jobs List
@@ -43,7 +43,7 @@
                     <label class="form-label">Unscheduled Search</label>
                     <input class="form-control" type="text" name="q" placeholder="Search unscheduled jobs by name/client/location..." value="<?= e($search) ?>" />
                 </div>
-                <div class="col-12 col-lg-4 d-flex gap-2">
+                <div class="col-12 col-lg-4 d-flex gap-2 mobile-two-col-buttons">
                     <button class="btn btn-primary" type="submit">Apply</button>
                     <a class="btn btn-outline-secondary" href="<?= url('/jobs/schedule') ?>">Reset</a>
                 </div>
@@ -90,7 +90,7 @@
                                     data-job-name="<?= e((string) ($job['name'] ?? ('Job #' . $jobId))) ?>"
                                     data-job-status="<?= e($jobStatus) ?>"
                                 >
-                                    <div class="d-flex justify-content-between gap-2">
+                                    <div class="d-flex justify-content-between gap-2 mobile-two-col-buttons">
                                         <div class="fw-semibold text-truncate">#<?= e((string) $jobId) ?> - <?= e((string) ($job['name'] ?? '')) ?></div>
                                         <span class="badge text-bg-light text-uppercase border"><?= e($jobStatus) ?></span>
                                     </div>

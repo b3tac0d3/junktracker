@@ -33,7 +33,7 @@
                 <li class="breadcrumb-item active">Entry #<?= e((string) ($entry['id'] ?? '')) ?></li>
             </ol>
         </div>
-        <div class="d-flex gap-2">
+        <div class="d-flex gap-2 mobile-two-col-buttons">
             <?php if ($isActive): ?>
                 <?php if ($isOpen): ?>
                     <form method="post" action="<?= url('/time-tracking/' . ($entry['id'] ?? '') . '/punch-out') ?>">

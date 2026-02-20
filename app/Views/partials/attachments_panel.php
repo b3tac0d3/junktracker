@@ -19,7 +19,7 @@
     $tags = \App\Models\Attachment::TAGS;
 ?>
 <div class="card mb-4 attachments-panel-card">
-    <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+    <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2 mobile-two-col-buttons">
         <div>
             <i class="fas fa-paperclip me-1"></i>
             <?= e($attachmentPanelTitle) ?>

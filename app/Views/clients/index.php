@@ -1,10 +1,3 @@
-<?php
-    $exportParams = array_filter([
-        'q' => (string) ($query ?? ''),
-        'status' => (string) ($status ?? 'active'),
-        'export' => 'csv',
-    ], static fn (mixed $value): bool => (string) $value !== '');
-?>
 <div class="container-fluid px-4">
     <div class="d-flex flex-wrap align-items-center justify-content-between mt-4 mb-3 gap-3">
         <div>
@@ -17,10 +10,6 @@
         <a class="btn btn-primary" href="<?= url('/clients/new') ?>">
             <i class="fas fa-user-plus me-1"></i>
             Add Client
-        </a>
-        <a class="btn btn-outline-primary" href="<?= url('/clients?' . http_build_query($exportParams)) ?>">
-            <i class="fas fa-file-csv me-1"></i>
-            Export CSV
         </a>
     </div>
 
@@ -75,7 +64,7 @@
             Client Directory
         </div>
         <div class="card-body">
-            <table id="clientsTable">
+            <table id="clientsTable" class="js-card-list-source">
                 <thead>
                     <tr>
                         <th>ID</th>

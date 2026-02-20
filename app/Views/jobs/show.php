@@ -85,7 +85,7 @@
                 <li class="breadcrumb-item active"><?= e($job['name'] ?? 'Job') ?></li>
             </ol>
         </div>
-        <div class="d-flex gap-2">
+        <div class="d-flex gap-2 mobile-two-col-buttons">
             <?php if (!$isDeleted): ?>
                 <button class="btn btn-danger" type="button" data-bs-toggle="modal" data-bs-target="#deleteJobModal">
                     <i class="fas fa-trash"></i>
@@ -142,12 +142,12 @@
     <div class="row g-4">
         <div class="col-12 col-xl-8">
             <div class="card mb-4" id="crew-punch">
-                <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+                <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2 mobile-two-col-buttons">
                     <div>
                         <i class="fas fa-briefcase me-1"></i>
                         Job Overview
                     </div>
-                    <div class="d-flex align-items-center gap-2">
+                    <div class="d-flex align-items-center gap-2 mobile-two-col-buttons">
                         <span class="badge <?= $statusClass ?> text-uppercase"><?= e($status !== '' ? $status : 'pending') ?></span>
                         <a class="btn btn-sm btn-warning" href="<?= url('/jobs/' . ($job['id'] ?? '') . '/edit') ?>" title="Edit job" aria-label="Edit job">
                             <i class="fas fa-pen"></i>
@@ -253,7 +253,7 @@
             </div>
 
             <div class="card mb-4">
-                <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+                <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2 mobile-two-col-buttons">
                     <div>
                     <i class="fas fa-truck-loading me-1"></i>
                     Disposal Record
@@ -310,7 +310,7 @@
             </div>
 
             <div class="card mb-4">
-                <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+                <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2 mobile-two-col-buttons">
                     <div>
                     <i class="fas fa-receipt me-1"></i>
                     Expense Record
@@ -367,7 +367,7 @@
             </div>
 
             <div class="card mb-4">
-                <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+                <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2 mobile-two-col-buttons">
                     <div>
                         <i class="fas fa-clock me-1"></i>
                         Hours
@@ -575,7 +575,7 @@
                 </div>
             </div>
             <div class="card mb-4">
-                <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+                <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2 mobile-two-col-buttons">
                     <div>
                         <i class="fas fa-list-check me-1"></i>
                         Job Actions
@@ -661,12 +661,12 @@
             </div>
 
             <div class="card mb-4">
-                <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+                <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2 mobile-two-col-buttons">
                     <div>
                         <i class="fas fa-file-invoice-dollar me-1"></i>
                         Billing Snapshot
                     </div>
-                    <div class="d-flex align-items-center gap-2">
+                    <div class="d-flex align-items-center gap-2 mobile-two-col-buttons">
                         <?php if (empty($job['paid'])): ?>
                             <form method="post" action="<?= url('/jobs/' . ($job['id'] ?? '') . '/mark-paid') ?>">
                                 <?= csrf_field() ?>
@@ -753,12 +753,12 @@
             </div>
 
             <div class="card mb-4" id="estimate-invoice">
-                <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+                <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2 mobile-two-col-buttons">
                     <div>
                         <i class="fas fa-file-signature me-1"></i>
                         Estimate / Invoice Workflow
                     </div>
-                    <div class="d-flex gap-2">
+                    <div class="d-flex gap-2 mobile-two-col-buttons">
                         <a class="btn btn-sm btn-outline-primary" href="<?= url('/jobs/' . ($job['id'] ?? '') . '/documents/new?type=estimate') ?>">
                             <i class="fas fa-plus me-1"></i>
                             Add Estimate
@@ -859,7 +859,7 @@
             </div>
 
             <div class="card mb-4">
-                <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+                <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2 mobile-two-col-buttons">
                     <div>
                         <i class="fas fa-list-check me-1"></i>
                         Tasks

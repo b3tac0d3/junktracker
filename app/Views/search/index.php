@@ -32,7 +32,7 @@
                         />
                     </div>
                 </div>
-                <div class="col-12 col-lg-2 d-flex gap-2">
+                <div class="col-12 col-lg-2 d-flex gap-2 mobile-two-col-buttons">
                     <button class="btn btn-primary flex-fill" type="submit">Search</button>
                     <a class="btn btn-outline-secondary flex-fill" href="<?= url('/search') ?>">Clear</a>
                 </div>
@@ -46,7 +46,7 @@
         <div class="alert alert-warning mb-3">No results found for "<?= e($query) ?>".</div>
         <div class="card mb-4">
             <div class="card-header"><i class="fas fa-plus-circle me-1"></i>Create New Record</div>
-            <div class="card-body d-flex flex-wrap gap-2">
+            <div class="card-body d-flex flex-wrap gap-2 mobile-two-col-buttons">
                 <a class="btn btn-primary" href="<?= url('/jobs/new') ?>">Add Job</a>
                 <a class="btn btn-warning text-dark" href="<?= url('/prospects/new') ?>">Add Prospect</a>
                 <a class="btn btn-success" href="<?= url('/clients/new') ?>">Add Client</a>
@@ -81,7 +81,7 @@
                                 <?php $itemUrl = trim((string) ($item['url'] ?? '')); ?>
                                 <?php if ($itemUrl !== ''): ?>
                                     <a class="list-group-item list-group-item-action" href="<?= url($itemUrl) ?>">
-                                        <div class="d-flex w-100 justify-content-between align-items-start gap-2">
+                                        <div class="d-flex w-100 justify-content-between align-items-start gap-2 mobile-two-col-buttons">
                                             <div>
                                                 <div class="fw-semibold"><?= e((string) ($item['title'] ?? 'Result')) ?></div>
                                                 <?php if (!empty($item['meta'])): ?>

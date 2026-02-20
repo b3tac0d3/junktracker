@@ -27,6 +27,7 @@
             'sub' => 'Expired: ' . (int) ($health['expired_invites'] ?? 0),
             'tone' => 'neutral',
             'icon' => 'fa-envelope-open-text',
+            'url' => url('/users?status=all'),
         ],
         [
             'label' => 'Failed Mail (24h)',
@@ -34,6 +35,7 @@
             'sub' => 'Delivery issues',
             'tone' => 'danger',
             'icon' => 'fa-triangle-exclamation',
+            'url' => url('/admin/settings'),
         ],
         [
             'label' => 'Failed Logins (24h)',
@@ -41,6 +43,7 @@
             'sub' => 'Security signal',
             'tone' => 'danger',
             'icon' => 'fa-user-lock',
+            'url' => url('/admin/audit?preset=security&q=login'),
         ],
         [
             'label' => 'Active Sessions',
@@ -48,6 +51,7 @@
             'sub' => 'Current active session files',
             'tone' => 'info',
             'icon' => 'fa-users',
+            'url' => url('/admin/audit?preset=security'),
         ],
         [
             'label' => 'Overdue Tasks',
@@ -55,6 +59,7 @@
             'sub' => 'Needs follow-up',
             'tone' => 'warning',
             'icon' => 'fa-list-check',
+            'url' => url('/tasks?status=overdue'),
         ],
     ];
 ?>
@@ -88,6 +93,7 @@
     }
 
     .admin-shell .metric-body {
+        position: relative;
         padding: 1rem 1.25rem 1.1rem;
     }
 
@@ -133,6 +139,10 @@
     .admin-shell .metric-card.metric-warning .metric-icon {
         color: #9f6500;
         background: #fff6dc;
+    }
+
+    .admin-shell .metric-card .stretched-link {
+        border-radius: 1rem;
     }
 
     .admin-shell .health-panel {
@@ -231,6 +241,11 @@
                         </div>
                         <div class="metric-value"><?= e((string) $card['value']) ?></div>
                         <div class="metric-sub"><?= e((string) $card['sub']) ?></div>
+                        <a
+                            class="stretched-link"
+                            href="<?= e((string) ($card['url'] ?? url('/admin'))) ?>"
+                            aria-label="<?= e('Open ' . (string) ($card['label'] ?? 'details')) ?>"
+                        ></a>
                     </div>
                 </div>
             </div>

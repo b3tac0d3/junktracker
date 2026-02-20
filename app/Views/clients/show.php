@@ -19,7 +19,7 @@
                 <li class="breadcrumb-item active">#<?= e((string) ($client['id'] ?? '')) ?></li>
             </ol>
         </div>
-        <div class="d-flex gap-2">
+        <div class="d-flex gap-2 mobile-two-col-buttons">
             <a class="btn btn-primary" href="<?= url('/client-contacts/new?client_id=' . ($client['id'] ?? '')) ?>">
                 <i class="fas fa-phone me-1"></i>
                 Log Contact
@@ -170,7 +170,7 @@
     </div>
 
     <div class="card mb-4">
-        <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+        <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2 mobile-two-col-buttons">
             <div>
                 <i class="fas fa-address-book me-1"></i>
                 Client Contacts
@@ -236,7 +236,7 @@
     </div>
 
     <div class="card mb-4">
-        <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+        <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2 mobile-two-col-buttons">
             <div>
                 <i class="fas fa-list-check me-1"></i>
                 Tasks

@@ -1,7 +1,6 @@
 <?php
     $filters = is_array($filters ?? null) ? $filters : [];
     $bugs = is_array($bugs ?? null) ? $bugs : [];
-    $summary = is_array($summary ?? null) ? $summary : [];
     $users = is_array($users ?? null) ? $users : [];
     $statusFilters = is_array($statusFilters ?? null) ? $statusFilters : ['open', 'all'];
     $statusOptions = is_array($statusOptions ?? null) ? $statusOptions : [];
@@ -34,41 +33,6 @@
     <?php if ($error = flash('error')): ?>
         <div class="alert alert-danger"><?= e($error) ?></div>
     <?php endif; ?>
-
-    <div class="row g-3 mb-4">
-        <div class="col-md-6 col-xl-3">
-            <div class="card border-0 shadow-sm h-100">
-                <div class="card-body">
-                    <div class="text-uppercase small text-muted">Open</div>
-                    <div class="h4 mb-0 text-danger"><?= e((string) ((int) ($summary['open_count'] ?? 0))) ?></div>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-6 col-xl-3">
-            <div class="card border-0 shadow-sm h-100">
-                <div class="card-body">
-                    <div class="text-uppercase small text-muted">In Progress</div>
-                    <div class="h4 mb-0 text-warning"><?= e((string) ((int) ($summary['in_progress_count'] ?? 0))) ?></div>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-6 col-xl-3">
-            <div class="card border-0 shadow-sm h-100">
-                <div class="card-body">
-                    <div class="text-uppercase small text-muted">Fixed</div>
-                    <div class="h4 mb-0 text-success"><?= e((string) ((int) ($summary['fixed_count'] ?? 0))) ?></div>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-6 col-xl-3">
-            <div class="card border-0 shadow-sm h-100">
-                <div class="card-body">
-                    <div class="text-uppercase small text-muted">Total</div>
-                    <div class="h4 mb-0"><?= e((string) ((int) ($summary['total_count'] ?? 0))) ?></div>
-                </div>
-            </div>
-        </div>
-    </div>
 
     <div class="card mb-4">
         <div class="card-header">
@@ -198,7 +162,7 @@
             <?php if (empty($bugs)): ?>
                 <div class="text-muted">No bugs found.</div>
             <?php else: ?>
-                <table id="devBugsTable">
+                <table id="devBugsTable" class="js-card-list-source">
                     <thead>
                         <tr>
                             <th>ID</th>
@@ -271,4 +235,3 @@
         </div>
     </div>
 </div>
-

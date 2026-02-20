@@ -41,7 +41,7 @@
                 <?php endif; ?>
             </ol>
         </div>
-        <div class="d-flex gap-2">
+        <div class="d-flex gap-2 mobile-two-col-buttons">
             <?php if (!empty($isOwnActivity)): ?>
                 <a class="btn btn-outline-secondary" href="<?= url('/settings') ?>">Back to Settings</a>
             <?php else: ?>

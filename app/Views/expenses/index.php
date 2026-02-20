@@ -1,5 +1,4 @@
 <?php
-    $summary = $summary ?? [];
     $filters = $filters ?? [];
     $categories = $categories ?? [];
     $expenses = $expenses ?? [];
@@ -18,8 +17,6 @@
     $currentPath = '/expenses';
     $currentQuery = (string) ($_SERVER['QUERY_STRING'] ?? '');
     $currentReturnTo = $currentPath . ($currentQuery !== '' ? '?' . $currentQuery : '');
-    $exportParams = array_merge($currentFilters, ['preset_id' => $selectedPresetId > 0 ? (string) $selectedPresetId : '', 'export' => 'csv']);
-    $exportParams = array_filter($exportParams, static fn (mixed $value): bool => (string) $value !== '');
 ?>
 <div class="container-fluid px-4">
     <div class="d-flex flex-wrap align-items-center justify-content-between mt-4 mb-3 gap-3">
@@ -42,94 +39,6 @@
     <?php if ($error = flash('error')): ?>
         <div class="alert alert-danger"><?= e($error) ?></div>
     <?php endif; ?>
-
-    <div class="card mb-4">
-        <div class="card-body">
-            <div class="row g-2 align-items-end">
-                <div class="col-12 col-lg-5">
-                    <form method="get" action="<?= url('/expenses') ?>">
-                        <label class="form-label">Saved Filters</label>
-                        <div class="input-group">
-                            <select class="form-select" name="preset_id">
-                                <option value="">Choose preset...</option>
-                                <?php foreach ($savedPresets as $preset): ?>
-                                    <?php $presetId = (int) ($preset['id'] ?? 0); ?>
-                                    <option value="<?= e((string) $presetId) ?>" <?= $selectedPresetId === $presetId ? 'selected' : '' ?>>
-                                        <?= e((string) ($preset['preset_name'] ?? ('Preset #' . $presetId))) ?>
-                                    </option>
-                                <?php endforeach; ?>
-                            </select>
-                            <button class="btn btn-outline-primary" type="submit">Load</button>
-                            <a class="btn btn-outline-secondary" href="<?= url('/expenses') ?>">Reset</a>
-                        </div>
-                    </form>
-                </div>
-                <div class="col-12 col-lg-4">
-                    <form method="post" action="<?= url('/filter-presets/save') ?>">
-                        <?= csrf_field() ?>
-                        <input type="hidden" name="module_key" value="<?= e($filterPresetModule) ?>" />
-                        <input type="hidden" name="return_to" value="<?= e($currentReturnTo) ?>" />
-                        <input type="hidden" name="filters_json" value='<?= e((string) json_encode($currentFilters)) ?>' />
-                        <label class="form-label">Save Current Filters</label>
-                        <div class="input-group">
-                            <input class="form-control" type="text" name="preset_name" placeholder="Preset name..." />
-                            <button class="btn btn-outline-success" type="submit">Save</button>
-                        </div>
-                    </form>
-                </div>
-                <div class="col-12 col-lg-3 d-flex gap-2 justify-content-lg-end">
-                    <?php if ($selectedPresetId > 0): ?>
-                        <form method="post" action="<?= url('/filter-presets/' . $selectedPresetId . '/delete') ?>" onsubmit="return confirm('Delete this preset?');">
-                            <?= csrf_field() ?>
-                            <input type="hidden" name="module_key" value="<?= e($filterPresetModule) ?>" />
-                            <input type="hidden" name="return_to" value="<?= e('/expenses') ?>" />
-                            <button class="btn btn-outline-danger" type="submit">Delete Preset</button>
-                        </form>
-                    <?php endif; ?>
-                    <a class="btn btn-outline-primary" href="<?= url('/expenses?' . http_build_query($exportParams)) ?>">
-                        <i class="fas fa-file-csv me-1"></i>
-                        Export CSV
-                    </a>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <div class="row g-3 mb-4">
-        <div class="col-md-6 col-xl-4">
-            <div class="card border-0 shadow-sm h-100">
-                <div class="card-body">
-                    <div class="text-uppercase small text-muted">Total Expenses</div>
-                    <div class="h4 mb-1 text-danger">
-                        <?= e('$' . number_format((float) ($summary['total_amount'] ?? 0), 2)) ?>
-                    </div>
-                    <div class="small text-muted"><?= e((string) ((int) ($summary['expense_count'] ?? 0))) ?> records</div>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-6 col-xl-4">
-            <div class="card border-0 shadow-sm h-100">
-                <div class="card-body">
-                    <div class="text-uppercase small text-muted">Job-Linked Expenses</div>
-                    <div class="h4 mb-1 text-primary">
-                        <?= e('$' . number_format((float) ($summary['linked_amount'] ?? 0), 2)) ?>
-                    </div>
-                    <div class="small text-muted">Assigned to jobs</div>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-6 col-xl-4">
-            <div class="card border-0 shadow-sm h-100">
-                <div class="card-body">
-                    <div class="text-uppercase small text-muted">Unlinked Expenses</div>
-                    <div class="h4 mb-1 text-warning">
-                        <?= e('$' . number_format((float) ($summary['unlinked_amount'] ?? 0), 2)) ?>
-                    </div>
-                    <div class="small text-muted">Not tied to a job</div>
-                </div>
-            </div>
-        </div>
-    </div>
 
     <div class="card mb-4">
         <div class="card-body">
@@ -187,12 +96,57 @@
                         <label class="form-label">End</label>
                         <input class="form-control" type="date" name="end_date" value="<?= e((string) ($filters['end_date'] ?? '')) ?>" />
                     </div>
-                    <div class="col-12 d-flex gap-2">
+                    <div class="col-12 d-flex gap-2 mobile-two-col-buttons">
                         <button class="btn btn-primary" type="submit">Apply Filters</button>
                         <a class="btn btn-outline-secondary" href="<?= url('/expenses') ?>">Clear</a>
                     </div>
                 </div>
             </form>
+            <div class="filter-presets-section border-top mt-4 pt-3">
+                <div class="row g-2 align-items-end">
+                    <div class="col-12 col-lg-5">
+                        <form method="get" action="<?= url('/expenses') ?>">
+                            <label class="form-label">Saved Filters</label>
+                            <div class="input-group">
+                                <select class="form-select" name="preset_id">
+                                    <option value="">Choose preset...</option>
+                                    <?php foreach ($savedPresets as $preset): ?>
+                                        <?php $presetId = (int) ($preset['id'] ?? 0); ?>
+                                        <option value="<?= e((string) $presetId) ?>" <?= $selectedPresetId === $presetId ? 'selected' : '' ?>>
+                                            <?= e((string) ($preset['preset_name'] ?? ('Preset #' . $presetId))) ?>
+                                        </option>
+                                    <?php endforeach; ?>
+                                </select>
+                                <button class="btn btn-outline-primary" type="submit">Load</button>
+                                <a class="btn btn-outline-secondary" href="<?= url('/expenses') ?>">Reset</a>
+                            </div>
+                        </form>
+                    </div>
+                    <div class="col-12 col-lg-4">
+                        <form method="post" action="<?= url('/filter-presets/save') ?>">
+                            <?= csrf_field() ?>
+                            <input type="hidden" name="module_key" value="<?= e($filterPresetModule) ?>" />
+                            <input type="hidden" name="return_to" value="<?= e($currentReturnTo) ?>" />
+                            <input type="hidden" name="filters_json" value='<?= e((string) json_encode($currentFilters)) ?>' />
+                            <label class="form-label">Save Current Filters</label>
+                            <div class="input-group">
+                                <input class="form-control" type="text" name="preset_name" placeholder="Preset name..." />
+                                <button class="btn btn-outline-success" type="submit">Save</button>
+                            </div>
+                        </form>
+                    </div>
+                    <div class="col-12 col-lg-3 d-flex gap-2 justify-content-lg-end mobile-two-col-buttons">
+                        <?php if ($selectedPresetId > 0): ?>
+                            <form method="post" action="<?= url('/filter-presets/' . $selectedPresetId . '/delete') ?>" onsubmit="return confirm('Delete this preset?');">
+                                <?= csrf_field() ?>
+                                <input type="hidden" name="module_key" value="<?= e($filterPresetModule) ?>" />
+                                <input type="hidden" name="return_to" value="<?= e('/expenses') ?>" />
+                                <button class="btn btn-outline-danger" type="submit">Delete Preset</button>
+                            </form>
+                        <?php endif; ?>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -205,7 +159,7 @@
             <?php if (empty($expenses)): ?>
                 <div class="text-muted">No expenses found for this filter set.</div>
             <?php else: ?>
-                <table id="expensesTable">
+                <table id="expensesTable" class="js-card-list-source">
                     <thead>
                         <tr>
                             <th>ID</th>
@@ -258,7 +212,7 @@
                 <div class="text-muted">No job-linked expenses in this range.</div>
             <?php else: ?>
                 <div class="table-responsive">
-                    <table class="table table-striped align-middle mb-0">
+                    <table class="table table-striped align-middle mb-0 js-card-list-source">
                         <thead>
                             <tr>
                                 <th>Job</th>

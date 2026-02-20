@@ -1,6 +1,5 @@
 <?php
     $scope = (string) ($scope ?? 'open');
-    $summary = is_array($summary ?? null) ? $summary : [];
     $notifications = is_array($notifications ?? null) ? $notifications : [];
     $scopes = [
         'open' => 'Open',
@@ -28,41 +27,6 @@
         <div class="alert alert-danger"><?= e($error) ?></div>
     <?php endif; ?>
 
-    <div class="row g-3 mb-4">
-        <div class="col-md-3">
-            <div class="card h-100 border-0 shadow-sm">
-                <div class="card-body">
-                    <div class="text-muted small text-uppercase">Total</div>
-                    <div class="h4 mb-0"><?= e((string) ((int) ($summary['total'] ?? 0))) ?></div>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card h-100 border-0 shadow-sm">
-                <div class="card-body">
-                    <div class="text-muted small text-uppercase">Open</div>
-                    <div class="h4 mb-0 text-primary"><?= e((string) ((int) ($summary['open'] ?? 0))) ?></div>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card h-100 border-0 shadow-sm">
-                <div class="card-body">
-                    <div class="text-muted small text-uppercase">Unread</div>
-                    <div class="h4 mb-0 text-danger"><?= e((string) ((int) ($summary['unread'] ?? 0))) ?></div>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card h-100 border-0 shadow-sm">
-                <div class="card-body">
-                    <div class="text-muted small text-uppercase">Dismissed</div>
-                    <div class="h4 mb-0 text-secondary"><?= e((string) ((int) ($summary['dismissed'] ?? 0))) ?></div>
-                </div>
-            </div>
-        </div>
-    </div>
-
     <div class="card mb-4">
         <div class="card-body">
             <form class="row g-2 align-items-end" method="get" action="<?= url('/notifications') ?>">
@@ -74,7 +38,7 @@
                         <?php endforeach; ?>
                     </select>
                 </div>
-                <div class="col-md-8 d-flex gap-2">
+                <div class="col-md-8 d-flex gap-2 mobile-two-col-buttons">
                     <button class="btn btn-primary" type="submit">Apply</button>
                     <a class="btn btn-outline-secondary" href="<?= url('/notifications') ?>">Reset</a>
                 </div>
@@ -89,7 +53,7 @@
         </div>
         <div class="card-body p-0">
             <div class="table-responsive">
-                <table class="table table-striped table-hover align-middle mb-0">
+                <table class="table table-striped table-hover align-middle mb-0 js-card-list-source">
                     <thead>
                         <tr>
                             <th>Status</th>

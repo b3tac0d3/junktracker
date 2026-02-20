@@ -286,6 +286,8 @@
         <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js" crossorigin="anonymous"></script>
         <script src="<?= asset('js/scripts.js') ?>"></script>
         <script src="<?= asset('js/ajax-actions.js') ?>"></script>
+        <script src="<?= asset('js/card-list-component.js') ?>"></script>
+        <script src="<?= asset('js/mobile-filter-accordion.js') ?>"></script>
         <script>
             (function () {
                 const searchInput = document.getElementById('globalNavSearchInput');

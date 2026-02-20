@@ -195,7 +195,7 @@
         <?php endif; ?>
     </div>
 
-    <div class="mt-4 d-flex gap-2">
+    <div class="mt-4 d-flex gap-2 mobile-two-col-buttons">
         <?php if (!$isEdit): ?>
             <button class="btn btn-primary" name="force_create" type="submit" value="0">Save Client</button>
         <?php else: ?>

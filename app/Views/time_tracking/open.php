@@ -45,7 +45,7 @@
                 <li class="breadcrumb-item active">Open Clock</li>
             </ol>
         </div>
-        <div class="d-flex gap-2">
+        <div class="d-flex gap-2 mobile-two-col-buttons">
             <a class="btn btn-outline-secondary" href="<?= url('/time-tracking') ?>">
                 <i class="fas fa-history me-1"></i>
                 Time History
@@ -136,7 +136,7 @@
                             <?php endforeach; ?>
                         </select>
                     </div>
-                    <div class="col-12 col-lg-2 d-flex gap-2">
+                    <div class="col-12 col-lg-2 d-flex gap-2 mobile-two-col-buttons">
                         <button class="btn btn-primary flex-fill" type="submit">Apply</button>
                         <a class="btn btn-outline-secondary flex-fill" href="<?= url('/time-tracking/open') ?>">Clear</a>
                     </div>

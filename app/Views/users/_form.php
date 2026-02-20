@@ -136,7 +136,7 @@
             <?php endif; ?>
         <?php endif; ?>
     </div>
-    <div class="mt-4 d-flex gap-2">
+    <div class="mt-4 d-flex gap-2 mobile-two-col-buttons">
         <button class="btn btn-primary" type="submit">Save User</button>
         <?php if (!empty($user['id'])): ?>
             <a class="btn btn-outline-secondary" href="<?= url('/users/' . $user['id']) ?>">Cancel</a>

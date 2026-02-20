@@ -151,7 +151,7 @@
             </div>
         </div>
     </div>
-    <div class="mt-4 d-flex gap-2">
+    <div class="mt-4 d-flex gap-2 mobile-two-col-buttons">
         <button class="btn btn-primary" type="submit">Save Job</button>
         <a class="btn btn-outline-secondary" href="<?= $cancelUrl ?>">Cancel</a>
     </div>

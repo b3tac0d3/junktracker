@@ -1,14 +1,5 @@
 <?php
-    $summary = $summary ?? [];
     $filters = $filters ?? [];
-    $exportParams = array_filter([
-        'q' => (string) ($filters['q'] ?? ''),
-        'type' => (string) ($filters['type'] ?? 'all'),
-        'record_status' => (string) ($filters['record_status'] ?? 'active'),
-        'start_date' => (string) ($filters['start_date'] ?? ''),
-        'end_date' => (string) ($filters['end_date'] ?? ''),
-        'export' => 'csv',
-    ], static fn (mixed $value): bool => (string) $value !== '');
 ?>
 <div class="container-fluid px-4">
     <div class="d-flex flex-wrap align-items-center justify-content-between mt-4 mb-3 gap-3">
@@ -23,10 +14,6 @@
             <i class="fas fa-plus me-1"></i>
             Add Sale
         </a>
-        <a class="btn btn-outline-primary" href="<?= url('/sales?' . http_build_query($exportParams)) ?>">
-            <i class="fas fa-file-csv me-1"></i>
-            Export CSV
-        </a>
     </div>
 
     <?php if ($success = flash('success')): ?>
@@ -35,54 +22,6 @@
     <?php if ($error = flash('error')): ?>
         <div class="alert alert-danger"><?= e($error) ?></div>
     <?php endif; ?>
-
-    <div class="row g-3 mb-4">
-        <div class="col-md-6 col-xl-4">
-            <div class="card border-0 shadow-sm h-100">
-                <div class="card-body">
-                    <div class="text-uppercase small text-muted">Total Sales</div>
-                    <div class="small text-muted mt-2">Gross</div>
-                    <div class="h5 mb-0 text-success">
-                        <?= e('$' . number_format((float) ($summary['gross_total'] ?? 0), 2)) ?>
-                    </div>
-                    <div class="small text-muted mt-2">Net</div>
-                    <div class="h6 mb-0">
-                        <?= e('$' . number_format((float) ($summary['net_total'] ?? 0), 2)) ?>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-6 col-xl-4">
-            <div class="card border-0 shadow-sm h-100">
-                <div class="card-body">
-                    <div class="text-uppercase small text-muted">Total Scrap Sales</div>
-                    <div class="small text-muted mt-2">Gross</div>
-                    <div class="h5 mb-0 text-success">
-                        <?= e('$' . number_format((float) ($summary['scrap_gross_total'] ?? 0), 2)) ?>
-                    </div>
-                    <div class="small text-muted mt-2">Net</div>
-                    <div class="h6 mb-0">
-                        <?= e('$' . number_format((float) ($summary['scrap_net_total'] ?? 0), 2)) ?>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-6 col-xl-4">
-            <div class="card border-0 shadow-sm h-100">
-                <div class="card-body">
-                    <div class="text-uppercase small text-muted">Total Shop Sales</div>
-                    <div class="small text-muted mt-2">Gross</div>
-                    <div class="h5 mb-0 text-success">
-                        <?= e('$' . number_format((float) ($summary['shop_gross_total'] ?? 0), 2)) ?>
-                    </div>
-                    <div class="small text-muted mt-2">Net</div>
-                    <div class="h6 mb-0">
-                        <?= e('$' . number_format((float) ($summary['shop_net_total'] ?? 0), 2)) ?>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
 
     <div class="card mb-4">
         <div class="card-body">
@@ -121,7 +60,7 @@
                         <label class="form-label">End Date</label>
                         <input class="form-control" type="date" name="end_date" value="<?= e((string) ($filters['end_date'] ?? '')) ?>" />
                     </div>
-                    <div class="col-12 d-flex gap-2">
+                    <div class="col-12 d-flex gap-2 mobile-two-col-buttons">
                         <button class="btn btn-primary" type="submit">Apply Filters</button>
                         <a class="btn btn-outline-secondary" href="<?= url('/sales') ?>">Clear</a>
                     </div>
@@ -139,7 +78,7 @@
             <?php if (empty($sales ?? [])): ?>
                 <div class="text-muted">No sales records found for this filter set.</div>
             <?php else: ?>
-                <table id="salesTable">
+                <table id="salesTable" class="js-card-list-source">
                     <thead>
                         <tr>
                             <th>ID</th>
