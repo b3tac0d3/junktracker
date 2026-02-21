@@ -2,7 +2,8 @@
     $billing = $billing ?? [];
     $isEdit = !empty($billing['id']);
     $entryType = (string) old('entry_type', $billing['action_type'] ?? 'deposit');
-    $entryDate = (string) old('entry_date', format_datetime_local($billing['action_at'] ?? null));
+    $entryDateDefault = $billing['action_at'] ?? (!$isEdit ? date('Y-m-d H:i:s') : null);
+    $entryDate = (string) old('entry_date', format_datetime_local($entryDateDefault));
     $amount = (string) old('amount', isset($billing['amount']) ? (string) $billing['amount'] : '');
 
     $existingNote = (string) ($billing['note'] ?? '');

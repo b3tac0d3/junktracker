@@ -39,8 +39,13 @@ final class Job
         }
 
         if (!empty($filters['status']) && $filters['status'] !== 'all') {
-            $where[] = 'j.job_status = :status';
-            $params['status'] = $filters['status'];
+            $status = strtolower(trim((string) $filters['status']));
+            if ($status === 'dispatch') {
+                $where[] = 'LOWER(TRIM(COALESCE(j.job_status, \'\'))) IN (\'pending\', \'active\')';
+            } else {
+                $where[] = 'j.job_status = :status';
+                $params['status'] = $filters['status'];
+            }
         }
 
         if (!empty($filters['billing_state']) && $filters['billing_state'] !== 'all') {
@@ -338,6 +343,7 @@ final class Job
 
     public static function findPotentialDuplicates(array $data, ?int $excludeId = null, int $limit = 8): array
     {
+        $excludeId = ($excludeId !== null && $excludeId > 0) ? (int) $excludeId : null;
         $name = strtolower(trim((string) ($data['name'] ?? '')));
         $address1 = strtolower(trim((string) ($data['address_1'] ?? '')));
         $city = strtolower(trim((string) ($data['city'] ?? '')));
@@ -413,6 +419,11 @@ final class Job
 
         $matches = [];
         foreach ($rows as $row) {
+            $rowId = (int) ($row['id'] ?? 0);
+            if ($excludeId !== null && $rowId === $excludeId) {
+                continue;
+            }
+
             $rowName = strtolower(trim((string) ($row['name'] ?? '')));
             $rowAddress = strtolower(trim((string) ($row['address_1'] ?? '')));
             $rowCity = strtolower(trim((string) ($row['city'] ?? '')));
@@ -457,7 +468,7 @@ final class Job
             }
 
             $matches[] = [
-                'id' => (int) ($row['id'] ?? 0),
+                'id' => $rowId,
                 'name' => (string) ($row['name'] ?? ''),
                 'client_name' => (string) ($row['client_name'] ?? ''),
                 'job_status' => (string) ($row['job_status'] ?? ''),
@@ -781,6 +792,32 @@ final class Job
 
         self::updateScheduledDate($id, $data['scheduled_date'], $actorId, $data['scheduled_end_at'] ?? null);
         self::syncPaidStatus($id);
+    }
+
+    public static function updateStatus(int $id, string $status, ?int $actorId = null): void
+    {
+        $sets = [
+            'job_status = :job_status',
+            'updated_at = NOW()',
+        ];
+        $params = [
+            'id' => $id,
+            'job_status' => $status,
+        ];
+
+        if ($actorId !== null && Schema::hasColumn('jobs', 'updated_by')) {
+            $sets[] = 'updated_by = :updated_by';
+            $params['updated_by'] = $actorId;
+        }
+
+        $sql = 'UPDATE jobs
+                SET ' . implode(', ', $sets) . '
+                WHERE id = :id
+                  AND deleted_at IS NULL
+                  AND COALESCE(active, 1) = 1';
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute($params);
     }
 
     public static function searchOwners(string $term, int $limit = 15): array
@@ -1151,7 +1188,7 @@ final class Job
         $paidAt = $paidAt ?? date('Y-m-d H:i:s');
         $sets = [
             'paid = 1',
-            'paid_date = COALESCE(paid_date, :paid_at)',
+            'paid_date = :paid_at',
             'updated_at = NOW()',
         ];
         $params = [
@@ -1188,30 +1225,72 @@ final class Job
 
     public static function syncPaidStatus(int $jobId): void
     {
-        $sql = 'SELECT COALESCE(j.total_billed, 0) AS invoice_amount,
-                       COALESCE(SUM(CASE WHEN ja.action_type = \'payment\' THEN COALESCE(ja.amount, 0) ELSE 0 END), 0) AS payment_total
-                FROM jobs j
-                LEFT JOIN job_actions ja ON ja.job_id = j.id
-                WHERE j.id = :id
-                GROUP BY j.id';
-
-        $stmt = Database::connection()->prepare($sql);
-        $stmt->execute(['id' => $jobId]);
-        $totals = $stmt->fetch();
+        $totals = self::paymentSnapshot($jobId);
 
         if (!$totals) {
             return;
         }
 
         $invoiceAmount = (float) ($totals['invoice_amount'] ?? 0);
-        $paymentTotal = (float) ($totals['payment_total'] ?? 0);
+        $collectedTotal = (float) ($totals['collected_total'] ?? 0);
+        $lastCollectedAt = trim((string) ($totals['last_collected_at'] ?? ''));
 
-        if ($invoiceAmount > 0 && $paymentTotal >= $invoiceAmount) {
-            self::markPaid($jobId);
+        if ($invoiceAmount > 0 && $collectedTotal >= $invoiceAmount) {
+            self::markPaid($jobId, $lastCollectedAt !== '' ? $lastCollectedAt : null);
             return;
         }
 
         self::markUnpaid($jobId);
+    }
+
+    public static function paymentSnapshot(int $jobId): array
+    {
+        $sql = 'SELECT
+                    COALESCE(NULLIF(j.total_billed, 0), NULLIF(j.total_quote, 0), 0) AS invoice_amount,
+                    COALESCE(SUM(CASE WHEN ja.action_type = \'payment\' THEN COALESCE(ja.amount, 0) ELSE 0 END), 0) AS payment_total,
+                    COALESCE(SUM(CASE WHEN ja.action_type = \'deposit\' THEN COALESCE(ja.amount, 0) ELSE 0 END), 0) AS deposit_total,
+                    COALESCE(SUM(CASE WHEN ja.action_type = \'adjustment\' THEN COALESCE(ja.amount, 0) ELSE 0 END), 0) AS adjustment_total,
+                    MAX(CASE
+                        WHEN ja.action_type IN (\'payment\', \'deposit\', \'adjustment\')
+                        THEN ja.action_at
+                        ELSE NULL
+                    END) AS last_collected_at
+                FROM jobs j
+                LEFT JOIN job_actions ja ON ja.job_id = j.id
+                WHERE j.id = :id
+                GROUP BY j.id
+                LIMIT 1';
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute(['id' => $jobId]);
+        $row = $stmt->fetch();
+        if (!$row) {
+            return [];
+        }
+
+        $invoiceAmount = (float) ($row['invoice_amount'] ?? 0);
+        $paymentTotal = (float) ($row['payment_total'] ?? 0);
+        $depositTotal = (float) ($row['deposit_total'] ?? 0);
+        $adjustmentTotal = (float) ($row['adjustment_total'] ?? 0);
+        $collectedTotal = $paymentTotal + $depositTotal + $adjustmentTotal;
+
+        $status = 'unpaid';
+        if ($invoiceAmount > 0 && $collectedTotal >= $invoiceAmount) {
+            $status = 'paid_in_full';
+        } elseif ($collectedTotal > 0) {
+            $status = 'partially_paid';
+        }
+
+        return [
+            'invoice_amount' => $invoiceAmount,
+            'payment_total' => $paymentTotal,
+            'deposit_total' => $depositTotal,
+            'adjustment_total' => $adjustmentTotal,
+            'collected_total' => $collectedTotal,
+            'balance_due' => $invoiceAmount - $collectedTotal,
+            'last_collected_at' => (string) ($row['last_collected_at'] ?? ''),
+            'payment_status' => $status,
+        ];
     }
 
     public static function actions(int $jobId): array
@@ -2028,6 +2107,7 @@ final class Job
     private static function calendarColorForStatus(string $status): string
     {
         return match ($status) {
+            'dispatch' => '#0ea5e9',
             'active' => '#2563eb',
             'complete' => '#16a34a',
             'cancelled' => '#64748b',

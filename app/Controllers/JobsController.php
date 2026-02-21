@@ -41,7 +41,7 @@ final class JobsController extends Controller
 
         $filters = [
             'q' => trim((string) ($presetFilters['q'] ?? '')),
-            'status' => (string) ($presetFilters['status'] ?? 'all'),
+            'status' => (string) ($presetFilters['status'] ?? 'dispatch'),
             'record_status' => (string) ($presetFilters['record_status'] ?? 'active'),
             'billing_state' => (string) ($presetFilters['billing_state'] ?? 'all'),
             'start_date' => trim((string) ($presetFilters['start_date'] ?? '')),
@@ -52,7 +52,7 @@ final class JobsController extends Controller
             $filters['q'] = trim((string) ($_GET['q'] ?? ''));
         }
         if (array_key_exists('status', $_GET)) {
-            $filters['status'] = (string) ($_GET['status'] ?? 'all');
+            $filters['status'] = (string) ($_GET['status'] ?? 'dispatch');
         }
         if (array_key_exists('record_status', $_GET)) {
             $filters['record_status'] = (string) ($_GET['record_status'] ?? 'active');
@@ -68,8 +68,9 @@ final class JobsController extends Controller
         }
 
         $statusOptions = $this->jobStatuses();
-        if (!in_array($filters['status'], array_merge(['all'], $statusOptions), true)) {
-            $filters['status'] = 'all';
+        $filterStatusOptions = array_values(array_unique(array_merge(['dispatch'], $statusOptions)));
+        if (!in_array($filters['status'], array_merge(['all'], $filterStatusOptions), true)) {
+            $filters['status'] = 'dispatch';
         }
         if (!in_array($filters['record_status'], ['active', 'deleted', 'all'], true)) {
             $filters['record_status'] = 'active';
@@ -93,7 +94,7 @@ final class JobsController extends Controller
             'pageTitle' => 'Jobs',
             'jobs' => $jobs,
             'filters' => $filters,
-            'statusOptions' => $statusOptions,
+            'statusOptions' => $filterStatusOptions,
             'savedPresets' => $savedPresets,
             'selectedPresetId' => $selectedPresetId,
             'filterPresetModule' => $moduleKey,
@@ -306,9 +307,23 @@ final class JobsController extends Controller
             }
         }
 
+        $attachments = Attachment::forLink('job', $id);
+        $photoAttachmentsByTag = [
+            'before_photo' => [],
+            'during_photo' => [],
+            'after_photo' => [],
+        ];
+        foreach ($attachments as $attachment) {
+            $tag = (string) ($attachment['tag'] ?? '');
+            if (array_key_exists($tag, $photoAttachmentsByTag)) {
+                $photoAttachmentsByTag[$tag][] = $attachment;
+            }
+        }
+
         $this->render('jobs/show', [
             'pageTitle' => 'Job Details',
             'job' => $job,
+            'statusOptions' => $this->jobStatuses(),
             'actions' => Job::actions($id),
             'documents' => JobDocument::forJob($id),
             'documentSummary' => JobDocument::summaryForJob($id),
@@ -316,16 +331,64 @@ final class JobsController extends Controller
             'expenses' => Job::expenses($id),
             'summary' => Job::summary($id),
             'profitability' => Job::profitabilitySnapshot($id),
+            'paymentSnapshot' => Job::paymentSnapshot($id),
             'billingEntries' => Job::billingEntries($id),
             'timeEntries' => TimeEntry::forJob($id),
             'timeSummary' => TimeEntry::summaryForJob($id),
             'tasks' => Task::forLinkedRecord('job', $id),
-            'attachments' => Attachment::forLink('job', $id),
+            'attachments' => $attachments,
+            'photoAttachmentsByTag' => $photoAttachmentsByTag,
             'crewEmployees' => $crewEmployees,
             'openByEmployee' => $openByEmployee,
             'openElsewhereByEmployee' => $openElsewhereByEmployee,
-            'pageScripts' => '<script src="' . asset('js/job-crew-lookup.js') . '"></script>',
+            'pageScripts' => implode("\n", [
+                '<script src="' . asset('js/job-crew-lookup.js') . '"></script>',
+                '<script src="' . asset('js/job-photo-modal.js') . '"></script>',
+            ]),
         ]);
+    }
+
+    public function updateStatus(array $params): void
+    {
+        require_permission('jobs', 'edit');
+
+        $id = isset($params['id']) ? (int) $params['id'] : 0;
+        $job = $this->findJobOr404($id);
+        if (!$job) {
+            return;
+        }
+
+        if (!$this->checkCsrf('/jobs/' . $id)) {
+            return;
+        }
+
+        $status = trim((string) ($_POST['job_status'] ?? ''));
+        if (!in_array($status, $this->jobStatuses(), true)) {
+            flash('error', 'Select a valid job status.');
+            redirect('/jobs/' . $id);
+        }
+
+        $currentStatus = (string) ($job['job_status'] ?? '');
+        if ($status === $currentStatus) {
+            flash('success', 'Job status is already ' . $status . '.');
+            redirect('/jobs/' . $id);
+        }
+
+        Job::updateStatus($id, $status, $this->actorId());
+        $this->logJobAction(
+            $id,
+            'status_changed',
+            'Status changed from ' . ($currentStatus !== '' ? $currentStatus : 'pending') . ' to ' . $status . '.'
+        );
+        log_user_action(
+            'job_status_changed',
+            'jobs',
+            $id,
+            'Updated status for job #' . $id . ' to ' . $status . '.'
+        );
+
+        flash('success', 'Job status updated.');
+        redirect('/jobs/' . $id);
     }
 
     public function punchIn(array $params): void
@@ -1016,8 +1079,8 @@ final class JobsController extends Controller
         }
 
         Job::markPaid($jobId, null, $this->actorId());
-        $this->logJobAction($jobId, 'job_marked_paid', 'Job manually marked as paid.');
-        flash('success', 'Job marked as paid.');
+        $this->logJobAction($jobId, 'job_marked_paid', 'Job manually marked as paid in full.');
+        flash('success', 'Job marked as paid in full.');
         redirect('/jobs/' . $jobId);
     }
 
@@ -1600,6 +1663,9 @@ final class JobsController extends Controller
             }
             $value = trim((string) ($row['value_key'] ?? ''));
             if ($value === '') {
+                continue;
+            }
+            if (!in_array($value, self::JOB_STATUSES, true)) {
                 continue;
             }
             $values[] = $value;

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Controllers;
 
+use App\Models\Employee;
 use App\Models\Job;
 use App\Models\TimeEntry;
 use App\Models\UserFilterPreset;
@@ -101,24 +102,143 @@ final class TimeTrackingController extends Controller
 
         $filters = [
             'q' => trim((string) ($_GET['q'] ?? '')),
-            'employee_id' => $this->toIntOrNull($_GET['employee_id'] ?? null),
-            'job_id' => $this->toIntOrNull($_GET['job_id'] ?? null),
         ];
+
+        $entries = TimeEntry::openEntries($filters);
+        $employees = TimeEntry::employees();
+        $openEmployeeIds = [];
+        foreach ($entries as $entry) {
+            $employeeId = (int) ($entry['employee_id'] ?? 0);
+            if ($employeeId > 0) {
+                $openEmployeeIds[$employeeId] = true;
+            }
+        }
+
+        $query = trim((string) ($filters['q'] ?? ''));
+        $searchTerm = function_exists('mb_strtolower')
+            ? mb_strtolower($query)
+            : strtolower($query);
+        $punchedOutEmployees = [];
+        foreach ($employees as $employee) {
+            $employeeId = (int) ($employee['id'] ?? 0);
+            if ($employeeId <= 0 || isset($openEmployeeIds[$employeeId])) {
+                continue;
+            }
+            if ($searchTerm !== '') {
+                $name = trim((string) ($employee['name'] ?? ''));
+                $haystack = function_exists('mb_strtolower')
+                    ? mb_strtolower($name . ' ' . (string) $employeeId)
+                    : strtolower($name . ' ' . (string) $employeeId);
+                if (!str_contains($haystack, $searchTerm)) {
+                    continue;
+                }
+            }
+            $punchedOutEmployees[] = $employee;
+        }
 
         $pageScripts = implode("\n", [
             '<script src="https://cdn.jsdelivr.net/npm/simple-datatables@7.1.2/dist/umd/simple-datatables.min.js" crossorigin="anonymous"></script>',
             '<script src="' . asset('js/time-open-table.js') . '"></script>',
+            '<script src="' . asset('js/time-open-punch-modal.js') . '"></script>',
         ]);
 
         $this->render('time_tracking/open', [
             'pageTitle' => 'Currently Punched In',
             'filters' => $filters,
-            'entries' => TimeEntry::openEntries($filters),
+            'entries' => $entries,
             'summary' => TimeEntry::openSummary($filters),
-            'employees' => TimeEntry::employees(),
-            'jobs' => TimeEntry::jobs(),
+            'punchedOutEmployees' => $punchedOutEmployees,
             'pageScripts' => $pageScripts,
         ]);
+    }
+
+    public function openPunchIn(): void
+    {
+        $this->authorize('edit');
+
+        $returnTo = $this->sanitizeReturnTo($_POST['return_to'] ?? '/time-tracking/open');
+
+        if (!verify_csrf($_POST['csrf_token'] ?? null)) {
+            flash('error', 'Your session expired. Please try again.');
+            redirect($returnTo);
+        }
+
+        $employeeId = $this->toIntOrNull($_POST['employee_id'] ?? null);
+        if ($employeeId === null || $employeeId <= 0) {
+            flash('error', 'Select a valid employee.');
+            redirect($returnTo);
+        }
+
+        $employee = Employee::findById($employeeId);
+        if (
+            !$employee
+            || !empty($employee['deleted_at'])
+            || (int) ($employee['active'] ?? 1) !== 1
+        ) {
+            flash('error', 'This employee is inactive and cannot be punched in.');
+            redirect($returnTo);
+        }
+
+        $openEntry = TimeEntry::findOpenForEmployee($employeeId);
+        if ($openEntry) {
+            $openJobId = (int) ($openEntry['job_id'] ?? 0);
+            $openJobName = (string) ($openEntry['job_name'] ?? '');
+            flash('error', 'This employee is already punched in on ' . $this->resolveJobLabel($openJobId, $openJobName) . '.');
+            redirect($returnTo);
+        }
+
+        $jobId = null;
+        $jobInput = $this->toIntOrNull($_POST['job_id'] ?? null);
+        if ($jobInput !== null && $jobInput > 0) {
+            if (!$this->optionExists($jobInput, TimeEntry::jobs())) {
+                flash('error', 'Select a valid job before punching in.');
+                redirect($returnTo);
+            }
+            $jobId = $jobInput;
+        }
+
+        $payRate = TimeEntry::employeeRate($employeeId) ?? 0.0;
+        try {
+            $entryId = TimeEntry::create([
+                'employee_id' => $employeeId,
+                'job_id' => $jobId,
+                'work_date' => date('Y-m-d'),
+                'start_time' => date('H:i:s'),
+                'end_time' => null,
+                'minutes_worked' => null,
+                'pay_rate' => $payRate,
+                'total_paid' => null,
+                'note' => null,
+            ], auth_user_id());
+        } catch (Throwable) {
+            flash('error', 'Unable to punch in with the selected values. Please verify employee/job selection.');
+            redirect($returnTo);
+        }
+
+        $employeeName = trim((string) ($employee['display_name'] ?? $employee['name'] ?? ''));
+        if ($employeeName === '') {
+            $employeeName = trim((string) (($employee['first_name'] ?? '') . ' ' . ($employee['last_name'] ?? '')));
+        }
+        if ($employeeName === '') {
+            $employeeName = 'Employee #' . $employeeId;
+        }
+
+        if (($jobId ?? 0) > 0) {
+            Job::createAction((int) $jobId, [
+                'action_type' => 'time_punched_in',
+                'action_at' => date('Y-m-d H:i:s'),
+                'amount' => null,
+                'ref_table' => 'employee_time_entries',
+                'ref_id' => $entryId,
+                'note' => $employeeName . ' punched in from Open Clock.',
+            ], auth_user_id());
+        }
+
+        $jobLabel = $this->resolveJobLabel((int) ($jobId ?? 0), '');
+        log_user_action('time_punched_in', 'employee_time_entries', $entryId, $employeeName . ' punched in on ' . $jobLabel . '.');
+
+        flash('success', $employeeName . ' punched in on ' . $jobLabel . '.');
+        redirect($returnTo);
     }
 
     public function create(): void

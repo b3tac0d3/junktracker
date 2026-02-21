@@ -11,6 +11,7 @@
         'cancelled' => 'bg-secondary',
         default => 'bg-warning',
     };
+    $statusOptions = is_array($statusOptions ?? null) ? $statusOptions : ['pending', 'active', 'complete', 'cancelled'];
 
     $depositTotal = (float) ($summary['deposit_total'] ?? 0);
     $expenseTotal = (float) ($summary['expense_total'] ?? 0);
@@ -26,6 +27,20 @@
     $profitBillingCollected = (float) ($profitability['billing_collected'] ?? 0);
     $profitScrapTotal = (float) ($profitability['scrap_total'] ?? 0);
     $profitDumpTotal = (float) ($profitability['dump_total'] ?? 0);
+    $paymentSnapshot = is_array($paymentSnapshot ?? null) ? $paymentSnapshot : [];
+    $paymentStatus = (string) ($paymentSnapshot['payment_status'] ?? (!empty($job['paid']) ? 'paid_in_full' : 'unpaid'));
+    $paymentStatusLabel = match ($paymentStatus) {
+        'paid_in_full' => 'Paid in Full',
+        'partially_paid' => 'Partially Paid',
+        default => 'Unpaid',
+    };
+    $paymentStatusClass = match ($paymentStatus) {
+        'paid_in_full' => 'bg-success',
+        'partially_paid' => 'bg-warning text-dark',
+        default => 'bg-secondary',
+    };
+    $collectedTotal = (float) ($paymentSnapshot['collected_total'] ?? 0);
+    $balanceDue = (float) ($paymentSnapshot['balance_due'] ?? 0);
     $crewEmployees = $crewEmployees ?? [];
     $openByEmployee = $openByEmployee ?? [];
     $openElsewhereByEmployee = $openElsewhereByEmployee ?? [];
@@ -33,6 +48,8 @@
     $documents = is_array($documents ?? null) ? $documents : [];
     $documentSummary = is_array($documentSummary ?? null) ? $documentSummary : [];
     $attachments = is_array($attachments ?? null) ? $attachments : [];
+    $photoAttachmentsByTag = is_array($photoAttachmentsByTag ?? null) ? $photoAttachmentsByTag : [];
+    $photoTagOrder = ['before_photo', 'during_photo', 'after_photo'];
     $isDeleted = !empty($job['deleted_at']) || (isset($job['active']) && (int) $job['active'] === 0);
     $jobPath = '/jobs/' . (string) ($job['id'] ?? '');
     $scheduledStartAt = (string) ($job['scheduled_start_at'] ?? ($job['scheduled_date'] ?? ''));
@@ -149,9 +166,22 @@
                     </div>
                     <div class="d-flex align-items-center gap-2 mobile-two-col-buttons">
                         <span class="badge <?= $statusClass ?> text-uppercase"><?= e($status !== '' ? $status : 'pending') ?></span>
-                        <a class="btn btn-sm btn-warning" href="<?= url('/jobs/' . ($job['id'] ?? '') . '/edit') ?>" title="Edit job" aria-label="Edit job">
-                            <i class="fas fa-pen"></i>
-                        </a>
+                        <?php if (!$isDeleted && can_access('jobs', 'edit')): ?>
+                            <form class="d-flex align-items-center gap-2 mobile-two-col-buttons" method="post" action="<?= url('/jobs/' . ($job['id'] ?? '') . '/status') ?>">
+                                <?= csrf_field() ?>
+                                <select class="form-select form-select-sm" name="job_status" aria-label="Quick update status" style="min-width: 9rem;">
+                                    <?php foreach ($statusOptions as $statusOption): ?>
+                                        <option value="<?= e((string) $statusOption) ?>" <?= (string) $status === (string) $statusOption ? 'selected' : '' ?>>
+                                            <?= e(ucwords(str_replace('_', ' ', (string) $statusOption))) ?>
+                                        </option>
+                                    <?php endforeach; ?>
+                                </select>
+                                <button class="btn btn-sm btn-outline-primary" type="submit">Update</button>
+                            </form>
+                            <a class="btn btn-sm btn-warning" href="<?= url('/jobs/' . ($job['id'] ?? '') . '/edit') ?>" title="Edit job" aria-label="Edit job">
+                                <i class="fas fa-pen"></i>
+                            </a>
+                        <?php endif; ?>
                     </div>
                 </div>
                 <div class="card-body">
@@ -198,7 +228,76 @@
                     </div>
                 </div>
             </div>
+        </div>
 
+        <div class="col-12 col-xl-4">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <i class="fas fa-chart-line me-1"></i>
+                    Profit Snapshot
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-6">
+                            <div class="text-muted small">Revenue Target</div>
+                            <div class="fw-semibold"><?= e('$' . number_format($profitRevenueTotal, 2)) ?></div>
+                        </div>
+                        <div class="col-6">
+                            <div class="text-muted small">Costs</div>
+                            <div class="fw-semibold text-danger"><?= e('$' . number_format($profitCostTotal, 2)) ?></div>
+                        </div>
+                        <div class="col-6">
+                            <div class="text-muted small">Estimated Net</div>
+                            <div class="fw-semibold <?= $profitNetEstimate < 0 ? 'text-danger' : 'text-success' ?>">
+                                <?= e('$' . number_format($profitNetEstimate, 2)) ?>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="text-muted small">Collected to Date</div>
+                            <div class="fw-semibold"><?= e('$' . number_format($profitBillingCollected + $profitScrapTotal, 2)) ?></div>
+                        </div>
+                        <div class="col-6">
+                            <div class="text-muted small">Scrap Sales</div>
+                            <div class="fw-semibold text-success"><?= e('$' . number_format($profitScrapTotal, 2)) ?></div>
+                        </div>
+                        <div class="col-6">
+                            <div class="text-muted small">Dump Costs</div>
+                            <div class="fw-semibold text-danger"><?= e('$' . number_format($profitDumpTotal, 2)) ?></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="card mb-4">
+                <div class="card-header">
+                    <i class="fas fa-chart-pie me-1"></i>
+                    Operations Snapshot
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-6">
+                            <div class="text-muted small">Expenses</div>
+                            <div class="fw-semibold"><?= e('$' . number_format($expenseTotal, 2)) ?></div>
+                        </div>
+                        <div class="col-6">
+                            <div class="text-muted small">Disposals</div>
+                            <div class="fw-semibold"><?= e('$' . number_format($disposalTotal, 2)) ?></div>
+                        </div>
+                        <div class="col-6">
+                            <div class="text-muted small">Labor</div>
+                            <div class="fw-semibold"><?= e('$' . number_format($timeTotalPaid, 2)) ?></div>
+                        </div>
+                        <div class="col-6">
+                            <div class="text-muted small">Action Entries</div>
+                            <div class="fw-semibold"><?= e((string) $actionCount) ?></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-12">
             <div class="card mb-4">
                 <div class="card-header">
                     <i class="fas fa-calendar-check me-1"></i>
@@ -231,7 +330,7 @@
                             <div class="fw-semibold"><?= e(format_datetime($job['billed_date'] ?? null)) ?></div>
                         </div>
                         <div class="col-md-4">
-                            <div class="text-muted small">Paid Date</div>
+                            <div class="text-muted small">Paid-in-Full Date</div>
                             <div class="fw-semibold"><?= e(format_datetime($job['paid_date'] ?? null)) ?></div>
                         </div>
                         <div class="col-md-4">
@@ -622,44 +721,7 @@
             </div>
         </div>
 
-        <div class="col-12 col-xl-4">
-            <div class="card mb-4">
-                <div class="card-header">
-                    <i class="fas fa-chart-line me-1"></i>
-                    Profit Snapshot
-                </div>
-                <div class="card-body">
-                    <div class="row g-3">
-                        <div class="col-6">
-                            <div class="text-muted small">Revenue Target</div>
-                            <div class="fw-semibold"><?= e('$' . number_format($profitRevenueTotal, 2)) ?></div>
-                        </div>
-                        <div class="col-6">
-                            <div class="text-muted small">Costs</div>
-                            <div class="fw-semibold text-danger"><?= e('$' . number_format($profitCostTotal, 2)) ?></div>
-                        </div>
-                        <div class="col-6">
-                            <div class="text-muted small">Estimated Net</div>
-                            <div class="fw-semibold <?= $profitNetEstimate < 0 ? 'text-danger' : 'text-success' ?>">
-                                <?= e('$' . number_format($profitNetEstimate, 2)) ?>
-                            </div>
-                        </div>
-                        <div class="col-6">
-                            <div class="text-muted small">Collected to Date</div>
-                            <div class="fw-semibold"><?= e('$' . number_format($profitBillingCollected + $profitScrapTotal, 2)) ?></div>
-                        </div>
-                        <div class="col-6">
-                            <div class="text-muted small">Scrap Sales</div>
-                            <div class="fw-semibold text-success"><?= e('$' . number_format($profitScrapTotal, 2)) ?></div>
-                        </div>
-                        <div class="col-6">
-                            <div class="text-muted small">Dump Costs</div>
-                            <div class="fw-semibold text-danger"><?= e('$' . number_format($profitDumpTotal, 2)) ?></div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
+        <div class="col-12">
             <div class="card mb-4">
                 <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2 mobile-two-col-buttons">
                     <div>
@@ -667,12 +729,12 @@
                         Billing Snapshot
                     </div>
                     <div class="d-flex align-items-center gap-2 mobile-two-col-buttons">
-                        <?php if (empty($job['paid'])): ?>
+                        <?php if ($paymentStatus !== 'paid_in_full'): ?>
                             <form method="post" action="<?= url('/jobs/' . ($job['id'] ?? '') . '/mark-paid') ?>">
                                 <?= csrf_field() ?>
                                 <button class="btn btn-sm btn-success" type="submit">
                                     <i class="fas fa-check-circle me-1"></i>
-                                    Mark as Paid
+                                    Mark as Paid in Full
                                 </button>
                             </form>
                         <?php else: ?>
@@ -702,11 +764,24 @@
                             <div class="fw-semibold"><?= isset($job['total_billed']) ? e('$' . number_format((float) $job['total_billed'], 2)) : '-' ?></div>
                         </div>
                         <div class="col-6">
-                            <div class="text-muted small">Paid</div>
-                            <div class="fw-semibold"><?= !empty($job['paid']) ? 'Yes' : 'No' ?></div>
+                            <div class="text-muted small">Collected</div>
+                            <div class="fw-semibold"><?= e('$' . number_format($collectedTotal, 2)) ?></div>
+                        </div>
+                        <div class="col-6">
+                            <div class="text-muted small">Balance Due</div>
+                            <div class="fw-semibold <?= $balanceDue > 0 ? 'text-danger' : 'text-success' ?>">
+                                <?= e('$' . number_format(abs($balanceDue), 2)) ?>
+                                <?php if ($balanceDue < 0): ?>
+                                    <span class="small text-muted">(credit)</span>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="text-muted small">Payment Status</div>
+                            <div class="fw-semibold"><span class="badge <?= $paymentStatusClass ?>"><?= e($paymentStatusLabel) ?></span></div>
                         </div>
                         <div class="col-12">
-                            <div class="text-muted small">Paid Date</div>
+                            <div class="text-muted small">Paid-in-Full Date</div>
                             <div class="fw-semibold"><?= e(format_datetime($job['paid_date'] ?? null)) ?></div>
                         </div>
                     </div>
@@ -832,33 +907,6 @@
             </div>
 
             <div class="card mb-4">
-                <div class="card-header">
-                    <i class="fas fa-chart-pie me-1"></i>
-                    Operations Snapshot
-                </div>
-                <div class="card-body">
-                    <div class="row g-3">
-                        <div class="col-6">
-                            <div class="text-muted small">Expenses</div>
-                            <div class="fw-semibold"><?= e('$' . number_format($expenseTotal, 2)) ?></div>
-                        </div>
-                        <div class="col-6">
-                            <div class="text-muted small">Disposals</div>
-                            <div class="fw-semibold"><?= e('$' . number_format($disposalTotal, 2)) ?></div>
-                        </div>
-                        <div class="col-6">
-                            <div class="text-muted small">Labor</div>
-                            <div class="fw-semibold"><?= e('$' . number_format($timeTotalPaid, 2)) ?></div>
-                        </div>
-                        <div class="col-6">
-                            <div class="text-muted small">Action Entries</div>
-                            <div class="fw-semibold"><?= e((string) $actionCount) ?></div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="card mb-4">
                 <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2 mobile-two-col-buttons">
                     <div>
                         <i class="fas fa-list-check me-1"></i>
@@ -917,6 +965,151 @@
                                 <?php endif; ?>
                             </tbody>
                         </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card mb-4">
+                <div class="card-header">
+                    <i class="fas fa-camera me-1"></i>
+                    Job Photos
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <?php foreach ($photoTagOrder as $photoTag): ?>
+                            <?php
+                                $photoItems = is_array($photoAttachmentsByTag[$photoTag] ?? null) ? $photoAttachmentsByTag[$photoTag] : [];
+                                $photoLabel = \App\Models\Attachment::tagLabel($photoTag);
+                            ?>
+                            <div class="col-12 col-xl-4">
+                                <div class="card h-100">
+                                    <div class="card-header d-flex justify-content-between align-items-center">
+                                        <span><?= e($photoLabel) ?></span>
+                                        <span class="badge bg-secondary"><?= e((string) count($photoItems)) ?></span>
+                                    </div>
+                                    <div class="card-body">
+                                        <?php if (can_access('jobs', 'edit')): ?>
+                                            <form method="post" action="<?= url('/attachments/upload') ?>" enctype="multipart/form-data" class="mb-3">
+                                                <?= csrf_field() ?>
+                                                <input type="hidden" name="link_type" value="job" />
+                                                <input type="hidden" name="link_id" value="<?= e((string) ($job['id'] ?? 0)) ?>" />
+                                                <input type="hidden" name="tag" value="<?= e($photoTag) ?>" />
+                                                <input type="hidden" name="images_only" value="1" />
+                                                <input type="hidden" name="return_to" value="<?= e($jobPath) ?>" />
+                                                <div class="mb-2">
+                                                    <input class="form-control form-control-sm" type="file" name="attachment_file[]" accept="image/*" multiple required />
+                                                </div>
+                                                <div class="mb-2">
+                                                    <input class="form-control form-control-sm" type="text" name="note" maxlength="255" placeholder="Optional note for this upload batch" />
+                                                </div>
+                                                <button class="btn btn-sm btn-primary w-100" type="submit">
+                                                    <i class="fas fa-upload me-1"></i>
+                                                    Upload <?= e($photoLabel) ?> Photos
+                                                </button>
+                                            </form>
+                                        <?php endif; ?>
+
+                                        <?php if (empty($photoItems)): ?>
+                                            <div class="small text-muted">No <?= e(strtolower($photoLabel)) ?> photos uploaded.</div>
+                                        <?php else: ?>
+                                            <div class="job-photo-grid">
+                                                <?php foreach ($photoItems as $photo): ?>
+                                                    <?php
+                                                        $attachmentId = (int) ($photo['id'] ?? 0);
+                                                        $fileName = (string) (($photo['original_name'] ?? '') !== '' ? $photo['original_name'] : 'Photo');
+                                                        $inlinePhotoUrl = url('/attachments/' . $attachmentId . '/download?inline=1');
+                                                        $photoCapturedAt = format_datetime($photo['created_at'] ?? null);
+                                                        $photoMetaParts = [$photoLabel];
+                                                        if ($photoCapturedAt !== '—') {
+                                                            $photoMetaParts[] = $photoCapturedAt;
+                                                        }
+                                                        if (!empty($photo['note'])) {
+                                                            $photoMetaParts[] = (string) $photo['note'];
+                                                        }
+                                                        $photoMetaLabel = implode(' • ', array_values(array_filter(
+                                                            $photoMetaParts,
+                                                            static fn (mixed $value): bool => trim((string) $value) !== ''
+                                                        )));
+                                                    ?>
+                                                    <div class="job-photo-item">
+                                                        <a
+                                                            class="job-photo-thumb-link js-job-photo-preview"
+                                                            href="<?= e($inlinePhotoUrl) ?>"
+                                                            title="<?= e($fileName) ?>"
+                                                            data-full-src="<?= e($inlinePhotoUrl) ?>"
+                                                            data-filename="<?= e($fileName) ?>"
+                                                            data-meta="<?= e($photoMetaLabel) ?>"
+                                                        >
+                                                            <img
+                                                                class="job-photo-thumb"
+                                                                src="<?= e($inlinePhotoUrl) ?>"
+                                                                alt="<?= e($fileName) ?>"
+                                                                loading="lazy"
+                                                            />
+                                                        </a>
+                                                        <div class="job-photo-meta">
+                                                            <div class="small fw-semibold text-truncate" title="<?= e($fileName) ?>"><?= e($fileName) ?></div>
+                                                            <div class="small text-muted"><?= e(format_datetime($photo['created_at'] ?? null)) ?></div>
+                                                            <?php if (!empty($photo['note'])): ?>
+                                                                <div class="small text-muted text-truncate" title="<?= e((string) $photo['note']) ?>"><?= e((string) $photo['note']) ?></div>
+                                                            <?php endif; ?>
+                                                        </div>
+                                                        <div class="d-flex gap-1">
+                                                            <a class="btn btn-sm btn-outline-primary" href="<?= url('/attachments/' . $attachmentId . '/download') ?>" title="Download">
+                                                                <i class="fas fa-download"></i>
+                                                            </a>
+                                                            <?php if (can_access('jobs', 'edit') || can_access('jobs', 'delete')): ?>
+                                                                <form method="post" action="<?= url('/attachments/' . $attachmentId . '/delete') ?>">
+                                                                    <?= csrf_field() ?>
+                                                                    <input type="hidden" name="return_to" value="<?= e($jobPath) ?>" />
+                                                                    <button class="btn btn-sm btn-outline-danger" type="submit" title="Delete">
+                                                                        <i class="fas fa-trash"></i>
+                                                                    </button>
+                                                                </form>
+                                                            <?php endif; ?>
+                                                        </div>
+                                                    </div>
+                                                <?php endforeach; ?>
+                                            </div>
+                                        <?php endif; ?>
+                                    </div>
+                                </div>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal fade" id="jobPhotoPreviewModal" data-photo-preview-modal="1" tabindex="-1" aria-labelledby="jobPhotoPreviewModalLabel" aria-hidden="true">
+                <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <div>
+                                <h5 class="modal-title" id="jobPhotoPreviewModalLabel">Photo Preview</h5>
+                                <div class="small text-muted js-job-photo-modal-meta"></div>
+                            </div>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body text-center">
+                            <img class="img-fluid rounded js-job-photo-modal-image" src="" alt="Job photo preview" />
+                        </div>
+                        <div class="modal-footer d-flex justify-content-between">
+                            <div class="small text-muted js-job-photo-modal-counter"></div>
+                            <div class="d-flex gap-2">
+                                <button type="button" class="btn btn-outline-secondary js-job-photo-prev">
+                                    <i class="fas fa-chevron-left me-1"></i>
+                                    Prev
+                                </button>
+                                <a class="btn btn-outline-primary js-job-photo-open" href="#" target="_blank" rel="noopener">
+                                    <i class="fas fa-up-right-from-square me-1"></i>
+                                    Open
+                                </a>
+                                <button type="button" class="btn btn-primary js-job-photo-next">
+                                    Next
+                                    <i class="fas fa-chevron-right ms-1"></i>
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>

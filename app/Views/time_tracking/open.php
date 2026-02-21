@@ -2,8 +2,7 @@
     $filters = $filters ?? [];
     $entries = $entries ?? [];
     $summary = $summary ?? [];
-    $employees = $employees ?? [];
-    $jobs = $jobs ?? [];
+    $punchedOutEmployees = $punchedOutEmployees ?? [];
 
     $activeCount = (int) ($summary['active_count'] ?? 0);
     $totalMinutes = (int) ($summary['total_open_minutes'] ?? 0);
@@ -98,7 +97,7 @@
         <div class="card-body">
             <form method="get" action="<?= url('/time-tracking/open') ?>">
                 <div class="row g-2 align-items-end">
-                    <div class="col-12 col-lg-5">
+                    <div class="col-12 col-lg-10">
                         <label class="form-label">Search</label>
                         <div class="input-group">
                             <span class="input-group-text"><i class="fas fa-search"></i></span>
@@ -106,35 +105,10 @@
                                 class="form-control"
                                 type="text"
                                 name="q"
-                                placeholder="Search employee or job..."
+                                placeholder="Search employees or jobs..."
                                 value="<?= e((string) ($filters['q'] ?? '')) ?>"
                             />
                         </div>
-                    </div>
-                    <div class="col-12 col-lg-3">
-                        <label class="form-label">Employee</label>
-                        <select class="form-select" name="employee_id">
-                            <option value="">All</option>
-                            <?php foreach ($employees as $employee): ?>
-                                <?php $id = (string) ((int) ($employee['id'] ?? 0)); ?>
-                                <option value="<?= e($id) ?>" <?= (string) ($filters['employee_id'] ?? '') === $id ? 'selected' : '' ?>>
-                                    <?= e((string) ($employee['name'] ?? ('Employee #' . $id))) ?>
-                                </option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
-                    <div class="col-12 col-lg-2">
-                        <label class="form-label">Job</label>
-                        <select class="form-select" name="job_id">
-                            <option value="">All</option>
-                            <option value="0" <?= (string) ($filters['job_id'] ?? '') === '0' ? 'selected' : '' ?>>Non-Job Time</option>
-                            <?php foreach ($jobs as $job): ?>
-                                <?php $id = (string) ((int) ($job['id'] ?? 0)); ?>
-                                <option value="<?= e($id) ?>" <?= (string) ($filters['job_id'] ?? '') === $id ? 'selected' : '' ?>>
-                                    #<?= e($id) ?> - <?= e((string) ($job['name'] ?? ('Job #' . $id))) ?>
-                                </option>
-                            <?php endforeach; ?>
-                        </select>
                     </div>
                     <div class="col-12 col-lg-2 d-flex gap-2 mobile-two-col-buttons">
                         <button class="btn btn-primary flex-fill" type="submit">Apply</button>
@@ -148,7 +122,7 @@
     <div class="card mb-4">
         <div class="card-header">
             <i class="fas fa-user-clock me-1"></i>
-            Open Clock Entries
+            Punched In
         </div>
         <div class="card-body">
             <?php if (empty($entries)): ?>
@@ -210,6 +184,102 @@
                     </tbody>
                 </table>
             <?php endif; ?>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-header">
+            <i class="fas fa-user-check me-1"></i>
+            Punched Out
+        </div>
+        <div class="card-body">
+            <div class="small text-muted mb-3">
+                Quick punch-in from this list can be attached to a job, or left blank for <strong>Non-Job Time</strong>.
+            </div>
+            <?php if (empty($punchedOutEmployees)): ?>
+                <div class="text-muted">No punched-out employees match your search.</div>
+            <?php else: ?>
+                <div class="table-responsive">
+                    <table class="table align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th>Employee</th>
+                                <th>Default Rate</th>
+                                <th class="text-end">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($punchedOutEmployees as $employee): ?>
+                                <?php $employeeId = (int) ($employee['id'] ?? 0); ?>
+                                <tr>
+                                    <td>
+                                        <?php if ($employeeId > 0): ?>
+                                            <a class="text-decoration-none fw-semibold" href="<?= url('/employees/' . $employeeId) ?>">
+                                                <?= e((string) ($employee['name'] ?? ('Employee #' . $employeeId))) ?>
+                                            </a>
+                                        <?php else: ?>
+                                            —
+                                        <?php endif; ?>
+                                    </td>
+                                    <td><?= e('$' . number_format((float) ($employee['pay_rate'] ?? 0), 2)) ?></td>
+                                    <td class="text-end">
+                                        <button
+                                            class="btn btn-sm btn-success js-open-clock-punch-in"
+                                            type="button"
+                                            data-employee-id="<?= e((string) $employeeId) ?>"
+                                            data-employee-name="<?= e((string) ($employee['name'] ?? ('Employee #' . $employeeId))) ?>"
+                                        >
+                                            <i class="fas fa-play me-1"></i>
+                                            Punch In
+                                        </button>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            <?php endif; ?>
+        </div>
+    </div>
+
+    <div class="modal fade" id="openClockPunchInModal" tabindex="-1" aria-labelledby="openClockPunchInModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <form method="post" action="<?= url('/time-tracking/open/punch-in') ?>" id="openClockPunchInForm">
+                    <?= csrf_field() ?>
+                    <input type="hidden" name="employee_id" id="open_clock_punch_employee_id" value="" />
+                    <input type="hidden" name="return_to" value="<?= e($openReturnTo) ?>" />
+                    <input type="hidden" name="job_id" id="open_clock_punch_job_id" value="" />
+                    <input type="hidden" id="open_clock_job_lookup_url" value="<?= e(url('/time-tracking/lookup/jobs')) ?>" />
+
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="openClockPunchInModalLabel">Punch In</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p class="mb-3">Search for a job (optional). If left blank, this punch-in is saved as Non-Job Time.</p>
+                        <div class="position-relative">
+                            <label class="form-label" for="open_clock_punch_job_search">Job (optional)</label>
+                            <input
+                                class="form-control"
+                                id="open_clock_punch_job_search"
+                                type="text"
+                                autocomplete="off"
+                                placeholder="Search job by name, id, city..."
+                            />
+                            <div id="open_clock_punch_job_suggestions" class="list-group position-absolute w-100 shadow-sm d-none"></div>
+                            <div class="form-text">Pick from suggestions to attach this punch to a job.</div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button class="btn btn-success" type="submit">
+                            <i class="fas fa-play me-1"></i>
+                            Punch In
+                        </button>
+                    </div>
+                </form>
+            </div>
         </div>
     </div>
 </div>

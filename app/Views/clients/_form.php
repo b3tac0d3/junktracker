@@ -5,6 +5,8 @@
     $isEdit = !empty($client['id']);
     $duplicateMatches = is_array($duplicateMatches ?? null) ? $duplicateMatches : [];
     $requireDuplicateConfirm = !empty($requireDuplicateConfirm);
+    $canCreateContact = !empty($canCreateContact);
+    $createAsContactNow = old('create_contact_now', !empty($createAsContactNow) ? '1' : '0') === '1';
 
     $firstName = (string) old('first_name', $client['first_name'] ?? '');
     $lastName = (string) old('last_name', $client['last_name'] ?? '');
@@ -189,6 +191,15 @@
                     <input class="form-check-input" id="ignore_duplicate_warning" name="ignore_duplicate_warning" type="checkbox" value="1" <?= old('ignore_duplicate_warning') === '1' ? 'checked' : '' ?> />
                     <label class="form-check-label" for="ignore_duplicate_warning">
                         Ignore duplicate warning and update anyway
+                    </label>
+                </div>
+            </div>
+        <?php elseif ($canCreateContact): ?>
+            <div class="col-12">
+                <div class="form-check">
+                    <input class="form-check-input" id="create_contact_now" name="create_contact_now" type="checkbox" value="1" <?= $createAsContactNow ? 'checked' : '' ?> />
+                    <label class="form-check-label" for="create_contact_now">
+                        Also save this client as a network client
                     </label>
                 </div>
             </div>

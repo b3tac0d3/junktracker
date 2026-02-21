@@ -9,7 +9,18 @@ use Core\Database;
 final class Attachment
 {
     public const LINK_TYPES = ['job', 'client', 'prospect', 'sale'];
-    public const TAGS = ['photo', 'invoice', 'contract', 'receipt', 'note', 'other'];
+    public const TAGS = [
+        'photo',
+        'before_photo',
+        'during_photo',
+        'after_photo',
+        'invoice',
+        'contract',
+        'receipt',
+        'note',
+        'other',
+    ];
+    public const PHOTO_TAGS = ['before_photo', 'during_photo', 'after_photo'];
 
     private static bool $schemaEnsured = false;
 
@@ -271,6 +282,33 @@ final class Attachment
         $stmt->execute($params);
     }
 
+    public static function updateNote(int $id, ?string $note, ?int $actorId = null): void
+    {
+        self::ensureSchema();
+
+        $sets = [
+            'note = :note',
+            'updated_at = NOW()',
+        ];
+        $params = [
+            'id' => $id,
+            'note' => $note,
+        ];
+
+        if ($actorId !== null && Schema::hasColumn('attachments', 'updated_by')) {
+            $sets[] = 'updated_by = :updated_by';
+            $params['updated_by'] = $actorId;
+        }
+
+        $sql = 'UPDATE attachments
+                SET ' . implode(', ', $sets) . '
+                WHERE id = :id
+                  AND deleted_at IS NULL';
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute($params);
+    }
+
     public static function normalizeLinkType(string $linkType): ?string
     {
         $normalized = strtolower(trim($linkType));
@@ -281,6 +319,447 @@ final class Attachment
     {
         $normalized = strtolower(trim($tag));
         return in_array($normalized, self::TAGS, true) ? $normalized : 'other';
+    }
+
+    public static function tagLabel(string $tag): string
+    {
+        $normalized = self::normalizeTag($tag);
+        return match ($normalized) {
+            'before_photo' => 'Before',
+            'during_photo' => 'During',
+            'after_photo' => 'After',
+            default => ucwords(str_replace('_', ' ', $normalized)),
+        };
+    }
+
+    public static function photoTags(): array
+    {
+        return ['photo', ...self::PHOTO_TAGS];
+    }
+
+    public static function photoLibrary(array $filters, array $allowedLinkTypes = self::LINK_TYPES, int $limit = 500): array
+    {
+        self::ensureSchema();
+
+        $allowed = array_values(array_filter(array_unique(array_map(
+            static fn (mixed $type): string => strtolower(trim((string) $type)),
+            $allowedLinkTypes
+        )), static fn (string $type): bool => in_array($type, self::LINK_TYPES, true)));
+
+        if (empty($allowed)) {
+            return [];
+        }
+
+        $limit = max(1, min($limit, 1000));
+        $where = [
+            'a.deleted_at IS NULL',
+            "COALESCE(a.mime_type, '') LIKE 'image/%'",
+        ];
+        $params = [];
+
+        $allowedPlaceholders = [];
+        foreach ($allowed as $index => $type) {
+            $key = 'allowed_type_' . $index;
+            $allowedPlaceholders[] = ':' . $key;
+            $params[$key] = $type;
+        }
+        $where[] = 'a.link_type IN (' . implode(', ', $allowedPlaceholders) . ')';
+
+        $requestedType = strtolower(trim((string) ($filters['link_type'] ?? 'all')));
+        if ($requestedType !== 'all' && in_array($requestedType, $allowed, true)) {
+            $where[] = 'a.link_type = :filter_link_type';
+            $params['filter_link_type'] = $requestedType;
+        }
+
+        $requestedTag = strtolower(trim((string) ($filters['tag'] ?? 'all')));
+        if ($requestedTag !== 'all' && in_array($requestedTag, self::photoTags(), true)) {
+            $where[] = 'a.tag = :filter_tag';
+            $params['filter_tag'] = $requestedTag;
+        }
+
+        $startDate = trim((string) ($filters['start_date'] ?? ''));
+        if ($startDate !== '') {
+            $where[] = 'DATE(a.created_at) >= :start_date';
+            $params['start_date'] = $startDate;
+        }
+
+        $endDate = trim((string) ($filters['end_date'] ?? ''));
+        if ($endDate !== '') {
+            $where[] = 'DATE(a.created_at) <= :end_date';
+            $params['end_date'] = $endDate;
+        }
+
+        $search = trim((string) ($filters['q'] ?? ''));
+        if ($search !== '') {
+            $prospectSearchClauses = [
+                'CAST(p.id AS CHAR) LIKE :search',
+                'pc.first_name LIKE :search',
+                'pc.last_name LIKE :search',
+                'pc.business_name LIKE :search',
+            ];
+            if (Schema::hasColumn('prospects', 'next_step')) {
+                $prospectSearchClauses[] = 'p.next_step LIKE :search';
+            }
+            if (Schema::hasColumn('prospects', 'note')) {
+                $prospectSearchClauses[] = 'p.note LIKE :search';
+            }
+
+            $where[] = '(
+                a.original_name LIKE :search
+                OR a.note LIKE :search
+                OR CAST(a.id AS CHAR) LIKE :search
+                OR j.name LIKE :search
+                OR CONCAT_WS(\' \', c.first_name, c.last_name) LIKE :search
+                OR c.business_name LIKE :search
+                OR (' . implode(' OR ', $prospectSearchClauses) . ')
+                OR s.name LIKE :search
+            )';
+            $params['search'] = '%' . $search . '%';
+        }
+
+        $sql = 'SELECT
+                    a.id,
+                    a.link_type,
+                    a.link_id,
+                    a.tag,
+                    a.original_name,
+                    a.storage_path,
+                    a.mime_type,
+                    a.file_size,
+                    a.note,
+                    a.created_at,
+                    a.created_by,
+                    ' . self::userLabelSql('u', 'a.created_by') . ' AS created_by_name,
+                    CASE
+                        WHEN a.link_type = \'job\' THEN COALESCE(NULLIF(j.name, \'\'), CONCAT(\'Job #\', a.link_id))
+                        WHEN a.link_type = \'client\' THEN COALESCE(NULLIF(TRIM(CONCAT_WS(\' \', c.first_name, c.last_name)), \'\'), CONCAT(\'Client #\', a.link_id))
+                        WHEN a.link_type = \'prospect\' THEN COALESCE(
+                            NULLIF(TRIM(CONCAT_WS(\' \', pc.first_name, pc.last_name)), \'\'),
+                            NULLIF(pc.business_name, \'\'),
+                            CONCAT(\'Prospect #\', a.link_id)
+                        )
+                        WHEN a.link_type = \'sale\' THEN COALESCE(NULLIF(s.name, \'\'), CONCAT(\'Sale #\', a.link_id))
+                        ELSE CONCAT(UPPER(a.link_type), \' #\', a.link_id)
+                    END AS linked_label
+                FROM attachments a
+                LEFT JOIN users u ON u.id = a.created_by
+                LEFT JOIN jobs j ON a.link_type = \'job\' AND j.id = a.link_id
+                LEFT JOIN clients c ON a.link_type = \'client\' AND c.id = a.link_id
+                LEFT JOIN prospects p ON a.link_type = \'prospect\' AND p.id = a.link_id
+                LEFT JOIN clients pc ON p.client_id = pc.id
+                LEFT JOIN sales s ON a.link_type = \'sale\' AND s.id = a.link_id
+                WHERE ' . implode(' AND ', $where) . '
+                ORDER BY a.created_at DESC, a.id DESC
+                LIMIT ' . $limit;
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute($params);
+
+        return $stmt->fetchAll();
+    }
+
+    public static function jobPhotoJobs(string $search = '', int $limit = 300): array
+    {
+        self::ensureSchema();
+
+        $limit = max(1, min($limit, 1000));
+        $params = [];
+        $tagPlaceholders = [];
+        foreach (self::PHOTO_TAGS as $index => $tag) {
+            $key = 'tag_' . $index;
+            $tagPlaceholders[] = ':' . $key;
+            $params[$key] = $tag;
+        }
+
+        $jobWhere = [];
+        if (Schema::hasColumn('jobs', 'deleted_at')) {
+            $jobWhere[] = 'j.deleted_at IS NULL';
+        }
+        if (Schema::hasColumn('jobs', 'active')) {
+            $jobWhere[] = 'COALESCE(j.active, 1) = 1';
+        }
+
+        $search = trim($search);
+        $searchClause = '';
+        if ($search !== '') {
+            $searchClause = ' AND (j.name LIKE :search OR CAST(j.id AS CHAR) LIKE :search)';
+            $params['search'] = '%' . $search . '%';
+        }
+
+        $sql = 'SELECT
+                    j.id AS job_id,
+                    COALESCE(NULLIF(j.name, \'\'), CONCAT(\'Job #\', j.id)) AS job_name,
+                    COUNT(*) AS photo_count,
+                    SUM(CASE WHEN a.tag = \'before_photo\' THEN 1 ELSE 0 END) AS before_count,
+                    SUM(CASE WHEN a.tag = \'during_photo\' THEN 1 ELSE 0 END) AS during_count,
+                    SUM(CASE WHEN a.tag = \'after_photo\' THEN 1 ELSE 0 END) AS after_count,
+                    MAX(a.created_at) AS last_photo_at,
+                    (
+                        SELECT a2.id
+                        FROM attachments a2
+                        WHERE a2.link_type = \'job\'
+                          AND a2.link_id = j.id
+                          AND a2.deleted_at IS NULL
+                          AND COALESCE(a2.mime_type, \'\') LIKE \'image/%\'
+                          AND a2.tag IN (' . implode(', ', $tagPlaceholders) . ')
+                        ORDER BY
+                            CASE a2.tag
+                                WHEN \'after_photo\' THEN 1
+                                WHEN \'during_photo\' THEN 2
+                                WHEN \'before_photo\' THEN 3
+                                ELSE 4
+                            END,
+                            a2.created_at DESC,
+                            a2.id DESC
+                        LIMIT 1
+                    ) AS cover_attachment_id
+                FROM attachments a
+                INNER JOIN jobs j ON j.id = a.link_id
+                WHERE a.link_type = \'job\'
+                  AND a.deleted_at IS NULL
+                  AND COALESCE(a.mime_type, \'\') LIKE \'image/%\'
+                  AND a.tag IN (' . implode(', ', $tagPlaceholders) . ')' .
+                  (!empty($jobWhere) ? ' AND ' . implode(' AND ', $jobWhere) : '') .
+                  $searchClause . '
+                GROUP BY j.id, j.name
+                ORDER BY MAX(a.created_at) DESC, j.id DESC
+                LIMIT ' . $limit;
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute($params);
+
+        return $stmt->fetchAll();
+    }
+
+    public static function jobPhotoJob(int $jobId): ?array
+    {
+        self::ensureSchema();
+        if ($jobId <= 0) {
+            return null;
+        }
+
+        $sql = 'SELECT j.id,
+                       COALESCE(NULLIF(j.name, \'\'), CONCAT(\'Job #\', j.id)) AS name
+                FROM jobs j
+                WHERE j.id = :id
+                LIMIT 1';
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute(['id' => $jobId]);
+        $row = $stmt->fetch();
+
+        return $row ?: null;
+    }
+
+    public static function jobPhotoTagGroups(int $jobId): array
+    {
+        self::ensureSchema();
+        if ($jobId <= 0) {
+            return [];
+        }
+
+        $params = ['job_id' => $jobId];
+        $tagPlaceholders = [];
+        foreach (self::PHOTO_TAGS as $index => $tag) {
+            $key = 'tag_' . $index;
+            $tagPlaceholders[] = ':' . $key;
+            $params[$key] = $tag;
+        }
+
+        $sql = 'SELECT
+                    a.tag,
+                    COUNT(*) AS photo_count,
+                    MAX(a.created_at) AS last_photo_at,
+                    (
+                        SELECT a2.id
+                        FROM attachments a2
+                        WHERE a2.link_type = \'job\'
+                          AND a2.link_id = :job_id
+                          AND a2.deleted_at IS NULL
+                          AND COALESCE(a2.mime_type, \'\') LIKE \'image/%\'
+                          AND a2.tag = a.tag
+                        ORDER BY a2.created_at DESC, a2.id DESC
+                        LIMIT 1
+                    ) AS cover_attachment_id
+                FROM attachments a
+                WHERE a.link_type = \'job\'
+                  AND a.link_id = :job_id
+                  AND a.deleted_at IS NULL
+                  AND COALESCE(a.mime_type, \'\') LIKE \'image/%\'
+                  AND a.tag IN (' . implode(', ', $tagPlaceholders) . ')
+                GROUP BY a.tag';
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute($params);
+        $rows = $stmt->fetchAll();
+
+        $groups = [];
+        foreach (self::PHOTO_TAGS as $tag) {
+            $groups[$tag] = [
+                'tag' => $tag,
+                'label' => self::tagLabel($tag),
+                'photo_count' => 0,
+                'last_photo_at' => null,
+                'cover_attachment_id' => null,
+            ];
+        }
+
+        foreach ($rows as $row) {
+            $tag = strtolower(trim((string) ($row['tag'] ?? '')));
+            if (!isset($groups[$tag])) {
+                continue;
+            }
+            $groups[$tag]['photo_count'] = (int) ($row['photo_count'] ?? 0);
+            $groups[$tag]['last_photo_at'] = $row['last_photo_at'] ?? null;
+            $groups[$tag]['cover_attachment_id'] = isset($row['cover_attachment_id']) ? (int) $row['cover_attachment_id'] : null;
+        }
+
+        return array_values($groups);
+    }
+
+    public static function jobPhotosByTag(int $jobId, string $tag, string $search = '', int $limit = 1200): array
+    {
+        self::ensureSchema();
+
+        if ($jobId <= 0) {
+            return [];
+        }
+
+        $normalizedTag = strtolower(trim($tag));
+        if (!in_array($normalizedTag, self::PHOTO_TAGS, true)) {
+            return [];
+        }
+
+        $limit = max(1, min($limit, 2000));
+        $params = [
+            'job_id' => $jobId,
+            'tag' => $normalizedTag,
+        ];
+        $where = [
+            'a.link_type = \'job\'',
+            'a.link_id = :job_id',
+            'a.tag = :tag',
+            'a.deleted_at IS NULL',
+            "COALESCE(a.mime_type, '') LIKE 'image/%'",
+        ];
+
+        $search = trim($search);
+        if ($search !== '') {
+            $where[] = '(a.original_name LIKE :search OR a.note LIKE :search OR CAST(a.id AS CHAR) LIKE :search)';
+            $params['search'] = '%' . $search . '%';
+        }
+
+        $sql = 'SELECT
+                    a.id,
+                    a.link_type,
+                    a.link_id,
+                    a.tag,
+                    a.original_name,
+                    a.storage_path,
+                    a.mime_type,
+                    a.file_size,
+                    a.note,
+                    a.created_at,
+                    a.created_by,
+                    ' . self::userLabelSql('u', 'a.created_by') . ' AS created_by_name
+                FROM attachments a
+                LEFT JOIN users u ON u.id = a.created_by
+                WHERE ' . implode(' AND ', $where) . '
+                ORDER BY a.created_at DESC, a.id DESC
+                LIMIT ' . $limit;
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute($params);
+
+        return $stmt->fetchAll();
+    }
+
+    public static function findPhotosByIds(array $ids, array $allowedLinkTypes = self::LINK_TYPES): array
+    {
+        self::ensureSchema();
+
+        $normalizedIds = [];
+        foreach ($ids as $id) {
+            $raw = trim((string) $id);
+            if ($raw === '' || !ctype_digit($raw)) {
+                continue;
+            }
+            $value = (int) $raw;
+            if ($value > 0) {
+                $normalizedIds[] = $value;
+            }
+        }
+        $normalizedIds = array_values(array_unique($normalizedIds));
+        if (empty($normalizedIds)) {
+            return [];
+        }
+
+        $allowed = array_values(array_filter(array_unique(array_map(
+            static fn (mixed $type): string => strtolower(trim((string) $type)),
+            $allowedLinkTypes
+        )), static fn (string $type): bool => in_array($type, self::LINK_TYPES, true)));
+        if (empty($allowed)) {
+            return [];
+        }
+
+        $params = [];
+        $idPlaceholders = [];
+        foreach ($normalizedIds as $index => $id) {
+            $key = 'id_' . $index;
+            $idPlaceholders[] = ':' . $key;
+            $params[$key] = $id;
+        }
+
+        $typePlaceholders = [];
+        foreach ($allowed as $index => $type) {
+            $key = 'type_' . $index;
+            $typePlaceholders[] = ':' . $key;
+            $params[$key] = $type;
+        }
+
+        $sql = 'SELECT
+                    a.id,
+                    a.link_type,
+                    a.link_id,
+                    a.tag,
+                    a.original_name,
+                    a.storage_path,
+                    a.mime_type,
+                    a.file_size,
+                    a.created_at
+                FROM attachments a
+                WHERE a.id IN (' . implode(', ', $idPlaceholders) . ')
+                  AND a.deleted_at IS NULL
+                  AND COALESCE(a.mime_type, \'\') LIKE \'image/%\'
+                  AND a.link_type IN (' . implode(', ', $typePlaceholders) . ')
+                ORDER BY a.created_at DESC, a.id DESC';
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute($params);
+
+        return $stmt->fetchAll();
+    }
+
+    public static function absoluteStoragePath(string $storagePath): ?string
+    {
+        self::ensureSchema();
+
+        $root = realpath(self::storageRoot());
+        if ($root === false) {
+            return null;
+        }
+
+        $relative = ltrim(trim($storagePath), '/');
+        if ($relative === '') {
+            return null;
+        }
+
+        $realPath = realpath(self::storageRoot() . '/' . $relative);
+        if ($realPath === false || !str_starts_with($realPath, $root) || !is_file($realPath)) {
+            return null;
+        }
+
+        return $realPath;
     }
 
     private static function userLabelSql(string $alias, string $fallbackColumn): string

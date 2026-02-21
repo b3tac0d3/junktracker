@@ -41,7 +41,7 @@
                     <label class="form-label">Tag</label>
                     <select class="form-select" name="tag">
                         <?php foreach ($tags as $tag): ?>
-                            <option value="<?= e($tag) ?>"><?= e(ucfirst($tag)) ?></option>
+                            <option value="<?= e($tag) ?>"><?= e(\App\Models\Attachment::tagLabel((string) $tag)) ?></option>
                         <?php endforeach; ?>
                     </select>
                 </div>
@@ -92,7 +92,7 @@
                                         <div class="small text-muted"><?= e((string) $file['note']) ?></div>
                                     <?php endif; ?>
                                 </td>
-                                <td class="text-capitalize"><?= e((string) ($file['tag'] ?? 'other')) ?></td>
+                                <td><?= e(\App\Models\Attachment::tagLabel((string) ($file['tag'] ?? 'other'))) ?></td>
                                 <td><?= e($sizeLabel) ?></td>
                                 <td><?= e(format_datetime($file['created_at'] ?? null)) ?></td>
                                 <td><?= e((string) (($file['created_by_name'] ?? '') !== '' ? $file['created_by_name'] : '—')) ?></td>
