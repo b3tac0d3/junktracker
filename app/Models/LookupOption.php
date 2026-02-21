@@ -50,6 +50,7 @@ final class LookupOption
             'job_status' => 'Job Status',
             'prospect_status' => 'Prospect Status',
             'prospect_next_step' => 'Prospect Next Step',
+            'contact_type' => 'Network Client Type',
         ];
     }
 
@@ -249,6 +250,13 @@ final class LookupOption
                 ['send_quote', 'Send Quote', 40],
                 ['make_appointment', 'Make Appointment', 50],
                 ['other', 'Other', 60],
+            ],
+            'contact_type' => [
+                ['general', 'General', 10],
+                ['specialist', 'Specialist', 20],
+                ['vendor', 'Vendor', 30],
+                ['realtor', 'Realtor', 40],
+                ['other', 'Other', 50],
             ],
         ];
 

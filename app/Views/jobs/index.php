@@ -1,11 +1,11 @@
 <?php
-    $statusOptions = is_array($statusOptions ?? null) ? $statusOptions : ['pending', 'active', 'complete', 'cancelled'];
+    $statusOptions = is_array($statusOptions ?? null) ? $statusOptions : ['pending', 'dispatch', 'active', 'complete', 'cancelled'];
     $savedPresets = is_array($savedPresets ?? null) ? $savedPresets : [];
     $selectedPresetId = isset($selectedPresetId) ? (int) $selectedPresetId : 0;
     $filterPresetModule = (string) ($filterPresetModule ?? 'jobs');
     $currentFilters = [
         'q' => (string) ($filters['q'] ?? ''),
-        'status' => (string) ($filters['status'] ?? 'all'),
+        'status' => (string) ($filters['status'] ?? 'dispatch'),
         'record_status' => (string) ($filters['record_status'] ?? 'active'),
         'billing_state' => (string) ($filters['billing_state'] ?? 'all'),
         'start_date' => (string) ($filters['start_date'] ?? ''),
@@ -53,7 +53,7 @@
                     <div class="col-12 col-lg-2">
                         <label class="form-label">Status</label>
                         <select class="form-select" name="status">
-                            <option value="all" <?= ($filters['status'] ?? 'all') === 'all' ? 'selected' : '' ?>>All</option>
+                            <option value="all" <?= ($filters['status'] ?? 'dispatch') === 'all' ? 'selected' : '' ?>>All</option>
                             <?php foreach ($statusOptions as $statusOption): ?>
                                 <option value="<?= e((string) $statusOption) ?>" <?= ($filters['status'] ?? '') === (string) $statusOption ? 'selected' : '' ?>>
                                     <?= e(ucwords(str_replace('_', ' ', (string) $statusOption))) ?>
@@ -167,6 +167,7 @@
                             }
                             $status = $job['job_status'] ?? '';
                             $statusClass = match ($status) {
+                                'dispatch' => 'bg-info text-dark',
                                 'active' => 'bg-primary',
                                 'complete' => 'bg-success',
                                 'cancelled' => 'bg-secondary',

@@ -7,6 +7,11 @@
     $contacts = $contacts ?? [];
     $tasks = $tasks ?? [];
     $attachments = is_array($attachments ?? null) ? $attachments : [];
+    $linkedContact = is_array($linkedContact ?? null) ? $linkedContact : null;
+    $linkedContactId = (int) ($linkedContact['id'] ?? 0);
+    $workSummary = is_array($workSummary ?? null) ? $workSummary : [];
+    $completedJobs = is_array($completedJobs ?? null) ? $completedJobs : [];
+    $money = static fn (mixed $value): string => '$' . number_format((float) ($value ?? 0), 2);
     $clientPath = '/clients/' . (string) ($client['id'] ?? '');
 ?>
 <div class="container-fluid px-4">
@@ -24,6 +29,22 @@
                 <i class="fas fa-phone me-1"></i>
                 Log Contact
             </a>
+            <?php if (can_access('contacts', 'create') || ($linkedContactId > 0 && can_access('contacts', 'view'))): ?>
+                <?php if ($linkedContactId > 0): ?>
+                    <a class="btn btn-info" href="<?= url('/network/' . $linkedContactId) ?>">
+                        <i class="fas fa-address-card me-1"></i>
+                        View Network Client
+                    </a>
+                <?php elseif (can_access('contacts', 'create')): ?>
+                    <form method="post" action="<?= url('/clients/' . ($client['id'] ?? '') . '/save-contact') ?>">
+                        <?= csrf_field() ?>
+                        <button class="btn btn-info" type="submit">
+                            <i class="fas fa-address-card me-1"></i>
+                            Save as Network Client
+                        </button>
+                    </form>
+                <?php endif; ?>
+            <?php endif; ?>
             <a class="btn btn-warning" href="<?= url('/clients/' . ($client['id'] ?? '') . '/edit') ?>">
                 <i class="fas fa-pen me-1"></i>
                 Edit Client
@@ -115,6 +136,85 @@
                     <div class="text-muted small">Notes</div>
                     <div class="fw-semibold" style="white-space: pre-wrap;"><?= e((string) (($client['note'] ?? '') !== '' ? $client['note'] : '—')) ?></div>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-header">
+            <i class="fas fa-chart-column me-1"></i>
+            Work Summary
+        </div>
+        <div class="card-body">
+            <div class="row g-3 mb-3">
+                <div class="col-6 col-md-2">
+                    <div class="text-muted small">Total Jobs</div>
+                    <div class="fw-semibold"><?= e((string) ((int) ($workSummary['total_jobs'] ?? 0))) ?></div>
+                </div>
+                <div class="col-6 col-md-2">
+                    <div class="text-muted small">Completed Jobs</div>
+                    <div class="fw-semibold"><?= e((string) ((int) ($workSummary['completed_jobs'] ?? 0))) ?></div>
+                </div>
+                <div class="col-6 col-md-2">
+                    <div class="text-muted small">Jobs Gross</div>
+                    <div class="fw-semibold text-success"><?= e($money($workSummary['jobs_gross_total'] ?? 0)) ?></div>
+                </div>
+                <div class="col-6 col-md-2">
+                    <div class="text-muted small">Sales Gross</div>
+                    <div class="fw-semibold text-success"><?= e($money($workSummary['sales_gross_total'] ?? 0)) ?></div>
+                    <div class="small text-muted"><?= e((string) ((int) ($workSummary['sales_count'] ?? 0))) ?> sales</div>
+                </div>
+                <div class="col-6 col-md-2">
+                    <div class="text-muted small">Combined Gross</div>
+                    <div class="fw-semibold text-success"><?= e($money($workSummary['combined_gross_total'] ?? 0)) ?></div>
+                </div>
+                <div class="col-6 col-md-2">
+                    <div class="text-muted small">Total Expenses</div>
+                    <div class="fw-semibold text-danger"><?= e($money($workSummary['expenses_total'] ?? 0)) ?></div>
+                </div>
+            </div>
+
+            <div class="table-responsive">
+                <table class="table table-striped table-hover align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>Completed Job</th>
+                            <th>Location</th>
+                            <th>Completed</th>
+                            <th>Gross</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php if (empty($completedJobs)): ?>
+                            <tr>
+                                <td colspan="4" class="text-muted">No completed jobs for this client yet.</td>
+                            </tr>
+                        <?php else: ?>
+                            <?php foreach ($completedJobs as $job): ?>
+                                <?php
+                                    $jobName = trim((string) ($job['name'] ?? ''));
+                                    if ($jobName === '') {
+                                        $jobName = 'Job #' . (int) ($job['id'] ?? 0);
+                                    }
+                                    $city = trim((string) ($job['city'] ?? ''));
+                                    $state = trim((string) ($job['state'] ?? ''));
+                                    $location = trim($city . ($city !== '' && $state !== '' ? ', ' : '') . $state);
+                                    $completedAt = $job['end_date'] ?? ($job['paid_date'] ?? ($job['updated_at'] ?? null));
+                                ?>
+                                <tr>
+                                    <td>
+                                        <a class="text-decoration-none" href="<?= url('/jobs/' . (string) ($job['id'] ?? '')) ?>">
+                                            <?= e($jobName) ?>
+                                        </a>
+                                    </td>
+                                    <td><?= e($location !== '' ? $location : '—') ?></td>
+                                    <td><?= e(format_datetime($completedAt)) ?></td>
+                                    <td class="text-success"><?= e($money($job['gross_total'] ?? 0)) ?></td>
+                                </tr>
+                            <?php endforeach; ?>
+                        <?php endif; ?>
+                    </tbody>
+                </table>
             </div>
         </div>
     </div>

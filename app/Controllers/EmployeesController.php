@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Controllers;
 
+use App\Models\Contact;
 use App\Models\Employee;
 use App\Models\Job;
 use App\Models\TimeEntry;
@@ -274,6 +275,10 @@ final class EmployeesController extends Controller
         }
 
         $employeeId = Employee::create($data, auth_user_id());
+        $employee = Employee::findById($employeeId);
+        if ($employee) {
+            Contact::upsertFromEmployee($employee, auth_user_id());
+        }
         flash('success', 'Employee added.');
         redirect('/employees/' . $employeeId);
     }
@@ -331,6 +336,10 @@ final class EmployeesController extends Controller
         }
 
         Employee::update($id, $data, auth_user_id());
+        $updatedEmployee = Employee::findById($id);
+        if ($updatedEmployee) {
+            Contact::upsertFromEmployee($updatedEmployee, auth_user_id());
+        }
         flash('success', 'Employee updated.');
         redirect('/employees/' . $id);
     }

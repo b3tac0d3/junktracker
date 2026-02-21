@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Controllers;
 
+use App\Models\Contact;
 use App\Models\User;
 use Core\Controller;
 
@@ -57,6 +58,10 @@ final class SettingsController extends Controller
         }
 
         User::updateProfile($userId, $data, $userId);
+        $updatedUser = User::findById($userId);
+        if ($updatedUser) {
+            Contact::upsertFromUser($updatedUser, $userId);
+        }
 
         $_SESSION['user']['email'] = $data['email'];
         $_SESSION['user']['first_name'] = $data['first_name'];

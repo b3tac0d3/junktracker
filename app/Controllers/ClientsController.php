@@ -8,6 +8,7 @@ use App\Models\Attachment;
 use App\Models\Client;
 use App\Models\ClientContact;
 use App\Models\Company;
+use App\Models\Contact;
 use App\Models\Task;
 use Core\Controller;
 
@@ -65,6 +66,9 @@ final class ClientsController extends Controller
         $this->render('clients/show', [
             'pageTitle' => 'Client Details',
             'client' => $client,
+            'linkedContact' => Contact::findByLinkedClientId($id),
+            'workSummary' => Client::workSummary($id),
+            'completedJobs' => Client::completedJobs($id),
             'companies' => Client::linkedCompanies($id),
             'tasks' => Task::forLinkedRecord('client', $id),
             'attachments' => Attachment::forLink('client', $id),
@@ -84,6 +88,8 @@ final class ClientsController extends Controller
             'pageTitle' => 'Add Client',
             'client' => null,
             'clientTypes' => self::CLIENT_TYPES,
+            'canCreateContact' => can_access('contacts', 'create'),
+            'createAsContactNow' => false,
             'duplicateMatches' => [],
             'requireDuplicateConfirm' => false,
             'selectedCompany' => $this->resolveSelectedCompany(null),
@@ -112,9 +118,17 @@ final class ClientsController extends Controller
         }
 
         $companyId = $this->toIntOrNull($_POST['company_id'] ?? null);
+        $createAsContactNow = isset($_POST['create_contact_now']) && (string) ($_POST['create_contact_now'] ?? '') === '1';
+        $canCreateContact = can_access('contacts', 'create');
         $actorId = auth_user_id();
         $data['active'] = 1;
         $forceCreate = isset($_POST['force_create']) && (string) $_POST['force_create'] === '1';
+
+        if ($createAsContactNow && !$canCreateContact) {
+            flash('error', 'You do not have permission to create network clients.');
+            flash_old($_POST);
+            redirect('/clients/new');
+        }
 
         $duplicateMatches = Client::findPotentialDuplicates($data);
         if (!$forceCreate && !empty($duplicateMatches)) {
@@ -122,6 +136,8 @@ final class ClientsController extends Controller
                 'pageTitle' => 'Add Client',
                 'client' => $data,
                 'clientTypes' => self::CLIENT_TYPES,
+                'canCreateContact' => $canCreateContact,
+                'createAsContactNow' => $createAsContactNow,
                 'duplicateMatches' => $duplicateMatches,
                 'requireDuplicateConfirm' => true,
                 'selectedCompany' => $companyId !== null ? Company::findById($companyId) : null,
@@ -133,7 +149,16 @@ final class ClientsController extends Controller
         $clientId = Client::create($data, $actorId);
         Client::syncCompanyLink($clientId, $companyId, $actorId);
 
-        flash('success', 'Client added.');
+        $successMessage = 'Client added.';
+        if ($createAsContactNow && $canCreateContact) {
+            $contactId = Contact::createFromClientId($clientId, $actorId);
+            if ($contactId !== null && $contactId > 0) {
+                log_user_action('client_saved_as_contact', 'contacts', $contactId, 'Saved client #' . $clientId . ' as network client #' . $contactId . '.');
+                $successMessage .= ' Network client saved.';
+            }
+        }
+
+        flash('success', $successMessage);
         redirect('/clients/' . $clientId);
     }
 
@@ -153,6 +178,8 @@ final class ClientsController extends Controller
             'pageTitle' => 'Edit Client',
             'client' => $client,
             'clientTypes' => self::CLIENT_TYPES,
+            'canCreateContact' => can_access('contacts', 'create'),
+            'createAsContactNow' => false,
             'selectedCompany' => $this->resolveSelectedCompany($id),
             'pageScripts' => '<script src="' . asset('js/client-company-lookup.js') . '"></script>',
         ]);
@@ -241,6 +268,42 @@ final class ClientsController extends Controller
         }
 
         redirect('/clients/' . $id);
+    }
+
+    public function saveAsContact(array $params): void
+    {
+        $this->authorize('view');
+
+        if (!can_access('contacts', 'create')) {
+            flash('error', 'You do not have permission to create network clients.');
+            redirect('/clients/' . ($params['id'] ?? ''));
+        }
+
+        if (!verify_csrf($_POST['csrf_token'] ?? null)) {
+            flash('error', 'Your session expired. Please try again.');
+            redirect('/clients/' . ($params['id'] ?? ''));
+        }
+
+        $id = isset($params['id']) ? (int) $params['id'] : 0;
+        if ($id <= 0) {
+            redirect('/clients');
+        }
+
+        $client = Client::findById($id);
+        if (!$client) {
+            $this->renderNotFound();
+            return;
+        }
+
+        $contactId = Contact::createFromClientId($id, auth_user_id());
+        if ($contactId === null || $contactId <= 0) {
+            flash('error', 'Unable to save this client as a network client.');
+            redirect('/clients/' . $id);
+        }
+
+        log_user_action('client_saved_as_contact', 'contacts', $contactId, 'Saved client #' . $id . ' as network client #' . $contactId . '.');
+        flash('success', 'Client saved as network client.');
+        redirect('/network/' . $contactId);
     }
 
     public function lookup(): void

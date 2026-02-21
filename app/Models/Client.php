@@ -621,6 +621,114 @@ final class Client
         return array_slice($matches, 0, $limit);
     }
 
+    public static function workSummary(int $clientId): array
+    {
+        if ($clientId <= 0) {
+            return self::emptyWorkSummary();
+        }
+
+        [$jobFilterSql, $jobFilterParams] = self::buildClientJobFilter('j', $clientId);
+        $jobWhere = self::buildActiveRecordWhere('jobs', 'j');
+        $jobWhere[] = $jobFilterSql;
+
+        $statusCompleteExpr = Schema::hasColumn('jobs', 'job_status')
+            ? "LOWER(TRIM(COALESCE(j.job_status, ''))) = 'complete'"
+            : '0 = 1';
+
+        $jobSummarySql = 'SELECT
+                            COUNT(*) AS total_jobs,
+                            COALESCE(SUM(CASE WHEN ' . $statusCompleteExpr . ' THEN 1 ELSE 0 END), 0) AS completed_jobs,
+                            COALESCE(SUM(' . self::jobGrossExpression('j') . '), 0) AS jobs_gross_total
+                          FROM jobs j
+                          WHERE ' . implode(' AND ', $jobWhere);
+
+        $jobStmt = Database::connection()->prepare($jobSummarySql);
+        $jobStmt->execute($jobFilterParams);
+        $jobSummary = $jobStmt->fetch() ?: [];
+
+        $expenseTotal = 0.0;
+        if (Schema::tableExists('expenses')) {
+            $expenseWhere = self::buildActiveRecordWhere('expenses', 'e');
+            $expenseWhere[] = $jobFilterSql;
+            $expenseSql = 'SELECT COALESCE(SUM(COALESCE(e.amount, 0)), 0) AS expense_total
+                           FROM expenses e
+                           INNER JOIN jobs j ON j.id = e.job_id
+                           WHERE ' . implode(' AND ', $expenseWhere);
+            $expenseStmt = Database::connection()->prepare($expenseSql);
+            $expenseStmt->execute($jobFilterParams);
+            $expenseTotal = (float) ($expenseStmt->fetchColumn() ?? 0);
+        }
+
+        $salesGross = 0.0;
+        $salesCount = 0;
+        if (Schema::tableExists('sales')) {
+            $salesWhere = self::buildActiveRecordWhere('sales', 's');
+            $salesWhere[] = $jobFilterSql;
+            $salesSql = 'SELECT
+                            COALESCE(SUM(COALESCE(s.gross_amount, 0)), 0) AS gross_total,
+                            COUNT(*) AS sale_count
+                         FROM sales s
+                         INNER JOIN jobs j ON j.id = s.job_id
+                         WHERE ' . implode(' AND ', $salesWhere);
+            $salesStmt = Database::connection()->prepare($salesSql);
+            $salesStmt->execute($jobFilterParams);
+            $salesRow = $salesStmt->fetch() ?: [];
+            $salesGross = (float) ($salesRow['gross_total'] ?? 0);
+            $salesCount = (int) ($salesRow['sale_count'] ?? 0);
+        }
+
+        $jobsGross = (float) ($jobSummary['jobs_gross_total'] ?? 0);
+
+        return [
+            'total_jobs' => (int) ($jobSummary['total_jobs'] ?? 0),
+            'completed_jobs' => (int) ($jobSummary['completed_jobs'] ?? 0),
+            'jobs_gross_total' => $jobsGross,
+            'expenses_total' => $expenseTotal,
+            'sales_gross_total' => $salesGross,
+            'sales_count' => $salesCount,
+            'combined_gross_total' => $jobsGross + $salesGross,
+        ];
+    }
+
+    public static function completedJobs(int $clientId, int $limit = 25): array
+    {
+        if ($clientId <= 0) {
+            return [];
+        }
+
+        $limit = max(1, min($limit, 100));
+        [$jobFilterSql, $jobFilterParams] = self::buildClientJobFilter('j', $clientId);
+        $where = self::buildActiveRecordWhere('jobs', 'j');
+        $where[] = $jobFilterSql;
+
+        if (Schema::hasColumn('jobs', 'job_status')) {
+            $where[] = "LOWER(TRIM(COALESCE(j.job_status, ''))) = 'complete'";
+        }
+
+        $sql = 'SELECT
+                    j.id,
+                    j.name,
+                    j.city,
+                    j.state,
+                    j.end_date,
+                    j.paid_date,
+                    j.updated_at,
+                    ' . self::jobGrossExpression('j') . ' AS gross_total
+                FROM jobs j
+                WHERE ' . implode(' AND ', $where) . '
+                ORDER BY COALESCE(j.end_date, j.paid_date, j.updated_at, j.created_at) DESC, j.id DESC
+                LIMIT :limit';
+
+        $stmt = Database::connection()->prepare($sql);
+        foreach ($jobFilterParams as $key => $value) {
+            $stmt->bindValue(':' . $key, $value);
+        }
+        $stmt->bindValue(':limit', $limit, \PDO::PARAM_INT);
+        $stmt->execute();
+
+        return $stmt->fetchAll();
+    }
+
     private static function normalizePhone(string $value): string
     {
         $digits = preg_replace('/\D+/', '', $value);
@@ -639,6 +747,66 @@ final class Client
     {
         $normalized = preg_replace('/[^A-Z0-9]/', '', strtoupper($value));
         return $normalized ?? '';
+    }
+
+    private static function buildClientJobFilter(string $jobAlias, int $clientId): array
+    {
+        $conditions = [sprintf('%s.client_id = :client_id', $jobAlias)];
+        if (Schema::hasColumn('jobs', 'contact_client_id')) {
+            $conditions[] = sprintf('%s.contact_client_id = :client_id', $jobAlias);
+        }
+        if (Schema::hasColumn('jobs', 'job_owner_type') && Schema::hasColumn('jobs', 'job_owner_id')) {
+            $conditions[] = sprintf(
+                "(LOWER(TRIM(COALESCE(%s.job_owner_type, ''))) = 'client' AND %s.job_owner_id = :client_id)",
+                $jobAlias,
+                $jobAlias
+            );
+        }
+
+        return ['(' . implode(' OR ', $conditions) . ')', ['client_id' => $clientId]];
+    }
+
+    private static function buildActiveRecordWhere(string $table, string $alias): array
+    {
+        $where = [];
+        if (Schema::hasColumn($table, 'deleted_at')) {
+            $where[] = sprintf('%s.deleted_at IS NULL', $alias);
+        }
+        if (Schema::hasColumn($table, 'active')) {
+            $where[] = sprintf('COALESCE(%s.active, 1) = 1', $alias);
+        }
+
+        return $where;
+    }
+
+    private static function jobGrossExpression(string $jobAlias): string
+    {
+        $hasTotalBilled = Schema::hasColumn('jobs', 'total_billed');
+        $hasTotalQuote = Schema::hasColumn('jobs', 'total_quote');
+        if ($hasTotalBilled && $hasTotalQuote) {
+            return sprintf('COALESCE(%s.total_billed, %s.total_quote, 0)', $jobAlias, $jobAlias);
+        }
+        if ($hasTotalBilled) {
+            return sprintf('COALESCE(%s.total_billed, 0)', $jobAlias);
+        }
+        if ($hasTotalQuote) {
+            return sprintf('COALESCE(%s.total_quote, 0)', $jobAlias);
+        }
+
+        return '0';
+    }
+
+    private static function emptyWorkSummary(): array
+    {
+        return [
+            'total_jobs' => 0,
+            'completed_jobs' => 0,
+            'jobs_gross_total' => 0.0,
+            'expenses_total' => 0.0,
+            'sales_gross_total' => 0.0,
+            'sales_count' => 0,
+            'combined_gross_total' => 0.0,
+        ];
     }
 
     private static function ensureCompanyLinkTable(): void

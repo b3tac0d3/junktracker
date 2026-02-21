@@ -16,7 +16,15 @@
         || can_access('estates', 'view')
         || can_access('companies', 'view')
         || can_access('client_contacts', 'view')
+        || can_access('contacts', 'view')
         || can_access('consignors', 'view');
+    $canViewPhotoLibrary = can_access('jobs', 'view')
+        || can_access('clients', 'view')
+        || can_access('prospects', 'view')
+        || can_access('sales', 'view');
+    $canViewServiceSection = can_access('jobs', 'view')
+        || can_access('prospects', 'view')
+        || $canViewPhotoLibrary;
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -104,21 +112,34 @@
                                     <?php endif; ?>
                                 </a>
                             <?php endif; ?>
-                            <?php if (can_access('jobs', 'view')): ?>
-                                <a class="nav-link" href="<?= url('/jobs') ?>">
-                                    <div class="sb-nav-link-icon"><i class="fas fa-briefcase"></i></div>
-                                    Jobs
-                                </a>
-                                <a class="nav-link" href="<?= url('/jobs/schedule') ?>">
-                                    <div class="sb-nav-link-icon"><i class="fas fa-calendar-days"></i></div>
-                                    Schedule Board
+                            <?php if (can_access('tasks', 'view')): ?>
+                                <a class="nav-link" href="<?= url('/tasks') ?>">
+                                    <div class="sb-nav-link-icon"><i class="fas fa-list-check"></i></div>
+                                    Tasks
                                 </a>
                             <?php endif; ?>
-                            <?php if (can_access('prospects', 'view')): ?>
-                                <a class="nav-link" href="<?= url('/prospects') ?>">
-                                    <div class="sb-nav-link-icon"><i class="fas fa-user-plus"></i></div>
-                                    Prospects
+                            <?php if ($canViewServiceSection): ?>
+                                <a class="nav-link collapsed" href="#" data-bs-toggle="collapse" data-bs-target="#collapseServiceMenu" aria-expanded="false" aria-controls="collapseServiceMenu">
+                                    <div class="sb-nav-link-icon"><i class="fas fa-screwdriver-wrench"></i></div>
+                                    Service
+                                    <div class="sb-sidenav-collapse-arrow"><i class="fas fa-angle-down"></i></div>
                                 </a>
+                                <div class="collapse" id="collapseServiceMenu" aria-labelledby="headingOne" data-bs-parent="#sidenavAccordion">
+                                    <nav class="sb-sidenav-menu-nested nav">
+                                        <?php if (can_access('jobs', 'view')): ?>
+                                            <a class="nav-link" href="<?= url('/jobs') ?>"><i class="fas fa-briefcase me-1"></i>Jobs</a>
+                                        <?php endif; ?>
+                                        <?php if ($canViewPhotoLibrary): ?>
+                                            <a class="nav-link" href="<?= url('/photos') ?>"><i class="fas fa-images me-1"></i>Photos</a>
+                                        <?php endif; ?>
+                                        <?php if (can_access('jobs', 'view')): ?>
+                                            <a class="nav-link" href="<?= url('/jobs/schedule') ?>"><i class="fas fa-calendar-days me-1"></i>Schedule Board</a>
+                                        <?php endif; ?>
+                                        <?php if (can_access('prospects', 'view')): ?>
+                                            <a class="nav-link" href="<?= url('/prospects') ?>"><i class="fas fa-user-plus me-1"></i>Prospects</a>
+                                        <?php endif; ?>
+                                    </nav>
+                                </div>
                             <?php endif; ?>
                             <?php if (can_access('sales', 'view')): ?>
                                 <a class="nav-link" href="<?= url('/sales') ?>">
@@ -145,6 +166,9 @@
                                         <?php endif; ?>
                                         <?php if (can_access('client_contacts', 'view')): ?>
                                             <a class="nav-link" href="<?= url('/client-contacts') ?>"><i class="fas fa-phone me-1"></i>Client Contacts</a>
+                                        <?php endif; ?>
+                                        <?php if (can_access('contacts', 'view')): ?>
+                                            <a class="nav-link" href="<?= url('/network') ?>"><i class="fas fa-address-card me-1"></i>Network</a>
                                         <?php endif; ?>
                                         <?php if (can_access('consignors', 'view')): ?>
                                             <a class="nav-link" href="<?= url('/consignors') ?>"><i class="fas fa-handshake me-1"></i>Consignors</a>
@@ -179,22 +203,16 @@
                                     Expenses
                                 </a>
                             <?php endif; ?>
-                            <?php if (can_access('reports', 'view')): ?>
-                                <a class="nav-link" href="<?= url('/reports') ?>">
-                                    <div class="sb-nav-link-icon"><i class="fas fa-chart-line"></i></div>
-                                    Reports
-                                </a>
-                            <?php endif; ?>
-                            <?php if (can_access('tasks', 'view')): ?>
-                                <a class="nav-link" href="<?= url('/tasks') ?>">
-                                    <div class="sb-nav-link-icon"><i class="fas fa-list-check"></i></div>
-                                    Tasks
-                                </a>
-                            <?php endif; ?>
                             <?php if (can_access('employees', 'view')): ?>
                                 <a class="nav-link" href="<?= url('/employees') ?>">
                                     <div class="sb-nav-link-icon"><i class="fas fa-id-badge"></i></div>
                                     Employees
+                                </a>
+                            <?php endif; ?>
+                            <?php if (can_access('reports', 'view')): ?>
+                                <a class="nav-link" href="<?= url('/reports') ?>">
+                                    <div class="sb-nav-link-icon"><i class="fas fa-chart-line"></i></div>
+                                    Reports
                                 </a>
                             <?php endif; ?>
                             <?php if (can_access('admin', 'view')): ?>
@@ -287,6 +305,7 @@
         <script src="<?= asset('js/scripts.js') ?>"></script>
         <script src="<?= asset('js/ajax-actions.js') ?>"></script>
         <script src="<?= asset('js/card-list-component.js') ?>"></script>
+        <script src="<?= asset('js/datatable-external-top.js') ?>"></script>
         <script src="<?= asset('js/mobile-filter-accordion.js') ?>"></script>
         <script>
             (function () {

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use Core\Controller;
+use App\Models\Contact;
 use App\Models\Employee;
 use App\Models\User;
 use App\Models\UserAction;
@@ -284,6 +285,10 @@ final class UsersController extends Controller
         $data['password'] = '';
         $data['password_confirm'] = '';
         $userId = User::create($data, auth_user_id());
+        $savedUser = User::findById($userId);
+        if ($savedUser) {
+            Contact::upsertFromUser($savedUser, auth_user_id());
+        }
 
         $linkMessage = '';
         if ($employeeLinkSupported) {
@@ -291,7 +296,9 @@ final class UsersController extends Controller
         }
 
         $inviteSent = $this->sendSetupInvite($userId, $data['email'], trim($data['first_name'] . ' ' . $data['last_name']));
-        $savedUser = User::findById($userId);
+        if (!$savedUser) {
+            $savedUser = User::findById($userId);
+        }
         $inviteState = $savedUser ? User::inviteStatus($savedUser) : null;
         $inviteExpiryLabel = '';
         if ($inviteState && !empty($inviteState['expires_at'])) {
@@ -336,6 +343,10 @@ final class UsersController extends Controller
         }
 
         User::update($id, $data, auth_user_id());
+        $updatedUser = User::findById($id);
+        if ($updatedUser) {
+            Contact::upsertFromUser($updatedUser, auth_user_id());
+        }
         log_user_action('user_updated', 'users', $id, 'Updated user #' . $id . '.');
         redirect('/users/' . $id);
     }
@@ -362,6 +373,10 @@ final class UsersController extends Controller
         }
 
         User::deactivate($id, auth_user_id());
+        $deactivatedUser = User::findById($id);
+        if ($deactivatedUser) {
+            Contact::upsertFromUser($deactivatedUser, auth_user_id());
+        }
         log_user_action('user_deactivated', 'users', $id, 'Deactivated user #' . $id . '.');
         redirect('/users/' . $id);
     }
@@ -726,6 +741,10 @@ final class UsersController extends Controller
 
                 $employeeId = Employee::create($employeeData, auth_user_id());
                 Employee::assignToUser($employeeId, $userId, auth_user_id());
+                $employee = Employee::findById($employeeId);
+                if ($employee) {
+                    Contact::upsertFromEmployee($employee, auth_user_id());
+                }
 
                 $employeeName = trim($employeeData['first_name'] . ' ' . $employeeData['last_name']);
                 $label = $employeeName !== '' ? $employeeName : ('Employee #' . $employeeId);

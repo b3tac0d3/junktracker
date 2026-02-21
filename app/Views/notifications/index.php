@@ -46,7 +46,7 @@
         </div>
     </div>
 
-    <div class="card mb-4">
+    <div class="card mb-4 notifications-alerts-card">
         <div class="card-header d-flex align-items-center justify-content-between">
             <span><i class="fas fa-bell me-1"></i>Alerts</span>
             <span class="small text-muted">Click a title to open the linked record</span>
@@ -60,13 +60,12 @@
                             <th>Type</th>
                             <th>Alert</th>
                             <th>Due</th>
-                            <th class="text-end">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
                         <?php if (empty($notifications)): ?>
                             <tr>
-                                <td colspan="5" class="text-muted">No notifications in this view.</td>
+                                <td colspan="4" class="text-muted">No notifications in this view.</td>
                             </tr>
                         <?php else: ?>
                             <?php foreach ($notifications as $row): ?>
@@ -101,27 +100,46 @@
                                         <?php endif; ?>
                                         <div class="small text-muted"><?= e((string) ($row['message'] ?? '')) ?></div>
                                     </td>
-                                    <td><?= e(format_datetime($row['due_at'] ?? null)) ?></td>
-                                    <td class="text-end">
-                                        <div class="d-inline-flex gap-1">
-                                            <form method="post" action="<?= url('/notifications/read') ?>">
-                                                <?= csrf_field() ?>
-                                                <input type="hidden" name="notification_key" value="<?= e((string) ($row['key'] ?? '')) ?>" />
-                                                <input type="hidden" name="is_read" value="<?= $isRead ? '0' : '1' ?>" />
-                                                <input type="hidden" name="return_to" value="<?= e('/notifications?scope=' . $scope) ?>" />
-                                                <button class="btn btn-sm <?= $isRead ? 'btn-outline-secondary' : 'btn-outline-success' ?>" type="submit" title="Toggle read">
-                                                    <i class="fas <?= $isRead ? 'fa-envelope' : 'fa-envelope-open' ?>"></i>
+                                    <td>
+                                        <div class="d-flex align-items-center justify-content-between gap-2">
+                                            <span><?= e(format_datetime($row['due_at'] ?? null)) ?></span>
+                                            <div class="dropdown">
+                                                <button
+                                                    class="btn btn-link btn-sm p-0 border-0 text-muted"
+                                                    type="button"
+                                                    data-bs-toggle="dropdown"
+                                                    aria-expanded="false"
+                                                    title="Notification actions"
+                                                >
+                                                    <i class="fas fa-ellipsis"></i>
                                                 </button>
-                                            </form>
-                                            <form method="post" action="<?= url('/notifications/dismiss') ?>">
-                                                <?= csrf_field() ?>
-                                                <input type="hidden" name="notification_key" value="<?= e((string) ($row['key'] ?? '')) ?>" />
-                                                <input type="hidden" name="dismiss" value="<?= $isDismissed ? '0' : '1' ?>" />
-                                                <input type="hidden" name="return_to" value="<?= e('/notifications?scope=' . $scope) ?>" />
-                                                <button class="btn btn-sm <?= $isDismissed ? 'btn-outline-primary' : 'btn-outline-danger' ?>" type="submit" title="Toggle dismiss">
-                                                    <i class="fas <?= $isDismissed ? 'fa-rotate-left' : 'fa-xmark' ?>"></i>
-                                                </button>
-                                            </form>
+                                                <ul class="dropdown-menu dropdown-menu-end">
+                                                    <li>
+                                                        <form method="post" action="<?= url('/notifications/read') ?>">
+                                                            <?= csrf_field() ?>
+                                                            <input type="hidden" name="notification_key" value="<?= e((string) ($row['key'] ?? '')) ?>" />
+                                                            <input type="hidden" name="is_read" value="<?= $isRead ? '0' : '1' ?>" />
+                                                            <input type="hidden" name="return_to" value="<?= e('/notifications?scope=' . $scope) ?>" />
+                                                            <button class="dropdown-item" type="submit">
+                                                                <i class="fas <?= $isRead ? 'fa-envelope me-2' : 'fa-envelope-open me-2' ?>"></i>
+                                                                <?= $isRead ? 'Mark Unread' : 'Mark Read' ?>
+                                                            </button>
+                                                        </form>
+                                                    </li>
+                                                    <li>
+                                                        <form method="post" action="<?= url('/notifications/dismiss') ?>">
+                                                            <?= csrf_field() ?>
+                                                            <input type="hidden" name="notification_key" value="<?= e((string) ($row['key'] ?? '')) ?>" />
+                                                            <input type="hidden" name="dismiss" value="<?= $isDismissed ? '0' : '1' ?>" />
+                                                            <input type="hidden" name="return_to" value="<?= e('/notifications?scope=' . $scope) ?>" />
+                                                            <button class="dropdown-item" type="submit">
+                                                                <i class="fas <?= $isDismissed ? 'fa-rotate-left me-2' : 'fa-xmark me-2' ?>"></i>
+                                                                <?= $isDismissed ? 'Restore Notification' : 'Dismiss Notification' ?>
+                                                            </button>
+                                                        </form>
+                                                    </li>
+                                                </ul>
+                                            </div>
                                         </div>
                                     </td>
                                 </tr>
