@@ -186,3 +186,129 @@ body {
 #jobsCountBadge:empty {
   display: none;
 }
+
+
+/* =========================================
+   Card-List Component (js-card-list-source)
+   ========================================= */
+
+/* Parent card housing the card-list */
+.card-list-parent {
+    overflow: hidden;
+}
+
+/* Grid that wraps each card row */
+.card-list-grid {
+    padding: 0.75rem;
+}
+
+/* Individual card item */
+.card-list-item {
+    border: 1px solid var(--jt-border-subtle);
+    border-radius: 0.75rem;
+    transition: box-shadow 0.15s ease, transform 0.15s ease;
+    cursor: default;
+}
+
+.card-list-item:hover {
+    box-shadow: 0 4px 16px rgba(37, 99, 235, 0.12);
+    transform: translateY(-1px);
+}
+
+/* Title / primary field */
+.card-list-item-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--jt-text-main);
+    margin-bottom: 0.5rem;
+    line-height: 1.3;
+}
+
+.card-list-item-title a {
+    color: var(--jt-primary);
+    text-decoration: none;
+}
+
+.card-list-item-title a:hover {
+    text-decoration: underline;
+}
+
+/* Label + value rows */
+.card-list-field {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 0.5rem;
+    padding: 0.18rem 0;
+    border-bottom: 1px solid var(--jt-border-subtle);
+    font-size: 0.82rem;
+}
+
+.card-list-field:last-of-type {
+    border-bottom: none;
+}
+
+.card-list-field-label {
+    color: var(--jt-text-muted);
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.7rem;
+    letter-spacing: 0.04em;
+    flex-shrink: 0;
+}
+
+.card-list-field-value {
+    color: var(--jt-text-main);
+    text-align: right;
+    flex: 1;
+}
+
+/* Action buttons in card footer */
+.card-list-actions {
+    flex-wrap: wrap;
+    gap: 0.4rem;
+}
+
+/* Empty state */
+.card-list-empty {
+    text-align: center;
+    padding: 2rem 1rem;
+    font-size: 0.9rem;
+    color: var(--jt-text-muted);
+}
+
+/* Mobile two-column button grid */
+.mobile-two-col-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+@media (max-width: 575.98px) {
+    .mobile-two-col-buttons {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .card-list-field-label {
+        font-size: 0.68rem;
+    }
+
+    .card-list-item-title {
+        font-size: 0.95rem;
+    }
+}
+
+/* On desktop, hide card-list and show table as usual */
+@media (min-width: 768px) {
+    .card-list-component {
+        display: none !important;
+    }
+    .js-card-list-source.d-none {
+        display: table !important;
+    }
+    .js-card-list-source[aria-hidden="true"] {
+        display: table !important;
+        aria-hidden: unset;
+    }
+}
