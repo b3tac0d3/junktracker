@@ -143,3 +143,46 @@ body {
     padding: 1.5rem 2rem;
   }
 }
+
+/* =========================================
+   Filter Card & Chevron Animation
+   ========================================= */
+
+.jt-filter-card .card-header {
+  user-select: none;
+  transition: background-color 0.15s ease;
+}
+
+.jt-filter-card .card-header:hover {
+  background-color: rgba(37, 99, 235, 0.05);
+}
+
+.jt-filter-chevron {
+  transition: transform 0.25s ease;
+  font-size: 0.8rem;
+  color: var(--jt-text-muted);
+}
+
+.jt-filter-card .card-header[aria-expanded="true"] .jt-filter-chevron {
+  transform: rotate(180deg);
+}
+
+/* Table dark header polish */
+.table-dark th {
+  background-color: #020617;
+  border-color: rgba(255, 255, 255, 0.1);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+}
+
+/* Row hover highlight */
+.table-hover tbody tr:hover {
+  background-color: rgba(37, 99, 235, 0.04);
+}
+
+/* Count badge inside card headers */
+#jobsCountBadge:empty {
+  display: none;
+}
