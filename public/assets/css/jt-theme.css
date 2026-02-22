@@ -1,0 +1,145 @@
+:root {
+  --jt-bg: #f4f5f7;
+  --jt-surface: #ffffff;
+  --jt-primary: #2563eb;
+  --jt-primary-soft: #dbeafe;
+  --jt-accent: #14b8a6;
+  --jt-border-subtle: #e5e7eb;
+  --jt-text-main: #111827;
+  --jt-text-muted: #6b7280;
+}
+
+body {
+  background-color: var(--jt-bg);
+  color: var(--jt-text-main);
+}
+
+.sb-topnav.navbar-dark {
+  background-color: #020617 !important;
+}
+
+.sb-topnav .navbar-brand {
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.sb-sidenav {
+  background-color: #020617;
+}
+
+.sb-sidenav .nav-link {
+  color: var(--jt-text-muted);
+}
+
+.sb-sidenav .nav-link.active {
+  color: #f9fafb;
+  background-color: rgba(37, 99, 235, 0.18);
+  border-radius: 0.5rem;
+}
+
+.btn-primary {
+  background-color: var(--jt-primary);
+  border-color: var(--jt-primary);
+}
+
+.btn-primary:hover {
+  background-color: #1d4ed8;
+  border-color: #1d4ed8;
+}
+
+.card {
+  border-radius: 0.75rem;
+  border-color: var(--jt-border-subtle);
+  box-shadow: 0 8px 16px rgba(15, 23, 42, 0.06);
+}
+
+.text-muted {
+  color: var(--jt-text-muted) !important;
+}
+
+.jt-card-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.jt-card {
+  background-color: var(--jt-surface);
+  border-radius: 0.75rem;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid var(--jt-border-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.jt-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.jt-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.75rem;
+  font-size: 0.78rem;
+  color: var(--jt-text-muted);
+}
+
+.jt-pill {
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+.jt-pill-primary {
+  background-color: var(--jt-primary-soft);
+  color: #1d4ed8;
+}
+
+.jt-card-actions {
+  margin-top: 0.4rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+@media (min-width: 768px) {
+  .jt-card-list {
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  }
+}
+
+#layoutSidenav #layoutSidenav_nav {
+  width: 240px;
+}
+
+@media (max-width: 767.98px) {
+  #layoutSidenav #layoutSidenav_nav {
+    width: 220px;
+  }
+}
+
+.sb-sidenav .nav-link {
+  padding: 0.5rem 1.1rem;
+  font-size: 0.85rem;
+}
+
+.sb-sidenav-menu-heading {
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  color: #6b7280;
+}
+
+#layoutSidenav_content main {
+  padding: 0.75rem 0.9rem;
+}
+
+@media (min-width: 992px) {
+  #layoutSidenav_content main {
+    padding: 1.5rem 2rem;
+  }
+}
