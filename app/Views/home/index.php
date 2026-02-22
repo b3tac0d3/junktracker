@@ -52,6 +52,7 @@
     $selfOpenLabel = trim((string) ($selfPunch['open_label'] ?? ''));
     $selfMessage = trim((string) ($selfPunch['message'] ?? ''));
     $selfJobLookupUrl = url('/time-tracking/lookup/jobs');
+    $businessLabel = trim((string) ($businessLabel ?? ''));
 
     $money = static fn (mixed $value): string => '$' . number_format((float) ($value ?? 0), 2);
     $minutes = static function (mixed $value): string {
@@ -68,7 +69,11 @@
         <div>
             <h1 class="mb-1">Dashboard</h1>
             <ol class="breadcrumb mb-0">
-                <li class="breadcrumb-item active">Operations Summary</li>
+                <li class="breadcrumb-item active">
+                    <?php if ($businessLabel !== ''): ?>
+                        <div class="fw-bold"><?= e($businessLabel) ?></div>
+                    <?php endif; ?>
+                </li>
             </ol>
         </div>
         <div class="text-muted small">

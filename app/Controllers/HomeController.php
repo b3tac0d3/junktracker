@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Controllers;
 
+use App\Models\Business;
 use App\Models\Dashboard;
 use App\Models\Employee;
 use App\Models\Job;
@@ -22,12 +23,14 @@ final class HomeController extends Controller
 
         $overview = Dashboard::overview();
         $selfPunch = $this->selfPunchData();
+        $businessLabel = $this->currentBusinessLabel();
         $pageScripts = '<script src="' . asset('js/dashboard-self-punch.js') . '?v=' . rawurlencode((string) config('app.version', 'dev')) . '"></script>';
 
         $this->render('home/index', [
             'pageTitle' => 'Dashboard',
             'overview' => $overview,
             'selfPunch' => $selfPunch,
+            'businessLabel' => $businessLabel,
             'pageScripts' => $pageScripts,
         ]);
     }
@@ -302,5 +305,25 @@ final class HomeController extends Controller
         }
 
         return (int) $raw;
+    }
+
+    private function currentBusinessLabel(): string
+    {
+        $businessId = current_business_id();
+        if ($businessId <= 0) {
+            return '';
+        }
+
+        try {
+            $business = Business::findById($businessId);
+            $name = trim((string) ($business['name'] ?? ''));
+            if ($name !== '') {
+                return $name;
+            }
+        } catch (\Throwable) {
+            // Keep dashboard rendering resilient.
+        }
+
+        return 'Business #' . $businessId;
     }
 }
