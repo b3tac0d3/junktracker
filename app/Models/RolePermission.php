@@ -39,6 +39,8 @@ final class RolePermission
         'expense_categories' => 'Expense Categories',
         'disposal_locations' => 'Disposal Locations',
         'admin_settings' => 'Admin Settings',
+        'business_info' => 'Business Info',
+        'site_admin' => 'Site Admin',
         'audit_log' => 'Audit Log',
         'recovery' => 'Recovery',
         'lookups' => 'Lookups',
@@ -54,9 +56,11 @@ final class RolePermission
     public static function roleOptions(): array
     {
         return [
+            0 => 'Punch Only',
             1 => 'User',
             2 => 'Manager',
             3 => 'Admin',
+            4 => 'Site Admin',
             99 => 'Dev',
         ];
     }
@@ -107,7 +111,7 @@ final class RolePermission
             return true;
         }
 
-        if ($role === 99) {
+        if ($role >= 4 || $role === 99) {
             return true;
         }
 
@@ -240,6 +244,11 @@ final class RolePermission
             ];
         }
 
+        if ($role === 0) {
+            self::allow($matrix, ['time_tracking'], ['view', 'create', 'edit']);
+            return $matrix;
+        }
+
         if ($role === 1) {
             self::allow($matrix, ['dashboard', 'notifications'], ['view']);
             self::allow($matrix, [
@@ -284,13 +293,23 @@ final class RolePermission
             self::allow($matrix, ['employees'], ['view', 'create', 'edit']);
             self::allow($matrix, ['users', 'expense_categories', 'disposal_locations'], ['view']);
             self::allow($matrix, ['expense_categories', 'disposal_locations'], ['create', 'edit']);
+            self::allow($matrix, ['business_info'], ['view', 'edit']);
             self::allow($matrix, ['data_quality'], ['view']);
             return $matrix;
         }
 
         if ($role === 3) {
-            $adminModules = array_values(array_filter(array_keys(self::MODULES), static fn (string $module): bool => $module !== 'dev_tools'));
+            $adminModules = array_values(array_filter(
+                array_keys(self::MODULES),
+                static fn (string $module): bool => !in_array($module, ['dev_tools', 'site_admin'], true)
+            ));
             self::allow($matrix, $adminModules, ['view', 'create', 'edit', 'delete']);
+            return $matrix;
+        }
+
+        if ($role === 4) {
+            $siteAdminModules = array_values(array_filter(array_keys(self::MODULES), static fn (string $module): bool => $module !== 'dev_tools'));
+            self::allow($matrix, $siteAdminModules, ['view', 'create', 'edit', 'delete']);
             return $matrix;
         }
 
@@ -327,7 +346,7 @@ final class RolePermission
                     (:role_value, :module_key, :can_view, :can_create, :can_edit, :can_delete, NULL, NOW())'
             );
 
-            foreach ([1, 2, 3] as $role) {
+            foreach ([0, 1, 2, 3, 4] as $role) {
                 $matrix = self::defaultMatrixForRole($role);
                 foreach ($matrix as $module => $actions) {
                     $stmt->execute([

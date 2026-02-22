@@ -34,6 +34,16 @@
                             <option value="all" <?= ($status ?? '') === 'all' ? 'selected' : '' ?>>All</option>
                         </select>
                     </div>
+                    <div class="col-12 col-lg-2">
+                        <select class="form-select" name="invite">
+                            <option value="all" <?= ($inviteFilter ?? 'all') === 'all' ? 'selected' : '' ?>>All Invites</option>
+                            <option value="pending" <?= ($inviteFilter ?? '') === 'pending' ? 'selected' : '' ?>>Pending</option>
+                            <option value="invited" <?= ($inviteFilter ?? '') === 'invited' ? 'selected' : '' ?>>Invited</option>
+                            <option value="expired" <?= ($inviteFilter ?? '') === 'expired' ? 'selected' : '' ?>>Expired</option>
+                            <option value="accepted" <?= ($inviteFilter ?? '') === 'accepted' ? 'selected' : '' ?>>Accepted</option>
+                            <option value="none" <?= ($inviteFilter ?? '') === 'none' ? 'selected' : '' ?>>No Invite</option>
+                        </select>
+                    </div>
                     <div class="col-12 col-lg-2 d-grid">
                         <button class="btn btn-primary" type="submit">Apply</button>
                     </div>

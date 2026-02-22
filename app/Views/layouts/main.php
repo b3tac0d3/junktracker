@@ -2,7 +2,18 @@
     $pageTitle = $pageTitle ?? 'Dashboard';
     $currentUser = auth_user();
     $displayName = $currentUser ? trim(($currentUser['first_name'] ?? '') . ' ' . ($currentUser['last_name'] ?? '')) : 'Guest';
+    $isPunchOnlyRole = $currentUser && (int) ($currentUser['role'] ?? -1) === 0;
+    $showSiteAdminNav = $currentUser && has_role(4);
     $appVersion = trim((string) config('app.version', ''));
+    $activeBusinessName = '';
+    if ($showSiteAdminNav) {
+        try {
+            $activeBusiness = \App\Models\Business::findById(current_business_id());
+            $activeBusinessName = trim((string) ($activeBusiness['name'] ?? ''));
+        } catch (\Throwable) {
+            $activeBusinessName = '';
+        }
+    }
     $notificationUnread = 0;
     if ($currentUser && can_access('notifications', 'view')) {
         try {
@@ -167,11 +178,11 @@
                                         <?php if (can_access('client_contacts', 'view')): ?>
                                             <a class="nav-link" href="<?= url('/client-contacts') ?>"><i class="fas fa-phone me-1"></i>Client Contacts</a>
                                         <?php endif; ?>
-                                        <?php if (can_access('contacts', 'view')): ?>
-                                            <a class="nav-link" href="<?= url('/network') ?>"><i class="fas fa-address-card me-1"></i>Network</a>
-                                        <?php endif; ?>
                                         <?php if (can_access('consignors', 'view')): ?>
                                             <a class="nav-link" href="<?= url('/consignors') ?>"><i class="fas fa-handshake me-1"></i>Consignors</a>
+                                        <?php endif; ?>
+                                        <?php if (can_access('contacts', 'view')): ?>
+                                            <a class="nav-link" href="<?= url('/network') ?>"><i class="fas fa-address-card me-1"></i>Network</a>
                                         <?php endif; ?>
                                     </nav>
                                 </div>
@@ -184,8 +195,10 @@
                                 </a>
                                 <div class="collapse" id="collapseLayouts1" aria-labelledby="headingOne" data-bs-parent="#sidenavAccordion">
                                     <nav class="sb-sidenav-menu-nested nav">
-                                        <a class="nav-link" href="<?= url('/time-tracking') ?>"><i class="fas fa-business-time me-1"></i>Time Tracking</a>
-                                        <a class="nav-link" href="<?= url('/time-tracking/open') ?>"><i class="fas fa-user-clock me-1"></i>Punch Clock</a>
+                                        <?php if (!$isPunchOnlyRole): ?>
+                                            <a class="nav-link" href="<?= url('/time-tracking') ?>"><i class="fas fa-business-time me-1"></i>Time Tracking</a>
+                                        <?php endif; ?>
+                                        <a class="nav-link" href="<?= url('/punch-clock') ?>"><i class="fas fa-user-clock me-1"></i>Punch Clock</a>
                                     </nav>
                                 </div>
                             <?php endif; ?>
@@ -221,7 +234,13 @@
                                     Admin
                                 </a>
                             <?php endif; ?>
-                            <?php if (has_role(99)): ?>
+                            <?php if ($showSiteAdminNav): ?>
+                                <a class="nav-link" href="<?= url('/site-admin') ?>">
+                                    <div class="sb-nav-link-icon"><i class="fas fa-building-shield"></i></div>
+                                    Site Admin
+                                </a>
+                            <?php endif; ?>
+                            <?php if (has_role(4)): ?>
                                 <a class="nav-link" href="<?= url('/dev') ?>">
                                     <div class="sb-nav-link-icon"><i class="fas fa-code"></i></div>
                                     Dev
@@ -272,6 +291,9 @@
                     <div class="sb-sidenav-footer">
                         <div class="small">Logged in as:</div>
                         <?= e($displayName !== '' ? $displayName : 'Guest') ?>
+                        <?php if ($activeBusinessName !== ''): ?>
+                            <div class="small text-muted mt-1"><?= e($activeBusinessName) ?></div>
+                        <?php endif; ?>
                         <?php if ($appVersion !== ''): ?>
                             <div class="small text-muted mt-1">v<?= e($appVersion) ?></div>
                         <?php endif; ?>
@@ -304,6 +326,7 @@
         <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js" crossorigin="anonymous"></script>
         <script src="<?= asset('js/scripts.js') ?>"></script>
         <script src="<?= asset('js/ajax-actions.js') ?>"></script>
+        <script src="<?= asset('js/punch-geolocation.js') ?>"></script>
         <script src="<?= asset('js/card-list-component.js') ?>"></script>
         <script src="<?= asset('js/datatable-external-top.js') ?>"></script>
         <script src="<?= asset('js/mobile-filter-accordion.js') ?>"></script>

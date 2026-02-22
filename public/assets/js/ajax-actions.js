@@ -159,9 +159,14 @@ window.addEventListener('DOMContentLoaded', () => {
             `;
             elapsedCell.textContent = String(payload?.elapsed_label || '0h 00m');
             actionsCell.innerHTML = `
-                <form class="d-inline" method="post" action="${escapeHtml(base)}/jobs/${jobId}/time/punch-out">
+                <form class="d-inline js-punch-geo-form" method="post" action="${escapeHtml(base)}/jobs/${jobId}/time/punch-out">
                     <input type="hidden" name="csrf_token" value="${escapeHtml(csrfToken)}" />
                     <input type="hidden" name="time_entry_id" value="${entryId}" />
+                    <input type="hidden" name="geo_lat" value="" />
+                    <input type="hidden" name="geo_lng" value="" />
+                    <input type="hidden" name="geo_accuracy" value="" />
+                    <input type="hidden" name="geo_captured_at" value="" />
+                    <input type="hidden" name="geo_source" value="job_view_punch_out" />
                     <button class="btn btn-sm btn-danger" type="submit">
                         <i class="fas fa-stop-circle me-1"></i>
                         Punch Out
@@ -181,9 +186,14 @@ window.addEventListener('DOMContentLoaded', () => {
                         <i class="fas fa-user-minus"></i>
                     </button>
                 </form>
-                <form class="d-inline" method="post" action="${escapeHtml(base)}/jobs/${jobId}/time/punch-in">
+                <form class="d-inline js-punch-geo-form" method="post" action="${escapeHtml(base)}/jobs/${jobId}/time/punch-in">
                     <input type="hidden" name="csrf_token" value="${escapeHtml(csrfToken)}" />
                     <input type="hidden" name="employee_id" value="${employeeId}" />
+                    <input type="hidden" name="geo_lat" value="" />
+                    <input type="hidden" name="geo_lng" value="" />
+                    <input type="hidden" name="geo_accuracy" value="" />
+                    <input type="hidden" name="geo_captured_at" value="" />
+                    <input type="hidden" name="geo_source" value="job_view_punch_in" />
                     <button class="btn btn-sm btn-success" type="submit">
                         <i class="fas fa-play-circle me-1"></i>
                         Punch In
@@ -260,4 +270,3 @@ window.addEventListener('DOMContentLoaded', () => {
         }
     });
 });
-

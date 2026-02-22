@@ -21,6 +21,8 @@
     }
 
     $assignedUserId = (string) old('assigned_user_id', isset($task['assigned_user_id']) ? (string) $task['assigned_user_id'] : '');
+    $currentUserId = (int) (auth_user_id() ?? 0);
+    $assignedToOther = $assignedUserId !== '' && (int) $assignedUserId !== $currentUserId;
     $linkType = (string) old('link_type', $task['link_type'] ?? 'general');
     if (!in_array($linkType, $linkTypes, true)) {
         $linkType = 'general';
@@ -73,6 +75,13 @@
                     </option>
                 <?php endforeach; ?>
             </select>
+            <div class="form-text">
+                <?php if ($assignedToOther): ?>
+                    Assignment will be marked pending until that user accepts.
+                <?php else: ?>
+                    Assign to yourself for immediate acceptance.
+                <?php endif; ?>
+            </div>
         </div>
         <div class="col-md-3">
             <label class="form-label" for="link_type">Link Type</label>

@@ -420,7 +420,15 @@ final class AuthController extends Controller
             'first_name' => $user['first_name'] ?? '',
             'last_name' => $user['last_name'] ?? '',
             'role' => $user['role'] ?? null,
+            'business_id' => isset($user['business_id']) ? (int) $user['business_id'] : 1,
         ];
+
+        $role = (int) ($user['role'] ?? 0);
+        if ($role >= 4 || $role === 99) {
+            set_active_business_id(0);
+        } else {
+            set_active_business_id(0);
+        }
 
         remember_login($user, $remember);
         if ($setTrustCookie) {
@@ -428,7 +436,7 @@ final class AuthController extends Controller
         }
         record_user_login_event($user, $loginMethod);
 
-        redirect('/');
+        redirect($this->landingPathForRole($role));
     }
 
     private function maskEmail(string $email): string
@@ -465,6 +473,19 @@ final class AuthController extends Controller
         }
 
         redirect('/login' . $query);
+    }
+
+    private function landingPathForRole(?int $role): string
+    {
+        if ((int) $role === 0) {
+            return '/punch-clock';
+        }
+
+        if ((int) $role === 4) {
+            return '/site-admin';
+        }
+
+        return '/';
     }
 
     private function errorMessageForCode(string $code): string

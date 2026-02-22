@@ -180,6 +180,57 @@ function auth_user_id(): ?int
     return $id > 0 ? $id : null;
 }
 
+function auth_user_role(): int
+{
+    $user = auth_user();
+    if (!$user) {
+        return 0;
+    }
+
+    return (int) ($user['role'] ?? 0);
+}
+
+function current_business_id(): int
+{
+    $fallback = (int) config('app.default_business_id', 1);
+    if ($fallback <= 0) {
+        $fallback = 1;
+    }
+
+    $user = auth_user();
+    if (!$user) {
+        return $fallback;
+    }
+
+    $role = (int) ($user['role'] ?? 0);
+    if ($role >= 4 || $role === 99) {
+        $activeBusinessId = (int) ($_SESSION['active_business_id'] ?? 0);
+        if ($activeBusinessId > 0) {
+            return $activeBusinessId;
+        }
+
+        // Site admins/dev are global users; do not bind scope to their user record.
+        return $fallback;
+    }
+
+    $businessId = isset($user['business_id']) ? (int) $user['business_id'] : 0;
+    return $businessId > 0 ? $businessId : $fallback;
+}
+
+function set_active_business_id(int $businessId): void
+{
+    if (!isset($_SESSION)) {
+        return;
+    }
+
+    if ($businessId <= 0) {
+        unset($_SESSION['active_business_id']);
+        return;
+    }
+
+    $_SESSION['active_business_id'] = $businessId;
+}
+
 function request_ip_address(): ?string
 {
     $candidates = [
@@ -216,6 +267,90 @@ function request_user_agent(): ?string
     }
 
     return substr($value, 0, 512);
+}
+
+function request_geo_payload(?array $source = null): array
+{
+    $input = is_array($source) ? $source : $_POST;
+
+    $latitude = normalize_geo_coordinate($input['geo_lat'] ?? null, -90.0, 90.0);
+    $longitude = normalize_geo_coordinate($input['geo_lng'] ?? null, -180.0, 180.0);
+    $accuracy = normalize_geo_accuracy($input['geo_accuracy'] ?? null);
+
+    $sourceLabel = trim((string) ($input['geo_source'] ?? ''));
+    if ($sourceLabel === '') {
+        $sourceLabel = null;
+    } else {
+        $sourceLabel = substr($sourceLabel, 0, 32);
+    }
+
+    $capturedAt = normalize_geo_captured_at($input['geo_captured_at'] ?? null);
+
+    return [
+        'lat' => $latitude,
+        'lng' => $longitude,
+        'accuracy' => $accuracy,
+        'source' => $sourceLabel,
+        'captured_at' => $capturedAt,
+    ];
+}
+
+function geo_capture_fields(string $source = 'browser'): string
+{
+    $safeSource = e(substr(trim($source) !== '' ? trim($source) : 'browser', 0, 32));
+
+    return implode("\n", [
+        '<input type="hidden" name="geo_lat" value="" />',
+        '<input type="hidden" name="geo_lng" value="" />',
+        '<input type="hidden" name="geo_accuracy" value="" />',
+        '<input type="hidden" name="geo_captured_at" value="" />',
+        '<input type="hidden" name="geo_source" value="' . $safeSource . '" />',
+    ]);
+}
+
+function normalize_geo_coordinate(mixed $value, float $min, float $max): ?float
+{
+    $raw = trim((string) ($value ?? ''));
+    if ($raw === '' || !is_numeric($raw)) {
+        return null;
+    }
+
+    $coordinate = (float) $raw;
+    if ($coordinate < $min || $coordinate > $max) {
+        return null;
+    }
+
+    return round($coordinate, 7);
+}
+
+function normalize_geo_accuracy(mixed $value): ?float
+{
+    $raw = trim((string) ($value ?? ''));
+    if ($raw === '' || !is_numeric($raw)) {
+        return null;
+    }
+
+    $accuracy = (float) $raw;
+    if ($accuracy < 0) {
+        return null;
+    }
+
+    return round($accuracy, 2);
+}
+
+function normalize_geo_captured_at(mixed $value): ?string
+{
+    $raw = trim((string) ($value ?? ''));
+    if ($raw === '') {
+        return null;
+    }
+
+    $timestamp = strtotime($raw);
+    if ($timestamp === false) {
+        return null;
+    }
+
+    return date('Y-m-d H:i:s', $timestamp);
 }
 
 function login_method_label(?string $method): string
@@ -378,6 +513,16 @@ function has_role(int $minimumRole): bool
     return (int) ($user['role'] ?? 0) >= $minimumRole;
 }
 
+function is_punch_only_role(): bool
+{
+    $user = auth_user();
+    if (!$user) {
+        return false;
+    }
+
+    return (int) ($user['role'] ?? 0) === 0;
+}
+
 function require_role(int $minimumRole): void
 {
     if (!is_authenticated()) {
@@ -407,7 +552,7 @@ function can_access(string $module, string $action = 'view'): bool
     }
 
     $role = (int) ($user['role'] ?? 0);
-    if ($role === 99) {
+    if ($role >= 4 || $role === 99) {
         return true;
     }
 
@@ -458,12 +603,67 @@ function lookup_options(string $groupKey, array $fallback = []): array
 function role_label(?int $role): string
 {
     return match ($role) {
+        0 => 'Punch Only',
         1 => 'User',
         2 => 'Manager',
         3 => 'Admin',
+        4 => 'Site Admin',
         99 => 'Dev',
         default => 'Unknown',
     };
+}
+
+function is_global_role_value(?int $role): bool
+{
+    $value = (int) ($role ?? 0);
+    return $value >= 4 || $value === 99;
+}
+
+function assignable_role_options_for_user(?int $actorRole = null): array
+{
+    $role = $actorRole !== null ? (int) $actorRole : auth_user_role();
+    $options = class_exists(\App\Models\RolePermission::class)
+        ? \App\Models\RolePermission::roleOptions()
+        : [
+            0 => 'Punch Only',
+            1 => 'User',
+            2 => 'Manager',
+            3 => 'Admin',
+            4 => 'Site Admin',
+            99 => 'Dev',
+        ];
+
+    if ($role === 99) {
+        return $options;
+    }
+
+    if ($role >= 4) {
+        unset($options[99]);
+        return $options;
+    }
+
+    if ($role >= 3) {
+        unset($options[4], $options[99]);
+        return $options;
+    }
+
+    if ($role >= 2) {
+        return array_intersect_key($options, array_flip([0, 1, 2]));
+    }
+
+    return array_intersect_key($options, array_flip([0, 1]));
+}
+
+function can_manage_role(?int $actorRole, ?int $targetRole): bool
+{
+    $actor = (int) ($actorRole ?? 0);
+    $target = (int) ($targetRole ?? 0);
+
+    if ($actor === 99) {
+        return true;
+    }
+
+    return $actor >= $target;
 }
 
 function format_datetime(?string $value): string
@@ -695,7 +895,15 @@ function attempt_remember_login(): void
         'first_name' => $user['first_name'] ?? '',
         'last_name' => $user['last_name'] ?? '',
         'role' => $user['role'] ?? null,
+        'business_id' => isset($user['business_id']) ? (int) $user['business_id'] : 1,
     ];
+
+    $role = (int) ($user['role'] ?? 0);
+    if ($role >= 4 || $role === 99) {
+        set_active_business_id(0);
+    } else {
+        set_active_business_id(0);
+    }
 
     try {
         \App\Models\User::clearFailedLogin((int) ($user['id'] ?? 0));

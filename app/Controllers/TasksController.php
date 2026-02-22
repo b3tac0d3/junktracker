@@ -31,6 +31,7 @@ final class TasksController extends Controller
         $filters = [
             'q' => trim((string) ($presetFilters['q'] ?? '')),
             'status' => (string) ($presetFilters['status'] ?? 'open'),
+            'assignment_status' => (string) ($presetFilters['assignment_status'] ?? 'all'),
             'importance' => $this->toIntOrNull($presetFilters['importance'] ?? null),
             'link_type' => (string) ($presetFilters['link_type'] ?? 'all'),
             'owner_scope' => (string) ($presetFilters['owner_scope'] ?? 'all'),
@@ -46,6 +47,9 @@ final class TasksController extends Controller
         }
         if (array_key_exists('status', $_GET)) {
             $filters['status'] = (string) ($_GET['status'] ?? 'open');
+        }
+        if (array_key_exists('assignment_status', $_GET)) {
+            $filters['assignment_status'] = (string) ($_GET['assignment_status'] ?? 'all');
         }
         if (array_key_exists('importance', $_GET)) {
             $filters['importance'] = $this->toIntOrNull($_GET['importance'] ?? null);
@@ -71,6 +75,9 @@ final class TasksController extends Controller
 
         if (!in_array($filters['status'], array_merge(['all', 'overdue'], Task::STATUSES), true)) {
             $filters['status'] = 'open';
+        }
+        if (!in_array($filters['assignment_status'], Task::ASSIGNMENT_STATUSES, true)) {
+            $filters['assignment_status'] = 'all';
         }
         if (($filters['importance'] ?? 0) < 1 || ($filters['importance'] ?? 0) > 5) {
             $filters['importance'] = null;
@@ -103,6 +110,7 @@ final class TasksController extends Controller
             'summary' => Task::summary($filters),
             'users' => Task::users(),
             'statusOptions' => Task::STATUSES,
+            'assignmentOptions' => Task::ASSIGNMENT_STATUSES,
             'linkTypes' => Task::LINK_TYPES,
             'linkTypeLabels' => $this->linkTypeLabels(),
             'ownerScopes' => ['all', 'mine', 'team'],
@@ -152,6 +160,7 @@ final class TasksController extends Controller
         }
 
         $taskId = Task::create($data, auth_user_id());
+        log_user_action('task_created', 'todos', $taskId, 'Created task: ' . ($data['title'] ?: ('Task #' . $taskId)));
         flash('success', 'Task added.');
         redirect('/tasks/' . $taskId);
     }
@@ -175,6 +184,7 @@ final class TasksController extends Controller
             'pageTitle' => 'Task Details',
             'task' => $task,
             'linkTypeLabels' => $this->linkTypeLabels(),
+            'canRespondAssignment' => $this->canRespondToAssignment($task),
         ]);
     }
 
@@ -237,6 +247,7 @@ final class TasksController extends Controller
         }
 
         Task::update($id, $data, auth_user_id());
+        log_user_action('task_updated', 'todos', $id, 'Updated task: ' . ($data['title'] ?: ('Task #' . $id)));
         flash('success', 'Task updated.');
         redirect('/tasks/' . $id);
     }
@@ -350,6 +361,56 @@ final class TasksController extends Controller
         }
 
         flash('success', $message);
+        redirect($returnPath);
+    }
+
+    public function respondAssignment(array $params): void
+    {
+        $this->authorize('edit');
+
+        $id = isset($params['id']) ? (int) $params['id'] : 0;
+        if ($id <= 0) {
+            redirect('/tasks');
+        }
+
+        $returnPath = $this->resolveReturnPath('/tasks/' . $id);
+
+        if (!verify_csrf($_POST['csrf_token'] ?? null)) {
+            flash('error', 'Your session expired. Please try again.');
+            redirect($returnPath);
+        }
+
+        $task = Task::findById($id);
+        if (!$task) {
+            $this->renderNotFound();
+            return;
+        }
+
+        if (!$this->canRespondToAssignment($task)) {
+            flash('error', 'You are not allowed to respond to this assignment.');
+            redirect($returnPath);
+        }
+
+        $decision = strtolower(trim((string) ($_POST['decision'] ?? '')));
+        if (!in_array($decision, ['accept', 'decline'], true)) {
+            flash('error', 'Invalid assignment response.');
+            redirect($returnPath);
+        }
+
+        $note = trim((string) ($_POST['assignment_note'] ?? ''));
+        $saved = Task::respondAssignment($id, $decision, (int) (auth_user_id() ?? 0), $note !== '' ? $note : null);
+        if (!$saved) {
+            flash('error', 'Unable to update assignment status.');
+            redirect($returnPath);
+        }
+
+        log_user_action(
+            $decision === 'accept' ? 'task_assignment_accepted' : 'task_assignment_declined',
+            'todos',
+            $id,
+            ($decision === 'accept' ? 'Accepted' : 'Declined') . ' task assignment.'
+        );
+        flash('success', $decision === 'accept' ? 'Task assignment accepted.' : 'Task assignment declined.');
         redirect($returnPath);
     }
 
@@ -479,6 +540,7 @@ final class TasksController extends Controller
                 (string) ($task['title'] ?? ''),
                 (string) ($task['link_label'] ?? ''),
                 (string) (($task['assigned_user_name'] ?? '') !== '' ? $task['assigned_user_name'] : 'Unassigned'),
+                (string) ($task['assignment_status'] ?? 'unassigned'),
                 (string) ($task['status'] ?? ''),
                 (string) ($task['importance'] ?? ''),
                 format_datetime($task['due_at'] ?? null),
@@ -488,7 +550,7 @@ final class TasksController extends Controller
 
         stream_csv_download(
             'tasks-' . date('Ymd-His') . '.csv',
-            ['ID', 'Task', 'Linked To', 'Assigned', 'Status', 'Priority', 'Due', 'Last Activity'],
+            ['ID', 'Task', 'Linked To', 'Assigned', 'Assignment', 'Status', 'Priority', 'Due', 'Last Activity'],
             $rows
         );
     }
@@ -553,6 +615,35 @@ final class TasksController extends Controller
         }
 
         return $returnTo;
+    }
+
+    private function canRespondToAssignment(array $task): bool
+    {
+        if (!empty($task['deleted_at'])) {
+            return false;
+        }
+
+        $assignedUserId = (int) ($task['assigned_user_id'] ?? 0);
+        if ($assignedUserId <= 0) {
+            return false;
+        }
+
+        $assignmentStatus = strtolower(trim((string) ($task['assignment_status'] ?? '')));
+        if ($assignmentStatus !== 'pending') {
+            return false;
+        }
+
+        $currentUserId = (int) (auth_user_id() ?? 0);
+        if ($currentUserId <= 0) {
+            return false;
+        }
+
+        if ($currentUserId === $assignedUserId) {
+            return true;
+        }
+
+        $currentRole = (int) ((auth_user()['role'] ?? 0));
+        return $currentRole === 99 || $currentRole >= 2;
     }
 
     private function renderNotFound(): void

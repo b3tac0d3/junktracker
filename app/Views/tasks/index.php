@@ -3,6 +3,7 @@
     $tasks = $tasks ?? [];
     $users = $users ?? [];
     $statusOptions = $statusOptions ?? ['open', 'in_progress', 'closed'];
+    $assignmentOptions = $assignmentOptions ?? ['all', 'pending', 'accepted', 'declined', 'unassigned'];
     $linkTypes = $linkTypes ?? ['general'];
     $linkTypeLabels = $linkTypeLabels ?? [];
     $ownerScopes = $ownerScopes ?? ['all', 'mine', 'team'];
@@ -17,6 +18,7 @@
     $currentFilters = [
         'q' => (string) ($filters['q'] ?? ''),
         'status' => (string) ($filters['status'] ?? 'open'),
+        'assignment_status' => (string) ($filters['assignment_status'] ?? 'all'),
         'importance' => $filters['importance'] ?? '',
         'link_type' => (string) ($filters['link_type'] ?? 'all'),
         'owner_scope' => (string) ($filters['owner_scope'] ?? 'all'),
@@ -89,6 +91,23 @@
                             <?php foreach ($statusOptions as $status): ?>
                                 <option value="<?= e($status) ?>" <?= ($filters['status'] ?? '') === $status ? 'selected' : '' ?>>
                                     <?= e(ucwords(str_replace('_', ' ', $status))) ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="col-12 col-lg-2">
+                        <label class="form-label">Assignment</label>
+                        <select class="form-select" name="assignment_status">
+                            <?php foreach ($assignmentOptions as $option): ?>
+                                <option value="<?= e($option) ?>" <?= ($filters['assignment_status'] ?? 'all') === $option ? 'selected' : '' ?>>
+                                    <?= e(match ($option) {
+                                        'all' => 'All',
+                                        'pending' => 'Pending Response',
+                                        'accepted' => 'Accepted',
+                                        'declined' => 'Declined',
+                                        'unassigned' => 'Unassigned',
+                                        default => ucwords(str_replace('_', ' ', $option)),
+                                    }) ?>
                                 </option>
                             <?php endforeach; ?>
                         </select>
@@ -227,6 +246,7 @@
                             <th>Task</th>
                             <th>Linked To</th>
                             <th>Assigned</th>
+                            <th>Assignment</th>
                             <th>Status</th>
                             <th>Priority</th>
                             <th>Due</th>
@@ -254,6 +274,19 @@
                                 $dueTs = $dueAt !== '' ? strtotime($dueAt) : false;
                                 $isOverdue = $status !== 'closed' && $dueTs !== false && $dueTs < time();
                                 $isDueToday = $status !== 'closed' && $dueTs !== false && date('Y-m-d', $dueTs) === date('Y-m-d');
+                                $assignmentStatus = strtolower((string) ($task['assignment_status'] ?? 'unassigned'));
+                                $assignmentBadgeClass = match ($assignmentStatus) {
+                                    'pending' => 'bg-warning text-dark',
+                                    'accepted' => 'bg-success',
+                                    'declined' => 'bg-danger',
+                                    default => 'bg-secondary',
+                                };
+                                $assignmentLabel = match ($assignmentStatus) {
+                                    'pending' => 'Pending',
+                                    'accepted' => 'Accepted',
+                                    'declined' => 'Declined',
+                                    default => 'Unassigned',
+                                };
                             ?>
                             <tr data-href="<?= $rowHref ?>" data-task-id="<?= e((string) ($task['id'] ?? '')) ?>" style="cursor: pointer;">
                                 <td data-href="<?= $rowHref ?>">
@@ -288,6 +321,7 @@
                                     <?php endif; ?>
                                 </td>
                                 <td><?= e((string) (($task['assigned_user_name'] ?? '') !== '' ? $task['assigned_user_name'] : 'Unassigned')) ?></td>
+                                <td><span class="badge <?= e($assignmentBadgeClass) ?>"><?= e($assignmentLabel) ?></span></td>
                                 <td><span class="badge js-task-status-badge <?= e($statusClass) ?>"><?= e(ucwords(str_replace('_', ' ', $status))) ?></span></td>
                                 <td><span class="badge <?= e($priorityClass) ?>">P<?= e((string) $importance) ?></span></td>
                                 <td>

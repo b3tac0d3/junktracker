@@ -141,6 +141,7 @@ final class EmployeesController extends Controller
             $jobId = null;
         }
 
+        $geo = request_geo_payload($_POST);
         $payRate = TimeEntry::employeeRate($id) ?? 0.0;
         $entryId = TimeEntry::create([
             'employee_id' => $id,
@@ -151,6 +152,11 @@ final class EmployeesController extends Controller
             'minutes_worked' => null,
             'pay_rate' => $payRate,
             'total_paid' => null,
+            'punch_in_lat' => $geo['lat'],
+            'punch_in_lng' => $geo['lng'],
+            'punch_in_accuracy_m' => $geo['accuracy'],
+            'punch_in_source' => $geo['source'],
+            'punch_in_captured_at' => $geo['captured_at'],
             'note' => null,
         ], auth_user_id());
 
@@ -214,6 +220,7 @@ final class EmployeesController extends Controller
             (string) ($entry['work_date'] ?? date('Y-m-d')),
             (string) ($entry['start_time'] ?? date('H:i:s'))
         );
+        $geo = request_geo_payload($_POST);
         $payRate = isset($entry['pay_rate']) && $entry['pay_rate'] !== null
             ? (float) $entry['pay_rate']
             : (TimeEntry::employeeRate($id) ?? 0.0);
@@ -224,6 +231,11 @@ final class EmployeesController extends Controller
             'minutes_worked' => $minutesWorked,
             'pay_rate' => $payRate,
             'total_paid' => $totalPaid,
+            'punch_out_lat' => $geo['lat'],
+            'punch_out_lng' => $geo['lng'],
+            'punch_out_accuracy_m' => $geo['accuracy'],
+            'punch_out_source' => $geo['source'],
+            'punch_out_captured_at' => $geo['captured_at'],
         ], auth_user_id());
 
         $employeeName = $this->employeeDisplayName($employee, $id);

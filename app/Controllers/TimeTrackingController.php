@@ -15,6 +15,10 @@ final class TimeTrackingController extends Controller
 {
     public function index(): void
     {
+        if ($this->redirectPunchOnlyToLanding(false)) {
+            return;
+        }
+
         $this->authorize('view');
 
         $moduleKey = 'time_tracking';
@@ -100,6 +104,10 @@ final class TimeTrackingController extends Controller
     {
         $this->authorize('view');
 
+        $requestPath = strtolower((string) (parse_url((string) ($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_PATH) ?? ''));
+        $usePunchClockPath = str_contains($requestPath, '/punch-clock') || is_punch_only_role();
+        $openBasePath = $usePunchClockPath ? '/punch-clock' : '/time-tracking/open';
+
         $filters = [
             'q' => trim((string) ($_GET['q'] ?? '')),
         ];
@@ -148,6 +156,8 @@ final class TimeTrackingController extends Controller
             'entries' => $entries,
             'summary' => TimeEntry::openSummary($filters),
             'punchedOutEmployees' => $punchedOutEmployees,
+            'openBasePath' => $openBasePath,
+            'isPunchOnlyRole' => is_punch_only_role(),
             'pageScripts' => $pageScripts,
         ]);
     }
@@ -198,6 +208,7 @@ final class TimeTrackingController extends Controller
         }
 
         $payRate = TimeEntry::employeeRate($employeeId) ?? 0.0;
+        $geo = request_geo_payload($_POST);
         try {
             $entryId = TimeEntry::create([
                 'employee_id' => $employeeId,
@@ -208,6 +219,11 @@ final class TimeTrackingController extends Controller
                 'minutes_worked' => null,
                 'pay_rate' => $payRate,
                 'total_paid' => null,
+                'punch_in_lat' => $geo['lat'],
+                'punch_in_lng' => $geo['lng'],
+                'punch_in_accuracy_m' => $geo['accuracy'],
+                'punch_in_source' => $geo['source'],
+                'punch_in_captured_at' => $geo['captured_at'],
                 'note' => null,
             ], auth_user_id());
         } catch (Throwable) {
@@ -243,6 +259,10 @@ final class TimeTrackingController extends Controller
 
     public function create(): void
     {
+        if ($this->redirectPunchOnlyToLanding()) {
+            return;
+        }
+
         $this->authorize('create');
 
         $jobId = $this->toIntOrNull($_GET['job_id'] ?? null);
@@ -290,6 +310,10 @@ final class TimeTrackingController extends Controller
 
     public function store(): void
     {
+        if ($this->redirectPunchOnlyToLanding()) {
+            return;
+        }
+
         $this->authorize('create');
 
         if (!verify_csrf($_POST['csrf_token'] ?? null)) {
@@ -330,6 +354,7 @@ final class TimeTrackingController extends Controller
 
             $nowDate = date('Y-m-d');
             $nowTime = date('H:i:s');
+            $geo = request_geo_payload($_POST);
             $payRate = $data['pay_rate'] !== null
                 ? (float) $data['pay_rate']
                 : (TimeEntry::employeeRate($employeeId) ?? 0.0);
@@ -344,6 +369,11 @@ final class TimeTrackingController extends Controller
                     'minutes_worked' => null,
                     'pay_rate' => $payRate,
                     'total_paid' => null,
+                    'punch_in_lat' => $geo['lat'],
+                    'punch_in_lng' => $geo['lng'],
+                    'punch_in_accuracy_m' => $geo['accuracy'],
+                    'punch_in_source' => $geo['source'],
+                    'punch_in_captured_at' => $geo['captured_at'],
                     'note' => $data['note'],
                 ], auth_user_id());
             } catch (Throwable) {
@@ -409,6 +439,10 @@ final class TimeTrackingController extends Controller
 
     public function show(array $params): void
     {
+        if ($this->redirectPunchOnlyToLanding()) {
+            return;
+        }
+
         $this->authorize('view');
 
         $id = isset($params['id']) ? (int) $params['id'] : 0;
@@ -434,6 +468,10 @@ final class TimeTrackingController extends Controller
 
     public function edit(array $params): void
     {
+        if ($this->redirectPunchOnlyToLanding()) {
+            return;
+        }
+
         $this->authorize('edit');
 
         $id = isset($params['id']) ? (int) $params['id'] : 0;
@@ -474,6 +512,10 @@ final class TimeTrackingController extends Controller
 
     public function update(array $params): void
     {
+        if ($this->redirectPunchOnlyToLanding()) {
+            return;
+        }
+
         $this->authorize('edit');
 
         $id = isset($params['id']) ? (int) $params['id'] : 0;
@@ -582,6 +624,7 @@ final class TimeTrackingController extends Controller
             (string) ($entry['work_date'] ?? date('Y-m-d')),
             (string) ($entry['start_time'] ?? date('H:i:s'))
         );
+        $geo = request_geo_payload($_POST);
         $payRate = isset($entry['pay_rate']) && $entry['pay_rate'] !== null
             ? (float) $entry['pay_rate']
             : (TimeEntry::employeeRate((int) ($entry['employee_id'] ?? 0)) ?? 0.0);
@@ -592,6 +635,11 @@ final class TimeTrackingController extends Controller
             'minutes_worked' => $minutesWorked,
             'pay_rate' => $payRate,
             'total_paid' => $totalPaid,
+            'punch_out_lat' => $geo['lat'],
+            'punch_out_lng' => $geo['lng'],
+            'punch_out_accuracy_m' => $geo['accuracy'],
+            'punch_out_source' => $geo['source'],
+            'punch_out_captured_at' => $geo['captured_at'],
         ], auth_user_id());
 
         $jobId = isset($entry['job_id']) ? (int) $entry['job_id'] : 0;
@@ -613,6 +661,10 @@ final class TimeTrackingController extends Controller
 
     public function delete(array $params): void
     {
+        if ($this->redirectPunchOnlyToLanding()) {
+            return;
+        }
+
         $this->authorize('delete');
 
         $id = isset($params['id']) ? (int) $params['id'] : 0;
@@ -678,13 +730,21 @@ final class TimeTrackingController extends Controller
     {
         $raw = trim((string) ($value ?? ''));
         if ($raw !== '') {
-            if (preg_match('#^/jobs/[0-9]+$#', $raw) || preg_match('#^/time-tracking(?:/.*)?$#', $raw)) {
+            if (
+                preg_match('#^/jobs/[0-9]+$#', $raw)
+                || preg_match('#^/time-tracking(?:/.*)?$#', $raw)
+                || preg_match('#^/punch-clock(?:/.*)?$#', $raw)
+            ) {
                 return $raw;
             }
         }
 
         if ($jobId !== null && $jobId > 0) {
             return '/jobs/' . $jobId;
+        }
+
+        if (is_punch_only_role()) {
+            return '/punch-clock';
         }
 
         return '/time-tracking';
@@ -887,6 +947,20 @@ final class TimeTrackingController extends Controller
     private function authorize(string $action): void
     {
         require_permission('time_tracking', $action);
+    }
+
+    private function redirectPunchOnlyToLanding(bool $withMessage = true): bool
+    {
+        if (!is_punch_only_role()) {
+            return false;
+        }
+
+        if ($withMessage) {
+            flash('error', 'Punch-only users can only access Punch Clock.');
+        }
+
+        redirect('/punch-clock');
+        return true;
     }
 
     private function renderNotFound(): void

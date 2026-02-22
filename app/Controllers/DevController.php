@@ -218,7 +218,7 @@ final class DevController extends Controller
 
     private function authorizeDev(): void
     {
-        require_role(99);
+        require_role(4);
     }
 
     private function collectBugData(array $input, bool $allowStatus = true): array

@@ -136,6 +136,8 @@
 
         const titleCell = cells[primaryIndex] || cells[0];
         const titleHtml = titleCell ? titleCell.innerHTML : 'Record';
+        const titleText = titleCell ? titleCell.textContent.replace(/\s+/g, ' ').trim() : '';
+        const renderTitle = titleText !== '' && !hasActionElements(titleCell);
 
         const col = document.createElement('div');
         col.className = 'col-12';
@@ -143,12 +145,15 @@
         const card = document.createElement('div');
         card.className = 'card card-list-item h-100';
 
-        const header = document.createElement('div');
-        header.className = 'card-header card-list-title';
-        header.innerHTML = titleHtml;
-
         const body = document.createElement('div');
         body.className = 'card-body';
+
+        if (renderTitle) {
+            const title = document.createElement('div');
+            title.className = 'card-list-item-title';
+            title.innerHTML = titleHtml;
+            body.appendChild(title);
+        }
 
         fieldIndexes.forEach(function (fieldIndex) {
             if (!cells[fieldIndex]) {
@@ -160,7 +165,6 @@
             body.appendChild(renderFieldRow(label, valueHtml));
         });
 
-        card.appendChild(header);
         card.appendChild(body);
 
         const actionCell = actionIndex >= 0 ? cells[actionIndex] : null;

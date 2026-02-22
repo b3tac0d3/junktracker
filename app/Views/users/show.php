@@ -4,6 +4,7 @@
     $canManageEmployeeLink = !empty($canManageEmployeeLink);
     $employeeLinkSupported = !empty($employeeLinkSupported);
     $linkedEmployee = is_array($linkedEmployee ?? null) ? $linkedEmployee : null;
+    $canManageRole = !array_key_exists('canManageRole', get_defined_vars()) || !empty($canManageRole);
     $canDeactivate = !array_key_exists('canDeactivate', get_defined_vars()) || !empty($canDeactivate);
     $inviteStatus = is_array($inviteStatus ?? null) ? $inviteStatus : [
         'status' => 'none',
@@ -14,7 +15,9 @@
         'accepted_at' => null,
         'is_outstanding' => false,
     ];
-    $canAutoAcceptInvite = in_array((string) ($inviteStatus['status'] ?? ''), ['invited', 'expired'], true) && can_access('users', 'edit');
+    $canAutoAcceptInvite = $canManageRole
+        && in_array((string) ($inviteStatus['status'] ?? ''), ['invited', 'expired'], true)
+        && can_access('users', 'edit');
     $lastLoginBrowser = trim((string) ($lastLogin['browser_name'] ?? ''));
     $lastLoginBrowserVersion = trim((string) ($lastLogin['browser_version'] ?? ''));
     if ($lastLoginBrowser !== '' && $lastLoginBrowserVersion !== '') {
@@ -34,10 +37,12 @@
             </ol>
         </div>
         <div class="entity-action-buttons">
-            <a class="btn btn-warning" href="<?= url('/users/' . ($user['id'] ?? '') . '/edit') ?>">
-                <i class="fas fa-pen me-1"></i>
-                Edit User
-            </a>
+            <?php if ($canManageRole): ?>
+                <a class="btn btn-warning" href="<?= url('/users/' . ($user['id'] ?? '') . '/edit') ?>">
+                    <i class="fas fa-pen me-1"></i>
+                    Edit User
+                </a>
+            <?php endif; ?>
             <a class="btn btn-info text-white" href="<?= url('/users/' . ($user['id'] ?? '') . '/activity') ?>">
                 <i class="fas fa-clock-rotate-left me-1"></i>
                 Activity Log
@@ -100,6 +105,12 @@
                 <div class="col-md-3">
                     <div class="text-muted small">Role</div>
                     <div class="fw-semibold"><?= e(role_label(isset($user['role']) ? (int) $user['role'] : null)) ?></div>
+                </div>
+                <div class="col-md-3">
+                    <div class="text-muted small">Scope</div>
+                    <div class="fw-semibold">
+                        <?= is_global_role_value(isset($user['role']) ? (int) $user['role'] : 0) ? 'Global (All Businesses)' : 'Business Workspace' ?>
+                    </div>
                 </div>
                 <div class="col-md-3">
                     <div class="text-muted small">Status</div>

@@ -2,6 +2,7 @@
     $user = $user ?? [];
     $isEdit = !empty($user);
     $formValues = is_array($formValues ?? null) ? $formValues : [];
+    $roleOptions = is_array($roleOptions ?? null) ? $roleOptions : \App\Models\RolePermission::roleOptions();
     $employeeLinkReview = is_array($employeeLinkReview ?? null) ? $employeeLinkReview : null;
     $employeeLinkSupported = !empty($employeeLinkSupported);
     $canCreateEmployee = !empty($canCreateEmployee);
@@ -25,10 +26,15 @@
             <label class="form-label" for="role">Role</label>
             <select class="form-select" id="role" name="role">
                 <?php $roleValue = (int) old('role', isset($formValues['role']) ? (int) $formValues['role'] : (isset($user['role']) ? (int) $user['role'] : 1)); ?>
-                <option value="1" <?= $roleValue === 1 ? 'selected' : '' ?>>User</option>
-                <option value="2" <?= $roleValue === 2 ? 'selected' : '' ?>>Manager</option>
-                <option value="3" <?= $roleValue === 3 ? 'selected' : '' ?>>Admin</option>
-                <option value="99" <?= $roleValue === 99 ? 'selected' : '' ?>>Dev</option>
+                <?php if (!array_key_exists($roleValue, $roleOptions)): ?>
+                    <?php $roleOptions[$roleValue] = role_label($roleValue); ?>
+                <?php endif; ?>
+                <?php ksort($roleOptions); ?>
+                <?php foreach ($roleOptions as $roleId => $roleLabel): ?>
+                    <option value="<?= e((string) $roleId) ?>" <?= (int) $roleId === $roleValue ? 'selected' : '' ?>>
+                        <?= e((string) $roleLabel) ?>
+                    </option>
+                <?php endforeach; ?>
             </select>
         </div>
         <div class="col-md-3">

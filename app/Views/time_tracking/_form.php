@@ -70,8 +70,9 @@
     $totalPaid = (string) old('total_paid', (string) ($entry['total_paid'] ?? ''));
     $note = (string) old('note', (string) ($entry['note'] ?? ''));
 ?>
-<form method="post" action="<?= url($formAction) ?>" id="timeEntryForm">
+<form class="js-punch-geo-form" method="post" action="<?= url($formAction) ?>" id="timeEntryForm" data-punch-geo-submit-value="punch_in_now">
     <?= csrf_field() ?>
+    <?= geo_capture_fields('time_entry_form') ?>
     <input type="hidden" name="return_to" value="<?= e($returnTo) ?>" />
 
     <input type="hidden" id="time_employee_lookup_url" value="<?= e(url('/time-tracking/lookup/employees')) ?>" />

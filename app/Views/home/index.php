@@ -131,8 +131,9 @@
                             </div>
                             <div class="d-flex flex-wrap gap-2 mobile-two-col-buttons">
                                 <?php if ($selfCanPunchOut && $selfEmployee): ?>
-                                    <form method="post" action="<?= url('/dashboard/punch-out') ?>">
+                                    <form class="js-punch-geo-form" method="post" action="<?= url('/dashboard/punch-out') ?>">
                                         <?= csrf_field() ?>
+                                        <?= geo_capture_fields('dashboard_self_punch_out') ?>
                                         <button class="btn btn-danger" type="submit">
                                             <i class="fas fa-stop-circle me-1"></i>
                                             Punch Me Out
@@ -180,8 +181,9 @@
         <div class="modal fade" id="dashboardPunchInModal" tabindex="-1" aria-labelledby="dashboardPunchInModalLabel" aria-hidden="true">
             <div class="modal-dialog">
                 <div class="modal-content dashboard-self-punch-modal">
-                    <form method="post" action="<?= url('/dashboard/punch-in') ?>" id="dashboardSelfPunchForm">
+                    <form class="js-punch-geo-form" method="post" action="<?= url('/dashboard/punch-in') ?>" id="dashboardSelfPunchForm">
                         <?= csrf_field() ?>
+                        <?= geo_capture_fields('dashboard_self_punch_in') ?>
                         <div class="modal-header">
                             <h5 class="modal-title" id="dashboardPunchInModalLabel">Punch Me In</h5>
                             <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>

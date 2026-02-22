@@ -437,6 +437,7 @@ final class JobsController extends Controller
         $payRate = isset($employee['pay_rate']) && $employee['pay_rate'] !== null
             ? (float) $employee['pay_rate']
             : (TimeEntry::employeeRate($employeeId) ?? 0.0);
+        $geo = request_geo_payload($_POST);
 
         try {
             $entryId = TimeEntry::create([
@@ -448,6 +449,11 @@ final class JobsController extends Controller
                 'minutes_worked' => null,
                 'pay_rate' => $payRate,
                 'total_paid' => null,
+                'punch_in_lat' => $geo['lat'],
+                'punch_in_lng' => $geo['lng'],
+                'punch_in_accuracy_m' => $geo['accuracy'],
+                'punch_in_source' => $geo['source'],
+                'punch_in_captured_at' => $geo['captured_at'],
                 'note' => null,
             ], $this->actorId());
         } catch (\Throwable) {
@@ -514,6 +520,7 @@ final class JobsController extends Controller
             (string) ($entry['work_date'] ?? date('Y-m-d')),
             (string) ($entry['start_time'] ?? date('H:i:s'))
         );
+        $geo = request_geo_payload($_POST);
         $payRate = isset($entry['pay_rate']) && $entry['pay_rate'] !== null
             ? (float) $entry['pay_rate']
             : (TimeEntry::employeeRate((int) ($entry['employee_id'] ?? 0)) ?? 0.0);
@@ -525,6 +532,11 @@ final class JobsController extends Controller
                 'minutes_worked' => $minutesWorked,
                 'pay_rate' => $payRate,
                 'total_paid' => $totalPaid,
+                'punch_out_lat' => $geo['lat'],
+                'punch_out_lng' => $geo['lng'],
+                'punch_out_accuracy_m' => $geo['accuracy'],
+                'punch_out_source' => $geo['source'],
+                'punch_out_captured_at' => $geo['captured_at'],
             ], $this->actorId());
         } catch (\Throwable) {
             $this->respondActionError('Punch out failed on server. Please refresh and try again.', $this->jobCrewRedirectPath($jobId), 500);
