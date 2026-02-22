@@ -17,6 +17,14 @@
     $currentPath = '/expenses';
     $currentQuery = (string) ($_SERVER['QUERY_STRING'] ?? '');
     $currentReturnTo = $currentPath . ($currentQuery !== '' ? '?' . $currentQuery : '');
+    $activeFilterCount = count(array_filter([
+        $currentFilters['q'] !== '',
+        $currentFilters['category_id'] !== '',
+        $currentFilters['job_link'] !== 'all',
+        $currentFilters['record_status'] !== 'active',
+        $currentFilters['start_date'] !== '',
+        $currentFilters['end_date'] !== '',
+    ]));
 ?>
 <div class="container-fluid px-4">
     <div class="d-flex flex-wrap align-items-center justify-content-between mt-4 mb-3 gap-3">
@@ -40,15 +48,27 @@
         <div class="alert alert-danger"><?= e($error) ?></div>
     <?php endif; ?>
 
-    <div class="card mb-4">
-        <div class="card-body">
+<!-- Filter card -->
+    <div class="card mb-4 jt-filter-card">
+        <div class="card-header d-flex align-items-center justify-content-between py-2" data-bs-toggle="collapse" data-bs-target="#expensesFilterCollapse" aria-expanded="<?= $activeFilterCount > 0 ? 'true' : 'false' ?>" aria-controls="expensesFilterCollapse" style="cursor:pointer;">
+            <div class="d-flex align-items-center">
+                <i class="fas fa-filter me-2 text-primary"></i>
+                <span class="fw-semibold">Filters</span>
+                <?php if ($activeFilterCount > 0): ?>
+                    <span class="badge bg-primary ms-2 rounded-pill"><?= $activeFilterCount ?> active</span>
+                <?php endif; ?>
+            </div>
+            <i class="fas fa-chevron-down jt-filter-chevron"></i>
+        </div>
+        <div class="collapse <?= $activeFilterCount > 0 ? 'show' : '' ?>" id="expensesFilterCollapse">
+            <div class="card-body">
             <form method="get" action="<?= url('/expenses') ?>">
                 <?php if ($selectedPresetId > 0): ?>
                     <input type="hidden" name="preset_id" value="<?= e((string) $selectedPresetId) ?>" />
                 <?php endif; ?>
-                <div class="row g-2 align-items-end">
+                <div class="row g-3">
                     <div class="col-12 col-lg-4">
-                        <label class="form-label">Search</label>
+                        <label class="form-label small fw-bold text-muted">Search</label>
                         <div class="input-group">
                             <span class="input-group-text"><i class="fas fa-search"></i></span>
                             <input
@@ -61,7 +81,7 @@
                         </div>
                     </div>
                     <div class="col-12 col-lg-2">
-                        <label class="form-label">Category</label>
+                        <label class="form-label small fw-bold text-muted">Category</label>
                         <select class="form-select" name="category_id">
                             <option value="">All</option>
                             <?php foreach ($categories as $category): ?>
@@ -73,7 +93,7 @@
                         </select>
                     </div>
                     <div class="col-12 col-lg-2">
-                        <label class="form-label">Link</label>
+                        <label class="form-label small fw-bold text-muted">Link</label>
                         <select class="form-select" name="job_link">
                             <option value="all" <?= ($filters['job_link'] ?? 'all') === 'all' ? 'selected' : '' ?>>All</option>
                             <option value="linked" <?= ($filters['job_link'] ?? '') === 'linked' ? 'selected' : '' ?>>Job Linked</option>
@@ -81,7 +101,7 @@
                         </select>
                     </div>
                     <div class="col-12 col-lg-2">
-                        <label class="form-label">Record</label>
+                        <label class="form-label small fw-bold text-muted">Record</label>
                         <select class="form-select" name="record_status">
                             <option value="active" <?= ($filters['record_status'] ?? 'active') === 'active' ? 'selected' : '' ?>>Active</option>
                             <option value="deleted" <?= ($filters['record_status'] ?? '') === 'deleted' ? 'selected' : '' ?>>Deleted</option>
@@ -89,11 +109,11 @@
                         </select>
                     </div>
                     <div class="col-12 col-lg-1">
-                        <label class="form-label">Start</label>
+                        <label class="form-label small fw-bold text-muted">Start</label>
                         <input class="form-control" type="date" name="start_date" value="<?= e((string) ($filters['start_date'] ?? '')) ?>" />
                     </div>
                     <div class="col-12 col-lg-1">
-                        <label class="form-label">End</label>
+                        <label class="form-label small fw-bold text-muted">End</label>
                         <input class="form-control" type="date" name="end_date" value="<?= e((string) ($filters['end_date'] ?? '')) ?>" />
                     </div>
                     <div class="col-12 d-flex gap-2 mobile-two-col-buttons">
@@ -103,10 +123,10 @@
                 </div>
             </form>
             <div class="filter-presets-section border-top mt-4 pt-3">
-                <div class="row g-2 align-items-end">
+                <div class="row g-3">
                     <div class="col-12 col-lg-5">
                         <form method="get" action="<?= url('/expenses') ?>">
-                            <label class="form-label">Saved Filters</label>
+                            <label class="form-label small fw-bold text-muted">Saved Filters</label>
                             <div class="input-group">
                                 <select class="form-select" name="preset_id">
                                     <option value="">Choose preset...</option>
@@ -128,7 +148,7 @@
                             <input type="hidden" name="module_key" value="<?= e($filterPresetModule) ?>" />
                             <input type="hidden" name="return_to" value="<?= e($currentReturnTo) ?>" />
                             <input type="hidden" name="filters_json" value='<?= e((string) json_encode($currentFilters)) ?>' />
-                            <label class="form-label">Save Current Filters</label>
+                            <label class="form-label small fw-bold text-muted">Save Current Filters</label>
                             <div class="input-group">
                                 <input class="form-control" type="text" name="preset_name" placeholder="Preset name..." />
                                 <button class="btn btn-outline-success" type="submit">Save</button>
@@ -147,6 +167,7 @@
                     </div>
                 </div>
             </div>
+                        </div>
         </div>
     </div>
 
