@@ -11783,18 +11783,26 @@ main .card.user-punch-link-card #user_employee_suggestions {
 }
 
 .sb-topnav .nav-notification-link {
-  padding-right: 1.2rem;
+  padding-right: 1.25rem;
 }
 
 .sb-topnav .nav-notification-link .nav-notification-badge {
   position: absolute;
-  top: 0.2rem;
-  right: 0.1rem;
+  top: 0.15rem;
+  right: 0.08rem;
   font-size: 0.65rem;
   line-height: 1;
   min-width: 1.2rem;
   padding: 0.2rem 0.32rem;
   border: 2px solid #212529;
+  transform: none;
+}
+
+@media (max-width: 575.98px) {
+  .sb-topnav .nav-notification-link .nav-notification-badge {
+    top: 0.08rem;
+    right: 0.02rem;
+  }
 }
 
 .schedule-unscheduled-list {

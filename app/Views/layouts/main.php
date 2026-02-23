@@ -92,11 +92,9 @@ $canViewServiceSection = can_access('jobs', 'view')
                     data-sync-url="<?= url('/notifications/summary') ?>"
                 >
                     <i class="fas fa-bell fa-fw"></i>
-                    <?php if ($notificationUnread > 0): ?>
-                        <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" style="font-size: 0.6rem; padding: 0.25rem 0.4rem;">
-                            <?= $notificationUnread > 99 ? '99+' : $notificationUnread ?>
-                        </span>
-                    <?php endif; ?>
+                    <span class="badge rounded-pill bg-danger nav-notification-badge <?= $notificationUnread > 0 ? '' : 'd-none' ?>">
+                        <?= $notificationUnread > 99 ? '99+' : $notificationUnread ?>
+                    </span>
                 </a>
             </li>
             <li class="nav-item dropdown">
@@ -134,9 +132,9 @@ $canViewServiceSection = can_access('jobs', 'view')
                             <a class="nav-link" href="<?= url('/notifications') ?>">
                                 <div class="sb-nav-link-icon"><i class="fas fa-bell"></i></div>
                                 Notifications
-                                <?php if ($notificationUnread > 0): ?>
-                                    <span class="badge bg-danger ms-auto rounded-pill"><?= $notificationUnread ?></span>
-                                <?php endif; ?>
+                                <span class="badge bg-danger ms-auto rounded-pill nav-notification-sidebar-badge <?= $notificationUnread > 0 ? '' : 'd-none' ?>">
+                                    <?= $notificationUnread > 99 ? '99+' : $notificationUnread ?>
+                                </span>
                             </a>
                         <?php endif; ?>
 
