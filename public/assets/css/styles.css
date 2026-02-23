@@ -11646,6 +11646,31 @@ main table thead th {
   margin-bottom: 0;
 }
 
+.jt-filter-card .jt-filter-actions .mobile-two-col-buttons {
+  align-items: stretch;
+}
+
+.jt-filter-card .jt-filter-actions .btn {
+  min-height: 2.65rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.filter-presets-section .jt-preset-input-group {
+  flex-wrap: nowrap;
+}
+
+.filter-presets-section .jt-preset-input-group > .form-control,
+.filter-presets-section .jt-preset-input-group > .form-select {
+  min-width: 0;
+}
+
+.filter-presets-section .jt-preset-input-group > .btn {
+  min-width: 5.5rem;
+  white-space: nowrap;
+}
+
 @media (min-width: 768px) {
   .mobile-filter-card .mobile-filter-toggle {
     display: none !important;

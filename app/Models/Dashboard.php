@@ -11,6 +11,12 @@ final class Dashboard
 {
     public static function overview(): array
     {
+        $businessId = self::currentBusinessId();
+        $cached = self::loadOverviewFromCache($businessId);
+        if (is_array($cached)) {
+            return $cached;
+        }
+
         $today = date('Y-m-d');
         $mtdStart = date('Y-m-01');
         $ytdStart = date('Y-01-01');
@@ -70,6 +76,7 @@ final class Dashboard
         ];
 
         self::storeSnapshot($today, $overview);
+        self::storeOverviewInCache($businessId, $overview);
 
         return $overview;
     }
@@ -704,5 +711,75 @@ final class Dashboard
         } catch (Throwable) {
             return $fallback;
         }
+    }
+
+    private static function loadOverviewFromCache(int $businessId): ?array
+    {
+        $ttl = self::overviewCacheTtlSeconds();
+        if ($ttl <= 0 || $businessId <= 0) {
+            return null;
+        }
+
+        $path = self::overviewCachePath($businessId);
+        if (!is_file($path)) {
+            return null;
+        }
+
+        $mtime = @filemtime($path);
+        if ($mtime === false || $mtime < (time() - $ttl)) {
+            return null;
+        }
+
+        $raw = @file_get_contents($path);
+        if (!is_string($raw) || trim($raw) === '') {
+            return null;
+        }
+
+        $decoded = json_decode($raw, true);
+        if (!is_array($decoded)) {
+            return null;
+        }
+
+        $data = $decoded['data'] ?? null;
+        return is_array($data) ? $data : null;
+    }
+
+    private static function storeOverviewInCache(int $businessId, array $overview): void
+    {
+        $ttl = self::overviewCacheTtlSeconds();
+        if ($ttl <= 0 || $businessId <= 0) {
+            return;
+        }
+
+        $path = self::overviewCachePath($businessId);
+        $dir = dirname($path);
+        if (!is_dir($dir)) {
+            @mkdir($dir, 0755, true);
+        }
+        if (!is_dir($dir) || !is_writable($dir)) {
+            return;
+        }
+
+        $payload = json_encode([
+            'cached_at' => date('c'),
+            'business_id' => $businessId,
+            'data' => $overview,
+        ]);
+        if (!is_string($payload)) {
+            return;
+        }
+
+        @file_put_contents($path, $payload, LOCK_EX);
+    }
+
+    private static function overviewCachePath(int $businessId): string
+    {
+        return BASE_PATH . '/storage/cache/dashboard_overview_' . $businessId . '.json';
+    }
+
+    private static function overviewCacheTtlSeconds(): int
+    {
+        $ttl = (int) config('app.dashboard_cache_ttl', 60);
+        return max(0, min(300, $ttl));
     }
 }
