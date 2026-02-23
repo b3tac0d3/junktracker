@@ -58,12 +58,25 @@
                                 <?php else: ?>
                                     <?php foreach ($recentBugs as $bug): ?>
                                         <?php
-                                            $status = (string) ($bug['status'] ?? 'new');
+                                            $status = (string) ($bug['status'] ?? 'unresearched');
+                                            if ($status === 'new') {
+                                                $status = 'unresearched';
+                                            } elseif ($status === 'in_progress') {
+                                                $status = 'working';
+                                            } elseif ($status === 'fixed' || $status === 'wont_fix') {
+                                                $status = 'fixed_closed';
+                                            }
                                             $statusClass = match ($status) {
-                                                'fixed' => 'bg-success',
-                                                'in_progress' => 'bg-warning text-dark',
-                                                'wont_fix' => 'bg-secondary',
-                                                default => 'bg-danger',
+                                                'fixed_closed' => 'bg-success',
+                                                'working' => 'bg-warning text-dark',
+                                                'confirmed' => 'bg-info text-dark',
+                                                default => 'bg-secondary',
+                                            };
+                                            $statusLabel = match ($status) {
+                                                'fixed_closed' => 'Fixed / Closed',
+                                                'working' => 'Working',
+                                                'confirmed' => 'Confirmed',
+                                                default => 'Unresearched',
                                             };
                                         ?>
                                         <tr>
@@ -73,7 +86,7 @@
                                                     <?= e((string) ($bug['title'] ?? 'Bug')) ?>
                                                 </a>
                                             </td>
-                                            <td><span class="badge <?= e($statusClass) ?>"><?= e(ucwords(str_replace('_', ' ', $status))) ?></span></td>
+                                            <td><span class="badge <?= e($statusClass) ?>"><?= e($statusLabel) ?></span></td>
                                             <td>P<?= e((string) ((int) ($bug['severity'] ?? 0))) ?></td>
                                             <td><?= e(format_datetime($bug['updated_at'] ?? null)) ?></td>
                                         </tr>

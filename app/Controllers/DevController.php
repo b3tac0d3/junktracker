@@ -35,7 +35,7 @@ final class DevController extends Controller
             'assigned_user_id' => $this->toInt($_GET['assigned_user_id'] ?? null),
         ];
 
-        $statusFilters = ['open', 'new', 'in_progress', 'fixed', 'wont_fix', 'all'];
+        $statusFilters = ['open', 'unresearched', 'confirmed', 'working', 'fixed_closed', 'all'];
         if (!in_array($filters['status'], $statusFilters, true)) {
             $filters['status'] = 'open';
         }
@@ -114,6 +114,7 @@ final class DevController extends Controller
         $this->render('dev/bugs/show', [
             'pageTitle' => 'Bug #' . $id,
             'bug' => $bug,
+            'notes' => DevBug::notes($id),
             'users' => DevBug::users(),
             'statusOptions' => DevBug::STATUSES,
             'environmentOptions' => DevBug::ENVIRONMENTS,
@@ -216,6 +217,49 @@ final class DevController extends Controller
         redirect('/dev/bugs');
     }
 
+    public function addBugNote(array $params): void
+    {
+        $this->authorizeDev();
+
+        $id = isset($params['id']) ? (int) $params['id'] : 0;
+        if ($id <= 0) {
+            redirect('/dev/bugs');
+        }
+
+        if (!verify_csrf($_POST['csrf_token'] ?? null)) {
+            flash('error', 'Your session expired. Please try again.');
+            redirect('/dev/bugs/' . $id);
+        }
+
+        $bug = DevBug::findById($id);
+        if (!$bug) {
+            $this->renderNotFound();
+            return;
+        }
+
+        $note = trim((string) ($_POST['note'] ?? ''));
+        if ($note === '') {
+            flash('error', 'Note is required.');
+            flash_old(['note' => (string) ($_POST['note'] ?? '')]);
+            redirect('/dev/bugs/' . $id);
+        }
+        if (mb_strlen($note) > 5000) {
+            flash('error', 'Note is too long (max 5000 characters).');
+            flash_old(['note' => (string) ($_POST['note'] ?? '')]);
+            redirect('/dev/bugs/' . $id);
+        }
+
+        $noteId = DevBug::addNote($id, $note, auth_user_id());
+        if ($noteId <= 0) {
+            flash('error', 'Unable to save bug note.');
+            redirect('/dev/bugs/' . $id);
+        }
+
+        log_user_action('dev_bug_note_added', 'dev_bug_notes', $noteId, 'Added note to dev bug #' . $id . '.');
+        flash('success', 'Note added.');
+        redirect('/dev/bugs/' . $id);
+    }
+
     private function authorizeDev(): void
     {
         require_role(4);
@@ -223,12 +267,12 @@ final class DevController extends Controller
 
     private function collectBugData(array $input, bool $allowStatus = true): array
     {
-        $status = trim((string) ($input['status'] ?? 'new'));
+        $status = trim((string) ($input['status'] ?? 'unresearched'));
         if (!$allowStatus) {
-            $status = 'new';
+            $status = 'unresearched';
         }
         if (!in_array($status, DevBug::STATUSES, true)) {
-            $status = 'new';
+            $status = 'unresearched';
         }
 
         $environment = trim((string) ($input['environment'] ?? 'local'));

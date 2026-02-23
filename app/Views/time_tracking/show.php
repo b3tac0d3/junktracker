@@ -167,6 +167,15 @@
                             —
                         <?php endif; ?>
                     </div>
+                    <?php if ($punchInGeo['coords'] !== null): ?>
+                        <div
+                            class="small text-muted js-reverse-geocode"
+                            data-lat="<?= e((string) ($entry['punch_in_lat'] ?? '')) ?>"
+                            data-lng="<?= e((string) ($entry['punch_in_lng'] ?? '')) ?>"
+                        >
+                            Resolving address...
+                        </div>
+                    <?php endif; ?>
                     <?php if ($punchInGeo['accuracy'] !== null): ?>
                         <div class="small text-muted">Accuracy: ±<?= e(number_format((float) $punchInGeo['accuracy'], 0)) ?>m</div>
                     <?php endif; ?>
@@ -182,6 +191,15 @@
                             —
                         <?php endif; ?>
                     </div>
+                    <?php if ($punchOutGeo['coords'] !== null): ?>
+                        <div
+                            class="small text-muted js-reverse-geocode"
+                            data-lat="<?= e((string) ($entry['punch_out_lat'] ?? '')) ?>"
+                            data-lng="<?= e((string) ($entry['punch_out_lng'] ?? '')) ?>"
+                        >
+                            Resolving address...
+                        </div>
+                    <?php endif; ?>
                     <?php if ($punchOutGeo['accuracy'] !== null): ?>
                         <div class="small text-muted">Accuracy: ±<?= e(number_format((float) $punchOutGeo['accuracy'], 0)) ?>m</div>
                     <?php endif; ?>
@@ -219,3 +237,52 @@
         </div>
     <?php endif; ?>
 </div>
+
+<script>
+    (function () {
+        const targets = Array.from(document.querySelectorAll('.js-reverse-geocode'));
+        if (targets.length === 0) {
+            return;
+        }
+
+        const lookup = async (lat, lng) => {
+            const cacheKey = `jt-revgeo:${lat},${lng}`;
+            const cached = window.sessionStorage.getItem(cacheKey);
+            if (cached) {
+                return cached;
+            }
+
+            const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lng)}&zoom=18&addressdetails=1`;
+            const response = await fetch(url, {headers: {'Accept': 'application/json'}});
+            if (!response.ok) {
+                throw new Error('lookup_failed');
+            }
+
+            const payload = await response.json();
+            const address = (payload && payload.display_name) ? String(payload.display_name).trim() : '';
+            if (!address) {
+                throw new Error('address_missing');
+            }
+
+            window.sessionStorage.setItem(cacheKey, address);
+            return address;
+        };
+
+        (async () => {
+            for (const node of targets) {
+                const lat = (node.getAttribute('data-lat') || '').trim();
+                const lng = (node.getAttribute('data-lng') || '').trim();
+                if (!lat || !lng) {
+                    node.textContent = 'Address unavailable';
+                    continue;
+                }
+
+                try {
+                    node.textContent = await lookup(lat, lng);
+                } catch (error) {
+                    node.textContent = 'Address unavailable (tap coordinates for map)';
+                }
+            }
+        })();
+    })();
+</script>

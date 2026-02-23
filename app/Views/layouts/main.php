@@ -6,12 +6,18 @@
     $showSiteAdminNav = $currentUser && has_role(4);
     $appVersion = trim((string) config('app.version', ''));
     $activeBusinessName = '';
+    $siteAdminSupportUnread = 0;
     if ($showSiteAdminNav) {
         try {
             $activeBusiness = \App\Models\Business::findById(current_business_id());
             $activeBusinessName = trim((string) ($activeBusiness['name'] ?? ''));
         } catch (\Throwable) {
             $activeBusinessName = '';
+        }
+        try {
+            $siteAdminSupportUnread = \App\Models\SiteAdminTicket::adminUnreadCount();
+        } catch (\Throwable) {
+            $siteAdminSupportUnread = 0;
         }
     }
     $notificationUnread = 0;
@@ -78,13 +84,16 @@
             <ul class="navbar-nav ms-auto ms-md-0 me-3 me-lg-4">
                 <?php if (can_access('notifications', 'view')): ?>
                     <li class="nav-item">
-                        <a class="nav-link position-relative nav-notification-link" href="<?= url('/notifications') ?>" title="Notifications">
+                        <a
+                            class="nav-link position-relative nav-notification-link"
+                            href="<?= url('/notifications') ?>"
+                            title="Notifications"
+                            data-sync-url="<?= url('/notifications/summary') ?>"
+                        >
                             <i class="fas fa-bell fa-fw"></i>
-                            <?php if ($notificationUnread > 0): ?>
-                                <span class="badge rounded-pill bg-danger nav-notification-badge">
-                                    <?= e((string) $notificationUnread) ?>
-                                </span>
-                            <?php endif; ?>
+                            <span class="badge rounded-pill bg-danger nav-notification-badge <?= $notificationUnread > 0 ? '' : 'd-none' ?>">
+                                <?= e((string) max(0, (int) $notificationUnread)) ?>
+                            </span>
                         </a>
                     </li>
                 <?php endif; ?>
@@ -93,6 +102,8 @@
                     <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="navbarDropdown">
                         <li><a class="dropdown-item" href="<?= url('/settings') ?>">Settings</a></li>
                         <li><a class="dropdown-item" href="<?= url('/activity-log') ?>">Activity Log</a></li>
+                        <li><a class="dropdown-item" href="<?= url('/support/new') ?>">Contact Site Admin</a></li>
+                        <li><a class="dropdown-item" href="<?= url('/support') ?>">My Site Requests</a></li>
                         <li><hr class="dropdown-divider" /></li>
                         <li>
                             <form method="post" action="<?= url('/logout') ?>">
@@ -119,9 +130,9 @@
                                 <a class="nav-link" href="<?= url('/notifications') ?>">
                                     <div class="sb-nav-link-icon"><i class="fas fa-bell"></i></div>
                                     Notifications
-                                    <?php if ($notificationUnread > 0): ?>
-                                        <span class="badge bg-danger ms-auto"><?= e((string) $notificationUnread) ?></span>
-                                    <?php endif; ?>
+                                    <span class="badge bg-danger ms-auto nav-notification-sidebar-badge <?= $notificationUnread > 0 ? '' : 'd-none' ?>">
+                                        <?= e((string) max(0, (int) $notificationUnread)) ?>
+                                    </span>
                                 </a>
                             <?php endif; ?>
                             <?php if (can_access('tasks', 'view')): ?>
@@ -236,10 +247,30 @@
                                 </a>
                             <?php endif; ?>
                             <?php if ($showSiteAdminNav): ?>
-                                <a class="nav-link" href="<?= url('/site-admin') ?>">
+                                <a class="nav-link collapsed" href="#" data-bs-toggle="collapse" data-bs-target="#collapseSiteAdminMenu" aria-expanded="false" aria-controls="collapseSiteAdminMenu">
                                     <div class="sb-nav-link-icon"><i class="fas fa-building-shield"></i></div>
                                     Site Admin
+                                    <?php if ($siteAdminSupportUnread > 0): ?>
+                                        <span class="badge bg-danger ms-auto me-2"><?= e((string) $siteAdminSupportUnread) ?></span>
+                                    <?php endif; ?>
+                                    <div class="sb-sidenav-collapse-arrow"><i class="fas fa-angle-down"></i></div>
                                 </a>
+                                <div class="collapse" id="collapseSiteAdminMenu" data-bs-parent="#sidenavAccordion">
+                                    <nav class="sb-sidenav-menu-nested nav">
+                                        <a class="nav-link" href="<?= url('/site-admin') ?>">
+                                            <i class="fas fa-building me-1"></i>Businesses
+                                        </a>
+                                        <a class="nav-link d-flex align-items-center" href="<?= url('/site-admin/support') ?>">
+                                            <span><i class="fas fa-inbox me-1"></i>Support Queue</span>
+                                            <?php if ($siteAdminSupportUnread > 0): ?>
+                                                <span class="ms-auto d-inline-flex align-items-center gap-1">
+                                                    <i class="fas fa-bell text-warning"></i>
+                                                    <span class="badge bg-danger"><?= e((string) $siteAdminSupportUnread) ?></span>
+                                                </span>
+                                            <?php endif; ?>
+                                        </a>
+                                    </nav>
+                                </div>
                             <?php endif; ?>
                             <?php if (has_role(4)): ?>
                                 <a class="nav-link" href="<?= url('/dev') ?>">
@@ -329,6 +360,7 @@
         <script src="<?= asset('js/ajax-actions.js') ?>"></script>
         <script src="<?= asset('js/punch-geolocation.js') ?>"></script>
         <script src="<?= asset('js/card-list-component.js') ?>"></script>
+        <script src="<?= asset('js/notification-badge-sync.js') ?>"></script>
         <script src="<?= asset('js/datatable-external-top.js') ?>"></script>
         <script src="<?= asset('js/mobile-filter-accordion.js') ?>"></script>
         <script>

@@ -931,7 +931,20 @@ function config(string $key, mixed $default = null): mixed
 
     if (!isset($configs[$file])) {
         $path = CONFIG_PATH . '/' . $file . '.php';
-        $configs[$file] = file_exists($path) ? require $path : [];
+        $loaded = file_exists($path) ? require $path : [];
+        if (!is_array($loaded)) {
+            $loaded = [];
+        }
+
+        $localOverridePath = CONFIG_PATH . '/' . $file . '.local.php';
+        if (is_file($localOverridePath)) {
+            $overrides = require $localOverridePath;
+            if (is_array($overrides)) {
+                $loaded = array_replace_recursive($loaded, $overrides);
+            }
+        }
+
+        $configs[$file] = $loaded;
     }
 
     $value = $configs[$file] ?? [];

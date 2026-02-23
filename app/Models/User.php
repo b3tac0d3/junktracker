@@ -572,6 +572,10 @@ final class User
             $sql .= ', business_id = :business_id';
             $fields['business_id'] = max(0, (int) $data['business_id']);
         }
+        if (Schema::hasColumn('users', 'two_factor_enabled') && array_key_exists('two_factor_enabled', $data)) {
+            $sql .= ', two_factor_enabled = :two_factor_enabled';
+            $fields['two_factor_enabled'] = (int) ((int) $data['two_factor_enabled'] === 1);
+        }
 
         if (!empty($data['password'])) {
             $sql .= ', password_hash = :password_hash';

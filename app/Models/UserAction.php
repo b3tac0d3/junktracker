@@ -73,13 +73,16 @@ final class UserAction
         $stmt->execute($params);
     }
 
-    public static function forUser(int $userId, string $query = ''): array
+    public static function forUser(int $userId, array $filters = []): array
     {
         if ($userId <= 0 || !self::isAvailable()) {
             return [];
         }
 
-        $search = trim($query);
+        $search = trim((string) ($filters['q'] ?? ''));
+        $actionKey = trim((string) ($filters['action_key'] ?? ''));
+        $dateFrom = trim((string) ($filters['date_from'] ?? ''));
+        $dateTo = trim((string) ($filters['date_to'] ?? ''));
         $sql = 'SELECT ua.id,
                        ua.user_id,
                        ua.action_key,
@@ -99,6 +102,18 @@ final class UserAction
         if (self::hasBusinessColumn()) {
             $sql .= ' AND ua.business_id = :business_id';
             $params['business_id'] = self::currentBusinessId();
+        }
+        if ($actionKey !== '') {
+            $sql .= ' AND ua.action_key = :action_key';
+            $params['action_key'] = $actionKey;
+        }
+        if ($dateFrom !== '') {
+            $sql .= ' AND DATE(ua.created_at) >= :date_from';
+            $params['date_from'] = $dateFrom;
+        }
+        if ($dateTo !== '') {
+            $sql .= ' AND DATE(ua.created_at) <= :date_to';
+            $params['date_to'] = $dateTo;
         }
 
         if ($search !== '') {

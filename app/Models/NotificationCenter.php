@@ -263,6 +263,31 @@ final class NotificationCenter
         ]);
     }
 
+    public static function markReadMany(int $userId, array $keys): int
+    {
+        self::ensureSchema();
+
+        if ($userId <= 0 || empty($keys)) {
+            return 0;
+        }
+
+        $count = 0;
+        $deduped = [];
+        foreach ($keys as $key) {
+            $normalized = trim((string) $key);
+            if ($normalized !== '') {
+                $deduped[$normalized] = true;
+            }
+        }
+
+        foreach (array_keys($deduped) as $key) {
+            self::markRead($userId, $key, true);
+            $count++;
+        }
+
+        return $count;
+    }
+
     public static function dismiss(int $userId, string $key, bool $dismiss = true): void
     {
         self::ensureSchema();

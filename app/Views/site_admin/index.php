@@ -18,6 +18,7 @@
         </div>
         <div class="d-flex gap-2 mobile-two-col-buttons">
             <a class="btn btn-outline-primary" href="<?= url('/admin') ?>">Open Admin Workspace</a>
+            <a class="btn btn-primary" href="<?= url('/site-admin/support') ?>">Open Support Queue</a>
         </div>
     </div>
 

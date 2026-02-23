@@ -573,7 +573,7 @@ final class UsersController extends Controller
 
     private function collectFormData(): array
     {
-        return [
+        $data = [
             'first_name' => trim($_POST['first_name'] ?? ''),
             'last_name' => trim($_POST['last_name'] ?? ''),
             'email' => trim($_POST['email'] ?? ''),
@@ -582,6 +582,12 @@ final class UsersController extends Controller
             'password' => (string) ($_POST['password'] ?? ''),
             'password_confirm' => (string) ($_POST['password_confirm'] ?? ''),
         ];
+
+        if (array_key_exists('two_factor_enabled', $_POST) && has_role(3)) {
+            $data['two_factor_enabled'] = !empty($_POST['two_factor_enabled']) ? 1 : 0;
+        }
+
+        return $data;
     }
 
     private function validate(array $data, bool $isCreate, ?int $userId = null): array
@@ -662,8 +668,13 @@ final class UsersController extends Controller
             return;
         }
 
-        $query = trim((string) ($_GET['q'] ?? ''));
-        $actions = UserAction::forUser($userId, $query);
+        $filters = [
+            'q' => trim((string) ($_GET['q'] ?? '')),
+            'action_key' => trim((string) ($_GET['action_key'] ?? '')),
+            'date_from' => trim((string) ($_GET['date_from'] ?? '')),
+            'date_to' => trim((string) ($_GET['date_to'] ?? '')),
+        ];
+        $actions = UserAction::forUser($userId, $filters);
 
         $pageScripts = implode("\n", [
             '<script src="https://cdn.jsdelivr.net/npm/simple-datatables@7.1.2/dist/umd/simple-datatables.min.js" crossorigin="anonymous"></script>',
@@ -674,7 +685,8 @@ final class UsersController extends Controller
             'pageTitle' => $isOwn ? 'My Activity Log' : 'User Activity Log',
             'user' => $user,
             'actions' => $actions,
-            'query' => $query,
+            'filters' => $filters,
+            'actionOptions' => UserAction::actionOptions(),
             'isOwnActivity' => $isOwn,
             'isLogReady' => UserAction::isAvailable(),
             'pageScripts' => $pageScripts,

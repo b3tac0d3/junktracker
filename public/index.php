@@ -5,6 +5,23 @@ declare(strict_types=1);
 ini_set('display_errors', '1');
 error_reporting(E_ALL);
 
+$httpsFlag = strtolower((string) ($_SERVER['HTTPS'] ?? ''));
+$forwardedProto = strtolower((string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? ''));
+$forwardedSsl = strtolower((string) ($_SERVER['HTTP_X_FORWARDED_SSL'] ?? ''));
+$isHttps = ($httpsFlag !== '' && $httpsFlag !== 'off')
+    || $forwardedProto === 'https'
+    || $forwardedSsl === 'on';
+$host = strtolower((string) ($_SERVER['HTTP_HOST'] ?? ''));
+$isLocalHost = $host === ''
+    || preg_match('/^(localhost|127\\.0\\.0\\.1)(:\\d+)?$/i', $host) === 1;
+$forceHttpsRaw = strtolower(trim((string) (getenv('APP_FORCE_HTTPS') ?: '1')));
+$shouldForceHttps = !in_array($forceHttpsRaw, ['0', 'false', 'off', 'no'], true);
+if ($shouldForceHttps && !$isHttps && !$isLocalHost) {
+    $target = 'https://' . (string) ($_SERVER['HTTP_HOST'] ?? '') . (string) ($_SERVER['REQUEST_URI'] ?? '/');
+    header('Location: ' . $target, true, 301);
+    exit;
+}
+
 // Use an app-local session storage path so auth does not depend on host-level
 // PHP session directory permissions.
 $sessionPath = dirname(__DIR__) . '/storage/sessions';
@@ -15,7 +32,7 @@ if (is_dir($sessionPath) && is_writable($sessionPath)) {
     session_save_path($sessionPath);
 }
 
-$secureCookie = !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
+$secureCookie = $isHttps;
 session_name('junktracker_sid');
 session_set_cookie_params([
     'lifetime' => 0,

@@ -20,6 +20,8 @@
         'all' => 'All',
     ];
     $subjectQuery = $canViewOtherUsers ? '&user_id=' . $subjectUserId : '';
+    $baseQuery = $canViewOtherUsers ? '?user_id=' . $subjectUserId : '';
+    $returnTo = '/notifications?scope=' . $scope . $subjectQuery;
     $summaryUrls = [
         'total' => url('/notifications?scope=all' . $subjectQuery),
         'open' => url('/notifications?scope=open' . $subjectQuery),
@@ -111,7 +113,7 @@
                 <?php endif; ?>
                 <div class="<?= $canViewOtherUsers ? 'col-md-4' : 'col-md-8' ?> d-flex gap-2 mobile-two-col-buttons">
                     <button class="btn btn-primary" type="submit">Apply</button>
-                    <a class="btn btn-outline-secondary" href="<?= url('/notifications' . ($canViewOtherUsers ? '?user_id=' . $subjectUserId : '')) ?>">Reset</a>
+                    <a class="btn btn-outline-secondary" href="<?= url('/notifications' . $baseQuery) ?>">Reset</a>
                 </div>
             </form>
         </div>
@@ -120,7 +122,16 @@
     <div class="card mb-4 notifications-alerts-card">
         <div class="card-header d-flex align-items-center justify-content-between">
             <span><i class="fas fa-bell me-1"></i>Alerts</span>
-            <span class="small text-muted"><?= e($subjectUserLabel) ?></span>
+            <div class="d-flex align-items-center gap-2">
+                <form method="post" action="<?= url('/notifications/read-all') ?>" class="m-0">
+                    <?= csrf_field() ?>
+                    <input type="hidden" name="user_id" value="<?= e((string) $subjectUserId) ?>" />
+                    <input type="hidden" name="scope" value="<?= e($scope) ?>" />
+                    <input type="hidden" name="return_to" value="<?= e($returnTo) ?>" />
+                    <button class="btn btn-sm btn-outline-primary" type="submit">Mark All Read</button>
+                </form>
+                <span class="small text-muted"><?= e($subjectUserLabel) ?></span>
+            </div>
         </div>
         <div class="card-body p-0">
             <div class="table-responsive">
@@ -151,6 +162,15 @@
                                     $isRead = !empty($row['is_read']);
                                     $isDismissed = !empty($row['is_dismissed']);
                                     $url = trim((string) ($row['url'] ?? ''));
+                                    $openTarget = $url !== '' ? $url : $returnTo;
+                                    $openQuery = [
+                                        'notification_key' => (string) ($row['key'] ?? ''),
+                                        'target' => $openTarget,
+                                    ];
+                                    if ($canViewOtherUsers) {
+                                        $openQuery['user_id'] = (string) $subjectUserId;
+                                    }
+                                    $openUrl = url('/notifications/open?' . http_build_query($openQuery));
                                 ?>
                                 <tr>
                                     <td>
@@ -164,11 +184,7 @@
                                     </td>
                                     <td><span class="badge <?= e($badgeClass) ?>"><?= e(ucwords(str_replace('_', ' ', (string) ($row['type'] ?? 'alert')))) ?></span></td>
                                     <td>
-                                        <?php if ($url !== ''): ?>
-                                            <a class="text-decoration-none fw-semibold" href="<?= url($url) ?>"><?= e((string) ($row['title'] ?? 'Alert')) ?></a>
-                                        <?php else: ?>
-                                            <span class="fw-semibold"><?= e((string) ($row['title'] ?? 'Alert')) ?></span>
-                                        <?php endif; ?>
+                                        <a class="text-decoration-none fw-semibold" href="<?= e($openUrl) ?>"><?= e((string) ($row['title'] ?? 'Alert')) ?></a>
                                         <div class="small text-muted"><?= e((string) ($row['message'] ?? '')) ?></div>
                                     </td>
                                     <td>
@@ -191,7 +207,7 @@
                                                             <input type="hidden" name="notification_key" value="<?= e((string) ($row['key'] ?? '')) ?>" />
                                                             <input type="hidden" name="is_read" value="<?= $isRead ? '0' : '1' ?>" />
                                                             <input type="hidden" name="user_id" value="<?= e((string) $subjectUserId) ?>" />
-                                                            <input type="hidden" name="return_to" value="<?= e('/notifications?scope=' . $scope . ($canViewOtherUsers ? '&user_id=' . $subjectUserId : '')) ?>" />
+                                                            <input type="hidden" name="return_to" value="<?= e($returnTo) ?>" />
                                                             <button class="dropdown-item" type="submit">
                                                                 <i class="fas <?= $isRead ? 'fa-envelope me-2' : 'fa-envelope-open me-2' ?>"></i>
                                                                 <?= $isRead ? 'Mark Unread' : 'Mark Read' ?>
@@ -204,7 +220,7 @@
                                                             <input type="hidden" name="notification_key" value="<?= e((string) ($row['key'] ?? '')) ?>" />
                                                             <input type="hidden" name="dismiss" value="<?= $isDismissed ? '0' : '1' ?>" />
                                                             <input type="hidden" name="user_id" value="<?= e((string) $subjectUserId) ?>" />
-                                                            <input type="hidden" name="return_to" value="<?= e('/notifications?scope=' . $scope . ($canViewOtherUsers ? '&user_id=' . $subjectUserId : '')) ?>" />
+                                                            <input type="hidden" name="return_to" value="<?= e($returnTo) ?>" />
                                                             <button class="dropdown-item" type="submit">
                                                                 <i class="fas <?= $isDismissed ? 'fa-rotate-left me-2' : 'fa-xmark me-2' ?>"></i>
                                                                 <?= $isDismissed ? 'Restore Notification' : 'Dismiss Notification' ?>

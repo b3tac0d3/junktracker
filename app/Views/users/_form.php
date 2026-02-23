@@ -6,6 +6,7 @@
     $employeeLinkReview = is_array($employeeLinkReview ?? null) ? $employeeLinkReview : null;
     $employeeLinkSupported = !empty($employeeLinkSupported);
     $canCreateEmployee = !empty($canCreateEmployee);
+    $canManageTwoFactor = $isEdit && has_role(3);
 ?>
 <form method="post" action="<?= url(isset($user['id']) ? '/users/' . $user['id'] : '/users') ?>">
     <?= csrf_field() ?>
@@ -54,6 +55,29 @@
                 <label class="form-label" for="password_confirm">Confirm Password</label>
                 <input class="form-control" id="password_confirm" name="password_confirm" type="password" />
             </div>
+            <?php if ($canManageTwoFactor): ?>
+                <?php
+                    $currentTwoFactorEnabled = !array_key_exists('two_factor_enabled', $user) || (int) ($user['two_factor_enabled'] ?? 1) === 1;
+                    $twoFactorInputValue = (string) old('two_factor_enabled', $currentTwoFactorEnabled ? '1' : '0');
+                    $twoFactorChecked = $twoFactorInputValue === '1';
+                ?>
+                <div class="col-12">
+                    <div class="form-check form-switch mt-1">
+                        <input type="hidden" name="two_factor_enabled" value="0" />
+                        <input
+                            class="form-check-input"
+                            type="checkbox"
+                            role="switch"
+                            id="two_factor_enabled"
+                            name="two_factor_enabled"
+                            value="1"
+                            <?= $twoFactorChecked ? 'checked' : '' ?>
+                        />
+                        <label class="form-check-label" for="two_factor_enabled">Require email 2FA for this user login</label>
+                    </div>
+                    <div class="form-text">Admin-only control.</div>
+                </div>
+            <?php endif; ?>
         <?php else: ?>
             <div class="col-12">
                 <div class="alert alert-info mb-0">

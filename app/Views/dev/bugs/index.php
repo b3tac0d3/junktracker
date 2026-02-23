@@ -5,6 +5,12 @@
     $statusFilters = is_array($statusFilters ?? null) ? $statusFilters : ['open', 'all'];
     $statusOptions = is_array($statusOptions ?? null) ? $statusOptions : [];
     $environmentOptions = is_array($environmentOptions ?? null) ? $environmentOptions : ['all', 'local', 'live', 'both'];
+    $statusMeta = [
+        'unresearched' => ['label' => 'Unresearched', 'class' => 'bg-secondary'],
+        'confirmed' => ['label' => 'Confirmed', 'class' => 'bg-info text-dark'],
+        'working' => ['label' => 'Working', 'class' => 'bg-warning text-dark'],
+        'fixed_closed' => ['label' => 'Fixed / Closed', 'class' => 'bg-success'],
+    ];
     $queryString = (string) ($_SERVER['QUERY_STRING'] ?? '');
     $returnTo = '/dev/bugs';
     if ($queryString !== '') {
@@ -110,7 +116,7 @@
                         <select class="form-select" name="status">
                             <?php foreach ($statusFilters as $status): ?>
                                 <option value="<?= e($status) ?>" <?= (string) ($filters['status'] ?? 'open') === $status ? 'selected' : '' ?>>
-                                    <?= e($status === 'open' ? 'Open (New/In Progress)' : ucwords(str_replace('_', ' ', $status))) ?>
+                                    <?= e($status === 'open' ? 'Open (Unresearched/Confirmed/Working)' : ($statusMeta[$status]['label'] ?? ucwords(str_replace('_', ' ', $status)))) ?>
                                 </option>
                             <?php endforeach; ?>
                         </select>
@@ -180,13 +186,16 @@
                         <?php foreach ($bugs as $bug): ?>
                             <?php
                                 $bugId = (int) ($bug['id'] ?? 0);
-                                $status = (string) ($bug['status'] ?? 'new');
-                                $statusClass = match ($status) {
-                                    'fixed' => 'bg-success',
-                                    'in_progress' => 'bg-warning text-dark',
-                                    'wont_fix' => 'bg-secondary',
-                                    default => 'bg-danger',
-                                };
+                                $status = (string) ($bug['status'] ?? 'unresearched');
+                                if ($status === 'new') {
+                                    $status = 'unresearched';
+                                } elseif ($status === 'in_progress') {
+                                    $status = 'working';
+                                } elseif ($status === 'fixed' || $status === 'wont_fix') {
+                                    $status = 'fixed_closed';
+                                }
+                                $statusClass = (string) ($statusMeta[$status]['class'] ?? 'bg-secondary');
+                                $statusLabel = (string) ($statusMeta[$status]['label'] ?? ucwords(str_replace('_', ' ', $status)));
                             ?>
                             <tr>
                                 <td>#<?= e((string) $bugId) ?></td>
@@ -195,7 +204,7 @@
                                         <?= e((string) ($bug['title'] ?? 'Bug')) ?>
                                     </a>
                                 </td>
-                                <td><span class="badge <?= e($statusClass) ?>"><?= e(ucwords(str_replace('_', ' ', $status))) ?></span></td>
+                                <td><span class="badge <?= e($statusClass) ?>"><?= e($statusLabel) ?></span></td>
                                 <td>P<?= e((string) ((int) ($bug['severity'] ?? 0))) ?></td>
                                 <td><?= e(ucfirst((string) ($bug['environment'] ?? 'local'))) ?></td>
                                 <td><?= e((string) (($bug['module_key'] ?? '') !== '' ? $bug['module_key'] : '—')) ?></td>
@@ -206,12 +215,12 @@
                                         <a class="btn btn-sm btn-outline-primary" href="<?= url('/dev/bugs/' . $bugId) ?>">
                                             <i class="fas fa-eye"></i>
                                         </a>
-                                        <?php if ($status !== 'fixed'): ?>
+                                        <?php if ($status !== 'fixed_closed'): ?>
                                             <form method="post" action="<?= url('/dev/bugs/' . $bugId . '/status') ?>">
                                                 <?= csrf_field() ?>
                                                 <input type="hidden" name="return_to" value="<?= e($returnTo) ?>" />
-                                                <input type="hidden" name="status" value="fixed" />
-                                                <button class="btn btn-sm btn-success" type="submit" title="Mark Fixed">
+                                                <input type="hidden" name="status" value="fixed_closed" />
+                                                <button class="btn btn-sm btn-success" type="submit" title="Mark Fixed / Closed">
                                                     <i class="fas fa-check"></i>
                                                 </button>
                                             </form>
@@ -219,7 +228,7 @@
                                             <form method="post" action="<?= url('/dev/bugs/' . $bugId . '/status') ?>">
                                                 <?= csrf_field() ?>
                                                 <input type="hidden" name="return_to" value="<?= e($returnTo) ?>" />
-                                                <input type="hidden" name="status" value="in_progress" />
+                                                <input type="hidden" name="status" value="working" />
                                                 <button class="btn btn-sm btn-warning" type="submit" title="Reopen">
                                                     <i class="fas fa-rotate-left"></i>
                                                 </button>

@@ -74,6 +74,12 @@ final class Job
             $params['end_date'] = $filters['end_date'];
         }
 
+        $selfScopedUserId = self::selfScopedUserId();
+        if ($selfScopedUserId !== null && Schema::hasColumn('jobs', 'created_by')) {
+            $where[] = 'j.created_by = :self_scope_user_id';
+            $params['self_scope_user_id'] = $selfScopedUserId;
+        }
+
         if (!empty($where)) {
             $sql .= ' WHERE ' . implode(' AND ', $where);
         }
@@ -117,6 +123,12 @@ final class Job
             $sql .= ' AND j.deleted_at IS NULL AND COALESCE(j.active, 1) = 1';
         } elseif ($recordStatus === 'deleted') {
             $sql .= ' AND (j.deleted_at IS NOT NULL OR j.active = 0)';
+        }
+
+        $selfScopedUserId = self::selfScopedUserId();
+        if ($selfScopedUserId !== null && Schema::hasColumn('jobs', 'created_by')) {
+            $sql .= ' AND j.created_by = :self_scope_user_id';
+            $params['self_scope_user_id'] = $selfScopedUserId;
         }
 
         $statusList = array_values(array_filter(array_map(
@@ -240,6 +252,12 @@ final class Job
             $sql .= ' AND j.deleted_at IS NULL AND COALESCE(j.active, 1) = 1';
         } elseif ($recordStatus === 'deleted') {
             $sql .= ' AND (j.deleted_at IS NOT NULL OR j.active = 0)';
+        }
+
+        $selfScopedUserId = self::selfScopedUserId();
+        if ($selfScopedUserId !== null && Schema::hasColumn('jobs', 'created_by')) {
+            $sql .= ' AND j.created_by = :self_scope_user_id';
+            $params['self_scope_user_id'] = $selfScopedUserId;
         }
 
         $statusList = array_values(array_filter(array_map(
@@ -369,6 +387,11 @@ final class Job
         if ($excludeId !== null && $excludeId > 0) {
             $where[] = 'j.id <> :exclude_id';
             $params['exclude_id'] = $excludeId;
+        }
+        $selfScopedUserId = self::selfScopedUserId();
+        if ($selfScopedUserId !== null && Schema::hasColumn('jobs', 'created_by')) {
+            $where[] = 'j.created_by = :self_scope_user_id';
+            $params['self_scope_user_id'] = $selfScopedUserId;
         }
         if ($hasName) {
             $matchClauses[] = 'LOWER(TRIM(COALESCE(j.name, ""))) = :name_exact';
@@ -512,12 +535,20 @@ final class Job
                         OR CAST(j.id AS CHAR) LIKE :term
                         OR j.city LIKE :term
                         OR j.state LIKE :term
-                      )
-                ORDER BY j.id DESC
-                LIMIT ' . $limit;
+                      )';
+
+        $params = ['term' => '%' . $term . '%'];
+        $selfScopedUserId = self::selfScopedUserId();
+        if ($selfScopedUserId !== null && Schema::hasColumn('jobs', 'created_by')) {
+            $sql .= ' AND j.created_by = :self_scope_user_id';
+            $params['self_scope_user_id'] = $selfScopedUserId;
+        }
+
+        $sql .= ' ORDER BY j.id DESC
+                  LIMIT ' . $limit;
 
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute(['term' => '%' . $term . '%']);
+        $stmt->execute($params);
 
         return $stmt->fetchAll();
     }
@@ -599,12 +630,19 @@ final class Job
                     CASE WHEN j.job_owner_type = \'estate\' THEN j.job_owner_id END,
                     CASE WHEN j.job_owner_type IS NULL THEN j.estate_id END
                 )
-                LEFT JOIN companies om ON om.id = CASE WHEN j.job_owner_type = \'company\' THEN j.job_owner_id END
-                WHERE j.id = :id
-                LIMIT 1';
+                LEFT JOIN companies om ON om.id = CASE WHEN j.job_owner_type = \'company\' THEN j.job_owner_id END';
+
+        $where = ['j.id = :id'];
+        $params = ['id' => $id];
+        $selfScopedUserId = self::selfScopedUserId();
+        if ($selfScopedUserId !== null && Schema::hasColumn('jobs', 'created_by')) {
+            $where[] = 'j.created_by = :self_scope_user_id';
+            $params['self_scope_user_id'] = $selfScopedUserId;
+        }
+        $sql .= ' WHERE ' . implode(' AND ', $where) . ' LIMIT 1';
 
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute(['id' => $id]);
+        $stmt->execute($params);
         $job = $stmt->fetch();
 
         return $job ?: null;
@@ -2129,5 +2167,20 @@ final class Job
         }
 
         return substr($digits, 0, 5);
+    }
+
+    private static function selfScopedUserId(): ?int
+    {
+        if (!function_exists('auth_user_role') || !function_exists('auth_user_id')) {
+            return null;
+        }
+
+        $role = (int) auth_user_role();
+        if ($role !== 0 && $role !== 1) {
+            return null;
+        }
+
+        $userId = auth_user_id();
+        return $userId !== null && $userId > 0 ? $userId : null;
     }
 }
