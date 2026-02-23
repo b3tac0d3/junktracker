@@ -1,314 +1,198 @@
 :root {
-  --jt-bg: #f4f5f7;
-  --jt-surface: #ffffff;
-  --jt-primary: #2563eb;
-  --jt-primary-soft: #dbeafe;
-  --jt-accent: #14b8a6;
-  --jt-border-subtle: #e5e7eb;
-  --jt-text-main: #111827;
-  --jt-text-muted: #6b7280;
+    --jt-bg: #f4f5f7;
+    --jt-surface: #ffffff;
+    --jt-primary: #2563eb;
+    --jt-primary-soft: #dbeafe;
+    --jt-accent: #14b8a6;
+    --jt-border-subtle: #e5e7eb;
+    --jt-text-main: #111827;
+    --jt-text-muted: #6b7280;
 }
 
 body {
-  background-color: var(--jt-bg);
-  color: var(--jt-text-main);
+    background-color: var(--jt-bg);
+    color: var(--jt-text-main);
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, .h1, .h2, .h3 {
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--jt-text-main);
 }
 
 .sb-topnav.navbar-dark {
-  background-color: #020617 !important;
+    background-color: #020617 !important;
 }
 
 .sb-topnav .navbar-brand {
-  font-weight: 700;
-  letter-spacing: 0.06em;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    font-size: 1.15rem;
 }
 
 .sb-sidenav {
-  background-color: #020617;
+    background-color: #020617;
 }
 
 .sb-sidenav .nav-link {
-  color: var(--jt-text-muted);
+    color: var(--jt-text-muted);
+    padding: 0.65rem 1.1rem;
+    font-size: 0.88rem;
+    transition: color 0.15s ease;
+    border-left: 3px solid transparent;
+}
+
+.sb-sidenav .nav-link i {
+    width: 1.25rem;
+    text-align: center;
+    margin-right: 0.65rem;
 }
 
 .sb-sidenav .nav-link.active {
-  color: #f9fafb;
-  background-color: rgba(37, 99, 235, 0.18);
-  border-radius: 0.5rem;
+    color: #f9fafb;
+    background-color: rgba(37, 99, 235, 0.12);
+    border-left-color: var(--jt-primary);
 }
 
-.btn-primary {
-  background-color: var(--jt-primary);
-  border-color: var(--jt-primary);
-}
-
-.btn-primary:hover {
-  background-color: #1d4ed8;
-  border-color: #1d4ed8;
-}
-
-.card {
-  border-radius: 0.75rem;
-  border-color: var(--jt-border-subtle);
-  box-shadow: 0 8px 16px rgba(15, 23, 42, 0.06);
-}
-
-.text-muted {
-  color: var(--jt-text-muted) !important;
-}
-
-.jt-card-list {
-  display: grid;
-  gap: 0.75rem;
-}
-
-.jt-card {
-  background-color: var(--jt-surface);
-  border-radius: 0.75rem;
-  padding: 0.75rem 0.9rem;
-  border: 1px solid var(--jt-border-subtle);
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-}
-
-.jt-card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 0.95rem;
-  font-weight: 600;
-}
-
-.jt-card-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.25rem 0.75rem;
-  font-size: 0.78rem;
-  color: var(--jt-text-muted);
-}
-
-.jt-pill {
-  padding: 0.15rem 0.5rem;
-  border-radius: 999px;
-  font-size: 0.7rem;
-  font-weight: 600;
-}
-
-.jt-pill-primary {
-  background-color: var(--jt-primary-soft);
-  color: #1d4ed8;
-}
-
-.jt-card-actions {
-  margin-top: 0.4rem;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.25rem;
-}
-
-@media (min-width: 768px) {
-  .jt-card-list {
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  }
-}
-
-#layoutSidenav #layoutSidenav_nav {
-  width: 240px;
-}
-
-@media (max-width: 767.98px) {
-  #layoutSidenav #layoutSidenav_nav {
-    width: 220px;
-  }
-}
-
-.sb-sidenav .nav-link {
-  padding: 0.5rem 1.1rem;
-  font-size: 0.85rem;
+.sb-sidenav .nav-link:hover {
+    color: #f9fafb;
 }
 
 .sb-sidenav-menu-heading {
-  font-size: 0.7rem;
-  letter-spacing: 0.08em;
-  color: #6b7280;
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #4b5563;
+    padding-top: 1.5rem;
+    padding-bottom: 0.5rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+    margin-top: 0.5rem;
 }
 
-#layoutSidenav_content main {
-  padding: 0.75rem 0.9rem;
+.sb-sidenav-menu-heading:first-of-type {
+    border-top: none;
+    margin-top: 0;
 }
 
-@media (min-width: 992px) {
-  #layoutSidenav_content main {
-    padding: 1.5rem 2rem;
-  }
+.btn-primary {
+    background-color: var(--jt-primary);
+    border-color: var(--jt-primary);
+    font-weight: 500;
 }
 
-/* =========================================
-   Filter Card & Chevron Animation
-   ========================================= */
-
-.jt-filter-card .card-header {
-  user-select: none;
-  transition: background-color 0.15s ease;
+.btn-primary:hover {
+    background-color: #1d4ed8;
+    border-color: #1d4ed8;
 }
 
-.jt-filter-card .card-header:hover {
-  background-color: rgba(37, 99, 235, 0.05);
-}
-
-.jt-filter-chevron {
-  transition: transform 0.25s ease;
-  font-size: 0.8rem;
-  color: var(--jt-text-muted);
-}
-
-.jt-filter-card .card-header[aria-expanded="true"] .jt-filter-chevron {
-  transform: rotate(180deg);
-}
-
-/* Table dark header polish */
-.table-dark th {
-  background-color: #020617;
-  border-color: rgba(255, 255, 255, 0.1);
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  font-size: 0.78rem;
-  text-transform: uppercase;
-}
-
-/* Row hover highlight */
-.table-hover tbody tr:hover {
-  background-color: rgba(37, 99, 235, 0.04);
-}
-
-/* Count badge inside card headers */
-#jobsCountBadge:empty {
-  display: none;
-}
-
-
-/* =========================================
-   Card-List Component (js-card-list-source)
-   ========================================= */
-
-/* Parent card housing the card-list */
-.card-list-parent {
+.card {
+    border-radius: 0.75rem;
+    border-color: var(--jt-border-subtle);
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
     overflow: hidden;
 }
 
-/* Grid that wraps each card row */
-.card-list-grid {
-    padding: 0.75rem;
+.card-header {
+    background-color: #f9fafb;
+    border-bottom: 1px solid var(--jt-border-subtle);
+    padding: 0.85rem 1.25rem;
+    font-weight: 600;
 }
 
-/* Individual card item */
+.table thead th {
+    background-color: #f9fafb;
+    color: var(--jt-text-muted);
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    border-top: none;
+    padding: 0.75rem 1.25rem;
+}
+
+.table tbody td {
+    padding: 0.75rem 1.25rem;
+    vertical-align: middle;
+}
+
+.table-hover tbody tr:hover {
+    background-color: rgba(37, 99, 235, 0.03);
+}
+
+/* JT Custom components */
+.jt-filter-card .card-header {
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+}
+
+.jt-filter-card .card-header:hover {
+    background-color: #f3f4f6;
+}
+
+.jt-filter-chevron {
+    transition: transform 0.25s ease;
+}
+
+.jt-filter-card .card-header[aria-expanded="true"] .jt-filter-chevron {
+    transform: rotate(180deg);
+}
+
+.text-end-numeric {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+/* Empty states */
+.jt-empty-state {
+    padding: 3.5rem 1.5rem;
+    text-align: center;
+}
+
+.jt-empty-state i {
+    color: var(--jt-border-subtle);
+    margin-bottom: 1rem;
+}
+
+.jt-empty-state h4 {
+    color: var(--jt-text-main);
+    margin-bottom: 0.5rem;
+}
+
+.jt-empty-state p {
+    color: var(--jt-text-muted);
+    max-width: 320px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+/* Smoother focus rings */
+.form-control:focus, .form-select:focus {
+    border-color: var(--jt-primary);
+    box-shadow: 0 0 0 0.2rem rgba(37, 99, 235, 0.15);
+}
+
+/* Card List Mobile Component (Extended) */
 .card-list-item {
     border: 1px solid var(--jt-border-subtle);
     border-radius: 0.75rem;
-    transition: box-shadow 0.15s ease, transform 0.15s ease;
-    cursor: default;
+    transition: box-shadow 0.15s ease;
 }
 
 .card-list-item:hover {
-    box-shadow: 0 4px 16px rgba(37, 99, 235, 0.12);
-    transform: translateY(-1px);
-}
-
-/* Title / primary field */
-.card-list-item-title {
-    font-size: 1rem;
-    font-weight: 600;
-    color: var(--jt-text-main);
-    margin-bottom: 0.5rem;
-    line-height: 1.3;
-}
-
-.card-list-item-title a {
-    color: var(--jt-primary);
-    text-decoration: none;
-}
-
-.card-list-item-title a:hover {
-    text-decoration: underline;
-}
-
-/* Label + value rows */
-.card-list-field {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    gap: 0.5rem;
-    padding: 0.18rem 0;
-    border-bottom: 1px solid var(--jt-border-subtle);
-    font-size: 0.82rem;
-}
-
-.card-list-field:last-of-type {
-    border-bottom: none;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
 }
 
 .card-list-field-label {
+    font-size: 0.65rem;
+    font-weight: 700;
     color: var(--jt-text-muted);
-    font-weight: 600;
     text-transform: uppercase;
-    font-size: 0.7rem;
-    letter-spacing: 0.04em;
-    flex-shrink: 0;
+    letter-spacing: 0.05em;
 }
 
 .card-list-field-value {
-    color: var(--jt-text-main);
-    text-align: right;
-    flex: 1;
-}
-
-/* Action buttons in card footer */
-.card-list-actions {
-    flex-wrap: wrap;
-    gap: 0.4rem;
-}
-
-/* Empty state */
-.card-list-empty {
-    text-align: center;
-    padding: 2rem 1rem;
-    font-size: 0.9rem;
-    color: var(--jt-text-muted);
-}
-
-/* Mobile two-column button grid */
-.mobile-two-col-buttons {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-}
-
-@media (max-width: 575.98px) {
-    .mobile-two-col-buttons {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-    }
-
-    .card-list-field-label {
-        font-size: 0.68rem;
-    }
-
-    .card-list-item-title {
-        font-size: 0.95rem;
-    }
-}
-
-/* On desktop, hide card-list and show table as usual */
-@media (min-width: 768px) {
-    .card-list-component {
-        display: none !important;
-    }
-    .js-card-list-source.d-none {
-        display: table !important;
-    }
-    .js-card-list-source[aria-hidden="true"] {
-        display: table !important;
-        aria-hidden: unset;
-    }
+    font-weight: 500;
 }
