@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 return [
     'name' => 'JunkTracker',
-    'version' => '2.0.1',
+    'version' => '2.0.2',
     'env' => getenv('APP_ENV') ?: 'local',
     'key' => getenv('APP_KEY') ?: 'local-dev-key-change-me',
     // Keep blank by default so absolute links use the current request host.

@@ -232,7 +232,7 @@
                     <div class="d-flex justify-content-between align-items-start">
                         <div>
                             <div class="small text-uppercase">Active Prospects</div>
-                            <div class="h3 mb-1"><?= e((string) ((int) ($counts['prospects_active'] ?? 0))) ?></div>
+                            <div class="h3 mb-1 text-white"><?= e((string) ((int) ($counts['prospects_active'] ?? 0))) ?></div>
                             <div class="small">Follow-Up Due: <?= e((string) ((int) ($counts['prospects_follow_up_due'] ?? 0))) ?></div>
                         </div>
                         <i class="fas fa-user-plus fs-4 opacity-75"></i>
@@ -249,7 +249,7 @@
                     <div class="d-flex justify-content-between align-items-start">
                         <div>
                             <div class="small text-uppercase">Pending Jobs</div>
-                            <div class="h3 mb-1"><?= e((string) ((int) ($counts['jobs_pending'] ?? 0))) ?></div>
+                            <div class="h3 mb-1 text-white"><?= e((string) ((int) ($counts['jobs_pending'] ?? 0))) ?></div>
                             <div class="small">Ready to schedule/activate</div>
                         </div>
                         <i class="fas fa-hourglass-half fs-4 opacity-75"></i>
@@ -266,7 +266,7 @@
                     <div class="d-flex justify-content-between align-items-start">
                         <div>
                             <div class="small text-uppercase">Active Jobs</div>
-                            <div class="h3 mb-1"><?= e((string) ((int) ($counts['jobs_active'] ?? 0))) ?></div>
+                            <div class="h3 mb-1 text-white"><?= e((string) ((int) ($counts['jobs_active'] ?? 0))) ?></div>
                             <div class="small">In progress</div>
                         </div>
                         <i class="fas fa-briefcase fs-4 opacity-75"></i>
@@ -283,7 +283,7 @@
                     <div class="d-flex justify-content-between align-items-start">
                         <div>
                             <div class="small text-uppercase">Crew On Clock</div>
-                            <div class="h3 mb-1"><?= e((string) ((int) ($onClockSummary['active_count'] ?? 0))) ?></div>
+                            <div class="h3 mb-1 text-white"><?= e((string) ((int) ($onClockSummary['active_count'] ?? 0))) ?></div>
                             <div class="small">Open hours: <?= e($minutes($onClockSummary['total_open_minutes'] ?? 0)) ?></div>
                         </div>
                         <i class="fas fa-user-clock fs-4 opacity-75"></i>
