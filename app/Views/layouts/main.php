@@ -183,6 +183,13 @@ $canViewServiceSection = can_access('jobs', 'view')
                                     Sales
                                 </a>
                             <?php endif; ?>
+                            <?php if (can_access('expenses', 'view')): ?>
+                                <a class="nav-link" href="<?= url('/expenses') ?>">
+                                    <div class="sb-nav-link-icon"><i class="fas fa-wallet"></i></div>
+                                    Expenses
+                                </a>
+                            <?php endif; ?>
+
                             <?php if ($canViewCustomersSection): ?>
                                 <a class="nav-link collapsed" href="#" data-bs-toggle="collapse" data-bs-target="#collapseCustomers" aria-expanded="false" aria-controls="collapseCustomers">
                                     <div class="sb-nav-link-icon"><i class="fas fa-users"></i></div>
@@ -227,12 +234,6 @@ $canViewServiceSection = can_access('jobs', 'view')
                         <?php endif; ?>
 
                         <div class="sb-sidenav-menu-heading">Admin</div>
-                        <?php if (can_access('expenses', 'view')): ?>
-                            <a class="nav-link" href="<?= url('/expenses') ?>">
-                                <div class="sb-nav-link-icon"><i class="fas fa-wallet"></i></div>
-                                Expenses
-                            </a>
-                        <?php endif; ?>
                         <?php if (can_access('employees', 'view')): ?>
                             <a class="nav-link" href="<?= url('/employees') ?>">
                                 <div class="sb-nav-link-icon"><i class="fas fa-id-card"></i></div>
@@ -251,6 +252,8 @@ $canViewServiceSection = can_access('jobs', 'view')
                                 Admin
                             </a>
                         <?php endif; ?>
+
+                        <div class="sb-sidenav-menu-heading">Dev</div>
                         <?php if ($showSiteAdminNav): ?>
                             <a class="nav-link collapsed" href="#" data-bs-toggle="collapse" data-bs-target="#collapseSiteAdminMenu" aria-expanded="false" aria-controls="collapseSiteAdminMenu">
                                 <div class="sb-nav-link-icon"><i class="fas fa-shield-alt"></i></div>
