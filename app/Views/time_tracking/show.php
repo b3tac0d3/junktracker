@@ -22,6 +22,36 @@
     $jobId = (int) ($entry['job_id'] ?? 0);
     $employeeId = (int) ($entry['employee_id'] ?? 0);
     $isOpen = $isActive && !empty($entry['start_time']) && empty($entry['end_time']);
+    $formatGeo = static function (mixed $latValue, mixed $lngValue, mixed $accuracyValue): array {
+        if ($latValue === null || $lngValue === null || $latValue === '' || $lngValue === '') {
+            return [
+                'coords' => null,
+                'maps_url' => null,
+                'accuracy' => null,
+            ];
+        }
+
+        $lat = is_numeric((string) $latValue) ? (float) $latValue : null;
+        $lng = is_numeric((string) $lngValue) ? (float) $lngValue : null;
+        if ($lat === null || $lng === null) {
+            return [
+                'coords' => null,
+                'maps_url' => null,
+                'accuracy' => null,
+            ];
+        }
+
+        $coords = number_format($lat, 6) . ', ' . number_format($lng, 6);
+        $accuracy = is_numeric((string) $accuracyValue) ? (float) $accuracyValue : null;
+
+        return [
+            'coords' => $coords,
+            'maps_url' => 'https://maps.google.com/?q=' . rawurlencode((string) $lat . ',' . (string) $lng),
+            'accuracy' => $accuracy,
+        ];
+    };
+    $punchInGeo = $formatGeo($entry['punch_in_lat'] ?? null, $entry['punch_in_lng'] ?? null, $entry['punch_in_accuracy_m'] ?? null);
+    $punchOutGeo = $formatGeo($entry['punch_out_lat'] ?? null, $entry['punch_out_lng'] ?? null, $entry['punch_out_accuracy_m'] ?? null);
 ?>
 <div class="container-fluid px-4">
     <div class="d-flex flex-wrap align-items-center justify-content-between mt-4 mb-3 gap-3">
@@ -36,8 +66,9 @@
         <div class="d-flex gap-2 mobile-two-col-buttons">
             <?php if ($isActive): ?>
                 <?php if ($isOpen): ?>
-                    <form method="post" action="<?= url('/time-tracking/' . ($entry['id'] ?? '') . '/punch-out') ?>">
+                    <form class="js-punch-geo-form" method="post" action="<?= url('/time-tracking/' . ($entry['id'] ?? '') . '/punch-out') ?>">
                         <?= csrf_field() ?>
+                        <?= geo_capture_fields('time_entry_view_punch_out') ?>
                         <input type="hidden" name="return_to" value="<?= e($returnTo) ?>" />
                         <button class="btn btn-danger" type="submit">Punch Out</button>
                     </form>
@@ -125,6 +156,55 @@
                     <div class="fw-semibold text-danger"><?= e('$' . number_format((float) ($entry['paid_calc'] ?? 0), 2)) ?></div>
                 </div>
 
+                <div class="col-md-6">
+                    <div class="text-muted small">Punch In Location</div>
+                    <div class="fw-semibold">
+                        <?php if ($punchInGeo['coords'] !== null): ?>
+                            <a class="text-decoration-none" href="<?= e((string) $punchInGeo['maps_url']) ?>" target="_blank" rel="noopener noreferrer">
+                                <?= e((string) $punchInGeo['coords']) ?>
+                            </a>
+                        <?php else: ?>
+                            —
+                        <?php endif; ?>
+                    </div>
+                    <?php if ($punchInGeo['coords'] !== null): ?>
+                        <div
+                            class="small text-muted js-reverse-geocode"
+                            data-lat="<?= e((string) ($entry['punch_in_lat'] ?? '')) ?>"
+                            data-lng="<?= e((string) ($entry['punch_in_lng'] ?? '')) ?>"
+                        >
+                            Resolving address...
+                        </div>
+                    <?php endif; ?>
+                    <?php if ($punchInGeo['accuracy'] !== null): ?>
+                        <div class="small text-muted">Accuracy: ±<?= e(number_format((float) $punchInGeo['accuracy'], 0)) ?>m</div>
+                    <?php endif; ?>
+                </div>
+                <div class="col-md-6">
+                    <div class="text-muted small">Punch Out Location</div>
+                    <div class="fw-semibold">
+                        <?php if ($punchOutGeo['coords'] !== null): ?>
+                            <a class="text-decoration-none" href="<?= e((string) $punchOutGeo['maps_url']) ?>" target="_blank" rel="noopener noreferrer">
+                                <?= e((string) $punchOutGeo['coords']) ?>
+                            </a>
+                        <?php else: ?>
+                            —
+                        <?php endif; ?>
+                    </div>
+                    <?php if ($punchOutGeo['coords'] !== null): ?>
+                        <div
+                            class="small text-muted js-reverse-geocode"
+                            data-lat="<?= e((string) ($entry['punch_out_lat'] ?? '')) ?>"
+                            data-lng="<?= e((string) ($entry['punch_out_lng'] ?? '')) ?>"
+                        >
+                            Resolving address...
+                        </div>
+                    <?php endif; ?>
+                    <?php if ($punchOutGeo['accuracy'] !== null): ?>
+                        <div class="small text-muted">Accuracy: ±<?= e(number_format((float) $punchOutGeo['accuracy'], 0)) ?>m</div>
+                    <?php endif; ?>
+                </div>
+
                 <div class="col-12">
                     <div class="text-muted small">Note</div>
                     <div class="fw-semibold" style="white-space: pre-wrap;"><?= e((string) (($entry['note'] ?? '') !== '' ? $entry['note'] : '—')) ?></div>
@@ -157,3 +237,52 @@
         </div>
     <?php endif; ?>
 </div>
+
+<script>
+    (function () {
+        const targets = Array.from(document.querySelectorAll('.js-reverse-geocode'));
+        if (targets.length === 0) {
+            return;
+        }
+
+        const lookup = async (lat, lng) => {
+            const cacheKey = `jt-revgeo:${lat},${lng}`;
+            const cached = window.sessionStorage.getItem(cacheKey);
+            if (cached) {
+                return cached;
+            }
+
+            const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lng)}&zoom=18&addressdetails=1`;
+            const response = await fetch(url, {headers: {'Accept': 'application/json'}});
+            if (!response.ok) {
+                throw new Error('lookup_failed');
+            }
+
+            const payload = await response.json();
+            const address = (payload && payload.display_name) ? String(payload.display_name).trim() : '';
+            if (!address) {
+                throw new Error('address_missing');
+            }
+
+            window.sessionStorage.setItem(cacheKey, address);
+            return address;
+        };
+
+        (async () => {
+            for (const node of targets) {
+                const lat = (node.getAttribute('data-lat') || '').trim();
+                const lng = (node.getAttribute('data-lng') || '').trim();
+                if (!lat || !lng) {
+                    node.textContent = 'Address unavailable';
+                    continue;
+                }
+
+                try {
+                    node.textContent = await lookup(lat, lng);
+                } catch (error) {
+                    node.textContent = 'Address unavailable (tap coordinates for map)';
+                }
+            }
+        })();
+    })();
+</script>

@@ -9,6 +9,7 @@ use Core\Database;
 final class Task
 {
     public const STATUSES = ['open', 'in_progress', 'closed'];
+    public const ASSIGNMENT_STATUSES = ['all', 'pending', 'accepted', 'declined', 'unassigned'];
     public const LINK_TYPES = ['general', 'client', 'estate', 'company', 'employee', 'job', 'expense', 'prospect', 'sale'];
     public const AUTO_PROSPECT_FOLLOW_UP_TITLE = 'Prospect Follow-Up';
 
@@ -19,12 +20,22 @@ final class Task
         [$whereSql, $params] = self::buildWhere($filters);
 
         $assignedNameSql = self::userLabelSql('ua');
+        $hasAssignmentStatus = Schema::hasColumn('todos', 'assignment_status');
+        $hasAssignmentRequestedAt = Schema::hasColumn('todos', 'assignment_requested_at');
+        $hasAssignmentRespondedAt = Schema::hasColumn('todos', 'assignment_responded_at');
+        $hasAssignmentRequestedBy = Schema::hasColumn('todos', 'assignment_requested_by');
+        $requesterNameSql = $hasAssignmentRequestedBy ? self::userLabelSql('urq') : 'NULL';
+        $requesterJoin = $hasAssignmentRequestedBy ? 'LEFT JOIN users urq ON urq.id = t.assignment_requested_by' : '';
 
         $sql = 'SELECT t.id,
                        t.title,
                        t.link_type,
                        t.link_id,
                        t.assigned_user_id,
+                       ' . ($hasAssignmentStatus ? 't.assignment_status' : 'CASE WHEN t.assigned_user_id IS NULL THEN \'unassigned\' ELSE \'accepted\' END') . ' AS assignment_status,
+                       ' . ($hasAssignmentRequestedAt ? 't.assignment_requested_at' : 'NULL') . ' AS assignment_requested_at,
+                       ' . ($hasAssignmentRespondedAt ? 't.assignment_responded_at' : 'NULL') . ' AS assignment_responded_at,
+                       ' . ($hasAssignmentRequestedBy ? 't.assignment_requested_by' : 'NULL') . ' AS assignment_requested_by,
                        t.importance,
                        t.status,
                        t.due_at,
@@ -32,9 +43,11 @@ final class Task
                        t.created_at,
                        t.updated_at,
                        t.deleted_at,
-                       ' . $assignedNameSql . ' AS assigned_user_name
+                       ' . $assignedNameSql . ' AS assigned_user_name,
+                       ' . $requesterNameSql . ' AS assignment_requested_by_name
                 FROM todos t
                 LEFT JOIN users ua ON ua.id = t.assigned_user_id
+                ' . $requesterJoin . '
                 WHERE ' . $whereSql . '
                 ORDER BY t.id DESC';
 
@@ -91,33 +104,50 @@ final class Task
         }
 
         $assignedNameSql = self::userLabelSql('ua');
+        $hasAssignmentStatus = Schema::hasColumn('todos', 'assignment_status');
+        $hasAssignmentRequestedAt = Schema::hasColumn('todos', 'assignment_requested_at');
+        $hasAssignmentRespondedAt = Schema::hasColumn('todos', 'assignment_responded_at');
+        $hasAssignmentRequestedBy = Schema::hasColumn('todos', 'assignment_requested_by');
+        $requesterNameSql = $hasAssignmentRequestedBy ? self::userLabelSql('urq') : 'NULL';
+        $requesterJoin = $hasAssignmentRequestedBy ? 'LEFT JOIN users urq ON urq.id = t.assignment_requested_by' : '';
 
         $sql = 'SELECT t.id,
                        t.title,
                        t.link_type,
                        t.link_id,
                        t.assigned_user_id,
+                       ' . ($hasAssignmentStatus ? 't.assignment_status' : 'CASE WHEN t.assigned_user_id IS NULL THEN \'unassigned\' ELSE \'accepted\' END') . ' AS assignment_status,
+                       ' . ($hasAssignmentRequestedAt ? 't.assignment_requested_at' : 'NULL') . ' AS assignment_requested_at,
+                       ' . ($hasAssignmentRespondedAt ? 't.assignment_responded_at' : 'NULL') . ' AS assignment_responded_at,
+                       ' . ($hasAssignmentRequestedBy ? 't.assignment_requested_by' : 'NULL') . ' AS assignment_requested_by,
                        t.importance,
                        t.status,
                        t.due_at,
                        t.completed_at,
                        t.created_at,
                        t.updated_at,
-                       ' . $assignedNameSql . ' AS assigned_user_name
+                       ' . $assignedNameSql . ' AS assigned_user_name,
+                       ' . $requesterNameSql . ' AS assignment_requested_by_name
                 FROM todos t
                 LEFT JOIN users ua ON ua.id = t.assigned_user_id
+                ' . $requesterJoin . '
                 WHERE t.link_type = :link_type
                   AND t.link_id = :link_id
-                  AND t.deleted_at IS NULL
+                  AND t.deleted_at IS NULL' . (Schema::hasColumn('todos', 'business_id') ? '
+                  AND t.business_id = :business_id' : '') . '
                 ORDER BY CASE WHEN t.status = \'closed\' THEN 1 ELSE 0 END,
                          COALESCE(t.due_at, \'9999-12-31 23:59:59\') ASC,
                          t.id DESC';
 
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute([
+        $params = [
             'link_type' => $linkType,
             'link_id' => $linkId,
-        ]);
+        ];
+        if (Schema::hasColumn('todos', 'business_id')) {
+            $params['business_id'] = self::currentBusinessId();
+        }
+        $stmt->execute($params);
 
         $rows = $stmt->fetchAll();
         return self::attachLinkData($rows);
@@ -131,14 +161,29 @@ final class Task
         $createdNameSql = self::userLabelSql('uc');
         $updatedNameSql = self::userLabelSql('uu');
         $deletedNameSql = self::userLabelSql('ud');
+        $requesterNameSql = self::userLabelSql('urq');
 
         $hasCreatedBy = Schema::hasColumn('todos', 'created_by');
         $hasUpdatedBy = Schema::hasColumn('todos', 'updated_by');
         $hasDeletedBy = Schema::hasColumn('todos', 'deleted_by');
+        $hasAssignmentStatus = Schema::hasColumn('todos', 'assignment_status');
+        $hasAssignmentRequestedAt = Schema::hasColumn('todos', 'assignment_requested_at');
+        $hasAssignmentRespondedAt = Schema::hasColumn('todos', 'assignment_responded_at');
+        $hasAssignmentRequestedBy = Schema::hasColumn('todos', 'assignment_requested_by');
+        $hasAssignmentNote = Schema::hasColumn('todos', 'assignment_note');
 
         $createdBySelect = $hasCreatedBy ? 't.created_by' : 'NULL';
         $updatedBySelect = $hasUpdatedBy ? 't.updated_by' : 'NULL';
         $deletedBySelect = $hasDeletedBy ? 't.deleted_by' : 'NULL';
+        $assignmentStatusSelect = $hasAssignmentStatus
+            ? 't.assignment_status'
+            : 'CASE WHEN t.assigned_user_id IS NULL THEN "unassigned" ELSE "accepted" END';
+        $assignmentRequestedAtSelect = $hasAssignmentRequestedAt ? 't.assignment_requested_at' : 'NULL';
+        $assignmentRespondedAtSelect = $hasAssignmentRespondedAt ? 't.assignment_responded_at' : 'NULL';
+        $assignmentRequestedBySelect = $hasAssignmentRequestedBy ? 't.assignment_requested_by' : 'NULL';
+        $assignmentNoteSelect = $hasAssignmentNote ? 't.assignment_note' : 'NULL';
+        $requesterJoin = $hasAssignmentRequestedBy ? 'LEFT JOIN users urq ON urq.id = t.assignment_requested_by' : '';
+        $requesterNameSelect = $hasAssignmentRequestedBy ? $requesterNameSql : 'NULL';
 
         $sql = 'SELECT t.id,
                        t.title,
@@ -151,6 +196,11 @@ final class Task
                        t.outcome,
                        t.due_at,
                        t.completed_at,
+                       ' . $assignmentStatusSelect . ' AS assignment_status,
+                       ' . $assignmentRequestedAtSelect . ' AS assignment_requested_at,
+                       ' . $assignmentRespondedAtSelect . ' AS assignment_responded_at,
+                       ' . $assignmentRequestedBySelect . ' AS assignment_requested_by,
+                       ' . $assignmentNoteSelect . ' AS assignment_note,
                        t.created_at,
                        ' . $createdBySelect . ' AS created_by,
                        t.updated_at,
@@ -160,17 +210,24 @@ final class Task
                        ' . $assignedNameSql . ' AS assigned_user_name,
                        ' . $createdNameSql . ' AS created_by_name,
                        ' . $updatedNameSql . ' AS updated_by_name,
-                       ' . $deletedNameSql . ' AS deleted_by_name
+                       ' . $deletedNameSql . ' AS deleted_by_name,
+                       ' . $requesterNameSelect . ' AS assignment_requested_by_name
                 FROM todos t
                 LEFT JOIN users ua ON ua.id = t.assigned_user_id
                 LEFT JOIN users uc ON uc.id = t.created_by
                 LEFT JOIN users uu ON uu.id = t.updated_by
                 LEFT JOIN users ud ON ud.id = t.deleted_by
+                ' . $requesterJoin . '
                 WHERE t.id = :id
+                  ' . (Schema::hasColumn('todos', 'business_id') ? 'AND t.business_id = :business_id' : '') . '
                 LIMIT 1';
 
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute(['id' => $id]);
+        $params = ['id' => $id];
+        if (Schema::hasColumn('todos', 'business_id')) {
+            $params['business_id'] = self::currentBusinessId();
+        }
+        $stmt->execute($params);
         $task = $stmt->fetch();
         if (!$task) {
             return null;
@@ -231,6 +288,38 @@ final class Task
             'due_at' => $data['due_at'],
             'completed_at' => $data['completed_at'],
         ];
+        if (Schema::hasColumn('todos', 'business_id')) {
+            $columns[] = 'business_id';
+            $values[] = ':business_id';
+            $params['business_id'] = self::currentBusinessId();
+        }
+
+        $assignment = self::assignmentStateForWrite(null, $data['assigned_user_id'], $actorId);
+        if (Schema::hasColumn('todos', 'assignment_status')) {
+            $columns[] = 'assignment_status';
+            $values[] = ':assignment_status';
+            $params['assignment_status'] = $assignment['assignment_status'];
+        }
+        if (Schema::hasColumn('todos', 'assignment_requested_at')) {
+            $columns[] = 'assignment_requested_at';
+            $values[] = ':assignment_requested_at';
+            $params['assignment_requested_at'] = $assignment['assignment_requested_at'];
+        }
+        if (Schema::hasColumn('todos', 'assignment_responded_at')) {
+            $columns[] = 'assignment_responded_at';
+            $values[] = ':assignment_responded_at';
+            $params['assignment_responded_at'] = $assignment['assignment_responded_at'];
+        }
+        if (Schema::hasColumn('todos', 'assignment_requested_by')) {
+            $columns[] = 'assignment_requested_by';
+            $values[] = ':assignment_requested_by';
+            $params['assignment_requested_by'] = $assignment['assignment_requested_by'];
+        }
+        if (Schema::hasColumn('todos', 'assignment_note')) {
+            $columns[] = 'assignment_note';
+            $values[] = ':assignment_note';
+            $params['assignment_note'] = $assignment['assignment_note'];
+        }
 
         if ($actorId !== null && Schema::hasColumn('todos', 'created_by')) {
             $columns[] = 'created_by';
@@ -255,6 +344,9 @@ final class Task
     public static function update(int $id, array $data, ?int $actorId = null): void
     {
         self::ensureTable();
+
+        $existingTask = self::findById($id);
+        $assignment = self::assignmentStateForWrite($existingTask, $data['assigned_user_id'], $actorId);
 
         $sets = [
             'title = :title',
@@ -283,6 +375,27 @@ final class Task
             'completed_at' => $data['completed_at'],
         ];
 
+        if (Schema::hasColumn('todos', 'assignment_status')) {
+            $sets[] = 'assignment_status = :assignment_status';
+            $params['assignment_status'] = $assignment['assignment_status'];
+        }
+        if (Schema::hasColumn('todos', 'assignment_requested_at')) {
+            $sets[] = 'assignment_requested_at = :assignment_requested_at';
+            $params['assignment_requested_at'] = $assignment['assignment_requested_at'];
+        }
+        if (Schema::hasColumn('todos', 'assignment_responded_at')) {
+            $sets[] = 'assignment_responded_at = :assignment_responded_at';
+            $params['assignment_responded_at'] = $assignment['assignment_responded_at'];
+        }
+        if (Schema::hasColumn('todos', 'assignment_requested_by')) {
+            $sets[] = 'assignment_requested_by = :assignment_requested_by';
+            $params['assignment_requested_by'] = $assignment['assignment_requested_by'];
+        }
+        if (Schema::hasColumn('todos', 'assignment_note')) {
+            $sets[] = 'assignment_note = :assignment_note';
+            $params['assignment_note'] = $assignment['assignment_note'];
+        }
+
         if ($actorId !== null && Schema::hasColumn('todos', 'updated_by')) {
             $sets[] = 'updated_by = :updated_by';
             $params['updated_by'] = $actorId;
@@ -291,6 +404,10 @@ final class Task
         $sql = 'UPDATE todos
                 SET ' . implode(', ', $sets) . '
                 WHERE id = :id';
+        if (Schema::hasColumn('todos', 'business_id')) {
+            $sql .= ' AND business_id = :business_id_scope';
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
 
         $stmt = Database::connection()->prepare($sql);
         $stmt->execute($params);
@@ -323,9 +440,62 @@ final class Task
         $sql = 'UPDATE todos
                 SET ' . implode(', ', $sets) . '
                 WHERE id = :id';
+        if (Schema::hasColumn('todos', 'business_id')) {
+            $sql .= ' AND business_id = :business_id_scope';
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
 
         $stmt = Database::connection()->prepare($sql);
         $stmt->execute($params);
+    }
+
+    public static function respondAssignment(int $id, string $decision, int $responderId, ?string $note = null): bool
+    {
+        self::ensureTable();
+
+        if ($id <= 0 || $responderId <= 0 || !Schema::hasColumn('todos', 'assignment_status')) {
+            return false;
+        }
+
+        $normalizedDecision = strtolower(trim($decision));
+        if (!in_array($normalizedDecision, ['accept', 'decline'], true)) {
+            return false;
+        }
+
+        $status = $normalizedDecision === 'accept' ? 'accepted' : 'declined';
+        $params = [
+            'id' => $id,
+            'assignment_status' => $status,
+            'assignment_note' => $note !== null ? trim($note) : null,
+            'updated_by' => $responderId,
+        ];
+
+        $sets = [
+            'assignment_status = :assignment_status',
+            'assignment_responded_at = NOW()',
+            'updated_at = NOW()',
+        ];
+        if (Schema::hasColumn('todos', 'assignment_note')) {
+            $sets[] = 'assignment_note = :assignment_note';
+        }
+        if (Schema::hasColumn('todos', 'updated_by')) {
+            $sets[] = 'updated_by = :updated_by';
+        }
+
+        $sql = 'UPDATE todos
+                SET ' . implode(', ', $sets) . '
+                WHERE id = :id
+                  AND deleted_at IS NULL
+                  AND assigned_user_id IS NOT NULL';
+        if (Schema::hasColumn('todos', 'business_id')) {
+            $sql .= ' AND business_id = :business_id_scope';
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute($params);
+
+        return $stmt->rowCount() > 0;
     }
 
     public static function softDelete(int $id, ?int $actorId = null): void
@@ -350,6 +520,10 @@ final class Task
         $sql = 'UPDATE todos
                 SET ' . implode(', ', $sets) . '
                 WHERE id = :id';
+        if (Schema::hasColumn('todos', 'business_id')) {
+            $sql .= ' AND business_id = :business_id_scope';
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
 
         $stmt = Database::connection()->prepare($sql);
         $stmt->execute($params);
@@ -361,6 +535,9 @@ final class Task
                 FROM users u';
 
         $where = [];
+        if (Schema::hasColumn('users', 'business_id')) {
+            $where[] = 'u.business_id = :business_id';
+        }
         if (Schema::hasColumn('users', 'deleted_at')) {
             $where[] = 'u.deleted_at IS NULL';
         }
@@ -373,7 +550,12 @@ final class Task
 
         $sql .= ' ORDER BY name ASC';
 
-        $stmt = Database::connection()->query($sql);
+        $stmt = Database::connection()->prepare($sql);
+        $params = [];
+        if (Schema::hasColumn('users', 'business_id')) {
+            $params['business_id'] = self::currentBusinessId();
+        }
+        $stmt->execute($params);
         return $stmt->fetchAll();
     }
 
@@ -519,6 +701,11 @@ final class Task
                   AND title = :title
                   AND deleted_at IS NULL
                   AND status IN (\'open\', \'in_progress\')';
+        if (Schema::hasColumn('todos', 'business_id')) {
+            $sql .= '
+                  AND business_id = :business_id';
+            $params['business_id'] = self::currentBusinessId();
+        }
 
         $stmt = Database::connection()->prepare($sql);
         $stmt->execute($params);
@@ -526,10 +713,81 @@ final class Task
         return $stmt->rowCount() > 0;
     }
 
+    private static function assignmentStateForWrite(?array $existing, ?int $newAssignedUserId, ?int $actorId): array
+    {
+        $assigneeId = $newAssignedUserId !== null ? (int) $newAssignedUserId : 0;
+        $assigneeId = $assigneeId > 0 ? $assigneeId : 0;
+
+        $existingAssigneeId = (int) ($existing['assigned_user_id'] ?? 0);
+        $existingStatus = strtolower(trim((string) ($existing['assignment_status'] ?? '')));
+        if (!in_array($existingStatus, ['pending', 'accepted', 'declined', 'unassigned'], true)) {
+            $existingStatus = $existingAssigneeId > 0 ? 'accepted' : 'unassigned';
+        }
+
+        $existingRequestedAt = self::normalizeDateTimeValue($existing['assignment_requested_at'] ?? null);
+        $existingRespondedAt = self::normalizeDateTimeValue($existing['assignment_responded_at'] ?? null);
+        $existingRequestedBy = isset($existing['assignment_requested_by']) ? (int) $existing['assignment_requested_by'] : null;
+        $existingNote = trim((string) ($existing['assignment_note'] ?? ''));
+
+        if ($assigneeId <= 0) {
+            return [
+                'assignment_status' => 'unassigned',
+                'assignment_requested_at' => null,
+                'assignment_responded_at' => null,
+                'assignment_requested_by' => null,
+                'assignment_note' => null,
+            ];
+        }
+
+        $actor = $actorId !== null ? (int) $actorId : 0;
+        $selfAssigned = $actor > 0 && $actor === $assigneeId;
+        $isReassignment = $existing !== null && $existingAssigneeId !== $assigneeId;
+        $isNewAssignment = $existing === null;
+
+        if ($isNewAssignment || $isReassignment) {
+            $requestedAt = date('Y-m-d H:i:s');
+            return [
+                'assignment_status' => $selfAssigned ? 'accepted' : 'pending',
+                'assignment_requested_at' => $requestedAt,
+                'assignment_responded_at' => $selfAssigned ? $requestedAt : null,
+                'assignment_requested_by' => $actor > 0 ? $actor : null,
+                'assignment_note' => null,
+            ];
+        }
+
+        return [
+            'assignment_status' => $existingStatus === 'unassigned' ? 'accepted' : $existingStatus,
+            'assignment_requested_at' => $existingRequestedAt,
+            'assignment_responded_at' => $existingRespondedAt,
+            'assignment_requested_by' => $existingRequestedBy,
+            'assignment_note' => $existingNote !== '' ? $existingNote : null,
+        ];
+    }
+
+    private static function normalizeDateTimeValue(mixed $value): ?string
+    {
+        $raw = trim((string) ($value ?? ''));
+        if ($raw === '') {
+            return null;
+        }
+
+        $timestamp = strtotime($raw);
+        if ($timestamp === false) {
+            return null;
+        }
+
+        return date('Y-m-d H:i:s', $timestamp);
+    }
+
     private static function buildWhere(array $filters): array
     {
         $where = [];
         $params = [];
+
+        if (Schema::hasColumn('todos', 'business_id')) {
+            $where[] = 't.business_id = :business_id';
+            $params['business_id'] = self::currentBusinessId();
+        }
 
         $recordStatus = (string) ($filters['record_status'] ?? 'active');
         if ($recordStatus === 'active') {
@@ -555,6 +813,22 @@ final class Task
             $where[] = 't.status <> \'closed\'';
             $where[] = 't.due_at IS NOT NULL';
             $where[] = 't.due_at < NOW()';
+        }
+
+        $assignmentStatus = strtolower(trim((string) ($filters['assignment_status'] ?? 'all')));
+        if (in_array($assignmentStatus, self::ASSIGNMENT_STATUSES, true) && $assignmentStatus !== 'all') {
+            if (Schema::hasColumn('todos', 'assignment_status')) {
+                $where[] = 't.assignment_status = :assignment_status';
+                $params['assignment_status'] = $assignmentStatus;
+            } else {
+                if ($assignmentStatus === 'unassigned') {
+                    $where[] = 't.assigned_user_id IS NULL';
+                } elseif ($assignmentStatus === 'accepted') {
+                    $where[] = 't.assigned_user_id IS NOT NULL';
+                } elseif ($assignmentStatus === 'pending' || $assignmentStatus === 'declined') {
+                    $where[] = '1 = 0';
+                }
+            }
         }
 
         $importance = isset($filters['importance']) ? (int) $filters['importance'] : 0;
@@ -924,6 +1198,15 @@ final class Task
         return $row ?: null;
     }
 
+    private static function currentBusinessId(): int
+    {
+        if (function_exists('current_business_id')) {
+            return max(1, (int) current_business_id());
+        }
+
+        return max(1, (int) config('app.default_business_id', 1));
+    }
+
     private static function ensureTable(): void
     {
         static $ensured = false;
@@ -934,11 +1217,17 @@ final class Task
         Database::connection()->exec(
             'CREATE TABLE IF NOT EXISTS todos (
                 id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+                business_id BIGINT UNSIGNED NOT NULL DEFAULT 1,
                 title VARCHAR(255) NOT NULL,
                 body TEXT NULL,
                 link_type VARCHAR(30) NOT NULL DEFAULT \'general\',
                 link_id BIGINT UNSIGNED NULL,
                 assigned_user_id BIGINT UNSIGNED NULL,
+                assignment_status VARCHAR(20) NOT NULL DEFAULT \'unassigned\',
+                assignment_requested_at DATETIME NULL,
+                assignment_responded_at DATETIME NULL,
+                assignment_requested_by BIGINT UNSIGNED NULL,
+                assignment_note VARCHAR(255) NULL,
                 created_by BIGINT UNSIGNED NULL,
                 updated_by BIGINT UNSIGNED NULL,
                 deleted_by BIGINT UNSIGNED NULL,
@@ -952,9 +1241,11 @@ final class Task
                 deleted_at DATETIME NULL,
                 PRIMARY KEY (id),
                 KEY idx_link (link_type, link_id),
+                KEY idx_todos_business (business_id),
                 KEY idx_status (status),
                 KEY idx_importance (importance),
                 KEY idx_assigned_user (assigned_user_id),
+                KEY idx_assignment_status (assignment_status),
                 KEY idx_due_at (due_at)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci'
         );
@@ -974,6 +1265,40 @@ final class Task
             if ($dataType !== '' && $dataType !== 'varchar') {
                 Database::connection()->exec('ALTER TABLE todos MODIFY COLUMN link_type VARCHAR(30) NOT NULL DEFAULT \'general\'');
             }
+        }
+
+        $missingColumns = [
+            'business_id' => 'ALTER TABLE todos ADD COLUMN business_id BIGINT UNSIGNED NOT NULL DEFAULT 1 AFTER id',
+            'assignment_status' => 'ALTER TABLE todos ADD COLUMN assignment_status VARCHAR(20) NOT NULL DEFAULT \'unassigned\' AFTER assigned_user_id',
+            'assignment_requested_at' => 'ALTER TABLE todos ADD COLUMN assignment_requested_at DATETIME NULL AFTER assignment_status',
+            'assignment_responded_at' => 'ALTER TABLE todos ADD COLUMN assignment_responded_at DATETIME NULL AFTER assignment_requested_at',
+            'assignment_requested_by' => 'ALTER TABLE todos ADD COLUMN assignment_requested_by BIGINT UNSIGNED NULL AFTER assignment_responded_at',
+            'assignment_note' => 'ALTER TABLE todos ADD COLUMN assignment_note VARCHAR(255) NULL AFTER assignment_requested_by',
+        ];
+        foreach ($missingColumns as $column => $sql) {
+            if (!Schema::hasColumn('todos', $column)) {
+                try {
+                    Database::connection()->exec($sql);
+                } catch (\Throwable) {
+                    // Existing installs may already include these columns via migrations.
+                }
+            }
+        }
+
+        try {
+            Database::connection()->exec('CREATE INDEX idx_assignment_status ON todos (assignment_status)');
+        } catch (\Throwable) {
+            // index exists
+        }
+        try {
+            Database::connection()->exec('CREATE INDEX idx_todos_business ON todos (business_id)');
+        } catch (\Throwable) {
+            // index exists
+        }
+        try {
+            Database::connection()->exec('UPDATE todos SET business_id = 1 WHERE business_id IS NULL OR business_id = 0');
+        } catch (\Throwable) {
+            // column or permissions may block runtime DDL adjustments
         }
 
         $ensured = true;

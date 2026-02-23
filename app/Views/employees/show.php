@@ -80,15 +80,17 @@
                         <div class="fw-semibold"><?= e((string) ($openClockElapsed ?? '—')) ?></div>
                     </div>
                     <div class="col-md-2 text-md-end">
-                        <form method="post" action="<?= url('/employees/' . ((int) ($employee['id'] ?? 0)) . '/punch-out') ?>">
+                        <form class="js-punch-geo-form" method="post" action="<?= url('/employees/' . ((int) ($employee['id'] ?? 0)) . '/punch-out') ?>">
                             <?= csrf_field() ?>
+                            <?= geo_capture_fields('employee_details_punch_out') ?>
                             <button class="btn btn-danger w-100" type="submit">Punch Out</button>
                         </form>
                     </div>
                 </div>
             <?php else: ?>
-                <form method="post" action="<?= url('/employees/' . ((int) ($employee['id'] ?? 0)) . '/punch-in') ?>" id="employeeQuickPunchForm">
+                <form class="js-punch-geo-form" method="post" action="<?= url('/employees/' . ((int) ($employee['id'] ?? 0)) . '/punch-in') ?>" id="employeeQuickPunchForm">
                     <?= csrf_field() ?>
+                    <?= geo_capture_fields('employee_details_punch_in') ?>
                     <input type="hidden" id="employee_punch_job_lookup_url" value="<?= e(url('/time-tracking/lookup/jobs')) ?>" />
                     <div class="row g-3 align-items-end">
                         <div class="col-md-10 position-relative">

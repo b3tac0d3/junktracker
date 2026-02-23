@@ -13,9 +13,22 @@ use Throwable;
 
 final class TimeTrackingController extends Controller
 {
+    private bool $selfScopedEmployeeResolved = false;
+    private ?array $selfScopedEmployee = null;
+
     public function index(): void
     {
+        if ($this->redirectPunchOnlyToLanding(false)) {
+            return;
+        }
+
         $this->authorize('view');
+        $isSelfScoped = $this->isSelfScopedRole();
+        $selfEmployeeId = $isSelfScoped ? $this->selfScopedEmployeeId() : null;
+        if ($isSelfScoped && $selfEmployeeId === null) {
+            flash('error', 'Your user is not linked to an active employee profile.');
+            redirect('/');
+        }
 
         $moduleKey = 'time_tracking';
         $userId = auth_user_id() ?? 0;
@@ -67,6 +80,9 @@ final class TimeTrackingController extends Controller
         if (!in_array($filters['record_status'], ['active', 'deleted', 'all'], true)) {
             $filters['record_status'] = 'active';
         }
+        if ($isSelfScoped && $selfEmployeeId !== null) {
+            $filters['employee_id'] = $selfEmployeeId;
+        }
 
         $entries = TimeEntry::filter($filters);
         if ((string) ($_GET['export'] ?? '') === 'csv') {
@@ -80,6 +96,10 @@ final class TimeTrackingController extends Controller
         ]);
 
         $summary = TimeEntry::summary($filters);
+        $employees = TimeEntry::employees();
+        if ($isSelfScoped && $selfEmployeeId !== null) {
+            $employees = $this->filterEmployeesById($employees, $selfEmployeeId);
+        }
 
         $this->render('time_tracking/index', [
             'pageTitle' => 'Time Tracking',
@@ -87,7 +107,7 @@ final class TimeTrackingController extends Controller
             'entries' => $entries,
             'summary' => $summary,
             'byEmployee' => TimeEntry::summaryByEmployee($filters),
-            'employees' => TimeEntry::employees(),
+            'employees' => $employees,
             'jobs' => TimeEntry::jobs(),
             'savedPresets' => $savedPresets,
             'selectedPresetId' => $selectedPresetId,
@@ -100,12 +120,30 @@ final class TimeTrackingController extends Controller
     {
         $this->authorize('view');
 
+        if (is_punch_only_role()) {
+            $this->renderPunchOnlyClock();
+            return;
+        }
+
+        $requestPath = strtolower((string) (parse_url((string) ($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_PATH) ?? ''));
+        $usePunchClockPath = str_contains($requestPath, '/punch-clock');
+        $openBasePath = $usePunchClockPath ? '/punch-clock' : '/time-tracking/open';
+        $isSelfScoped = $this->isSelfScopedRole();
+        $selfEmployeeId = $isSelfScoped ? $this->selfScopedEmployeeId() : null;
+        $missingSelfEmployee = $isSelfScoped && $selfEmployeeId === null;
+
         $filters = [
             'q' => trim((string) ($_GET['q'] ?? '')),
         ];
+        if ($isSelfScoped && $selfEmployeeId !== null) {
+            $filters['employee_id'] = $selfEmployeeId;
+        }
 
-        $entries = TimeEntry::openEntries($filters);
-        $employees = TimeEntry::employees();
+        $entries = $missingSelfEmployee ? [] : TimeEntry::openEntries($filters);
+        $employees = $missingSelfEmployee ? [] : TimeEntry::employees();
+        if (!$missingSelfEmployee && $isSelfScoped && $selfEmployeeId !== null) {
+            $employees = $this->filterEmployeesById($employees, $selfEmployeeId);
+        }
         $openEmployeeIds = [];
         foreach ($entries as $entry) {
             $employeeId = (int) ($entry['employee_id'] ?? 0);
@@ -146,9 +184,48 @@ final class TimeTrackingController extends Controller
             'pageTitle' => 'Currently Punched In',
             'filters' => $filters,
             'entries' => $entries,
-            'summary' => TimeEntry::openSummary($filters),
+            'summary' => $missingSelfEmployee
+                ? ['active_count' => 0, 'total_open_minutes' => 0, 'total_open_paid' => 0]
+                : TimeEntry::openSummary($filters),
             'punchedOutEmployees' => $punchedOutEmployees,
+            'openBasePath' => $openBasePath,
+            'isPunchOnlyRole' => is_punch_only_role(),
             'pageScripts' => $pageScripts,
+        ]);
+    }
+
+    private function renderPunchOnlyClock(): void
+    {
+        $employeeId = $this->selfScopedEmployeeId();
+        if ($employeeId === null) {
+            flash('error', 'Your user is not linked to an active employee profile.');
+            redirect('/login');
+        }
+
+        $employee = Employee::findById($employeeId);
+        $openEntry = TimeEntry::findOpenForEmployee($employeeId);
+        $historyStartDate = date('Y-m-d', strtotime('-30 days'));
+        $historyEndDate = date('Y-m-d');
+        $historyFilters = [
+            'employee_id' => $employeeId,
+            'start_date' => $historyStartDate,
+            'end_date' => $historyEndDate,
+            'record_status' => 'active',
+            'q' => '',
+            'job_id' => null,
+        ];
+        $historyEntries = TimeEntry::filter($historyFilters);
+        $historySummary = TimeEntry::summary($historyFilters);
+
+        $this->render('time_tracking/punch_only', [
+            'pageTitle' => 'Punch Clock',
+            'employee' => $employee,
+            'openEntry' => $openEntry,
+            'historyEntries' => $historyEntries,
+            'historySummary' => $historySummary,
+            'historyStartDate' => $historyStartDate,
+            'historyEndDate' => $historyEndDate,
+            'openBasePath' => '/punch-clock',
         ]);
     }
 
@@ -163,10 +240,21 @@ final class TimeTrackingController extends Controller
             redirect($returnTo);
         }
 
-        $employeeId = $this->toIntOrNull($_POST['employee_id'] ?? null);
-        if ($employeeId === null || $employeeId <= 0) {
-            flash('error', 'Select a valid employee.');
+        $isSelfScoped = $this->isSelfScopedRole();
+        $selfEmployeeId = $isSelfScoped ? $this->selfScopedEmployeeId() : null;
+        if ($isSelfScoped && $selfEmployeeId === null) {
+            flash('error', 'Your user is not linked to an active employee profile.');
             redirect($returnTo);
+        }
+
+        if ($isSelfScoped) {
+            $employeeId = $selfEmployeeId;
+        } else {
+            $employeeId = $this->toIntOrNull($_POST['employee_id'] ?? null);
+            if ($employeeId === null || $employeeId <= 0) {
+                flash('error', 'Select a valid employee.');
+                redirect($returnTo);
+            }
         }
 
         $employee = Employee::findById($employeeId);
@@ -198,6 +286,7 @@ final class TimeTrackingController extends Controller
         }
 
         $payRate = TimeEntry::employeeRate($employeeId) ?? 0.0;
+        $geo = request_geo_payload($_POST);
         try {
             $entryId = TimeEntry::create([
                 'employee_id' => $employeeId,
@@ -208,6 +297,11 @@ final class TimeTrackingController extends Controller
                 'minutes_worked' => null,
                 'pay_rate' => $payRate,
                 'total_paid' => null,
+                'punch_in_lat' => $geo['lat'],
+                'punch_in_lng' => $geo['lng'],
+                'punch_in_accuracy_m' => $geo['accuracy'],
+                'punch_in_source' => $geo['source'],
+                'punch_in_captured_at' => $geo['captured_at'],
                 'note' => null,
             ], auth_user_id());
         } catch (Throwable) {
@@ -243,10 +337,23 @@ final class TimeTrackingController extends Controller
 
     public function create(): void
     {
+        if ($this->redirectPunchOnlyToLanding()) {
+            return;
+        }
+
         $this->authorize('create');
+        $isSelfScoped = $this->isSelfScopedRole();
+        $selfEmployeeId = $isSelfScoped ? $this->selfScopedEmployeeId() : null;
+        if ($isSelfScoped && $selfEmployeeId === null) {
+            flash('error', 'Your user is not linked to an active employee profile.');
+            redirect('/time-tracking');
+        }
 
         $jobId = $this->toIntOrNull($_GET['job_id'] ?? null);
         $employees = TimeEntry::employees();
+        if ($isSelfScoped && $selfEmployeeId !== null) {
+            $employees = $this->filterEmployeesById($employees, $selfEmployeeId);
+        }
         $jobs = TimeEntry::jobs();
 
         $selectedJobId = null;
@@ -271,6 +378,7 @@ final class TimeTrackingController extends Controller
         $this->render('time_tracking/create', [
             'pageTitle' => 'Add Time Entry',
             'entry' => [
+                'employee_id' => $selfEmployeeId,
                 'job_id' => $selectedJobId,
                 'work_date' => date('Y-m-d'),
             ],
@@ -290,11 +398,22 @@ final class TimeTrackingController extends Controller
 
     public function store(): void
     {
+        if ($this->redirectPunchOnlyToLanding()) {
+            return;
+        }
+
         $this->authorize('create');
 
         if (!verify_csrf($_POST['csrf_token'] ?? null)) {
             flash('error', 'Your session expired. Please try again.');
             redirect('/time-tracking/new');
+        }
+
+        $isSelfScoped = $this->isSelfScopedRole();
+        $selfEmployeeId = $isSelfScoped ? $this->selfScopedEmployeeId() : null;
+        if ($isSelfScoped && $selfEmployeeId === null) {
+            flash('error', 'Your user is not linked to an active employee profile.');
+            redirect('/time-tracking');
         }
 
         $entryMode = (string) ($_POST['entry_mode'] ?? 'save');
@@ -303,6 +422,10 @@ final class TimeTrackingController extends Controller
         }
 
         $employees = TimeEntry::employees();
+        if ($isSelfScoped && $selfEmployeeId !== null) {
+            $employees = $this->filterEmployeesById($employees, $selfEmployeeId);
+            $_POST['employee_id'] = (string) $selfEmployeeId;
+        }
         $jobs = TimeEntry::jobs();
         $data = $this->collectFormData($_POST, $employees, $jobs, $entryMode);
         $errors = $data['errors'];
@@ -330,6 +453,7 @@ final class TimeTrackingController extends Controller
 
             $nowDate = date('Y-m-d');
             $nowTime = date('H:i:s');
+            $geo = request_geo_payload($_POST);
             $payRate = $data['pay_rate'] !== null
                 ? (float) $data['pay_rate']
                 : (TimeEntry::employeeRate($employeeId) ?? 0.0);
@@ -344,6 +468,11 @@ final class TimeTrackingController extends Controller
                     'minutes_worked' => null,
                     'pay_rate' => $payRate,
                     'total_paid' => null,
+                    'punch_in_lat' => $geo['lat'],
+                    'punch_in_lng' => $geo['lng'],
+                    'punch_in_accuracy_m' => $geo['accuracy'],
+                    'punch_in_source' => $geo['source'],
+                    'punch_in_captured_at' => $geo['captured_at'],
                     'note' => $data['note'],
                 ], auth_user_id());
             } catch (Throwable) {
@@ -409,6 +538,10 @@ final class TimeTrackingController extends Controller
 
     public function show(array $params): void
     {
+        if ($this->redirectPunchOnlyToLanding()) {
+            return;
+        }
+
         $this->authorize('view');
 
         $id = isset($params['id']) ? (int) $params['id'] : 0;
@@ -420,6 +553,10 @@ final class TimeTrackingController extends Controller
         if (!$entry) {
             $this->renderNotFound();
             return;
+        }
+        if (!$this->canAccessEmployeeId((int) ($entry['employee_id'] ?? 0))) {
+            flash('error', 'You can only view your own time entries.');
+            redirect('/time-tracking');
         }
 
         $isActive = empty($entry['deleted_at']) && (int) ($entry['active'] ?? 1) === 1;
@@ -434,6 +571,10 @@ final class TimeTrackingController extends Controller
 
     public function edit(array $params): void
     {
+        if ($this->redirectPunchOnlyToLanding()) {
+            return;
+        }
+
         $this->authorize('edit');
 
         $id = isset($params['id']) ? (int) $params['id'] : 0;
@@ -446,6 +587,10 @@ final class TimeTrackingController extends Controller
             $this->renderNotFound();
             return;
         }
+        if (!$this->canAccessEmployeeId((int) ($entry['employee_id'] ?? 0))) {
+            flash('error', 'You can only edit your own time entries.');
+            redirect('/time-tracking');
+        }
 
         $isActive = empty($entry['deleted_at']) && (int) ($entry['active'] ?? 1) === 1;
         if (!$isActive) {
@@ -454,11 +599,18 @@ final class TimeTrackingController extends Controller
         }
 
         $returnTo = $this->sanitizeReturnTo($_GET['return_to'] ?? null, isset($entry['job_id']) ? (int) $entry['job_id'] : null);
+        $employees = TimeEntry::employees();
+        if ($this->isSelfScopedRole()) {
+            $selfEmployeeId = $this->selfScopedEmployeeId();
+            if ($selfEmployeeId !== null) {
+                $employees = $this->filterEmployeesById($employees, $selfEmployeeId);
+            }
+        }
 
         $this->render('time_tracking/edit', [
             'pageTitle' => 'Edit Time Entry',
             'entry' => $entry,
-            'employees' => TimeEntry::employees(),
+            'employees' => $employees,
             'jobs' => TimeEntry::jobs(),
             'returnTo' => $returnTo,
             'formAction' => '/time-tracking/' . $id . '/edit',
@@ -474,6 +626,10 @@ final class TimeTrackingController extends Controller
 
     public function update(array $params): void
     {
+        if ($this->redirectPunchOnlyToLanding()) {
+            return;
+        }
+
         $this->authorize('edit');
 
         $id = isset($params['id']) ? (int) $params['id'] : 0;
@@ -485,6 +641,10 @@ final class TimeTrackingController extends Controller
         if (!$existing) {
             $this->renderNotFound();
             return;
+        }
+        if (!$this->canAccessEmployeeId((int) ($existing['employee_id'] ?? 0))) {
+            flash('error', 'You can only edit your own time entries.');
+            redirect('/time-tracking');
         }
 
         if (!verify_csrf($_POST['csrf_token'] ?? null)) {
@@ -499,6 +659,13 @@ final class TimeTrackingController extends Controller
         }
 
         $employees = TimeEntry::employees();
+        if ($this->isSelfScopedRole()) {
+            $selfEmployeeId = $this->selfScopedEmployeeId();
+            if ($selfEmployeeId !== null) {
+                $employees = $this->filterEmployeesById($employees, $selfEmployeeId);
+                $_POST['employee_id'] = (string) $selfEmployeeId;
+            }
+        }
         $jobs = TimeEntry::jobs();
         $data = $this->collectFormData($_POST, $employees, $jobs, 'save');
         $errors = $data['errors'];
@@ -560,6 +727,10 @@ final class TimeTrackingController extends Controller
             $this->renderNotFound();
             return;
         }
+        if (!$this->canAccessEmployeeId((int) ($entry['employee_id'] ?? 0))) {
+            flash('error', 'You can only punch out your own open entries.');
+            redirect($this->sanitizeReturnTo($_POST['return_to'] ?? null));
+        }
 
         $returnTo = $this->sanitizeReturnTo($_POST['return_to'] ?? null, isset($entry['job_id']) ? (int) $entry['job_id'] : null);
 
@@ -582,6 +753,7 @@ final class TimeTrackingController extends Controller
             (string) ($entry['work_date'] ?? date('Y-m-d')),
             (string) ($entry['start_time'] ?? date('H:i:s'))
         );
+        $geo = request_geo_payload($_POST);
         $payRate = isset($entry['pay_rate']) && $entry['pay_rate'] !== null
             ? (float) $entry['pay_rate']
             : (TimeEntry::employeeRate((int) ($entry['employee_id'] ?? 0)) ?? 0.0);
@@ -592,6 +764,11 @@ final class TimeTrackingController extends Controller
             'minutes_worked' => $minutesWorked,
             'pay_rate' => $payRate,
             'total_paid' => $totalPaid,
+            'punch_out_lat' => $geo['lat'],
+            'punch_out_lng' => $geo['lng'],
+            'punch_out_accuracy_m' => $geo['accuracy'],
+            'punch_out_source' => $geo['source'],
+            'punch_out_captured_at' => $geo['captured_at'],
         ], auth_user_id());
 
         $jobId = isset($entry['job_id']) ? (int) $entry['job_id'] : 0;
@@ -613,6 +790,10 @@ final class TimeTrackingController extends Controller
 
     public function delete(array $params): void
     {
+        if ($this->redirectPunchOnlyToLanding()) {
+            return;
+        }
+
         $this->authorize('delete');
 
         $id = isset($params['id']) ? (int) $params['id'] : 0;
@@ -624,6 +805,10 @@ final class TimeTrackingController extends Controller
         if (!$entry) {
             $this->renderNotFound();
             return;
+        }
+        if (!$this->canAccessEmployeeId((int) ($entry['employee_id'] ?? 0))) {
+            flash('error', 'You can only delete your own time entries.');
+            redirect('/time-tracking');
         }
 
         if (!verify_csrf($_POST['csrf_token'] ?? null)) {
@@ -661,8 +846,20 @@ final class TimeTrackingController extends Controller
         $this->authorize('view');
 
         $term = trim((string) ($_GET['q'] ?? ''));
+        $results = TimeEntry::lookupEmployees($term);
+        if ($this->isSelfScopedRole()) {
+            $selfEmployeeId = $this->selfScopedEmployeeId();
+            if ($selfEmployeeId === null) {
+                $results = [];
+            } else {
+                $results = array_values(array_filter(
+                    $results,
+                    static fn (array $row): bool => (int) ($row['id'] ?? 0) === $selfEmployeeId
+                ));
+            }
+        }
         header('Content-Type: application/json; charset=utf-8');
-        echo json_encode(TimeEntry::lookupEmployees($term));
+        echo json_encode($results);
     }
 
     public function jobLookup(): void
@@ -678,13 +875,21 @@ final class TimeTrackingController extends Controller
     {
         $raw = trim((string) ($value ?? ''));
         if ($raw !== '') {
-            if (preg_match('#^/jobs/[0-9]+$#', $raw) || preg_match('#^/time-tracking(?:/.*)?$#', $raw)) {
+            if (
+                preg_match('#^/jobs/[0-9]+$#', $raw)
+                || preg_match('#^/time-tracking(?:/.*)?$#', $raw)
+                || preg_match('#^/punch-clock(?:/.*)?$#', $raw)
+            ) {
                 return $raw;
             }
         }
 
         if ($jobId !== null && $jobId > 0) {
             return '/jobs/' . $jobId;
+        }
+
+        if (is_punch_only_role()) {
+            return '/punch-clock';
         }
 
         return '/time-tracking';
@@ -887,6 +1092,71 @@ final class TimeTrackingController extends Controller
     private function authorize(string $action): void
     {
         require_permission('time_tracking', $action);
+    }
+
+    private function isSelfScopedRole(): bool
+    {
+        $role = auth_user_role();
+        return $role === 0 || $role === 1;
+    }
+
+    private function selfScopedEmployeeId(): ?int
+    {
+        if (!$this->isSelfScopedRole()) {
+            return null;
+        }
+
+        if (!$this->selfScopedEmployeeResolved) {
+            $this->selfScopedEmployeeResolved = true;
+            $user = auth_user();
+            $this->selfScopedEmployee = is_array($user) ? Employee::findForUser($user) : null;
+        }
+
+        $id = isset($this->selfScopedEmployee['id']) ? (int) $this->selfScopedEmployee['id'] : 0;
+        return $id > 0 ? $id : null;
+    }
+
+    private function filterEmployeesById(array $employees, int $employeeId): array
+    {
+        foreach ($employees as $employee) {
+            if ((int) ($employee['id'] ?? 0) === $employeeId) {
+                return [$employee];
+            }
+        }
+
+        if ((int) ($this->selfScopedEmployee['id'] ?? 0) === $employeeId) {
+            return [[
+                'id' => $employeeId,
+                'name' => (string) ($this->selfScopedEmployee['name'] ?? ('Employee #' . $employeeId)),
+                'pay_rate' => $this->selfScopedEmployee['pay_rate'] ?? null,
+            ]];
+        }
+
+        return [];
+    }
+
+    private function canAccessEmployeeId(int $employeeId): bool
+    {
+        if (!$this->isSelfScopedRole()) {
+            return true;
+        }
+
+        $selfEmployeeId = $this->selfScopedEmployeeId();
+        return $selfEmployeeId !== null && $employeeId > 0 && $employeeId === $selfEmployeeId;
+    }
+
+    private function redirectPunchOnlyToLanding(bool $withMessage = true): bool
+    {
+        if (!is_punch_only_role()) {
+            return false;
+        }
+
+        if ($withMessage) {
+            flash('error', 'Punch-only users can only access Punch Clock.');
+        }
+
+        redirect('/punch-clock');
+        return true;
     }
 
     private function renderNotFound(): void

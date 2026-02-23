@@ -38,11 +38,17 @@ Use this checklist for each beta/live deployment.
 - Login success with and without remember-me.
 - Failed login lockout behavior after repeated bad attempts.
 - Logout works and redirects to login.
+- HTTP request redirects to HTTPS on live host.
 - User show page displays last login and failed login metadata.
+- Punch-only role:
+  - `/punch-clock` shows only self punch in/out + last 30-day log.
+  - Punch in and punch out both save correctly.
 - Admin:
   - Audit filters + CSV export
+  - User activity log filters (search + action type + date range)
   - System Health statuses
   - Permissions/settings pages load
+- Self-scoped users cannot open records they do not own via direct URL.
 - Dashboard loads without PHP errors.
 
 ## 5) Post-Deploy

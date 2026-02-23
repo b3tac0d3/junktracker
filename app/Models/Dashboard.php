@@ -77,32 +77,44 @@ final class Dashboard
     private static function counts(string $today): array
     {
         return self::safe(static function () use ($today): array {
+            $businessId = self::currentBusinessId();
+            $prospectBusinessFilter = Schema::hasColumn('prospects', 'business_id')
+                ? ' AND p.business_id = :business_id'
+                : '';
+            $jobBusinessFilter = Schema::hasColumn('jobs', 'business_id')
+                ? ' AND j.business_id = :business_id'
+                : '';
+
             $sql = 'SELECT
                         (SELECT COUNT(*)
                          FROM prospects p
                          WHERE p.deleted_at IS NULL
                            AND COALESCE(p.active, 1) = 1
-                           AND p.status = \'active\') AS prospects_active,
+                           AND p.status = \'active\'' . $prospectBusinessFilter . ') AS prospects_active,
                         (SELECT COUNT(*)
                          FROM prospects p
                          WHERE p.deleted_at IS NULL
                            AND COALESCE(p.active, 1) = 1
                            AND p.status = \'active\'
                            AND p.follow_up_on IS NOT NULL
-                           AND DATE(p.follow_up_on) <= :today) AS prospects_follow_up_due,
+                           AND DATE(p.follow_up_on) <= :today' . $prospectBusinessFilter . ') AS prospects_follow_up_due,
                         (SELECT COUNT(*)
                          FROM jobs j
                          WHERE j.deleted_at IS NULL
                            AND COALESCE(j.active, 1) = 1
-                           AND j.job_status = \'pending\') AS jobs_pending,
+                           AND j.job_status = \'pending\'' . $jobBusinessFilter . ') AS jobs_pending,
                         (SELECT COUNT(*)
                          FROM jobs j
                          WHERE j.deleted_at IS NULL
                            AND COALESCE(j.active, 1) = 1
-                           AND j.job_status = \'active\') AS jobs_active';
+                           AND j.job_status = \'active\'' . $jobBusinessFilter . ') AS jobs_active';
 
             $stmt = Database::connection()->prepare($sql);
-            $stmt->execute(['today' => $today]);
+            $params = ['today' => $today];
+            if ($prospectBusinessFilter !== '' || $jobBusinessFilter !== '') {
+                $params['business_id'] = $businessId;
+            }
+            $stmt->execute($params);
 
             $row = $stmt->fetch();
             return $row ?: [];
@@ -117,6 +129,9 @@ final class Dashboard
     private static function salesSummary(string $mtdStart, string $ytdStart, string $today): array
     {
         return self::safe(static function () use ($mtdStart, $ytdStart, $today): array {
+            $businessFilter = Schema::hasColumn('sales', 'business_id')
+                ? ' AND s.business_id = :business_id'
+                : '';
             $sql = 'SELECT
                         COALESCE(SUM(
                             CASE
@@ -148,14 +163,18 @@ final class Dashboard
                         ), 0) AS net_ytd
                     FROM sales s
                     WHERE s.deleted_at IS NULL
-                      AND COALESCE(s.active, 1) = 1';
+                      AND COALESCE(s.active, 1) = 1' . $businessFilter;
 
             $stmt = Database::connection()->prepare($sql);
-            $stmt->execute([
+            $params = [
                 'mtd_start' => $mtdStart,
                 'ytd_start' => $ytdStart,
                 'today' => $today,
-            ]);
+            ];
+            if ($businessFilter !== '') {
+                $params['business_id'] = self::currentBusinessId();
+            }
+            $stmt->execute($params);
 
             $row = $stmt->fetch();
             return $row ?: [];
@@ -170,6 +189,9 @@ final class Dashboard
     private static function jobsGrossSummary(string $mtdStart, string $ytdStart, string $today): array
     {
         return self::safe(static function () use ($mtdStart, $ytdStart, $today): array {
+            $businessFilter = Schema::hasColumn('jobs', 'business_id')
+                ? ' AND j.business_id = :business_id'
+                : '';
             $sql = 'SELECT
                         COALESCE(SUM(
                             CASE
@@ -187,14 +209,18 @@ final class Dashboard
                         ), 0) AS gross_ytd
                     FROM jobs j
                     WHERE j.deleted_at IS NULL
-                      AND COALESCE(j.active, 1) = 1';
+                      AND COALESCE(j.active, 1) = 1' . $businessFilter;
 
             $stmt = Database::connection()->prepare($sql);
-            $stmt->execute([
+            $params = [
                 'mtd_start' => $mtdStart,
                 'ytd_start' => $ytdStart,
                 'today' => $today,
-            ]);
+            ];
+            if ($businessFilter !== '') {
+                $params['business_id'] = self::currentBusinessId();
+            }
+            $stmt->execute($params);
 
             $row = $stmt->fetch();
             return $row ?: [];
@@ -207,6 +233,9 @@ final class Dashboard
     private static function expenseSummary(string $mtdStart, string $ytdStart, string $today): array
     {
         return self::safe(static function () use ($mtdStart, $ytdStart, $today): array {
+            $businessFilter = Schema::hasColumn('expenses', 'business_id')
+                ? ' AND e.business_id = :business_id'
+                : '';
             $sql = 'SELECT
                         COALESCE(SUM(
                             CASE
@@ -224,14 +253,18 @@ final class Dashboard
                         ), 0) AS ytd
                     FROM expenses e
                     WHERE e.deleted_at IS NULL
-                      AND COALESCE(e.is_active, 1) = 1';
+                      AND COALESCE(e.is_active, 1) = 1' . $businessFilter;
 
             $stmt = Database::connection()->prepare($sql);
-            $stmt->execute([
+            $params = [
                 'mtd_start' => $mtdStart,
                 'ytd_start' => $ytdStart,
                 'today' => $today,
-            ]);
+            ];
+            if ($businessFilter !== '') {
+                $params['business_id'] = self::currentBusinessId();
+            }
+            $stmt->execute($params);
 
             $row = $stmt->fetch();
             return $row ?: [];
@@ -244,11 +277,12 @@ final class Dashboard
     private static function onClockSummary(): array
     {
         return self::safe(static function (): array {
-            $entries = TimeEntry::openEntries([]);
+            $filters = ['business_id' => self::currentBusinessId()];
+            $entries = TimeEntry::openEntries($filters);
             usort($entries, static fn (array $a, array $b): int => (int) ($b['open_minutes'] ?? 0) <=> (int) ($a['open_minutes'] ?? 0));
 
             return [
-                'summary' => TimeEntry::openSummary([]),
+                'summary' => TimeEntry::openSummary($filters),
                 'entries' => array_slice($entries, 0, 10),
             ];
         }, [
@@ -287,6 +321,8 @@ final class Dashboard
     {
         return self::safe(static function () use ($overdueLimit, $upcomingLimit): array {
             $fetch = static function (bool $overdue, int $limit): array {
+                $businessScoped = Schema::hasColumn('todos', 'business_id');
+                $businessId = self::currentBusinessId();
                 $sql = 'SELECT t.id,
                                t.title,
                                t.link_type,
@@ -301,11 +337,17 @@ final class Dashboard
                         WHERE t.deleted_at IS NULL
                           AND t.status IN (\'open\', \'in_progress\')
                           AND t.due_at IS NOT NULL
+                          ' . ($businessScoped ? 'AND t.business_id = :business_id' : '') . '
                           AND ' . ($overdue ? 't.due_at < NOW()' : 't.due_at >= NOW()') . '
                         ORDER BY t.due_at ASC, t.importance DESC, t.id DESC
                         LIMIT ' . max(1, min($limit, 25));
 
-                $stmt = Database::connection()->query($sql);
+                $stmt = Database::connection()->prepare($sql);
+                $params = [];
+                if ($businessScoped) {
+                    $params['business_id'] = $businessId;
+                }
+                $stmt->execute($params);
                 $rows = $stmt->fetchAll();
 
                 foreach ($rows as &$row) {
@@ -333,6 +375,9 @@ final class Dashboard
     private static function upcomingProspects(int $limit): array
     {
         return self::safe(static function () use ($limit): array {
+            $businessFilter = Schema::hasColumn('prospects', 'business_id')
+                ? ' AND p.business_id = :business_id'
+                : '';
             $sql = 'SELECT p.id,
                            p.follow_up_on,
                            p.next_step,
@@ -347,7 +392,7 @@ final class Dashboard
                     LEFT JOIN clients c ON c.id = p.client_id
                     WHERE p.deleted_at IS NULL
                       AND COALESCE(p.active, 1) = 1
-                      AND p.status = \'active\'
+                      AND p.status = \'active\'' . $businessFilter . '
                     ORDER BY
                       CASE WHEN p.follow_up_on IS NULL THEN 1 ELSE 0 END ASC,
                       p.follow_up_on ASC,
@@ -355,7 +400,12 @@ final class Dashboard
                       p.id DESC
                     LIMIT ' . max(1, min($limit, 50));
 
-            $stmt = Database::connection()->query($sql);
+            $stmt = Database::connection()->prepare($sql);
+            $params = [];
+            if ($businessFilter !== '') {
+                $params['business_id'] = self::currentBusinessId();
+            }
+            $stmt->execute($params);
             return $stmt->fetchAll();
         }, []);
     }
@@ -363,6 +413,9 @@ final class Dashboard
     private static function jobsByStatus(string $status, int $limit): array
     {
         return self::safe(static function () use ($status, $limit): array {
+            $businessFilter = Schema::hasColumn('jobs', 'business_id')
+                ? ' AND j.business_id = :business_id'
+                : '';
             $sql = 'SELECT j.id,
                            j.name,
                            j.city,
@@ -379,7 +432,7 @@ final class Dashboard
                     LEFT JOIN clients c ON c.id = j.client_id
                     WHERE j.deleted_at IS NULL
                       AND COALESCE(j.active, 1) = 1
-                      AND j.job_status = :status
+                      AND j.job_status = :status' . $businessFilter . '
                     ORDER BY
                       CASE WHEN j.scheduled_date IS NULL THEN 1 ELSE 0 END ASC,
                       j.scheduled_date ASC,
@@ -387,7 +440,11 @@ final class Dashboard
                     LIMIT ' . max(1, min($limit, 50));
 
             $stmt = Database::connection()->prepare($sql);
-            $stmt->execute(['status' => $status]);
+            $params = ['status' => $status];
+            if ($businessFilter !== '') {
+                $params['business_id'] = self::currentBusinessId();
+            }
+            $stmt->execute($params);
             return $stmt->fetchAll();
         }, []);
     }
@@ -398,6 +455,9 @@ final class Dashboard
             Consignor::ensureSchema();
 
             $capped = max(1, min($limit, 25));
+            $businessFilter = Schema::hasColumn('consignors', 'business_id')
+                ? ' AND c.business_id = :business_id'
+                : '';
             $sql = 'SELECT c.id,
                            c.consignor_number,
                            c.first_name,
@@ -408,11 +468,17 @@ final class Dashboard
                     FROM consignors c
                     WHERE c.deleted_at IS NULL
                       AND COALESCE(c.active, 1) = 1
-                      AND c.next_payment_due_date IS NOT NULL
+                      AND c.next_payment_due_date IS NOT NULL' . $businessFilter . '
                     ORDER BY c.next_payment_due_date ASC, c.id DESC
                     LIMIT ' . $capped;
 
-            $rows = Database::connection()->query($sql)->fetchAll();
+            $stmt = Database::connection()->prepare($sql);
+            $params = [];
+            if ($businessFilter !== '') {
+                $params['business_id'] = self::currentBusinessId();
+            }
+            $stmt->execute($params);
+            $rows = $stmt->fetchAll();
 
             $countSql = 'SELECT
                             COALESCE(SUM(CASE WHEN c.next_payment_due_date <= CURDATE() THEN 1 ELSE 0 END), 0) AS due_now_count,
@@ -420,8 +486,14 @@ final class Dashboard
                          FROM consignors c
                          WHERE c.deleted_at IS NULL
                            AND COALESCE(c.active, 1) = 1
-                           AND c.next_payment_due_date IS NOT NULL';
-            $summary = Database::connection()->query($countSql)->fetch();
+                           AND c.next_payment_due_date IS NOT NULL' . $businessFilter;
+            $countStmt = Database::connection()->prepare($countSql);
+            $countParams = [];
+            if ($businessFilter !== '') {
+                $countParams['business_id'] = self::currentBusinessId();
+            }
+            $countStmt->execute($countParams);
+            $summary = $countStmt->fetch();
 
             return [
                 'rows' => $rows,
@@ -437,6 +509,9 @@ final class Dashboard
     {
         return self::safe(static function () use ($limit): array {
             $capped = max(1, min($limit, 25));
+            $businessFilter = Schema::hasColumn('jobs', 'business_id')
+                ? ' AND j.business_id = :business_id'
+                : '';
             $sql = 'SELECT j.id,
                            j.name,
                            j.updated_at,
@@ -454,6 +529,7 @@ final class Dashboard
                     WHERE j.deleted_at IS NULL
                       AND COALESCE(j.active, 1) = 1
                       AND j.job_status = \'complete\'
+                      ' . $businessFilter . '
                       AND (
                            j.billed_date IS NULL
                            OR COALESCE(j.total_billed, 0) <= 0
@@ -461,17 +537,30 @@ final class Dashboard
                     ORDER BY COALESCE(j.updated_at, j.end_date, j.scheduled_date, j.created_at) DESC, j.id DESC
                     LIMIT ' . $capped;
 
-            $rows = Database::connection()->query($sql)->fetchAll();
+            $stmt = Database::connection()->prepare($sql);
+            $params = [];
+            if ($businessFilter !== '') {
+                $params['business_id'] = self::currentBusinessId();
+            }
+            $stmt->execute($params);
+            $rows = $stmt->fetchAll();
             $summarySql = 'SELECT COUNT(*) AS count_total
                            FROM jobs j
                            WHERE j.deleted_at IS NULL
                              AND COALESCE(j.active, 1) = 1
                              AND j.job_status = \'complete\'
+                             ' . $businessFilter . '
                              AND (
                                   j.billed_date IS NULL
                                   OR COALESCE(j.total_billed, 0) <= 0
                              )';
-            $summary = Database::connection()->query($summarySql)->fetch();
+            $summaryStmt = Database::connection()->prepare($summarySql);
+            $summaryParams = [];
+            if ($businessFilter !== '') {
+                $summaryParams['business_id'] = self::currentBusinessId();
+            }
+            $summaryStmt->execute($summaryParams);
+            $summary = $summaryStmt->fetch();
 
             return [
                 'rows' => $rows,
@@ -596,6 +685,15 @@ final class Dashboard
         } catch (\Throwable) {
             // Snapshot persistence should not affect dashboard rendering.
         }
+    }
+
+    private static function currentBusinessId(): int
+    {
+        if (function_exists('current_business_id')) {
+            return max(1, (int) current_business_id());
+        }
+
+        return max(1, (int) config('app.default_business_id', 1));
     }
 
     private static function safe(callable $callback, array $fallback): array

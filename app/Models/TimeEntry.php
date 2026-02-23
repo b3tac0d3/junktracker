@@ -61,6 +61,9 @@ final class TimeEntry
                        e.start_time,
                        e.pay_rate,
                        e.note,
+                       e.punch_in_lat,
+                       e.punch_in_lng,
+                       e.punch_in_accuracy_m,
                        COALESCE(NULLIF(TRIM(CONCAT_WS(\' \', emp.first_name, emp.last_name)), \'\'), CONCAT(\'Employee #\', emp.id)) AS employee_name,
                        CASE
                            WHEN COALESCE(e.job_id, 0) = 0 THEN \'Non-Job Time\'
@@ -345,6 +348,29 @@ final class TimeEntry
             'note' => $data['note'],
         ];
 
+        if (Schema::hasColumn('employee_time_entries', 'business_id')) {
+            $columns[] = 'business_id';
+            $values[] = ':business_id';
+            $params['business_id'] = self::currentBusinessId();
+        }
+
+        $optionalCreateColumns = [
+            'punch_in_lat',
+            'punch_in_lng',
+            'punch_in_accuracy_m',
+            'punch_in_source',
+            'punch_in_captured_at',
+        ];
+        foreach ($optionalCreateColumns as $column) {
+            if (!Schema::hasColumn('employee_time_entries', $column) || !array_key_exists($column, $data)) {
+                continue;
+            }
+
+            $columns[] = $column;
+            $values[] = ':' . $column;
+            $params[$column] = $data[$column];
+        }
+
         if ($actorId !== null && Schema::hasColumn('employee_time_entries', 'created_by')) {
             $columns[] = 'created_by';
             $values[] = ':created_by';
@@ -385,6 +411,16 @@ final class TimeEntry
                        e.pay_rate,
                        e.total_paid,
                        e.note,
+                       e.punch_in_lat,
+                       e.punch_in_lng,
+                       e.punch_in_accuracy_m,
+                       e.punch_in_source,
+                       e.punch_in_captured_at,
+                       e.punch_out_lat,
+                       e.punch_out_lng,
+                       e.punch_out_accuracy_m,
+                       e.punch_out_source,
+                       e.punch_out_captured_at,
                        e.active,
                        e.deleted_at,
                        e.created_at,
@@ -666,6 +702,22 @@ final class TimeEntry
             $params['note'] = $data['note'];
         }
 
+        $optionalPunchOutColumns = [
+            'punch_out_lat',
+            'punch_out_lng',
+            'punch_out_accuracy_m',
+            'punch_out_source',
+            'punch_out_captured_at',
+        ];
+        foreach ($optionalPunchOutColumns as $column) {
+            if (!Schema::hasColumn('employee_time_entries', $column) || !array_key_exists($column, $data)) {
+                continue;
+            }
+
+            $sets[] = $column . ' = :' . $column;
+            $params[$column] = $data[$column];
+        }
+
         if ($actorId !== null && Schema::hasColumn('employee_time_entries', 'updated_by')) {
             $sets[] = 'updated_by = :updated_by';
             $params['updated_by'] = $actorId;
@@ -815,12 +867,21 @@ final class TimeEntry
     {
         $where = [];
         $params = [];
+        $businessId = isset($filters['business_id']) ? (int) $filters['business_id'] : self::currentBusinessId();
+        if ($businessId <= 0) {
+            $businessId = self::currentBusinessId();
+        }
 
         $recordStatus = (string) ($filters['record_status'] ?? 'active');
         if ($recordStatus === 'active') {
             $where[] = '(e.deleted_at IS NULL AND COALESCE(e.active, 1) = 1)';
         } elseif ($recordStatus === 'deleted') {
             $where[] = '(e.deleted_at IS NOT NULL OR COALESCE(e.active, 1) = 0)';
+        }
+
+        if (Schema::hasColumn('employee_time_entries', 'business_id')) {
+            $where[] = 'e.business_id = :business_id_scope';
+            $params['business_id_scope'] = $businessId;
         }
 
         $query = trim((string) ($filters['q'] ?? ''));
@@ -879,6 +940,15 @@ final class TimeEntry
             'e.end_time IS NULL',
         ];
         $params = [];
+        $businessId = isset($filters['business_id']) ? (int) $filters['business_id'] : self::currentBusinessId();
+        if ($businessId <= 0) {
+            $businessId = self::currentBusinessId();
+        }
+
+        if (Schema::hasColumn('employee_time_entries', 'business_id')) {
+            $where[] = 'e.business_id = :business_id_scope';
+            $params['business_id_scope'] = $businessId;
+        }
 
         $query = trim((string) ($filters['q'] ?? ''));
         if ($query !== '') {
@@ -915,6 +985,15 @@ final class TimeEntry
         return 'COALESCE(' . $alias . '.total_paid, ROUND(COALESCE(' . $alias . '.pay_rate, 0) * COALESCE(' . $alias . '.minutes_worked, 0) / 60, 2), 0)';
     }
 
+    private static function currentBusinessId(): int
+    {
+        if (function_exists('current_business_id')) {
+            return max(1, (int) current_business_id());
+        }
+
+        return max(1, (int) config('app.default_business_id', 1));
+    }
+
     private static function ensureTable(): void
     {
         static $ensured = false;
@@ -934,6 +1013,16 @@ final class TimeEntry
                 pay_rate DECIMAL(12,2) UNSIGNED NULL,
                 total_paid DECIMAL(12,2) UNSIGNED NULL,
                 note TEXT NULL,
+                punch_in_lat DECIMAL(10,7) NULL,
+                punch_in_lng DECIMAL(10,7) NULL,
+                punch_in_accuracy_m DECIMAL(10,2) NULL,
+                punch_in_source VARCHAR(32) NULL,
+                punch_in_captured_at DATETIME NULL,
+                punch_out_lat DECIMAL(10,7) NULL,
+                punch_out_lng DECIMAL(10,7) NULL,
+                punch_out_accuracy_m DECIMAL(10,2) NULL,
+                punch_out_source VARCHAR(32) NULL,
+                punch_out_captured_at DATETIME NULL,
                 active TINYINT(1) NOT NULL DEFAULT 1,
                 deleted_at DATETIME NULL,
                 created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -945,6 +1034,7 @@ final class TimeEntry
         );
 
         self::ensureNullableJobId();
+        self::ensureGeoColumns();
         $ensured = true;
     }
 
@@ -964,6 +1054,40 @@ final class TimeEntry
             Database::connection()->exec('ALTER TABLE employee_time_entries MODIFY job_id BIGINT UNSIGNED NULL');
         } catch (Throwable) {
             // Keep runtime resilient when table is managed externally.
+        }
+    }
+
+    private static function ensureGeoColumns(): void
+    {
+        static $checked = false;
+        if ($checked) {
+            return;
+        }
+        $checked = true;
+
+        $columnDefinitions = [
+            'punch_in_lat' => 'DECIMAL(10,7) NULL',
+            'punch_in_lng' => 'DECIMAL(10,7) NULL',
+            'punch_in_accuracy_m' => 'DECIMAL(10,2) NULL',
+            'punch_in_source' => 'VARCHAR(32) NULL',
+            'punch_in_captured_at' => 'DATETIME NULL',
+            'punch_out_lat' => 'DECIMAL(10,7) NULL',
+            'punch_out_lng' => 'DECIMAL(10,7) NULL',
+            'punch_out_accuracy_m' => 'DECIMAL(10,2) NULL',
+            'punch_out_source' => 'VARCHAR(32) NULL',
+            'punch_out_captured_at' => 'DATETIME NULL',
+        ];
+
+        foreach ($columnDefinitions as $column => $definition) {
+            if (Schema::hasColumn('employee_time_entries', $column)) {
+                continue;
+            }
+
+            try {
+                Database::connection()->exec('ALTER TABLE employee_time_entries ADD COLUMN ' . $column . ' ' . $definition);
+            } catch (Throwable) {
+                // Runtime compatibility fallback when schema changes are externally managed.
+            }
         }
     }
 }

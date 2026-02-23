@@ -641,8 +641,9 @@
                                                     </form>
                                                 <?php endif; ?>
                                                 <?php if ($currentOpen): ?>
-                                                    <form class="d-inline js-job-punch-form" method="post" action="<?= url('/jobs/' . ($job['id'] ?? '') . '/time/punch-out') ?>">
+                                                    <form class="d-inline js-job-punch-form js-punch-geo-form" method="post" action="<?= url('/jobs/' . ($job['id'] ?? '') . '/time/punch-out') ?>">
                                                         <?= csrf_field() ?>
+                                                        <?= geo_capture_fields('job_view_punch_out') ?>
                                                         <input type="hidden" name="time_entry_id" value="<?= e((string) ($currentOpen['id'] ?? '')) ?>" />
                                                         <button class="btn btn-sm btn-danger" type="submit">
                                                             <i class="fas fa-stop-circle me-1"></i>
@@ -655,8 +656,9 @@
                                                         Busy
                                                     </button>
                                                 <?php else: ?>
-                                                    <form class="d-inline js-job-punch-form" method="post" action="<?= url('/jobs/' . ($job['id'] ?? '') . '/time/punch-in') ?>">
+                                                    <form class="d-inline js-job-punch-form js-punch-geo-form" method="post" action="<?= url('/jobs/' . ($job['id'] ?? '') . '/time/punch-in') ?>">
                                                         <?= csrf_field() ?>
+                                                        <?= geo_capture_fields('job_view_punch_in') ?>
                                                         <input type="hidden" name="employee_id" value="<?= e((string) $employeeId) ?>" />
                                                         <button class="btn btn-sm btn-success" type="submit">
                                                             <i class="fas fa-play-circle me-1"></i>

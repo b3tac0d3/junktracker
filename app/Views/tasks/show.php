@@ -17,6 +17,20 @@
         $importance === 3 => 'bg-info text-dark',
         default => 'bg-secondary',
     };
+    $assignmentStatus = strtolower((string) ($task['assignment_status'] ?? 'unassigned'));
+    $assignmentBadgeClass = match ($assignmentStatus) {
+        'pending' => 'bg-warning text-dark',
+        'accepted' => 'bg-success',
+        'declined' => 'bg-danger',
+        default => 'bg-secondary',
+    };
+    $assignmentLabel = match ($assignmentStatus) {
+        'pending' => 'Pending Response',
+        'accepted' => 'Accepted',
+        'declined' => 'Declined',
+        default => 'Unassigned',
+    };
+    $canRespondAssignment = !empty($canRespondAssignment);
 ?>
 <div class="container-fluid px-4">
     <div class="d-flex flex-wrap align-items-center justify-content-between mt-4 mb-3 gap-3">
@@ -29,6 +43,26 @@
             </ol>
         </div>
         <div class="d-flex gap-2 mobile-two-col-buttons">
+            <?php if ($isActive && $canRespondAssignment): ?>
+                <form method="post" action="<?= url('/tasks/' . ($task['id'] ?? '') . '/assignment/respond') ?>">
+                    <?= csrf_field() ?>
+                    <input type="hidden" name="return_to" value="<?= e($returnTo) ?>" />
+                    <input type="hidden" name="decision" value="accept" />
+                    <button class="btn btn-success" type="submit">
+                        <i class="fas fa-check me-1"></i>
+                        Accept
+                    </button>
+                </form>
+                <form method="post" action="<?= url('/tasks/' . ($task['id'] ?? '') . '/assignment/respond') ?>">
+                    <?= csrf_field() ?>
+                    <input type="hidden" name="return_to" value="<?= e($returnTo) ?>" />
+                    <input type="hidden" name="decision" value="decline" />
+                    <button class="btn btn-outline-danger" type="submit">
+                        <i class="fas fa-xmark me-1"></i>
+                        Decline
+                    </button>
+                </form>
+            <?php endif; ?>
             <?php if ($isActive): ?>
                 <form method="post" action="<?= url('/tasks/' . ($task['id'] ?? '') . '/toggle-complete') ?>">
                     <?= csrf_field() ?>
@@ -108,6 +142,10 @@
                     <div class="fw-semibold"><?= e((string) (($task['assigned_user_name'] ?? '') !== '' ? $task['assigned_user_name'] : 'Unassigned')) ?></div>
                 </div>
                 <div class="col-md-4">
+                    <div class="text-muted small">Assignment Status</div>
+                    <div class="fw-semibold"><span class="badge <?= e($assignmentBadgeClass) ?>"><?= e($assignmentLabel) ?></span></div>
+                </div>
+                <div class="col-md-4">
                     <div class="text-muted small">Due At</div>
                     <div class="fw-semibold"><?= e(format_datetime($task['due_at'] ?? null)) ?></div>
                 </div>
@@ -115,6 +153,24 @@
                     <div class="text-muted small">Completed At</div>
                     <div class="fw-semibold"><?= e(format_datetime($task['completed_at'] ?? null)) ?></div>
                 </div>
+                <div class="col-md-4">
+                    <div class="text-muted small">Assigned By</div>
+                    <div class="fw-semibold"><?= e((string) (($task['assignment_requested_by_name'] ?? '') !== '' ? $task['assignment_requested_by_name'] : '—')) ?></div>
+                </div>
+                <div class="col-md-4">
+                    <div class="text-muted small">Requested At</div>
+                    <div class="fw-semibold"><?= e(format_datetime($task['assignment_requested_at'] ?? null)) ?></div>
+                </div>
+                <div class="col-md-4">
+                    <div class="text-muted small">Responded At</div>
+                    <div class="fw-semibold"><?= e(format_datetime($task['assignment_responded_at'] ?? null)) ?></div>
+                </div>
+                <?php if (trim((string) ($task['assignment_note'] ?? '')) !== ''): ?>
+                    <div class="col-12">
+                        <div class="text-muted small">Assignment Note</div>
+                        <div class="fw-semibold"><?= e((string) ($task['assignment_note'] ?? '')) ?></div>
+                    </div>
+                <?php endif; ?>
 
                 <div class="col-md-3">
                     <div class="text-muted small">Link Type</div>

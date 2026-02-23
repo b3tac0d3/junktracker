@@ -7,6 +7,7 @@ namespace App\Controllers;
 use Core\Controller;
 use App\Models\Attachment;
 use App\Models\Client;
+use App\Models\Employee;
 use App\Models\ExpenseCategory;
 use App\Models\Job;
 use App\Models\JobDocument;
@@ -403,10 +404,19 @@ final class JobsController extends Controller
             return;
         }
 
-        $employeeId = $this->toIntOrNull($_POST['employee_id'] ?? null);
-        if ($employeeId === null || $employeeId <= 0) {
-            $this->respondActionError('Select a valid employee.', $this->jobCrewRedirectPath($jobId));
-            return;
+        $selfScopedEmployeeId = $this->selfScopedEmployeeId();
+        if ($this->isSelfScopedRole()) {
+            if ($selfScopedEmployeeId === null) {
+                $this->respondActionError('Your user is not linked to an active employee profile.', $this->jobCrewRedirectPath($jobId), 403);
+                return;
+            }
+            $employeeId = $selfScopedEmployeeId;
+        } else {
+            $employeeId = $this->toIntOrNull($_POST['employee_id'] ?? null);
+            if ($employeeId === null || $employeeId <= 0) {
+                $this->respondActionError('Select a valid employee.', $this->jobCrewRedirectPath($jobId));
+                return;
+            }
         }
 
         if (!Job::isCrewMember($jobId, $employeeId)) {
@@ -437,6 +447,7 @@ final class JobsController extends Controller
         $payRate = isset($employee['pay_rate']) && $employee['pay_rate'] !== null
             ? (float) $employee['pay_rate']
             : (TimeEntry::employeeRate($employeeId) ?? 0.0);
+        $geo = request_geo_payload($_POST);
 
         try {
             $entryId = TimeEntry::create([
@@ -448,6 +459,11 @@ final class JobsController extends Controller
                 'minutes_worked' => null,
                 'pay_rate' => $payRate,
                 'total_paid' => null,
+                'punch_in_lat' => $geo['lat'],
+                'punch_in_lng' => $geo['lng'],
+                'punch_in_accuracy_m' => $geo['accuracy'],
+                'punch_in_source' => $geo['source'],
+                'punch_in_captured_at' => $geo['captured_at'],
                 'note' => null,
             ], $this->actorId());
         } catch (\Throwable) {
@@ -509,11 +525,23 @@ final class JobsController extends Controller
             $this->respondActionError('This time entry is not available for punch out.', $this->jobCrewRedirectPath($jobId));
             return;
         }
+        if ($this->isSelfScopedRole()) {
+            $selfScopedEmployeeId = $this->selfScopedEmployeeId();
+            if ($selfScopedEmployeeId === null) {
+                $this->respondActionError('Your user is not linked to an active employee profile.', $this->jobCrewRedirectPath($jobId), 403);
+                return;
+            }
+            if ((int) ($entry['employee_id'] ?? 0) !== $selfScopedEmployeeId) {
+                $this->respondActionError('You can only punch yourself in or out.', $this->jobCrewRedirectPath($jobId), 403);
+                return;
+            }
+        }
 
         $minutesWorked = $this->calculateOpenMinutes(
             (string) ($entry['work_date'] ?? date('Y-m-d')),
             (string) ($entry['start_time'] ?? date('H:i:s'))
         );
+        $geo = request_geo_payload($_POST);
         $payRate = isset($entry['pay_rate']) && $entry['pay_rate'] !== null
             ? (float) $entry['pay_rate']
             : (TimeEntry::employeeRate((int) ($entry['employee_id'] ?? 0)) ?? 0.0);
@@ -525,6 +553,11 @@ final class JobsController extends Controller
                 'minutes_worked' => $minutesWorked,
                 'pay_rate' => $payRate,
                 'total_paid' => $totalPaid,
+                'punch_out_lat' => $geo['lat'],
+                'punch_out_lng' => $geo['lng'],
+                'punch_out_accuracy_m' => $geo['accuracy'],
+                'punch_out_source' => $geo['source'],
+                'punch_out_captured_at' => $geo['captured_at'],
             ], $this->actorId());
         } catch (\Throwable) {
             $this->respondActionError('Punch out failed on server. Please refresh and try again.', $this->jobCrewRedirectPath($jobId), 500);
@@ -601,6 +634,17 @@ final class JobsController extends Controller
 
         $term = trim((string) ($_GET['q'] ?? ''));
         $results = Job::searchCrewCandidates($jobId, $term);
+        if ($this->isSelfScopedRole()) {
+            $selfScopedEmployeeId = $this->selfScopedEmployeeId();
+            if ($selfScopedEmployeeId === null) {
+                $results = [];
+            } else {
+                $results = array_values(array_filter(
+                    $results,
+                    static fn (array $row): bool => (int) ($row['id'] ?? 0) === $selfScopedEmployeeId
+                ));
+            }
+        }
 
         header('Content-Type: application/json; charset=utf-8');
         echo json_encode($results);
@@ -618,10 +662,19 @@ final class JobsController extends Controller
             return;
         }
 
-        $employeeId = $this->toIntOrNull($_POST['employee_id'] ?? null);
-        if ($employeeId === null || $employeeId <= 0) {
-            flash('error', 'Select an employee to add.');
-            redirect($this->jobCrewRedirectPath($jobId));
+        $selfScopedEmployeeId = $this->selfScopedEmployeeId();
+        if ($this->isSelfScopedRole()) {
+            if ($selfScopedEmployeeId === null) {
+                flash('error', 'Your user is not linked to an active employee profile.');
+                redirect($this->jobCrewRedirectPath($jobId));
+            }
+            $employeeId = $selfScopedEmployeeId;
+        } else {
+            $employeeId = $this->toIntOrNull($_POST['employee_id'] ?? null);
+            if ($employeeId === null || $employeeId <= 0) {
+                flash('error', 'Select an employee to add.');
+                redirect($this->jobCrewRedirectPath($jobId));
+            }
         }
 
         $isAlreadyCrew = Job::isCrewMember($jobId, $employeeId);
@@ -676,6 +729,17 @@ final class JobsController extends Controller
         if ($employeeId <= 0) {
             flash('error', 'Invalid crew member.');
             redirect($this->jobCrewRedirectPath($jobId));
+        }
+        if ($this->isSelfScopedRole()) {
+            $selfScopedEmployeeId = $this->selfScopedEmployeeId();
+            if ($selfScopedEmployeeId === null) {
+                flash('error', 'Your user is not linked to an active employee profile.');
+                redirect($this->jobCrewRedirectPath($jobId));
+            }
+            if ($employeeId !== $selfScopedEmployeeId) {
+                flash('error', 'You can only remove yourself from crew.');
+                redirect($this->jobCrewRedirectPath($jobId));
+            }
         }
 
         if (TimeEntry::findOpenForEmployee($employeeId)) {
@@ -1516,6 +1580,28 @@ final class JobsController extends Controller
     private function actorId(): ?int
     {
         return auth_user_id();
+    }
+
+    private function isSelfScopedRole(): bool
+    {
+        $role = auth_user_role();
+        return $role === 0 || $role === 1;
+    }
+
+    private function selfScopedEmployeeId(): ?int
+    {
+        if (!$this->isSelfScopedRole()) {
+            return null;
+        }
+
+        $user = auth_user();
+        if (!is_array($user)) {
+            return null;
+        }
+
+        $employee = Employee::findForUser($user);
+        $id = isset($employee['id']) ? (int) $employee['id'] : 0;
+        return $id > 0 ? $id : null;
     }
 
     private function logJobAction(int $jobId, string $actionType, ?string $note = null, ?float $amount = null, ?string $refTable = null, ?int $refId = null): void

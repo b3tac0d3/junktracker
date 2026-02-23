@@ -26,6 +26,7 @@ final class AdminPanel
         $sessionDir = BASE_PATH . '/storage/sessions';
         $logsDir = BASE_PATH . '/storage/logs';
         $contractsDir = BASE_PATH . '/storage/consignor_contracts';
+        $photosDir = Attachment::storageRoot();
 
         return [
             'database' => self::dbConnected(),
@@ -40,6 +41,10 @@ final class AdminPanel
             'contracts_path' => [
                 'ok' => is_dir($contractsDir) && is_writable($contractsDir),
                 'path' => $contractsDir,
+            ],
+            'photos_path' => [
+                'ok' => is_dir($photosDir) && is_writable($photosDir),
+                'path' => $photosDir,
             ],
             'mail_mode' => setting('mail.mode', (string) config('mail.mode', 'log')),
             'mail_host' => setting('mail.host', (string) config('mail.host', '')),
@@ -57,7 +62,14 @@ final class AdminPanel
                     WHERE is_active = 1
                       AND password_setup_sent_at IS NOT NULL
                       AND password_setup_used_at IS NULL';
-            return (int) Database::connection()->query($sql)->fetchColumn();
+            $params = [];
+            if (Schema::hasColumn('users', 'business_id')) {
+                $sql .= ' AND business_id = :business_id';
+                $params['business_id'] = self::currentBusinessId();
+            }
+            $stmt = Database::connection()->prepare($sql);
+            $stmt->execute($params);
+            return (int) $stmt->fetchColumn();
         });
     }
 
@@ -72,7 +84,14 @@ final class AdminPanel
                       AND password_setup_used_at IS NULL
                       AND password_setup_expires_at IS NOT NULL
                       AND password_setup_expires_at < NOW()';
-            return (int) Database::connection()->query($sql)->fetchColumn();
+            $params = [];
+            if (Schema::hasColumn('users', 'business_id')) {
+                $sql .= ' AND business_id = :business_id';
+                $params['business_id'] = self::currentBusinessId();
+            }
+            $stmt = Database::connection()->prepare($sql);
+            $stmt->execute($params);
+            return (int) $stmt->fetchColumn();
         });
     }
 
@@ -85,7 +104,14 @@ final class AdminPanel
                       AND status IN (\'open\', \'in_progress\')
                       AND due_at IS NOT NULL
                       AND due_at < NOW()';
-            return (int) Database::connection()->query($sql)->fetchColumn();
+            $params = [];
+            if (Schema::hasColumn('todos', 'business_id')) {
+                $sql .= ' AND business_id = :business_id';
+                $params['business_id'] = self::currentBusinessId();
+            }
+            $stmt = Database::connection()->prepare($sql);
+            $stmt->execute($params);
+            return (int) $stmt->fetchColumn();
         });
     }
 
@@ -161,5 +187,14 @@ final class AdminPanel
         } catch (Throwable) {
             return 0;
         }
+    }
+
+    private static function currentBusinessId(): int
+    {
+        if (function_exists('current_business_id')) {
+            return max(1, (int) current_business_id());
+        }
+
+        return max(1, (int) config('app.default_business_id', 1));
     }
 }

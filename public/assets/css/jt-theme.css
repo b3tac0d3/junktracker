@@ -1,0 +1,198 @@
+:root {
+    --jt-bg: #f4f5f7;
+    --jt-surface: #ffffff;
+    --jt-primary: #2563eb;
+    --jt-primary-soft: #dbeafe;
+    --jt-accent: #14b8a6;
+    --jt-border-subtle: #e5e7eb;
+    --jt-text-main: #111827;
+    --jt-text-muted: #6b7280;
+}
+
+body {
+    background-color: var(--jt-bg);
+    color: var(--jt-text-main);
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, .h1, .h2, .h3 {
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--jt-text-main);
+}
+
+.sb-topnav.navbar-dark {
+    background-color: #020617 !important;
+}
+
+.sb-topnav .navbar-brand {
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    font-size: 1.15rem;
+}
+
+.sb-sidenav {
+    background-color: #020617;
+}
+
+.sb-sidenav .nav-link {
+    color: var(--jt-text-muted);
+    padding: 0.65rem 1.1rem;
+    font-size: 0.88rem;
+    transition: color 0.15s ease;
+    border-left: 3px solid transparent;
+}
+
+.sb-sidenav .nav-link i {
+    width: 1.25rem;
+    text-align: center;
+    margin-right: 0.65rem;
+}
+
+.sb-sidenav .nav-link.active {
+    color: #f9fafb;
+    background-color: rgba(37, 99, 235, 0.12);
+    border-left-color: var(--jt-primary);
+}
+
+.sb-sidenav .nav-link:hover {
+    color: #f9fafb;
+}
+
+.sb-sidenav-menu-heading {
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #4b5563;
+    padding-top: 1.5rem;
+    padding-bottom: 0.5rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+    margin-top: 0.5rem;
+}
+
+.sb-sidenav-menu-heading:first-of-type {
+    border-top: none;
+    margin-top: 0;
+}
+
+.btn-primary {
+    background-color: var(--jt-primary);
+    border-color: var(--jt-primary);
+    font-weight: 500;
+}
+
+.btn-primary:hover {
+    background-color: #1d4ed8;
+    border-color: #1d4ed8;
+}
+
+.card {
+    border-radius: 0.75rem;
+    border-color: var(--jt-border-subtle);
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+    overflow: hidden;
+}
+
+.card-header {
+    background-color: #f9fafb;
+    border-bottom: 1px solid var(--jt-border-subtle);
+    padding: 0.85rem 1.25rem;
+    font-weight: 600;
+}
+
+.table thead th {
+    background-color: #f9fafb;
+    color: var(--jt-text-muted);
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    border-top: none;
+    padding: 0.75rem 1.25rem;
+}
+
+.table tbody td {
+    padding: 0.75rem 1.25rem;
+    vertical-align: middle;
+}
+
+.table-hover tbody tr:hover {
+    background-color: rgba(37, 99, 235, 0.03);
+}
+
+/* JT Custom components */
+.jt-filter-card .card-header {
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+}
+
+.jt-filter-card .card-header:hover {
+    background-color: #f3f4f6;
+}
+
+.jt-filter-chevron {
+    transition: transform 0.25s ease;
+}
+
+.jt-filter-card .card-header[aria-expanded="true"] .jt-filter-chevron {
+    transform: rotate(180deg);
+}
+
+.text-end-numeric {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+/* Empty states */
+.jt-empty-state {
+    padding: 3.5rem 1.5rem;
+    text-align: center;
+}
+
+.jt-empty-state i {
+    color: var(--jt-border-subtle);
+    margin-bottom: 1rem;
+}
+
+.jt-empty-state h4 {
+    color: var(--jt-text-main);
+    margin-bottom: 0.5rem;
+}
+
+.jt-empty-state p {
+    color: var(--jt-text-muted);
+    max-width: 320px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+/* Smoother focus rings */
+.form-control:focus, .form-select:focus {
+    border-color: var(--jt-primary);
+    box-shadow: 0 0 0 0.2rem rgba(37, 99, 235, 0.15);
+}
+
+/* Card List Mobile Component (Extended) */
+.card-list-item {
+    border: 1px solid var(--jt-border-subtle);
+    border-radius: 0.75rem;
+    transition: box-shadow 0.15s ease;
+}
+
+.card-list-item:hover {
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+}
+
+.card-list-field-label {
+    font-size: 0.65rem;
+    font-weight: 700;
+    color: var(--jt-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.card-list-field-value {
+    font-weight: 500;
+}

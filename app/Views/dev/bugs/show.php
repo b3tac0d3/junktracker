@@ -1,16 +1,27 @@
 <?php
     $bug = is_array($bug ?? null) ? $bug : [];
+    $notes = is_array($notes ?? null) ? $notes : [];
     $users = is_array($users ?? null) ? $users : [];
     $statusOptions = is_array($statusOptions ?? null) ? $statusOptions : [];
     $environmentOptions = is_array($environmentOptions ?? null) ? $environmentOptions : [];
     $bugId = (int) ($bug['id'] ?? 0);
-    $currentStatus = (string) ($bug['status'] ?? 'new');
-    $statusClass = match ($currentStatus) {
-        'fixed' => 'bg-success',
-        'in_progress' => 'bg-warning text-dark',
-        'wont_fix' => 'bg-secondary',
-        default => 'bg-danger',
-    };
+    $statusMeta = [
+        'unresearched' => ['label' => 'Unresearched', 'class' => 'bg-secondary'],
+        'confirmed' => ['label' => 'Confirmed', 'class' => 'bg-info text-dark'],
+        'working' => ['label' => 'Working', 'class' => 'bg-warning text-dark'],
+        'fixed_closed' => ['label' => 'Fixed / Closed', 'class' => 'bg-success'],
+    ];
+    $currentStatus = (string) ($bug['status'] ?? 'unresearched');
+    if ($currentStatus === 'new') {
+        $currentStatus = 'unresearched';
+    } elseif ($currentStatus === 'in_progress') {
+        $currentStatus = 'working';
+    } elseif ($currentStatus === 'fixed' || $currentStatus === 'wont_fix') {
+        $currentStatus = 'fixed_closed';
+    }
+    $formStatus = (string) old('status', $currentStatus);
+    $statusClass = (string) ($statusMeta[$currentStatus]['class'] ?? 'bg-secondary');
+    $statusLabel = (string) ($statusMeta[$currentStatus]['label'] ?? ucwords(str_replace('_', ' ', $currentStatus)));
 ?>
 <div class="container-fluid px-4">
     <div class="d-flex flex-wrap align-items-center justify-content-between mt-4 mb-3 gap-3">
@@ -44,7 +55,7 @@
                         <i class="fas fa-bug me-1"></i>
                         Details
                     </div>
-                    <span class="badge <?= e($statusClass) ?>"><?= e(ucwords(str_replace('_', ' ', $currentStatus))) ?></span>
+                    <span class="badge <?= e($statusClass) ?>"><?= e($statusLabel) ?></span>
                 </div>
                 <div class="card-body">
                     <form method="post" action="<?= url('/dev/bugs/' . $bugId . '/update') ?>">
@@ -66,8 +77,8 @@
                                 <label class="form-label">Status</label>
                                 <select class="form-select" name="status">
                                     <?php foreach ($statusOptions as $status): ?>
-                                        <option value="<?= e($status) ?>" <?= (string) old('status', (string) ($bug['status'] ?? 'new')) === $status ? 'selected' : '' ?>>
-                                            <?= e(ucwords(str_replace('_', ' ', $status))) ?>
+                                        <option value="<?= e($status) ?>" <?= $formStatus === $status ? 'selected' : '' ?>>
+                                            <?= e((string) ($statusMeta[$status]['label'] ?? ucwords(str_replace('_', ' ', $status)))) ?>
                                         </option>
                                     <?php endforeach; ?>
                                 </select>
@@ -140,11 +151,11 @@
                         <div class="fw-semibold"><?= e((string) (($bug['assigned_user_name'] ?? '') !== '' ? $bug['assigned_user_name'] : 'Unassigned')) ?></div>
                     </div>
                     <div class="mb-2">
-                        <div class="small text-muted">Fixed By</div>
+                        <div class="small text-muted">Closed By</div>
                         <div class="fw-semibold"><?= e((string) (($bug['fixed_by_name'] ?? '') !== '' ? $bug['fixed_by_name'] : '—')) ?></div>
                     </div>
                     <div class="mb-2">
-                        <div class="small text-muted">Fixed At</div>
+                        <div class="small text-muted">Closed At</div>
                         <div class="fw-semibold"><?= e(format_datetime($bug['fixed_at'] ?? null)) ?></div>
                     </div>
                     <hr />
@@ -173,16 +184,52 @@
                     Quick Status
                 </div>
                 <div class="card-body d-grid gap-2">
-                    <?php foreach (['new', 'in_progress', 'fixed', 'wont_fix'] as $quickStatus): ?>
+                    <?php foreach (['unresearched', 'confirmed', 'working', 'fixed_closed'] as $quickStatus): ?>
                         <form method="post" action="<?= url('/dev/bugs/' . $bugId . '/status') ?>">
                             <?= csrf_field() ?>
                             <input type="hidden" name="status" value="<?= e($quickStatus) ?>" />
                             <input type="hidden" name="return_to" value="<?= e('/dev/bugs/' . $bugId) ?>" />
                             <button class="btn <?= $quickStatus === $currentStatus ? 'btn-primary' : 'btn-outline-primary' ?> w-100" type="submit">
-                                Set: <?= e(ucwords(str_replace('_', ' ', $quickStatus))) ?>
+                                Set: <?= e((string) ($statusMeta[$quickStatus]['label'] ?? ucwords(str_replace('_', ' ', $quickStatus)))) ?>
                             </button>
                         </form>
                     <?php endforeach; ?>
+                </div>
+            </div>
+
+            <div class="card mt-4">
+                <div class="card-header">
+                    <i class="fas fa-notes-medical me-1"></i>
+                    Notes
+                </div>
+                <div class="card-body">
+                    <form method="post" action="<?= url('/dev/bugs/' . $bugId . '/notes') ?>" class="mb-3">
+                        <?= csrf_field() ?>
+                        <label class="form-label" for="dev_bug_note">Add Note</label>
+                        <textarea id="dev_bug_note" class="form-control" name="note" rows="3" maxlength="5000" required><?= e((string) old('note', '')) ?></textarea>
+                        <div class="d-flex justify-content-end mt-2">
+                            <button class="btn btn-outline-primary" type="submit">
+                                <i class="fas fa-plus me-1"></i>
+                                Add Note
+                            </button>
+                        </div>
+                    </form>
+
+                    <?php if (empty($notes)): ?>
+                        <div class="text-muted">No notes logged yet.</div>
+                    <?php else: ?>
+                        <div class="list-group">
+                            <?php foreach ($notes as $note): ?>
+                                <div class="list-group-item">
+                                    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-1">
+                                        <span class="fw-semibold"><?= e((string) (($note['created_by_name'] ?? '') !== '' ? $note['created_by_name'] : 'System')) ?></span>
+                                        <span class="small text-muted"><?= e(format_datetime($note['created_at'] ?? null)) ?></span>
+                                    </div>
+                                    <div class="small text-break"><?= nl2br(e((string) ($note['note'] ?? ''))) ?></div>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
+                    <?php endif; ?>
                 </div>
             </div>
         </div>

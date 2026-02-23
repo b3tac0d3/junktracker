@@ -15,10 +15,12 @@
     $sessionStatus = $statusBadge(!empty($systemStatus['sessions_path']['ok']), 'Writable', 'Not Writable');
     $logStatus = $statusBadge(!empty($systemStatus['logs_path']['ok']), 'Writable', 'Not Writable');
     $contractsStatus = $statusBadge(!empty($systemStatus['contracts_path']['ok']), 'Writable', 'Not Writable');
+    $photosStatus = $statusBadge(!empty($systemStatus['photos_path']['ok']), 'Writable', 'Not Writable');
     $migrationStatus = [
         'class' => !empty($systemStatus['migrations_table']) ? 'bg-success' : 'bg-warning text-dark',
         'label' => !empty($systemStatus['migrations_table']) ? 'Ready' : 'Missing',
     ];
+    $today = date('Y-m-d');
 
     $metricCards = [
         [
@@ -27,7 +29,7 @@
             'sub' => 'Expired: ' . (int) ($health['expired_invites'] ?? 0),
             'tone' => 'neutral',
             'icon' => 'fa-envelope-open-text',
-            'url' => url('/users?status=all'),
+            'url' => url('/users?status=active&invite=pending'),
         ],
         [
             'label' => 'Failed Mail (24h)',
@@ -35,7 +37,7 @@
             'sub' => 'Delivery issues',
             'tone' => 'danger',
             'icon' => 'fa-triangle-exclamation',
-            'url' => url('/admin/settings'),
+            'url' => url('/admin/audit?preset=all&q=mail&date_from=' . urlencode($today)),
         ],
         [
             'label' => 'Failed Logins (24h)',
@@ -43,7 +45,7 @@
             'sub' => 'Security signal',
             'tone' => 'danger',
             'icon' => 'fa-user-lock',
-            'url' => url('/admin/audit?preset=security&q=login'),
+            'url' => url('/admin/audit?preset=security&q=login&date_from=' . urlencode($today)),
         ],
         [
             'label' => 'Active Sessions',
@@ -51,7 +53,7 @@
             'sub' => 'Current active session files',
             'tone' => 'info',
             'icon' => 'fa-users',
-            'url' => url('/admin/audit?preset=security'),
+            'url' => url('/admin/audit?preset=security&q=session&date_from=' . urlencode($today)),
         ],
         [
             'label' => 'Overdue Tasks',
@@ -302,6 +304,17 @@
             </div>
 
             <div class="list-group-item">
+                <div class="health-row">
+                    <div>
+                        <div class="health-name">Photo Storage</div>
+                        <div class="health-meta">Job/client/prospect/sale photo uploads</div>
+                    </div>
+                    <span class="badge <?= e((string) $photosStatus['class']) ?>"><?= e((string) $photosStatus['label']) ?></span>
+                </div>
+                <div class="health-path font-monospace"><?= e((string) ($systemStatus['photos_path']['path'] ?? '—')) ?></div>
+            </div>
+
+            <div class="list-group-item">
                 <div class="row g-3">
                     <div class="col-md-3">
                         <div class="health-mini">
@@ -338,6 +351,18 @@
     </div>
 
     <div class="row g-4">
+        <?php if (has_role(4)): ?>
+            <div class="col-xl-4 col-md-6">
+                <div class="card h-100 admin-link-card">
+                    <div class="card-body d-flex flex-column">
+                        <h5 class="card-title mb-2"><i class="fas fa-building-shield me-2 text-primary"></i>Site Admin</h5>
+                        <p class="card-text text-muted mb-4">Create businesses and switch into a business workspace for daily operations.</p>
+                        <a class="btn btn-outline-primary mt-auto" href="<?= url('/site-admin') ?>">Open Site Admin</a>
+                    </div>
+                </div>
+            </div>
+        <?php endif; ?>
+
         <div class="col-xl-4 col-md-6">
             <div class="card h-100 admin-link-card">
                 <div class="card-body d-flex flex-column">
@@ -367,6 +392,18 @@
                 </div>
             </div>
         </div>
+
+        <?php if (can_access('business_info', 'view')): ?>
+            <div class="col-xl-4 col-md-6">
+                <div class="card h-100 admin-link-card">
+                    <div class="card-body d-flex flex-column">
+                        <h5 class="card-title mb-2"><i class="fas fa-building me-2 text-primary"></i>Business Info</h5>
+                        <p class="card-text text-muted mb-4">Maintain the shared legal, contact, and address profile for this business.</p>
+                        <a class="btn btn-outline-primary mt-auto" href="<?= url('/admin/business-info') ?>">Open Business Info</a>
+                    </div>
+                </div>
+            </div>
+        <?php endif; ?>
 
         <div class="col-xl-4 col-md-6">
             <div class="card h-100 admin-link-card">

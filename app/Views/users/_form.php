@@ -2,9 +2,11 @@
     $user = $user ?? [];
     $isEdit = !empty($user);
     $formValues = is_array($formValues ?? null) ? $formValues : [];
+    $roleOptions = is_array($roleOptions ?? null) ? $roleOptions : \App\Models\RolePermission::roleOptions();
     $employeeLinkReview = is_array($employeeLinkReview ?? null) ? $employeeLinkReview : null;
     $employeeLinkSupported = !empty($employeeLinkSupported);
     $canCreateEmployee = !empty($canCreateEmployee);
+    $canManageTwoFactor = $isEdit && has_role(3);
 ?>
 <form method="post" action="<?= url(isset($user['id']) ? '/users/' . $user['id'] : '/users') ?>">
     <?= csrf_field() ?>
@@ -25,10 +27,15 @@
             <label class="form-label" for="role">Role</label>
             <select class="form-select" id="role" name="role">
                 <?php $roleValue = (int) old('role', isset($formValues['role']) ? (int) $formValues['role'] : (isset($user['role']) ? (int) $user['role'] : 1)); ?>
-                <option value="1" <?= $roleValue === 1 ? 'selected' : '' ?>>User</option>
-                <option value="2" <?= $roleValue === 2 ? 'selected' : '' ?>>Manager</option>
-                <option value="3" <?= $roleValue === 3 ? 'selected' : '' ?>>Admin</option>
-                <option value="99" <?= $roleValue === 99 ? 'selected' : '' ?>>Dev</option>
+                <?php if (!array_key_exists($roleValue, $roleOptions)): ?>
+                    <?php $roleOptions[$roleValue] = role_label($roleValue); ?>
+                <?php endif; ?>
+                <?php ksort($roleOptions); ?>
+                <?php foreach ($roleOptions as $roleId => $roleLabel): ?>
+                    <option value="<?= e((string) $roleId) ?>" <?= (int) $roleId === $roleValue ? 'selected' : '' ?>>
+                        <?= e((string) $roleLabel) ?>
+                    </option>
+                <?php endforeach; ?>
             </select>
         </div>
         <div class="col-md-3">
@@ -48,6 +55,29 @@
                 <label class="form-label" for="password_confirm">Confirm Password</label>
                 <input class="form-control" id="password_confirm" name="password_confirm" type="password" />
             </div>
+            <?php if ($canManageTwoFactor): ?>
+                <?php
+                    $currentTwoFactorEnabled = !array_key_exists('two_factor_enabled', $user) || (int) ($user['two_factor_enabled'] ?? 1) === 1;
+                    $twoFactorInputValue = (string) old('two_factor_enabled', $currentTwoFactorEnabled ? '1' : '0');
+                    $twoFactorChecked = $twoFactorInputValue === '1';
+                ?>
+                <div class="col-12">
+                    <div class="form-check form-switch mt-1">
+                        <input type="hidden" name="two_factor_enabled" value="0" />
+                        <input
+                            class="form-check-input"
+                            type="checkbox"
+                            role="switch"
+                            id="two_factor_enabled"
+                            name="two_factor_enabled"
+                            value="1"
+                            <?= $twoFactorChecked ? 'checked' : '' ?>
+                        />
+                        <label class="form-check-label" for="two_factor_enabled">Require email 2FA for this user login</label>
+                    </div>
+                    <div class="form-text">Admin-only control.</div>
+                </div>
+            <?php endif; ?>
         <?php else: ?>
             <div class="col-12">
                 <div class="alert alert-info mb-0">

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Controllers;
 
+use App\Models\Business;
 use App\Models\Dashboard;
 use App\Models\Employee;
 use App\Models\Job;
@@ -14,16 +15,22 @@ final class HomeController extends Controller
 {
     public function index(): void
     {
+        if (is_punch_only_role()) {
+            redirect('/punch-clock');
+        }
+
         require_permission('dashboard', 'view');
 
         $overview = Dashboard::overview();
         $selfPunch = $this->selfPunchData();
+        $businessLabel = $this->currentBusinessLabel();
         $pageScripts = '<script src="' . asset('js/dashboard-self-punch.js') . '?v=' . rawurlencode((string) config('app.version', 'dev')) . '"></script>';
 
         $this->render('home/index', [
             'pageTitle' => 'Dashboard',
             'overview' => $overview,
             'selfPunch' => $selfPunch,
+            'businessLabel' => $businessLabel,
             'pageScripts' => $pageScripts,
         ]);
     }
@@ -57,6 +64,7 @@ final class HomeController extends Controller
         }
 
         $jobId = $this->toIntOrNull($_POST['job_id'] ?? null);
+        $geo = request_geo_payload($_POST);
         $job = null;
         if ($jobId !== null && $jobId > 0) {
             $job = Job::findById($jobId);
@@ -76,6 +84,11 @@ final class HomeController extends Controller
             'minutes_worked' => null,
             'pay_rate' => TimeEntry::employeeRate($employeeId) ?? null,
             'total_paid' => null,
+            'punch_in_lat' => $geo['lat'],
+            'punch_in_lng' => $geo['lng'],
+            'punch_in_accuracy_m' => $geo['accuracy'],
+            'punch_in_source' => $geo['source'],
+            'punch_in_captured_at' => $geo['captured_at'],
             'note' => !$nonJobTime
                 ? ('Self punch in from dashboard (Job #' . (int) $jobId . ').')
                 : 'Self punch in from dashboard (Non-Job Time).',
@@ -152,6 +165,7 @@ final class HomeController extends Controller
             (string) ($entry['work_date'] ?? date('Y-m-d')),
             (string) ($entry['start_time'] ?? date('H:i:s'))
         );
+        $geo = request_geo_payload($_POST);
         $payRate = isset($entry['pay_rate']) && $entry['pay_rate'] !== null
             ? (float) $entry['pay_rate']
             : (TimeEntry::employeeRate($employeeId) ?? 0.0);
@@ -162,6 +176,11 @@ final class HomeController extends Controller
             'minutes_worked' => $minutesWorked,
             'pay_rate' => $payRate,
             'total_paid' => $totalPaid,
+            'punch_out_lat' => $geo['lat'],
+            'punch_out_lng' => $geo['lng'],
+            'punch_out_accuracy_m' => $geo['accuracy'],
+            'punch_out_source' => $geo['source'],
+            'punch_out_captured_at' => $geo['captured_at'],
             'note' => (string) ($entry['note'] ?? ''),
         ], auth_user_id());
 
@@ -286,5 +305,25 @@ final class HomeController extends Controller
         }
 
         return (int) $raw;
+    }
+
+    private function currentBusinessLabel(): string
+    {
+        $businessId = current_business_id();
+        if ($businessId <= 0) {
+            return '';
+        }
+
+        try {
+            $business = Business::findById($businessId);
+            $name = trim((string) ($business['name'] ?? ''));
+            if ($name !== '') {
+                return $name;
+            }
+        } catch (\Throwable) {
+            // Keep dashboard rendering resilient.
+        }
+
+        return 'Business #' . $businessId;
     }
 }

@@ -23,12 +23,32 @@ final class UsersController extends Controller
         if (!in_array($status, ['active', 'inactive', 'all'], true)) {
             $status = 'active';
         }
+        $inviteFilter = trim((string) ($_GET['invite'] ?? 'all'));
+        $allowedInviteFilters = ['all', 'pending', 'invited', 'expired', 'accepted', 'none'];
+        if (!in_array($inviteFilter, $allowedInviteFilters, true)) {
+            $inviteFilter = 'all';
+        }
 
         $users = User::search($query, $status);
-        foreach ($users as &$user) {
+        $users = array_values(array_filter(array_map(static function (array $user): array {
             $user['invite'] = User::inviteStatus($user);
-        }
-        unset($user);
+            return $user;
+        }, $users), static function (array $user) use ($inviteFilter): bool {
+            if ($inviteFilter === 'all') {
+                return true;
+            }
+
+            $invite = is_array($user['invite'] ?? null) ? $user['invite'] : [];
+            $inviteStatus = (string) ($invite['status'] ?? 'none');
+            return match ($inviteFilter) {
+                'pending' => in_array($inviteStatus, ['invited', 'expired'], true),
+                'invited' => $inviteStatus === 'invited',
+                'expired' => $inviteStatus === 'expired',
+                'accepted' => $inviteStatus === 'accepted',
+                'none' => $inviteStatus === 'none',
+                default => true,
+            };
+        }));
 
         $pageScripts = implode("\n", [
             '<script src="https://cdn.jsdelivr.net/npm/simple-datatables@7.1.2/dist/umd/simple-datatables.min.js" crossorigin="anonymous"></script>',
@@ -40,6 +60,7 @@ final class UsersController extends Controller
             'users' => $users,
             'query' => $query,
             'status' => $status,
+            'inviteFilter' => $inviteFilter,
             'pageScripts' => $pageScripts,
         ]);
     }
@@ -59,7 +80,8 @@ final class UsersController extends Controller
         $viewer = auth_user();
         $viewerRole = (int) ($viewer['role'] ?? 0);
         $viewerId = auth_user_id();
-        $canDeactivate = !($viewerId !== null && $viewerId === $id && $viewerRole !== 99);
+        $canManageRole = $user ? $this->canManageRoleValue((int) ($user['role'] ?? 0)) : false;
+        $canDeactivate = $canManageRole && !($viewerId !== null && $viewerId === $id && $viewerRole !== 99);
 
         if (!$user) {
             http_response_code(404);
@@ -83,6 +105,7 @@ final class UsersController extends Controller
             'canManageEmployeeLink' => $canManageEmployeeLink,
             'employeeLinkSupported' => $employeeLinkSupported,
             'linkedEmployee' => $linkedEmployee,
+            'canManageRole' => $canManageRole,
             'canDeactivate' => $canDeactivate,
             'inviteStatus' => $inviteStatus,
             'pageScripts' => $pageScripts,
@@ -224,6 +247,7 @@ final class UsersController extends Controller
 
         $this->render('users/create', [
             'pageTitle' => 'Add User',
+            'roleOptions' => $this->assignableRoleOptions(),
             'employeeLinkReview' => null,
             'employeeLinkSupported' => Employee::supportsUserLinking() && has_role(2),
             'canCreateEmployee' => can_access('employees', 'create'),
@@ -242,6 +266,7 @@ final class UsersController extends Controller
         }
 
         $data = $this->collectFormData();
+        $data['business_id'] = is_global_role_value((int) ($data['role'] ?? 0)) ? 0 : current_business_id();
         $errors = $this->validate($data, true);
 
         if (!empty($errors)) {
@@ -260,6 +285,7 @@ final class UsersController extends Controller
             if (!$employeeLinkReviewed) {
                 $this->render('users/create', [
                     'pageTitle' => 'Add User',
+                    'roleOptions' => $this->assignableRoleOptions(),
                     'formValues' => $data,
                     'employeeLinkReview' => $this->buildEmployeeLinkReview($data, $employeeCandidates, '', $canCreateEmployee),
                     'employeeLinkSupported' => $employeeLinkSupported,
@@ -273,6 +299,7 @@ final class UsersController extends Controller
                 flash('error', $decisionError);
                 $this->render('users/create', [
                     'pageTitle' => 'Add User',
+                    'roleOptions' => $this->assignableRoleOptions(),
                     'formValues' => $data,
                     'employeeLinkReview' => $this->buildEmployeeLinkReview($data, $employeeCandidates, $employeeLinkDecision, $canCreateEmployee),
                     'employeeLinkSupported' => $employeeLinkSupported,
@@ -333,7 +360,21 @@ final class UsersController extends Controller
             redirect('/users');
         }
 
+        $existing = User::findById($id);
+        if (!$existing) {
+            http_response_code(404);
+            if (class_exists('App\\Controllers\\ErrorController')) {
+                (new \App\Controllers\ErrorController())->notFound();
+                return;
+            }
+        }
+        if (!$this->canManageRoleValue((int) ($existing['role'] ?? 0))) {
+            flash('error', 'You cannot edit this user role.');
+            redirect('/users/' . $id);
+        }
+
         $data = $this->collectFormData();
+        $data['business_id'] = is_global_role_value((int) ($data['role'] ?? 0)) ? 0 : current_business_id();
         $errors = $this->validate($data, false, $id);
 
         if (!empty($errors)) {
@@ -372,6 +413,16 @@ final class UsersController extends Controller
             redirect('/users/' . $id);
         }
 
+        $user = User::findById($id);
+        if (!$user) {
+            flash('error', 'User not found.');
+            redirect('/users');
+        }
+        if (!$this->canManageRoleValue((int) ($user['role'] ?? 0))) {
+            flash('error', 'You cannot deactivate this user.');
+            redirect('/users/' . $id);
+        }
+
         User::deactivate($id, auth_user_id());
         $deactivatedUser = User::findById($id);
         if ($deactivatedUser) {
@@ -405,6 +456,10 @@ final class UsersController extends Controller
 
             echo '404 Not Found';
             return;
+        }
+        if (!$this->canManageRoleValue((int) ($user['role'] ?? 0))) {
+            flash('error', 'You cannot manage invites for this user.');
+            redirect('/users');
         }
 
         $invite = User::inviteStatus($user);
@@ -442,10 +497,15 @@ final class UsersController extends Controller
                 return;
             }
         }
+        if (!$this->canManageRoleValue((int) ($user['role'] ?? 0))) {
+            flash('error', 'You cannot edit this user role.');
+            redirect('/users');
+        }
 
         $this->render('users/edit', [
             'pageTitle' => 'Edit User',
             'user' => $user,
+            'roleOptions' => $this->assignableRoleOptions(),
         ]);
 
         clear_old();
@@ -513,7 +573,7 @@ final class UsersController extends Controller
 
     private function collectFormData(): array
     {
-        return [
+        $data = [
             'first_name' => trim($_POST['first_name'] ?? ''),
             'last_name' => trim($_POST['last_name'] ?? ''),
             'email' => trim($_POST['email'] ?? ''),
@@ -522,6 +582,12 @@ final class UsersController extends Controller
             'password' => (string) ($_POST['password'] ?? ''),
             'password_confirm' => (string) ($_POST['password_confirm'] ?? ''),
         ];
+
+        if (array_key_exists('two_factor_enabled', $_POST) && has_role(3)) {
+            $data['two_factor_enabled'] = !empty($_POST['two_factor_enabled']) ? 1 : 0;
+        }
+
+        return $data;
     }
 
     private function validate(array $data, bool $isCreate, ?int $userId = null): array
@@ -542,8 +608,22 @@ final class UsersController extends Controller
         if ($data['password'] !== '' && strlen($data['password']) < 8) {
             $errors[] = 'Password must be at least 8 characters.';
         }
+        $allowedRoles = array_keys($this->assignableRoleOptions());
+        if (!in_array((int) $data['role'], $allowedRoles, true)) {
+            $errors[] = 'Selected role is not allowed.';
+        }
 
         return $errors;
+    }
+
+    private function assignableRoleOptions(): array
+    {
+        return assignable_role_options_for_user(auth_user_role());
+    }
+
+    private function canManageRoleValue(int $targetRole): bool
+    {
+        return can_manage_role(auth_user_role(), $targetRole);
     }
 
     private function sendSetupInvite(int $userId, string $email, string $displayName): bool
@@ -588,8 +668,13 @@ final class UsersController extends Controller
             return;
         }
 
-        $query = trim((string) ($_GET['q'] ?? ''));
-        $actions = UserAction::forUser($userId, $query);
+        $filters = [
+            'q' => trim((string) ($_GET['q'] ?? '')),
+            'action_key' => trim((string) ($_GET['action_key'] ?? '')),
+            'date_from' => trim((string) ($_GET['date_from'] ?? '')),
+            'date_to' => trim((string) ($_GET['date_to'] ?? '')),
+        ];
+        $actions = UserAction::forUser($userId, $filters);
 
         $pageScripts = implode("\n", [
             '<script src="https://cdn.jsdelivr.net/npm/simple-datatables@7.1.2/dist/umd/simple-datatables.min.js" crossorigin="anonymous"></script>',
@@ -600,7 +685,8 @@ final class UsersController extends Controller
             'pageTitle' => $isOwn ? 'My Activity Log' : 'User Activity Log',
             'user' => $user,
             'actions' => $actions,
-            'query' => $query,
+            'filters' => $filters,
+            'actionOptions' => UserAction::actionOptions(),
             'isOwnActivity' => $isOwn,
             'isLogReady' => UserAction::isAvailable(),
             'pageScripts' => $pageScripts,

@@ -3,6 +3,8 @@
     $entries = $entries ?? [];
     $summary = $summary ?? [];
     $punchedOutEmployees = $punchedOutEmployees ?? [];
+    $openBasePath = (string) ($openBasePath ?? '/time-tracking/open');
+    $isPunchOnlyRole = !empty($isPunchOnlyRole);
 
     $activeCount = (int) ($summary['active_count'] ?? 0);
     $totalMinutes = (int) ($summary['total_open_minutes'] ?? 0);
@@ -28,7 +30,7 @@
         return $time === false ? $value : date('g:i A', $time);
     };
 
-    $openReturnTo = '/time-tracking/open';
+    $openReturnTo = $openBasePath;
     $queryString = (string) ($_SERVER['QUERY_STRING'] ?? '');
     if ($queryString !== '') {
         $openReturnTo .= '?' . $queryString;
@@ -40,20 +42,24 @@
             <h1 class="mb-1">Currently Punched In</h1>
             <ol class="breadcrumb mb-0">
                 <li class="breadcrumb-item"><a href="<?= url('/') ?>">Dashboard</a></li>
-                <li class="breadcrumb-item"><a href="<?= url('/time-tracking') ?>">Time Tracking</a></li>
+                <?php if (!$isPunchOnlyRole): ?>
+                    <li class="breadcrumb-item"><a href="<?= url('/time-tracking') ?>">Time Tracking</a></li>
+                <?php endif; ?>
                 <li class="breadcrumb-item active">Open Clock</li>
             </ol>
         </div>
-        <div class="d-flex gap-2 mobile-two-col-buttons">
-            <a class="btn btn-outline-secondary" href="<?= url('/time-tracking') ?>">
-                <i class="fas fa-history me-1"></i>
-                Time History
-            </a>
-            <a class="btn btn-primary" href="<?= url('/time-tracking/new') ?>">
-                <i class="fas fa-plus me-1"></i>
-                Add Time Entry
-            </a>
-        </div>
+        <?php if (!$isPunchOnlyRole): ?>
+            <div class="d-flex gap-2 mobile-two-col-buttons">
+                <a class="btn btn-outline-secondary" href="<?= url('/time-tracking') ?>">
+                    <i class="fas fa-history me-1"></i>
+                    Time History
+                </a>
+                <a class="btn btn-primary" href="<?= url('/time-tracking/new') ?>">
+                    <i class="fas fa-plus me-1"></i>
+                    Add Time Entry
+                </a>
+            </div>
+        <?php endif; ?>
     </div>
 
     <?php if ($success = flash('success')): ?>
@@ -135,6 +141,7 @@
                             <th>Job</th>
                             <th>Date</th>
                             <th>Punched In</th>
+                            <th>Location</th>
                             <th>Elapsed</th>
                             <th>Rate</th>
                             <th>Est. Labor</th>
@@ -169,12 +176,31 @@
                                 </td>
                                 <td><?= e(format_date($entry['work_date'] ?? null)) ?></td>
                                 <td><?= e($formatTime($entry['start_time'] ?? null)) ?></td>
+                                <td>
+                                    <?php if (isset($entry['punch_in_lat'], $entry['punch_in_lng']) && $entry['punch_in_lat'] !== null && $entry['punch_in_lng'] !== null): ?>
+                                        <?php
+                                            $lat = (float) $entry['punch_in_lat'];
+                                            $lng = (float) $entry['punch_in_lng'];
+                                            $coords = number_format($lat, 5) . ', ' . number_format($lng, 5);
+                                            $mapUrl = 'https://maps.google.com/?q=' . rawurlencode((string) $lat . ',' . (string) $lng);
+                                        ?>
+                                        <a class="text-decoration-none" href="<?= e($mapUrl) ?>" target="_blank" rel="noopener noreferrer">
+                                            <?= e($coords) ?>
+                                        </a>
+                                        <?php if (isset($entry['punch_in_accuracy_m']) && $entry['punch_in_accuracy_m'] !== null): ?>
+                                            <div class="small text-muted">±<?= e(number_format((float) $entry['punch_in_accuracy_m'], 0)) ?>m</div>
+                                        <?php endif; ?>
+                                    <?php else: ?>
+                                        —
+                                    <?php endif; ?>
+                                </td>
                                 <td><?= e($formatMinutes($openMinutes)) ?></td>
                                 <td><?= e('$' . number_format((float) ($entry['pay_rate'] ?? 0), 2)) ?></td>
                                 <td class="text-danger"><?= e('$' . number_format((float) ($entry['open_paid'] ?? 0), 2)) ?></td>
                                 <td class="text-end">
-                                    <form method="post" action="<?= url('/time-tracking/' . ((int) ($entry['id'] ?? 0)) . '/punch-out') ?>">
+                                    <form class="js-punch-geo-form" method="post" action="<?= url('/time-tracking/' . ((int) ($entry['id'] ?? 0)) . '/punch-out') ?>">
                                         <?= csrf_field() ?>
+                                        <?= geo_capture_fields('open_clock_punch_out') ?>
                                         <input type="hidden" name="return_to" value="<?= e($openReturnTo) ?>" />
                                         <button class="btn btn-sm btn-danger" type="submit">Punch Out</button>
                                     </form>
@@ -245,8 +271,9 @@
     <div class="modal fade" id="openClockPunchInModal" tabindex="-1" aria-labelledby="openClockPunchInModalLabel" aria-hidden="true">
         <div class="modal-dialog">
             <div class="modal-content">
-                <form method="post" action="<?= url('/time-tracking/open/punch-in') ?>" id="openClockPunchInForm">
+                <form class="js-punch-geo-form" method="post" action="<?= url('/time-tracking/open/punch-in') ?>" id="openClockPunchInForm">
                     <?= csrf_field() ?>
+                    <?= geo_capture_fields('open_clock_punch_in') ?>
                     <input type="hidden" name="employee_id" id="open_clock_punch_employee_id" value="" />
                     <input type="hidden" name="return_to" value="<?= e($openReturnTo) ?>" />
                     <input type="hidden" name="job_id" id="open_clock_punch_job_id" value="" />

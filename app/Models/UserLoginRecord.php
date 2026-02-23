@@ -52,23 +52,30 @@ final class UserLoginRecord
             return $normalized;
         }
 
-        $sql = 'INSERT INTO user_login_records
-                    (user_id, login_method, ip_address, user_agent, browser_name, browser_version, os_name, device_type, logged_in_at)
-                VALUES
-                    (:user_id, :login_method, :ip_address, :user_agent, :browser_name, :browser_version, :os_name, :device_type, NOW())';
+        $columns = ['user_id', 'login_method', 'ip_address', 'user_agent', 'browser_name', 'browser_version', 'os_name', 'device_type', 'logged_in_at'];
+        $values = [':user_id', ':login_method', ':ip_address', ':user_agent', ':browser_name', ':browser_version', ':os_name', ':device_type', 'NOW()'];
+        $params = [
+            'user_id' => $userId,
+            'login_method' => $normalized['login_method'],
+            'ip_address' => $normalized['ip_address'],
+            'user_agent' => $normalized['user_agent'],
+            'browser_name' => $normalized['browser_name'],
+            'browser_version' => $normalized['browser_version'],
+            'os_name' => $normalized['os_name'],
+            'device_type' => $normalized['device_type'],
+        ];
+        if (self::hasBusinessColumn()) {
+            $columns[] = 'business_id';
+            $values[] = ':business_id';
+            $params['business_id'] = self::currentBusinessId();
+        }
+
+        $sql = 'INSERT INTO user_login_records (' . implode(', ', $columns) . ')
+                VALUES (' . implode(', ', $values) . ')';
 
         try {
             $stmt = Database::connection()->prepare($sql);
-            $stmt->execute([
-                'user_id' => $userId,
-                'login_method' => $normalized['login_method'],
-                'ip_address' => $normalized['ip_address'],
-                'user_agent' => $normalized['user_agent'],
-                'browser_name' => $normalized['browser_name'],
-                'browser_version' => $normalized['browser_version'],
-                'os_name' => $normalized['os_name'],
-                'device_type' => $normalized['device_type'],
-            ]);
+            $stmt->execute($params);
             $normalized['id'] = (int) Database::connection()->lastInsertId();
         } catch (Throwable) {
             $normalized['id'] = null;
@@ -95,12 +102,17 @@ final class UserLoginRecord
                        logged_in_at
                 FROM user_login_records
                 WHERE user_id = :user_id
+                  ' . (self::hasBusinessColumn() ? 'AND business_id = :business_id' : '') . '
                 ORDER BY logged_in_at DESC, id DESC
                 LIMIT 1';
 
         try {
             $stmt = Database::connection()->prepare($sql);
-            $stmt->execute(['user_id' => $userId]);
+            $params = ['user_id' => $userId];
+            if (self::hasBusinessColumn()) {
+                $params['business_id'] = self::currentBusinessId();
+            }
+            $stmt->execute($params);
             $record = $stmt->fetch();
             return $record ?: null;
         } catch (Throwable) {
@@ -127,6 +139,10 @@ final class UserLoginRecord
                 FROM user_login_records
                 WHERE user_id = :user_id';
         $params = ['user_id' => $userId];
+        if (self::hasBusinessColumn()) {
+            $sql .= ' AND business_id = :business_id';
+            $params['business_id'] = self::currentBusinessId();
+        }
 
         $search = trim($query);
         if ($search !== '') {
@@ -152,6 +168,20 @@ final class UserLoginRecord
         } catch (Throwable) {
             return [];
         }
+    }
+
+    private static function hasBusinessColumn(): bool
+    {
+        return Schema::hasColumn('user_login_records', 'business_id');
+    }
+
+    private static function currentBusinessId(): int
+    {
+        if (function_exists('current_business_id')) {
+            return max(1, (int) current_business_id());
+        }
+
+        return max(1, (int) config('app.default_business_id', 1));
     }
 
     private static function normalizeContext(array $context): array

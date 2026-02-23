@@ -1,4 +1,11 @@
 <?php
+    $filters = is_array($filters ?? null) ? $filters : [];
+    $actionOptions = is_array($actionOptions ?? null) ? $actionOptions : [];
+    $query = (string) ($filters['q'] ?? '');
+    $selectedActionKey = (string) ($filters['action_key'] ?? '');
+    $dateFrom = (string) ($filters['date_from'] ?? '');
+    $dateTo = (string) ($filters['date_to'] ?? '');
+
     $userName = trim((string) (($user['first_name'] ?? '') . ' ' . ($user['last_name'] ?? '')));
     if ($userName === '') {
         $userName = (string) ($user['email'] ?? ('User #' . ($user['id'] ?? '')));
@@ -59,22 +66,45 @@
     <div class="card mb-4">
         <div class="card-header">
             <i class="fas fa-search me-1"></i>
-            Search Activity
+            Filter Activity
         </div>
         <div class="card-body">
-            <form method="get" action="<?= !empty($isOwnActivity) ? url('/activity-log') : url('/users/' . ($user['id'] ?? '') . '/activity') ?>">
-                <div class="row g-2 align-items-center">
-                    <div class="col-12 col-lg-10">
+            <?php $activityBaseUrl = !empty($isOwnActivity) ? url('/activity-log') : url('/users/' . ($user['id'] ?? '') . '/activity'); ?>
+            <form method="get" action="<?= $activityBaseUrl ?>">
+                <div class="row g-2 align-items-end">
+                    <div class="col-12 col-lg-4">
+                        <label class="form-label">Search</label>
                         <div class="input-group">
                             <span class="input-group-text"><i class="fas fa-search"></i></span>
-                            <input class="form-control" type="text" name="q" placeholder="Search action type, summary, details, table..." value="<?= e($query ?? '') ?>" />
-                            <?php if (!empty($query)): ?>
-                                <a class="btn btn-outline-secondary" href="<?= !empty($isOwnActivity) ? url('/activity-log') : url('/users/' . ($user['id'] ?? '') . '/activity') ?>">Clear</a>
-                            <?php endif; ?>
+                            <input class="form-control" type="text" name="q" placeholder="Search action type, summary, details, table..." value="<?= e($query) ?>" />
                         </div>
                     </div>
-                    <div class="col-12 col-lg-2 d-grid">
-                        <button class="btn btn-primary" type="submit">Search</button>
+                    <div class="col-12 col-md-6 col-lg-3">
+                        <label class="form-label">Action Type</label>
+                        <select class="form-select" name="action_key">
+                            <option value="">All actions</option>
+                            <?php foreach ($actionOptions as $option): ?>
+                                <option value="<?= e($option) ?>" <?= $selectedActionKey === (string) $option ? 'selected' : '' ?>>
+                                    <?= e(ucwords(str_replace('_', ' ', (string) $option))) ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="col-6 col-md-3 col-lg-2">
+                        <label class="form-label">From</label>
+                        <input class="form-control" type="date" name="date_from" value="<?= e($dateFrom) ?>" />
+                    </div>
+                    <div class="col-6 col-md-3 col-lg-2">
+                        <label class="form-label">To</label>
+                        <input class="form-control" type="date" name="date_to" value="<?= e($dateTo) ?>" />
+                    </div>
+                    <div class="col-12 col-lg-1 d-grid">
+                        <button class="btn btn-primary" type="submit">Apply</button>
+                    </div>
+                    <div class="col-12 col-lg-12">
+                        <?php if ($query !== '' || $selectedActionKey !== '' || $dateFrom !== '' || $dateTo !== ''): ?>
+                            <a class="btn btn-outline-secondary btn-sm" href="<?= $activityBaseUrl ?>">Reset Filters</a>
+                        <?php endif; ?>
                     </div>
                 </div>
             </form>

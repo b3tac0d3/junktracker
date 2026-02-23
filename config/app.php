@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 return [
     'name' => 'JunkTracker',
-    'version' => '1.4.3 (beta)',
+    'version' => '2.0 (beta)',
     'env' => getenv('APP_ENV') ?: 'local',
     'key' => getenv('APP_KEY') ?: 'local-dev-key-change-me',
     // Keep blank by default so absolute links use the current request host.
@@ -13,4 +13,5 @@ return [
     'noindex' => getenv('APP_NOINDEX') !== '0',
     'two_factor_enabled' => getenv('APP_2FA_ENABLED') !== '0',
     'timezone' => 'America/New_York',
+    'default_business_id' => (int) (getenv('APP_DEFAULT_BUSINESS_ID') ?: 1),
 ];

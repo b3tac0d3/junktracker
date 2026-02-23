@@ -19,6 +19,7 @@ final class User
         $pdo = Database::connection();
 
         $columns = [
+            'business_id' => 'ALTER TABLE users ADD COLUMN business_id BIGINT UNSIGNED NOT NULL DEFAULT 1 AFTER role',
             'password_setup_token_hash' => 'ALTER TABLE users ADD COLUMN password_setup_token_hash VARCHAR(255) NULL AFTER password_hash',
             'password_setup_expires_at' => 'ALTER TABLE users ADD COLUMN password_setup_expires_at DATETIME NULL AFTER password_setup_token_hash',
             'password_setup_sent_at' => 'ALTER TABLE users ADD COLUMN password_setup_sent_at DATETIME NULL AFTER password_setup_expires_at',
@@ -50,6 +51,16 @@ final class User
         } catch (Throwable) {
             // index exists
         }
+        try {
+            $pdo->exec('CREATE INDEX idx_users_business ON users (business_id)');
+        } catch (Throwable) {
+            // index exists
+        }
+        try {
+            $pdo->exec('UPDATE users SET business_id = 1 WHERE business_id IS NULL OR business_id = 0');
+        } catch (Throwable) {
+            // nullable column on older environments
+        }
 
         $ensured = true;
     }
@@ -63,6 +74,7 @@ final class User
                        first_name,
                        last_name,
                        role,
+                       business_id,
                        password_hash,
                        is_active,
                        password_setup_token_hash,
@@ -82,8 +94,9 @@ final class User
                 FROM users
                 WHERE email = :email
                 LIMIT 1';
+        $params = ['email' => $email];
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute(['email' => $email]);
+        $stmt->execute($params);
         $user = $stmt->fetch();
 
         return $user ?: null;
@@ -103,6 +116,7 @@ final class User
                        first_name,
                        last_name,
                        role,
+                       business_id,
                        password_hash,
                        is_active,
                        created_at,
@@ -124,8 +138,9 @@ final class User
                 FROM users
                 WHERE id = :id
                 LIMIT 1';
+        $params = ['id' => $id];
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute(['id' => $id]);
+        $stmt->execute($params);
         $user = $stmt->fetch();
 
         return $user ?: null;
@@ -140,6 +155,7 @@ final class User
                        first_name,
                        last_name,
                        role,
+                       business_id,
                        password_hash,
                        is_active,
                        password_setup_token_hash,
@@ -157,10 +173,16 @@ final class User
                        last_login_at,
                        two_factor_enabled
                 FROM users
-                WHERE id = :id
+                WHERE id = :id';
+        $params = ['id' => $id];
+        if (Schema::hasColumn('users', 'business_id')) {
+            $sql .= ' AND business_id = :business_id';
+            $params['business_id'] = self::currentBusinessId();
+        }
+        $sql .= '
                 LIMIT 1';
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute(['id' => $id]);
+        $stmt->execute($params);
         $user = $stmt->fetch();
 
         return $user ?: null;
@@ -175,6 +197,7 @@ final class User
                        last_name,
                        email,
                        role,
+                       business_id,
                        password_hash,
                        is_active,
                        created_at,
@@ -193,6 +216,11 @@ final class User
                 FROM users';
         $params = [];
         $where = [];
+
+        if (Schema::hasColumn('users', 'business_id')) {
+            $where[] = 'business_id = :business_id';
+            $params['business_id'] = self::currentBusinessId();
+        }
 
         if ($status === 'active') {
             $where[] = 'is_active = 1';
@@ -223,6 +251,10 @@ final class User
                 FROM users
                 WHERE LOWER(email) = LOWER(:email)';
         $params = ['email' => trim($email)];
+        if (Schema::hasColumn('users', 'business_id')) {
+            $sql .= ' AND business_id = :business_id';
+            $params['business_id'] = self::currentBusinessId();
+        }
 
         if ($excludeId !== null && $excludeId > 0) {
             $sql .= ' AND id <> :exclude_id';
@@ -255,6 +287,15 @@ final class User
             'password_hash' => $passwordHash,
             'is_active' => $data['is_active'],
         ];
+        if (Schema::hasColumn('users', 'business_id')) {
+            $columns[] = 'business_id';
+            $values[] = ':business_id';
+            if (array_key_exists('business_id', $data)) {
+                $params['business_id'] = max(0, (int) $data['business_id']);
+            } else {
+                $params['business_id'] = self::currentBusinessId();
+            }
+        }
         if (Schema::hasColumn('users', 'two_factor_enabled')) {
             $columns[] = 'two_factor_enabled';
             $values[] = ':two_factor_enabled';
@@ -330,6 +371,7 @@ final class User
                        first_name,
                        last_name,
                        role,
+                       business_id,
                        is_active,
                        password_setup_expires_at,
                        password_setup_used_at
@@ -394,12 +436,13 @@ final class User
                     two_factor_sent_at = NOW(),
                     updated_at = NOW()
                 WHERE id = :id';
-
-        $stmt = Database::connection()->prepare($sql);
-        $stmt->execute([
+        $params = [
             'code_hash' => $codeHash,
             'id' => $userId,
-        ]);
+        ];
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute($params);
     }
 
     public static function verifyTwoFactorCode(int $userId, string $code): bool
@@ -448,9 +491,10 @@ final class User
         }
 
         $sql .= ' WHERE id = :id';
+        $params = ['id' => $userId];
 
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute(['id' => $userId]);
+        $stmt->execute($params);
     }
 
     public static function registerFailedLogin(int $id, ?string $ipAddress = null): void
@@ -482,12 +526,13 @@ final class User
                     END,
                     updated_at = NOW()
                 WHERE id = :id';
-
-        $stmt = Database::connection()->prepare($sql);
-        $stmt->execute([
+        $params = [
             'id' => $id,
             'ip_address' => $ipAddress,
-        ]);
+        ];
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute($params);
     }
 
     public static function clearFailedLogin(int $id): void
@@ -504,9 +549,10 @@ final class User
                     last_login_at = NOW(),
                     updated_at = NOW()
                 WHERE id = :id';
+        $params = ['id' => $id];
 
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute(['id' => $id]);
+        $stmt->execute($params);
     }
 
     public static function update(int $id, array $data, ?int $actorId = null): void
@@ -522,6 +568,14 @@ final class User
         ];
 
         $sql = 'UPDATE users SET email = :email, first_name = :first_name, last_name = :last_name, role = :role, is_active = :is_active';
+        if (Schema::hasColumn('users', 'business_id') && array_key_exists('business_id', $data)) {
+            $sql .= ', business_id = :business_id';
+            $fields['business_id'] = max(0, (int) $data['business_id']);
+        }
+        if (Schema::hasColumn('users', 'two_factor_enabled') && array_key_exists('two_factor_enabled', $data)) {
+            $sql .= ', two_factor_enabled = :two_factor_enabled';
+            $fields['two_factor_enabled'] = (int) ((int) $data['two_factor_enabled'] === 1);
+        }
 
         if (!empty($data['password'])) {
             $sql .= ', password_hash = :password_hash';
@@ -536,6 +590,10 @@ final class User
         }
 
         $sql .= ' WHERE id = :id';
+        if (Schema::hasColumn('users', 'business_id')) {
+            $sql .= ' AND business_id = :business_id_scope';
+            $fields['business_id_scope'] = self::currentBusinessId();
+        }
         $fields['id'] = $id;
 
         $stmt = Database::connection()->prepare($sql);
@@ -574,6 +632,10 @@ final class User
         }
 
         $sql .= ' WHERE id = :id';
+        if (Schema::hasColumn('users', 'business_id')) {
+            $sql .= ' AND business_id = :business_id_scope';
+            $fields['business_id_scope'] = self::currentBusinessId();
+        }
 
         $stmt = Database::connection()->prepare($sql);
         $stmt->execute($fields);
@@ -622,6 +684,10 @@ final class User
         }
 
         $sql = 'UPDATE users SET ' . implode(', ', $sets) . ' WHERE id = :id';
+        if (Schema::hasColumn('users', 'business_id')) {
+            $sql .= ' AND business_id = :business_id_scope';
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
         $stmt = Database::connection()->prepare($sql);
         $stmt->execute($params);
     }
@@ -694,6 +760,7 @@ final class User
                        last_name,
                        email,
                        role,
+                       business_id,
                        is_active,
                        password_hash,
                        password_setup_sent_at,
@@ -702,7 +769,14 @@ final class User
                        created_at,
                        updated_at
                 FROM users
-                WHERE is_active = 1
+                WHERE is_active = 1';
+        $params = [];
+        if (Schema::hasColumn('users', 'business_id')) {
+            $sql .= '
+                  AND business_id = :business_id';
+            $params['business_id'] = self::currentBusinessId();
+        }
+        $sql .= '
                   AND password_setup_sent_at IS NOT NULL
                   AND COALESCE(password_setup_used_at, \'\') = \'\'
                   AND COALESCE(password_hash, \'\') = \'\'
@@ -716,7 +790,9 @@ final class User
                   id DESC
                 LIMIT ' . $capped;
 
-        $rows = Database::connection()->query($sql)->fetchAll();
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute($params);
+        $rows = $stmt->fetchAll();
         foreach ($rows as &$row) {
             $row['invite'] = self::inviteStatus($row);
         }
@@ -757,7 +833,15 @@ final class User
                         END
                     ), 0) AS expired_count
                 FROM users';
-        $row = Database::connection()->query($sql)->fetch();
+        $params = [];
+        if (Schema::hasColumn('users', 'business_id')) {
+            $sql .= ' WHERE business_id = :business_id';
+            $params['business_id'] = self::currentBusinessId();
+        }
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute($params);
+        $row = $stmt->fetch();
 
         $invited = (int) ($row['invited_count'] ?? 0);
         $expired = (int) ($row['expired_count'] ?? 0);
@@ -800,11 +884,25 @@ final class User
                   AND password_setup_sent_at IS NOT NULL
                   AND COALESCE(password_setup_used_at, \'\') = \'\'
                   AND COALESCE(password_hash, \'\') = \'\'';
+        if (Schema::hasColumn('users', 'business_id')) {
+            $sql .= '
+                  AND business_id = :business_id_scope';
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
 
         $stmt = Database::connection()->prepare($sql);
         $stmt->execute($params);
 
         return $stmt->rowCount() > 0;
+    }
+
+    private static function currentBusinessId(): int
+    {
+        if (function_exists('current_business_id')) {
+            return max(1, (int) current_business_id());
+        }
+
+        return max(1, (int) config('app.default_business_id', 1));
     }
 
     private static function tokenHash(string $raw): string

@@ -9,25 +9,62 @@ use Core\Controller;
 
 final class NotificationsController extends Controller
 {
+    public function summary(): void
+    {
+        require_permission('notifications', 'view');
+
+        $viewerUser = auth_user() ?? [];
+        $viewerUserId = (int) ($viewerUser['id'] ?? 0);
+        if ($viewerUserId <= 0) {
+            json_response([
+                'ok' => false,
+                'message' => 'Unauthenticated.',
+            ], 401);
+            return;
+        }
+
+        $viewerRole = (int) ($viewerUser['role'] ?? 0);
+        $summary = NotificationCenter::summaryForUser($viewerUserId, $viewerUserId, $viewerRole);
+
+        json_response([
+            'ok' => true,
+            'summary' => [
+                'total' => (int) ($summary['total'] ?? 0),
+                'open' => (int) ($summary['open'] ?? 0),
+                'unread' => (int) ($summary['unread'] ?? 0),
+                'dismissed' => (int) ($summary['dismissed'] ?? 0),
+            ],
+            'business_id' => current_business_id(),
+        ]);
+    }
+
     public function index(): void
     {
         require_permission('notifications', 'view');
 
-        $userId = auth_user_id() ?? 0;
-        if ($userId <= 0) {
+        $viewerUser = auth_user() ?? [];
+        $viewerUserId = (int) ($viewerUser['id'] ?? 0);
+        if ($viewerUserId <= 0) {
             redirect('/login');
         }
+        $viewerRole = (int) ($viewerUser['role'] ?? 0);
 
         $scope = strtolower(trim((string) ($_GET['scope'] ?? 'open')));
         if (!in_array($scope, ['open', 'unread', 'dismissed', 'all'], true)) {
             $scope = 'open';
         }
 
+        $subjectUserId = $this->resolveSubjectUserId($viewerUserId, $viewerRole, $_GET['user_id'] ?? null);
+
         $this->render('notifications/index', [
             'pageTitle' => 'Notifications',
             'scope' => $scope,
-            'summary' => NotificationCenter::summaryForUser($userId),
-            'notifications' => NotificationCenter::listForUser($userId, $scope),
+            'summary' => NotificationCenter::summaryForUser($subjectUserId, $viewerUserId, $viewerRole),
+            'notifications' => NotificationCenter::listForUser($subjectUserId, $scope, $viewerUserId, $viewerRole),
+            'viewerRole' => $viewerRole,
+            'viewerUserId' => $viewerUserId,
+            'subjectUserId' => $subjectUserId,
+            'userOptions' => NotificationCenter::userOptionsForViewer($viewerUserId, $viewerRole),
         ]);
     }
 
@@ -35,13 +72,21 @@ final class NotificationsController extends Controller
     {
         require_permission('notifications', 'view');
 
-        $userId = auth_user_id() ?? 0;
-        if ($userId <= 0) {
+        $viewerUser = auth_user() ?? [];
+        $viewerUserId = (int) ($viewerUser['id'] ?? 0);
+        if ($viewerUserId <= 0) {
             redirect('/login');
         }
+        $viewerRole = (int) ($viewerUser['role'] ?? 0);
 
         if (!verify_csrf($_POST['csrf_token'] ?? null)) {
             $this->respondError('Your session expired. Please try again.', '/notifications');
+            return;
+        }
+
+        $subjectUserId = $this->resolveSubjectUserId($viewerUserId, $viewerRole, $_POST['user_id'] ?? null);
+        if (!NotificationCenter::canViewSubject($viewerUserId, $subjectUserId, $viewerRole)) {
+            $this->respondError('You do not have access to update notifications for this user.', '/notifications');
             return;
         }
 
@@ -52,7 +97,7 @@ final class NotificationsController extends Controller
         }
 
         $markRead = (string) ($_POST['is_read'] ?? '1') !== '0';
-        NotificationCenter::markRead($userId, $notificationKey, $markRead);
+        NotificationCenter::markRead($subjectUserId, $notificationKey, $markRead);
 
         $message = $markRead ? 'Notification marked read.' : 'Notification marked unread.';
         if (expects_json_response()) {
@@ -67,17 +112,82 @@ final class NotificationsController extends Controller
         redirect($this->returnPath('/notifications'));
     }
 
+    public function readAll(): void
+    {
+        require_permission('notifications', 'view');
+
+        $viewerUser = auth_user() ?? [];
+        $viewerUserId = (int) ($viewerUser['id'] ?? 0);
+        if ($viewerUserId <= 0) {
+            redirect('/login');
+        }
+        $viewerRole = (int) ($viewerUser['role'] ?? 0);
+
+        if (!verify_csrf($_POST['csrf_token'] ?? null)) {
+            $this->respondError('Your session expired. Please try again.', '/notifications');
+            return;
+        }
+
+        $subjectUserId = $this->resolveSubjectUserId($viewerUserId, $viewerRole, $_POST['user_id'] ?? null);
+        if (!NotificationCenter::canViewSubject($viewerUserId, $subjectUserId, $viewerRole)) {
+            $this->respondError('You do not have access to update notifications for this user.', '/notifications');
+            return;
+        }
+
+        $scope = strtolower(trim((string) ($_POST['scope'] ?? 'open')));
+        if (!in_array($scope, ['open', 'unread', 'dismissed', 'all'], true)) {
+            $scope = 'open';
+        }
+
+        $rows = NotificationCenter::listForUser($subjectUserId, $scope, $viewerUserId, $viewerRole);
+        $keys = [];
+        foreach ($rows as $row) {
+            if (!empty($row['is_read'])) {
+                continue;
+            }
+            $key = trim((string) ($row['key'] ?? ''));
+            if ($key !== '') {
+                $keys[] = $key;
+            }
+        }
+
+        $count = NotificationCenter::markReadMany($subjectUserId, $keys);
+        $message = $count > 0
+            ? sprintf('Marked %d notification%s as read.', $count, $count === 1 ? '' : 's')
+            : 'No unread notifications in this view.';
+
+        if (expects_json_response()) {
+            json_response([
+                'ok' => true,
+                'message' => $message,
+                'updated' => $count,
+            ]);
+            return;
+        }
+
+        flash('success', $message);
+        redirect($this->returnPath('/notifications'));
+    }
+
     public function dismiss(): void
     {
         require_permission('notifications', 'view');
 
-        $userId = auth_user_id() ?? 0;
-        if ($userId <= 0) {
+        $viewerUser = auth_user() ?? [];
+        $viewerUserId = (int) ($viewerUser['id'] ?? 0);
+        if ($viewerUserId <= 0) {
             redirect('/login');
         }
+        $viewerRole = (int) ($viewerUser['role'] ?? 0);
 
         if (!verify_csrf($_POST['csrf_token'] ?? null)) {
             $this->respondError('Your session expired. Please try again.', '/notifications');
+            return;
+        }
+
+        $subjectUserId = $this->resolveSubjectUserId($viewerUserId, $viewerRole, $_POST['user_id'] ?? null);
+        if (!NotificationCenter::canViewSubject($viewerUserId, $subjectUserId, $viewerRole)) {
+            $this->respondError('You do not have access to update notifications for this user.', '/notifications');
             return;
         }
 
@@ -88,7 +198,7 @@ final class NotificationsController extends Controller
         }
 
         $dismiss = (string) ($_POST['dismiss'] ?? '1') !== '0';
-        NotificationCenter::dismiss($userId, $notificationKey, $dismiss);
+        NotificationCenter::dismiss($subjectUserId, $notificationKey, $dismiss);
 
         $message = $dismiss ? 'Notification dismissed.' : 'Notification restored.';
         if (expects_json_response()) {
@@ -103,14 +213,36 @@ final class NotificationsController extends Controller
         redirect($this->returnPath('/notifications'));
     }
 
+    public function open(): void
+    {
+        require_permission('notifications', 'view');
+
+        $viewerUser = auth_user() ?? [];
+        $viewerUserId = (int) ($viewerUser['id'] ?? 0);
+        if ($viewerUserId <= 0) {
+            redirect('/login');
+        }
+        $viewerRole = (int) ($viewerUser['role'] ?? 0);
+
+        $subjectUserId = $this->resolveSubjectUserId($viewerUserId, $viewerRole, $_GET['user_id'] ?? null);
+        if (!NotificationCenter::canViewSubject($viewerUserId, $subjectUserId, $viewerRole)) {
+            flash('error', 'You do not have access to open notifications for this user.');
+            redirect('/notifications');
+        }
+
+        $notificationKey = trim((string) ($_GET['notification_key'] ?? ''));
+        if ($notificationKey !== '') {
+            NotificationCenter::markRead($subjectUserId, $notificationKey, true);
+        }
+
+        $target = $this->safeInternalPath((string) ($_GET['target'] ?? ''), '/notifications');
+        redirect($target);
+    }
+
     private function returnPath(string $fallback): string
     {
         $returnTo = trim((string) ($_POST['return_to'] ?? ''));
-        if ($returnTo === '' || !str_starts_with($returnTo, '/') || str_starts_with($returnTo, '//')) {
-            return $fallback;
-        }
-
-        return $returnTo;
+        return $this->safeInternalPath($returnTo, $fallback);
     }
 
     private function respondError(string $message, string $fallbackPath): void
@@ -125,5 +257,36 @@ final class NotificationsController extends Controller
 
         flash('error', $message);
         redirect($fallbackPath);
+    }
+
+    private function resolveSubjectUserId(int $viewerUserId, int $viewerRole, mixed $requestedUserId): int
+    {
+        if ($viewerUserId <= 0) {
+            return 0;
+        }
+
+        $subjectUserId = $viewerUserId;
+        if (($viewerRole === 99 || $viewerRole >= 2) && is_scalar($requestedUserId)) {
+            $requested = (int) trim((string) $requestedUserId);
+            if ($requested > 0) {
+                $subjectUserId = $requested;
+            }
+        }
+
+        if (!NotificationCenter::canViewSubject($viewerUserId, $subjectUserId, $viewerRole)) {
+            return $viewerUserId;
+        }
+
+        return $subjectUserId;
+    }
+
+    private function safeInternalPath(string $path, string $fallback): string
+    {
+        $normalized = trim($path);
+        if ($normalized === '' || !str_starts_with($normalized, '/') || str_starts_with($normalized, '//')) {
+            return $fallback;
+        }
+
+        return $normalized;
     }
 }

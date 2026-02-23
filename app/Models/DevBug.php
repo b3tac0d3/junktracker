@@ -8,7 +8,13 @@ use Core\Database;
 
 final class DevBug
 {
-    public const STATUSES = ['new', 'in_progress', 'fixed', 'wont_fix'];
+    public const STATUSES = ['unresearched', 'confirmed', 'working', 'fixed_closed'];
+    private const LEGACY_STATUS_MAP = [
+        'new' => 'unresearched',
+        'in_progress' => 'working',
+        'fixed' => 'fixed_closed',
+        'wont_fix' => 'fixed_closed',
+    ];
     public const ENVIRONMENTS = ['local', 'live', 'both'];
 
     public static function filter(array $filters, int $limit = 0): array
@@ -45,10 +51,15 @@ final class DevBug
                 WHERE ' . $whereSql . '
                 ORDER BY
                     CASE b.status
+                        WHEN \'unresearched\' THEN 1
                         WHEN \'new\' THEN 1
-                        WHEN \'in_progress\' THEN 2
-                        WHEN \'fixed\' THEN 3
-                        ELSE 4
+                        WHEN \'confirmed\' THEN 2
+                        WHEN \'working\' THEN 3
+                        WHEN \'in_progress\' THEN 3
+                        WHEN \'fixed_closed\' THEN 4
+                        WHEN \'fixed\' THEN 4
+                        WHEN \'wont_fix\' THEN 4
+                        ELSE 5
                     END ASC,
                     b.severity DESC,
                     b.updated_at DESC,
@@ -78,11 +89,11 @@ final class DevBug
 
         $sql = 'SELECT
                     COUNT(*) AS total_count,
-                    COALESCE(SUM(CASE WHEN status = \'new\' THEN 1 ELSE 0 END), 0) AS new_count,
-                    COALESCE(SUM(CASE WHEN status = \'in_progress\' THEN 1 ELSE 0 END), 0) AS in_progress_count,
-                    COALESCE(SUM(CASE WHEN status = \'fixed\' THEN 1 ELSE 0 END), 0) AS fixed_count,
-                    COALESCE(SUM(CASE WHEN status = \'wont_fix\' THEN 1 ELSE 0 END), 0) AS wont_fix_count,
-                    COALESCE(SUM(CASE WHEN status IN (\'new\', \'in_progress\') THEN 1 ELSE 0 END), 0) AS open_count
+                    COALESCE(SUM(CASE WHEN status IN (\'unresearched\', \'new\') THEN 1 ELSE 0 END), 0) AS unresearched_count,
+                    COALESCE(SUM(CASE WHEN status = \'confirmed\' THEN 1 ELSE 0 END), 0) AS confirmed_count,
+                    COALESCE(SUM(CASE WHEN status IN (\'working\', \'in_progress\') THEN 1 ELSE 0 END), 0) AS working_count,
+                    COALESCE(SUM(CASE WHEN status IN (\'fixed_closed\', \'fixed\', \'wont_fix\') THEN 1 ELSE 0 END), 0) AS fixed_closed_count,
+                    COALESCE(SUM(CASE WHEN status IN (\'unresearched\', \'new\', \'confirmed\', \'working\', \'in_progress\') THEN 1 ELSE 0 END), 0) AS open_count
                 FROM dev_bugs
                 WHERE deleted_at IS NULL';
 
@@ -90,13 +101,23 @@ final class DevBug
         if (!$row) {
             return [
                 'total_count' => 0,
+                'unresearched_count' => 0,
+                'confirmed_count' => 0,
+                'working_count' => 0,
+                'fixed_closed_count' => 0,
+                'open_count' => 0,
+                // backward compatibility with previous summary keys
                 'new_count' => 0,
                 'in_progress_count' => 0,
                 'fixed_count' => 0,
                 'wont_fix_count' => 0,
-                'open_count' => 0,
             ];
         }
+
+        $row['new_count'] = (int) ($row['unresearched_count'] ?? 0);
+        $row['in_progress_count'] = (int) ($row['working_count'] ?? 0);
+        $row['fixed_count'] = (int) ($row['fixed_closed_count'] ?? 0);
+        $row['wont_fix_count'] = 0;
 
         return $row;
     }
@@ -153,10 +174,8 @@ final class DevBug
     {
         self::ensureTable();
 
-        $status = in_array((string) ($data['status'] ?? 'new'), self::STATUSES, true)
-            ? (string) $data['status']
-            : 'new';
-        $isFixed = $status === 'fixed';
+        $status = self::normalizeStatus((string) ($data['status'] ?? 'unresearched'));
+        $isFixed = $status === 'fixed_closed';
 
         $sql = 'INSERT INTO dev_bugs (
                     title,
@@ -216,9 +235,7 @@ final class DevBug
     {
         self::ensureTable();
 
-        $status = in_array((string) ($data['status'] ?? 'new'), self::STATUSES, true)
-            ? (string) $data['status']
-            : 'new';
+        $status = self::normalizeStatus((string) ($data['status'] ?? 'unresearched'));
 
         $sql = 'UPDATE dev_bugs
                 SET title = :title,
@@ -229,8 +246,8 @@ final class DevBug
                     module_key = :module_key,
                     route_path = :route_path,
                     assigned_user_id = :assigned_user_id,
-                    fixed_at = CASE WHEN :status = \'fixed\' THEN COALESCE(fixed_at, NOW()) ELSE NULL END,
-                    fixed_by = CASE WHEN :status = \'fixed\' THEN COALESCE(fixed_by, :actor_id) ELSE NULL END,
+                    fixed_at = CASE WHEN :status = \'fixed_closed\' THEN COALESCE(fixed_at, NOW()) ELSE NULL END,
+                    fixed_by = CASE WHEN :status = \'fixed_closed\' THEN COALESCE(fixed_by, :actor_id) ELSE NULL END,
                     updated_at = NOW(),
                     updated_by = :actor_id
                 WHERE id = :id
@@ -255,14 +272,15 @@ final class DevBug
     {
         self::ensureTable();
 
+        $status = self::normalizeStatus($status);
         if (!in_array($status, self::STATUSES, true)) {
             return;
         }
 
         $sql = 'UPDATE dev_bugs
                 SET status = :status,
-                    fixed_at = CASE WHEN :status = \'fixed\' THEN COALESCE(fixed_at, NOW()) ELSE NULL END,
-                    fixed_by = CASE WHEN :status = \'fixed\' THEN COALESCE(fixed_by, :actor_id) ELSE NULL END,
+                    fixed_at = CASE WHEN :status = \'fixed_closed\' THEN COALESCE(fixed_at, NOW()) ELSE NULL END,
+                    fixed_by = CASE WHEN :status = \'fixed_closed\' THEN COALESCE(fixed_by, :actor_id) ELSE NULL END,
                     updated_at = NOW(),
                     updated_by = :actor_id
                 WHERE id = :id
@@ -318,6 +336,67 @@ final class DevBug
         return Database::connection()->query($sql)->fetchAll();
     }
 
+    public static function notes(int $bugId): array
+    {
+        self::ensureTable();
+
+        if ($bugId <= 0) {
+            return [];
+        }
+
+        $sql = 'SELECT n.id,
+                       n.bug_id,
+                       n.note,
+                       n.created_by,
+                       n.created_at,
+                       COALESCE(NULLIF(TRIM(CONCAT_WS(\' \', u.first_name, u.last_name)), \'\'), u.email, CONCAT(\'User #\', n.created_by)) AS created_by_name
+                FROM dev_bug_notes n
+                LEFT JOIN users u ON u.id = n.created_by
+                WHERE n.bug_id = :bug_id
+                ORDER BY n.created_at DESC, n.id DESC';
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute(['bug_id' => $bugId]);
+        return $stmt->fetchAll();
+    }
+
+    public static function addNote(int $bugId, string $note, ?int $actorId = null): int
+    {
+        self::ensureTable();
+
+        if ($bugId <= 0) {
+            return 0;
+        }
+
+        $cleanNote = trim($note);
+        if ($cleanNote === '') {
+            return 0;
+        }
+
+        $sql = 'INSERT INTO dev_bug_notes (
+                    bug_id,
+                    note,
+                    created_by,
+                    created_at,
+                    updated_at
+                ) VALUES (
+                    :bug_id,
+                    :note,
+                    :created_by,
+                    NOW(),
+                    NOW()
+                )';
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute([
+            'bug_id' => $bugId,
+            'note' => $cleanNote,
+            'created_by' => $actorId,
+        ]);
+
+        return (int) Database::connection()->lastInsertId();
+    }
+
     private static function buildWhere(array $filters): array
     {
         $where = ['b.deleted_at IS NULL'];
@@ -325,10 +404,18 @@ final class DevBug
 
         $status = trim((string) ($filters['status'] ?? 'open'));
         if ($status === 'open') {
-            $where[] = 'b.status IN (\'new\', \'in_progress\')';
-        } elseif ($status !== 'all' && in_array($status, self::STATUSES, true)) {
-            $where[] = 'b.status = :status';
-            $params['status'] = $status;
+            $where[] = 'b.status IN (\'unresearched\', \'new\', \'confirmed\', \'working\', \'in_progress\')';
+        } elseif ($status !== 'all') {
+            $normalizedStatus = self::normalizeStatus($status);
+            if ($normalizedStatus === 'unresearched') {
+                $where[] = 'b.status IN (\'unresearched\', \'new\')';
+            } elseif ($normalizedStatus === 'working') {
+                $where[] = 'b.status IN (\'working\', \'in_progress\')';
+            } elseif ($normalizedStatus === 'fixed_closed') {
+                $where[] = 'b.status IN (\'fixed_closed\', \'fixed\', \'wont_fix\')';
+            } elseif ($normalizedStatus === 'confirmed') {
+                $where[] = 'b.status = \'confirmed\'';
+            }
         }
 
         $query = trim((string) ($filters['q'] ?? ''));
@@ -377,7 +464,7 @@ final class DevBug
                 id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
                 title VARCHAR(255) NOT NULL,
                 details TEXT NULL,
-                status VARCHAR(32) NOT NULL DEFAULT \'new\',
+                status VARCHAR(32) NOT NULL DEFAULT \'unresearched\',
                 severity TINYINT UNSIGNED NOT NULL DEFAULT 3,
                 environment VARCHAR(16) NOT NULL DEFAULT \'local\',
                 module_key VARCHAR(80) NULL,
@@ -401,7 +488,55 @@ final class DevBug
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci'
         );
 
+        Database::connection()->exec(
+            'CREATE TABLE IF NOT EXISTS dev_bug_notes (
+                id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+                bug_id BIGINT UNSIGNED NOT NULL,
+                note TEXT NOT NULL,
+                created_by BIGINT UNSIGNED NULL,
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                PRIMARY KEY (id),
+                KEY idx_dev_bug_notes_bug (bug_id),
+                KEY idx_dev_bug_notes_created (created_at)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci'
+        );
+
+        try {
+            Database::connection()->exec('ALTER TABLE dev_bugs ALTER status SET DEFAULT \'unresearched\'');
+        } catch (\Throwable) {
+            try {
+                Database::connection()->exec('ALTER TABLE dev_bugs MODIFY status VARCHAR(32) NOT NULL DEFAULT \'unresearched\'');
+            } catch (\Throwable) {
+                // ignore
+            }
+        }
+
+        try {
+            Database::connection()->exec(
+                'UPDATE dev_bugs
+                 SET status = CASE
+                     WHEN status = \'new\' THEN \'unresearched\'
+                     WHEN status = \'in_progress\' THEN \'working\'
+                     WHEN status IN (\'fixed\', \'wont_fix\') THEN \'fixed_closed\'
+                     ELSE status
+                 END
+                 WHERE status IN (\'new\', \'in_progress\', \'fixed\', \'wont_fix\')'
+            );
+        } catch (\Throwable) {
+            // ignore
+        }
+
         $ensured = true;
     }
-}
 
+    private static function normalizeStatus(string $status): string
+    {
+        $normalized = strtolower(trim($status));
+        if (in_array($normalized, self::STATUSES, true)) {
+            return $normalized;
+        }
+
+        return self::LEGACY_STATUS_MAP[$normalized] ?? 'unresearched';
+    }
+}

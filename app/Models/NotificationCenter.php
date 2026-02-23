@@ -20,6 +20,7 @@ final class NotificationCenter
             'CREATE TABLE IF NOT EXISTS user_notification_states (
                 id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
                 user_id BIGINT UNSIGNED NOT NULL,
+                business_id BIGINT UNSIGNED NOT NULL DEFAULT 1,
                 notification_key VARCHAR(190) NOT NULL,
                 is_read TINYINT(1) NOT NULL DEFAULT 0,
                 read_at DATETIME NULL,
@@ -27,12 +28,31 @@ final class NotificationCenter
                 created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                 PRIMARY KEY (id),
-                UNIQUE KEY uniq_user_notification_state (user_id, notification_key),
+                UNIQUE KEY uniq_user_notification_state (user_id, business_id, notification_key),
                 KEY idx_user_notification_states_user (user_id),
+                KEY idx_user_notification_states_business (business_id),
                 KEY idx_user_notification_states_read (user_id, is_read),
                 KEY idx_user_notification_states_dismissed (user_id, dismissed_at)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci'
         );
+
+        if (!Schema::hasColumn('user_notification_states', 'business_id')) {
+            try {
+                Database::connection()->exec('ALTER TABLE user_notification_states ADD COLUMN business_id BIGINT UNSIGNED NOT NULL DEFAULT 1 AFTER user_id');
+            } catch (\Throwable) {
+                // Migration should handle this in strict environments.
+            }
+        }
+        try {
+            Database::connection()->exec('CREATE INDEX idx_user_notification_states_business ON user_notification_states (business_id)');
+        } catch (\Throwable) {
+            // index exists
+        }
+        try {
+            Database::connection()->exec('UPDATE user_notification_states SET business_id = 1 WHERE business_id IS NULL OR business_id = 0');
+        } catch (\Throwable) {
+            // not required if column absent
+        }
 
         $schema = trim((string) config('database.database', ''));
         if ($schema !== '') {
@@ -49,7 +69,12 @@ final class NotificationCenter
         self::$schemaEnsured = true;
     }
 
-    public static function listForUser(int $userId, string $scope = 'open'): array
+    public static function listForUser(
+        int $userId,
+        string $scope = 'open',
+        ?int $viewerUserId = null,
+        ?int $viewerRole = null
+    ): array
     {
         self::ensureSchema();
 
@@ -57,8 +82,18 @@ final class NotificationCenter
             return [];
         }
 
+        $viewerUserId = $viewerUserId ?? $userId;
+        $viewerRole = $viewerRole ?? self::userRole($viewerUserId);
+        if (!self::canViewUserNotifications($viewerUserId, $viewerRole, $userId)) {
+            return [];
+        }
+        if (!self::userExistsInScope($userId)) {
+            return [];
+        }
+
+        $subjectRole = self::userRole($userId);
         $scope = self::normalizeScope($scope);
-        $alerts = self::buildAlerts();
+        $alerts = self::buildAlertsForUser($userId, $subjectRole);
         if (empty($alerts)) {
             return [];
         }
@@ -93,7 +128,11 @@ final class NotificationCenter
         return $rows;
     }
 
-    public static function summaryForUser(int $userId): array
+    public static function summaryForUser(
+        int $userId,
+        ?int $viewerUserId = null,
+        ?int $viewerRole = null
+    ): array
     {
         self::ensureSchema();
 
@@ -106,7 +145,7 @@ final class NotificationCenter
             ];
         }
 
-        $all = self::listForUser($userId, 'all');
+        $all = self::listForUser($userId, 'all', $viewerUserId, $viewerRole);
         $open = 0;
         $unread = 0;
         $dismissed = 0;
@@ -132,8 +171,68 @@ final class NotificationCenter
 
     public static function unreadCount(int $userId): int
     {
-        $summary = self::summaryForUser($userId);
+        $summary = self::summaryForUser($userId, $userId, self::userRole($userId));
         return (int) ($summary['unread'] ?? 0);
+    }
+
+    public static function canViewSubject(int $viewerUserId, int $subjectUserId, ?int $viewerRole = null): bool
+    {
+        $resolvedRole = $viewerRole ?? self::userRole($viewerUserId);
+        return self::canViewUserNotifications($viewerUserId, $resolvedRole, $subjectUserId);
+    }
+
+    public static function userOptionsForViewer(int $viewerUserId, ?int $viewerRole = null): array
+    {
+        self::ensureSchema();
+
+        if ($viewerUserId <= 0) {
+            return [];
+        }
+
+        $resolvedRole = $viewerRole ?? self::userRole($viewerUserId);
+        if ($resolvedRole === 99 || $resolvedRole >= 2) {
+            $sql = 'SELECT u.id,
+                           COALESCE(NULLIF(TRIM(CONCAT_WS(" ", u.first_name, u.last_name)), ""), u.email, CONCAT("User #", u.id)) AS name
+                    FROM users u';
+            $where = [];
+            $params = [];
+            if (Schema::hasColumn('users', 'business_id')) {
+                $where[] = 'u.business_id = :business_id';
+                $params['business_id'] = self::currentBusinessId();
+            }
+            if (Schema::hasColumn('users', 'is_active')) {
+                $where[] = 'COALESCE(u.is_active, 1) = 1';
+            }
+            if (Schema::hasColumn('users', 'deleted_at')) {
+                $where[] = 'u.deleted_at IS NULL';
+            }
+            if (!empty($where)) {
+                $sql .= ' WHERE ' . implode(' AND ', $where);
+            }
+            $sql .= ' ORDER BY name ASC, u.id ASC';
+
+            $stmt = Database::connection()->prepare($sql);
+            $stmt->execute($params);
+            $rows = $stmt->fetchAll();
+            return is_array($rows) ? $rows : [];
+        }
+
+        $stmt = Database::connection()->prepare(
+            'SELECT u.id,
+                    COALESCE(NULLIF(TRIM(CONCAT_WS(" ", u.first_name, u.last_name)), ""), u.email, CONCAT("User #", u.id)) AS name
+             FROM users u
+             WHERE u.id = :id
+               ' . (Schema::hasColumn('users', 'business_id') ? 'AND u.business_id = :business_id' : '') . '
+             LIMIT 1'
+        );
+        $params = ['id' => $viewerUserId];
+        if (Schema::hasColumn('users', 'business_id')) {
+            $params['business_id'] = self::currentBusinessId();
+        }
+        $stmt->execute($params);
+        $row = $stmt->fetch();
+
+        return $row ? [$row] : [];
     }
 
     public static function markRead(int $userId, string $key, bool $read = true): void
@@ -146,9 +245,9 @@ final class NotificationCenter
         }
 
         $sql = 'INSERT INTO user_notification_states
-                    (user_id, notification_key, is_read, read_at, dismissed_at, created_at, updated_at)
+                    (user_id, business_id, notification_key, is_read, read_at, dismissed_at, created_at, updated_at)
                 VALUES
-                    (:user_id, :notification_key, :is_read, :read_at, NULL, NOW(), NOW())
+                    (:user_id, :business_id, :notification_key, :is_read, :read_at, NULL, NOW(), NOW())
                 ON DUPLICATE KEY UPDATE
                     is_read = VALUES(is_read),
                     read_at = VALUES(read_at),
@@ -157,10 +256,36 @@ final class NotificationCenter
         $stmt = Database::connection()->prepare($sql);
         $stmt->execute([
             'user_id' => $userId,
+            'business_id' => self::currentBusinessId(),
             'notification_key' => $normalizedKey,
             'is_read' => $read ? 1 : 0,
             'read_at' => $read ? date('Y-m-d H:i:s') : null,
         ]);
+    }
+
+    public static function markReadMany(int $userId, array $keys): int
+    {
+        self::ensureSchema();
+
+        if ($userId <= 0 || empty($keys)) {
+            return 0;
+        }
+
+        $count = 0;
+        $deduped = [];
+        foreach ($keys as $key) {
+            $normalized = trim((string) $key);
+            if ($normalized !== '') {
+                $deduped[$normalized] = true;
+            }
+        }
+
+        foreach (array_keys($deduped) as $key) {
+            self::markRead($userId, $key, true);
+            $count++;
+        }
+
+        return $count;
     }
 
     public static function dismiss(int $userId, string $key, bool $dismiss = true): void
@@ -173,9 +298,9 @@ final class NotificationCenter
         }
 
         $sql = 'INSERT INTO user_notification_states
-                    (user_id, notification_key, is_read, read_at, dismissed_at, created_at, updated_at)
+                    (user_id, business_id, notification_key, is_read, read_at, dismissed_at, created_at, updated_at)
                 VALUES
-                    (:user_id, :notification_key, 1, :read_at, :dismissed_at, NOW(), NOW())
+                    (:user_id, :business_id, :notification_key, 1, :read_at, :dismissed_at, NOW(), NOW())
                 ON DUPLICATE KEY UPDATE
                     dismissed_at = VALUES(dismissed_at),
                     is_read = CASE WHEN VALUES(dismissed_at) IS NULL THEN is_read ELSE 1 END,
@@ -185,6 +310,7 @@ final class NotificationCenter
         $stmt = Database::connection()->prepare($sql);
         $stmt->execute([
             'user_id' => $userId,
+            'business_id' => self::currentBusinessId(),
             'notification_key' => $normalizedKey,
             'read_at' => date('Y-m-d H:i:s'),
             'dismissed_at' => $dismiss ? date('Y-m-d H:i:s') : null,
@@ -217,7 +343,9 @@ final class NotificationCenter
         $sql = 'SELECT notification_key, is_read, read_at, dismissed_at
                 FROM user_notification_states
                 WHERE user_id = :user_id
+                  AND business_id = :business_id
                   AND notification_key IN (' . implode(', ', $placeholders) . ')';
+        $params['business_id'] = self::currentBusinessId();
 
         $stmt = Database::connection()->prepare($sql);
         $stmt->execute($params);
@@ -231,18 +359,20 @@ final class NotificationCenter
         return $state;
     }
 
-    private static function buildAlerts(): array
+    private static function buildAlertsForUser(int $subjectUserId, int $subjectRole): array
     {
         $alerts = [];
-        foreach ([
-            [self::class, 'overdueTasks'],
-            [self::class, 'upcomingTasks'],
-            [self::class, 'unpaidCompletedJobs'],
-            [self::class, 'prospectFollowUpsDue'],
-            [self::class, 'consignorPayoutsDue'],
-        ] as $loader) {
+        $loaders = [
+            static fn (): array => self::overdueTasks($subjectUserId),
+            static fn (): array => self::upcomingTasks($subjectUserId),
+            static fn (): array => self::unpaidCompletedJobs($subjectUserId, $subjectRole),
+            static fn (): array => self::prospectFollowUpsDue($subjectUserId, $subjectRole),
+            static fn (): array => self::consignorPayoutsDue($subjectUserId, $subjectRole),
+        ];
+
+        foreach ($loaders as $loader) {
             try {
-                $items = call_user_func($loader);
+                $items = $loader();
             } catch (\Throwable) {
                 $items = [];
             }
@@ -282,8 +412,13 @@ final class NotificationCenter
         return $alerts;
     }
 
-    private static function overdueTasks(): array
+    private static function overdueTasks(int $subjectUserId): array
     {
+        if ($subjectUserId <= 0) {
+            return [];
+        }
+
+        $ownershipWhere = self::taskOwnershipWhere('t');
         $sql = 'SELECT t.id,
                        t.title,
                        t.due_at,
@@ -295,12 +430,22 @@ final class NotificationCenter
                 LEFT JOIN users u ON u.id = t.assigned_user_id
                 WHERE t.deleted_at IS NULL
                   AND t.status IN ("open", "in_progress")
+                  ' . (Schema::hasColumn('todos', 'business_id') ? 'AND t.business_id = :business_id
+                  ' : '') . '
+                  AND ' . $ownershipWhere['sql'] . '
                   AND t.due_at IS NOT NULL
                   AND t.due_at < NOW()
                 ORDER BY t.due_at ASC, t.importance DESC, t.id DESC
                 LIMIT 40';
 
-        $rows = Database::connection()->query($sql)->fetchAll();
+        $params = $ownershipWhere['params'] + ['subject_user_id' => $subjectUserId];
+        if (Schema::hasColumn('todos', 'business_id')) {
+            $params['business_id'] = self::currentBusinessId();
+        }
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute($params);
+        $rows = $stmt->fetchAll();
 
         $alerts = [];
         foreach ($rows as $row) {
@@ -334,8 +479,13 @@ final class NotificationCenter
         return $alerts;
     }
 
-    private static function upcomingTasks(): array
+    private static function upcomingTasks(int $subjectUserId): array
     {
+        if ($subjectUserId <= 0) {
+            return [];
+        }
+
+        $ownershipWhere = self::taskOwnershipWhere('t');
         $sql = 'SELECT t.id,
                        t.title,
                        t.due_at,
@@ -345,13 +495,23 @@ final class NotificationCenter
                 FROM todos t
                 WHERE t.deleted_at IS NULL
                   AND t.status IN ("open", "in_progress")
+                  ' . (Schema::hasColumn('todos', 'business_id') ? 'AND t.business_id = :business_id
+                  ' : '') . '
+                  AND ' . $ownershipWhere['sql'] . '
                   AND t.due_at IS NOT NULL
                   AND t.due_at >= NOW()
                   AND t.due_at <= DATE_ADD(NOW(), INTERVAL 3 DAY)
                 ORDER BY t.due_at ASC, t.importance DESC, t.id DESC
                 LIMIT 40';
 
-        $rows = Database::connection()->query($sql)->fetchAll();
+        $params = $ownershipWhere['params'] + ['subject_user_id' => $subjectUserId];
+        if (Schema::hasColumn('todos', 'business_id')) {
+            $params['business_id'] = self::currentBusinessId();
+        }
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute($params);
+        $rows = $stmt->fetchAll();
 
         $alerts = [];
         foreach ($rows as $row) {
@@ -385,8 +545,25 @@ final class NotificationCenter
         return $alerts;
     }
 
-    private static function unpaidCompletedJobs(): array
+    private static function unpaidCompletedJobs(int $subjectUserId, int $subjectRole): array
     {
+        if ($subjectUserId <= 0) {
+            return [];
+        }
+
+        $where = [];
+        $params = [];
+        if (Schema::hasColumn('jobs', 'business_id')) {
+            $where[] = 'j.business_id = :business_id';
+            $params['business_id'] = self::currentBusinessId();
+        }
+        if (Schema::hasColumn('jobs', 'created_by')) {
+            $where[] = 'j.created_by = :subject_user_id';
+            $params['subject_user_id'] = $subjectUserId;
+        } elseif ($subjectRole < 2 && $subjectRole !== 99) {
+            return [];
+        }
+
         $sql = 'SELECT j.id,
                        j.name,
                        j.total_billed,
@@ -403,11 +580,13 @@ final class NotificationCenter
                   AND COALESCE(j.active, 1) = 1
                   AND j.job_status = "complete"
                   AND COALESCE(j.total_billed, 0) > 0
-                  AND COALESCE(j.paid, 0) = 0
+                  AND COALESCE(j.paid, 0) = 0' . (!empty($where) ? ' AND ' . implode(' AND ', $where) : '') . '
                 ORDER BY COALESCE(j.updated_at, j.end_date, j.created_at) DESC, j.id DESC
                 LIMIT 30';
 
-        $rows = Database::connection()->query($sql)->fetchAll();
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute($params);
+        $rows = $stmt->fetchAll();
 
         $alerts = [];
         foreach ($rows as $row) {
@@ -439,8 +618,25 @@ final class NotificationCenter
         return $alerts;
     }
 
-    private static function prospectFollowUpsDue(): array
+    private static function prospectFollowUpsDue(int $subjectUserId, int $subjectRole): array
     {
+        if ($subjectUserId <= 0) {
+            return [];
+        }
+
+        $where = [];
+        $params = [];
+        if (Schema::hasColumn('prospects', 'business_id')) {
+            $where[] = 'p.business_id = :business_id';
+            $params['business_id'] = self::currentBusinessId();
+        }
+        if (Schema::hasColumn('prospects', 'created_by')) {
+            $where[] = 'p.created_by = :subject_user_id';
+            $params['subject_user_id'] = $subjectUserId;
+        } elseif ($subjectRole < 2 && $subjectRole !== 99) {
+            return [];
+        }
+
         $sql = 'SELECT p.id,
                        p.follow_up_on,
                        p.next_step,
@@ -455,12 +651,16 @@ final class NotificationCenter
                 WHERE p.deleted_at IS NULL
                   AND COALESCE(p.active, 1) = 1
                   AND p.status = "active"
+                  ' . (!empty($where) ? 'AND ' . implode(' AND ', $where) . '
+                  ' : '') . '
                   AND p.follow_up_on IS NOT NULL
                   AND DATE(p.follow_up_on) <= CURDATE()
                 ORDER BY p.follow_up_on ASC, p.priority_rating DESC, p.id DESC
                 LIMIT 30';
 
-        $rows = Database::connection()->query($sql)->fetchAll();
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute($params);
+        $rows = $stmt->fetchAll();
 
         $alerts = [];
         foreach ($rows as $row) {
@@ -495,9 +695,26 @@ final class NotificationCenter
         return $alerts;
     }
 
-    private static function consignorPayoutsDue(): array
+    private static function consignorPayoutsDue(int $subjectUserId, int $subjectRole): array
     {
+        if ($subjectUserId <= 0) {
+            return [];
+        }
+
         Consignor::ensureSchema();
+
+        $where = [];
+        $params = [];
+        if (Schema::hasColumn('consignors', 'business_id')) {
+            $where[] = 'c.business_id = :business_id';
+            $params['business_id'] = self::currentBusinessId();
+        }
+        if (Schema::hasColumn('consignors', 'created_by')) {
+            $where[] = 'c.created_by = :subject_user_id';
+            $params['subject_user_id'] = $subjectUserId;
+        } elseif ($subjectRole < 2 && $subjectRole !== 99) {
+            return [];
+        }
 
         $sql = 'SELECT c.id,
                        c.business_name,
@@ -508,12 +725,16 @@ final class NotificationCenter
                 FROM consignors c
                 WHERE c.deleted_at IS NULL
                   AND COALESCE(c.active, 1) = 1
+                  ' . (!empty($where) ? 'AND ' . implode(' AND ', $where) . '
+                  ' : '') . '
                   AND c.next_payment_due_date IS NOT NULL
                   AND c.next_payment_due_date <= CURDATE()
                 ORDER BY c.next_payment_due_date ASC, c.id DESC
                 LIMIT 20';
 
-        $rows = Database::connection()->query($sql)->fetchAll();
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute($params);
+        $rows = $stmt->fetchAll();
 
         $alerts = [];
         foreach ($rows as $row) {
@@ -548,6 +769,85 @@ final class NotificationCenter
     private static function makeKey(string $type, int $id, string $stamp = ''): string
     {
         return hash('sha256', $type . '|' . $id . '|' . trim($stamp));
+    }
+
+    private static function taskOwnershipWhere(string $alias): array
+    {
+        $subjectParam = ':subject_user_id';
+        if (Schema::hasColumn('todos', 'created_by')) {
+            return [
+                'sql' => '((' . $alias . '.assigned_user_id = ' . $subjectParam . ')
+                           OR (' . $alias . '.assigned_user_id IS NULL AND ' . $alias . '.created_by = ' . $subjectParam . '))',
+                'params' => [],
+            ];
+        }
+
+        return [
+            'sql' => $alias . '.assigned_user_id = ' . $subjectParam,
+            'params' => [],
+        ];
+    }
+
+    private static function userRole(int $userId): int
+    {
+        if ($userId <= 0) {
+            return 0;
+        }
+
+        $sql = 'SELECT role FROM users WHERE id = :id';
+        $params = ['id' => $userId];
+        if (Schema::hasColumn('users', 'business_id')) {
+            $sql .= ' AND business_id = :business_id';
+            $params['business_id'] = self::currentBusinessId();
+        }
+        $sql .= ' LIMIT 1';
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute($params);
+        $role = $stmt->fetchColumn();
+
+        return is_numeric((string) $role) ? (int) $role : 0;
+    }
+
+    private static function userExistsInScope(int $userId): bool
+    {
+        if ($userId <= 0) {
+            return false;
+        }
+
+        $sql = 'SELECT 1 FROM users WHERE id = :id';
+        $params = ['id' => $userId];
+        if (Schema::hasColumn('users', 'business_id')) {
+            $sql .= ' AND business_id = :business_id';
+            $params['business_id'] = self::currentBusinessId();
+        }
+        $sql .= ' LIMIT 1';
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute($params);
+        return (bool) $stmt->fetchColumn();
+    }
+
+    private static function canViewUserNotifications(int $viewerUserId, int $viewerRole, int $subjectUserId): bool
+    {
+        if ($viewerUserId <= 0 || $subjectUserId <= 0) {
+            return false;
+        }
+
+        if ($viewerUserId === $subjectUserId) {
+            return true;
+        }
+
+        return $viewerRole === 99 || $viewerRole >= 2;
+    }
+
+    private static function currentBusinessId(): int
+    {
+        if (function_exists('current_business_id')) {
+            return max(1, (int) current_business_id());
+        }
+
+        return max(1, (int) config('app.default_business_id', 1));
     }
 
     private static function ensureForeignKey(string $constraintName, string $sql, string $schema): void
