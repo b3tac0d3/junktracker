@@ -2,7 +2,15 @@
 
 declare(strict_types=1);
 
-ini_set('display_errors', '1');
+$env = strtolower(trim((string) (getenv('APP_ENV') ?: 'local')));
+$debugRaw = getenv('APP_DEBUG');
+$isDebug = $debugRaw !== false
+    ? !in_array(strtolower(trim((string) $debugRaw)), ['0', 'false', 'off', 'no'], true)
+    : in_array($env, ['local', 'development', 'dev'], true);
+
+ini_set('display_errors', $isDebug ? '1' : '0');
+ini_set('display_startup_errors', $isDebug ? '1' : '0');
+ini_set('log_errors', '1');
 error_reporting(E_ALL);
 
 $httpsFlag = strtolower((string) ($_SERVER['HTTPS'] ?? ''));

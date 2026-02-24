@@ -376,6 +376,10 @@ final class JobsController extends Controller
         }
 
         Job::updateStatus($id, $status, $this->actorId());
+        $createdInvoiceId = null;
+        if (strtolower($status) === 'active') {
+            $createdInvoiceId = JobDocument::convertLatestEstimateForAcceptedJob($id, $this->actorId());
+        }
         $this->logJobAction(
             $id,
             'status_changed',
@@ -388,7 +392,28 @@ final class JobsController extends Controller
             'Updated status for job #' . $id . ' to ' . $status . '.'
         );
 
-        flash('success', 'Job status updated.');
+        if ($createdInvoiceId !== null && $createdInvoiceId > 0) {
+            Job::createAction($id, [
+                'action_type' => 'bill_sent',
+                'action_at' => date('Y-m-d H:i:s'),
+                'amount' => null,
+                'ref_table' => 'job_estimate_invoices',
+                'ref_id' => $createdInvoiceId,
+                'note' => 'Estimate auto-converted to invoice #' . $createdInvoiceId . ' after job activation.',
+            ], $this->actorId());
+            log_user_action(
+                'job_estimate_auto_converted',
+                'job_estimate_invoices',
+                $createdInvoiceId,
+                'Auto-converted estimate to invoice #' . $createdInvoiceId . ' for job #' . $id . '.'
+            );
+        }
+
+        if ($createdInvoiceId !== null && $createdInvoiceId > 0) {
+            flash('success', 'Job status updated. Estimate auto-converted to invoice #' . $createdInvoiceId . '.');
+        } else {
+            flash('success', 'Job status updated.');
+        }
         redirect('/jobs/' . $id);
     }
 

@@ -36,33 +36,45 @@ final class SiteAdminController extends Controller
         clear_old();
     }
 
+    public function createBusiness(): void
+    {
+        $this->authorize();
+
+        $this->render('site_admin/create', [
+            'pageTitle' => 'Add Business',
+            'formValues' => [],
+        ]);
+
+        clear_old();
+    }
+
     public function storeBusiness(): void
     {
         $this->authorize();
 
         if (!verify_csrf($_POST['csrf_token'] ?? null)) {
             flash('error', 'Your session expired. Please try again.');
-            redirect('/site-admin');
+            redirect('/site-admin/businesses/new');
         }
 
         if (!Business::isAvailable()) {
             flash('error', 'Businesses table is not available yet. Run the latest migration bundle first.');
-            redirect('/site-admin');
+            redirect('/site-admin/businesses/new');
         }
 
         $data = $this->collectBusinessInput($_POST);
-
         $errors = $this->validateBusinessInput($data);
+        $errors = array_merge($errors, $this->applyLogoUpload($data, null));
         if (!empty($errors)) {
             flash('error', implode(' ', $errors));
             flash_old($data);
-            redirect('/site-admin');
+            redirect('/site-admin/businesses/new');
         }
 
         $businessId = Business::create($data, auth_user_id());
         if ($businessId <= 0) {
             flash('error', 'Unable to create business right now.');
-            redirect('/site-admin');
+            redirect('/site-admin/businesses/new');
         }
 
         if ((int) ($_POST['switch_now'] ?? 0) === 1) {
@@ -80,7 +92,7 @@ final class SiteAdminController extends Controller
         flash('success', (int) ($_POST['switch_now'] ?? 0) === 1
             ? 'Business created and active context switched.'
             : 'Business created.');
-        redirect('/site-admin');
+        redirect('/site-admin/businesses/' . $businessId);
     }
 
     public function editBusiness(array $params): void
@@ -140,6 +152,7 @@ final class SiteAdminController extends Controller
 
         $data = $this->collectBusinessInput($_POST);
         $errors = $this->validateBusinessInput($data, $id);
+        $errors = array_merge($errors, $this->applyLogoUpload($data, $business));
         if (!empty($errors)) {
             flash('error', implode(' ', $errors));
             flash_old($data);
@@ -254,6 +267,20 @@ final class SiteAdminController extends Controller
             $errors[] = 'Business website must be a valid URL.';
         }
 
+        $timezone = trim((string) ($data['timezone'] ?? ''));
+        if ($timezone !== '') {
+            try {
+                new \DateTimeZone($timezone);
+            } catch (\Throwable) {
+                $errors[] = 'Timezone is invalid.';
+            }
+        }
+
+        $defaultTaxRate = $data['invoice_default_tax_rate'] ?? null;
+        if ($defaultTaxRate !== null && (!is_numeric((string) $defaultTaxRate) || (float) $defaultTaxRate < 0 || (float) $defaultTaxRate > 100)) {
+            $errors[] = 'Default invoice tax rate must be between 0 and 100.';
+        }
+
         return $errors;
     }
 
@@ -265,7 +292,140 @@ final class SiteAdminController extends Controller
             'email' => trim((string) ($source['email'] ?? '')),
             'phone' => trim((string) ($source['phone'] ?? '')),
             'website' => trim((string) ($source['website'] ?? '')),
+            'address_line1' => trim((string) ($source['address_line1'] ?? '')),
+            'address_line2' => trim((string) ($source['address_line2'] ?? '')),
+            'city' => trim((string) ($source['city'] ?? '')),
+            'state' => trim((string) ($source['state'] ?? '')),
+            'postal_code' => trim((string) ($source['postal_code'] ?? '')),
+            'country' => trim((string) ($source['country'] ?? 'US')) ?: 'US',
+            'tax_id' => trim((string) ($source['tax_id'] ?? '')),
+            'invoice_default_tax_rate' => $this->toNullableDecimal($source['invoice_default_tax_rate'] ?? null),
+            'timezone' => trim((string) ($source['timezone'] ?? 'America/New_York')) ?: 'America/New_York',
+            'logo_path' => trim((string) ($source['logo_path'] ?? '')),
+            'logo_mime_type' => trim((string) ($source['logo_mime_type'] ?? '')),
             'is_active' => (int) ($source['is_active'] ?? 1) === 1 ? 1 : 0,
         ];
+    }
+
+    private function applyLogoUpload(array &$data, ?array $existingBusiness): array
+    {
+        $errors = [];
+        if (!empty($_POST['remove_logo'])) {
+            $this->removeStoredLogo((string) ($existingBusiness['logo_path'] ?? ''));
+            $data['logo_path'] = '';
+            $data['logo_mime_type'] = '';
+            return $errors;
+        }
+
+        $upload = $_FILES['logo_file'] ?? null;
+        if (!is_array($upload) || (int) ($upload['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) {
+            $data['logo_path'] = trim((string) ($existingBusiness['logo_path'] ?? ''));
+            $data['logo_mime_type'] = trim((string) ($existingBusiness['logo_mime_type'] ?? ''));
+            return $errors;
+        }
+
+        $errorCode = (int) ($upload['error'] ?? UPLOAD_ERR_OK);
+        if ($errorCode !== UPLOAD_ERR_OK) {
+            $errors[] = 'Logo upload failed. Please try again.';
+            return $errors;
+        }
+
+        $tmpPath = (string) ($upload['tmp_name'] ?? '');
+        if ($tmpPath === '' || !is_uploaded_file($tmpPath)) {
+            $errors[] = 'Invalid logo upload payload.';
+            return $errors;
+        }
+
+        $mimeType = trim((string) ($upload['type'] ?? ''));
+        if ($mimeType === '' || !str_starts_with($mimeType, 'image/')) {
+            $detectedMime = @mime_content_type($tmpPath);
+            $mimeType = is_string($detectedMime) ? trim($detectedMime) : '';
+        }
+        if ($mimeType === '' || !str_starts_with($mimeType, 'image/')) {
+            $errors[] = 'Logo must be an image file.';
+            return $errors;
+        }
+
+        $extension = match ($mimeType) {
+            'image/png' => 'png',
+            'image/jpeg', 'image/jpg' => 'jpg',
+            'image/gif' => 'gif',
+            'image/webp' => 'webp',
+            default => '',
+        };
+        if ($extension === '') {
+            $errors[] = 'Supported logo formats: PNG, JPG, GIF, WEBP.';
+            return $errors;
+        }
+
+        $size = (int) ($upload['size'] ?? 0);
+        if ($size > 4 * 1024 * 1024) {
+            $errors[] = 'Logo must be 4MB or smaller.';
+            return $errors;
+        }
+
+        $storageDir = $this->businessLogoStorageRoot();
+        if (!is_dir($storageDir)) {
+            @mkdir($storageDir, 0775, true);
+        }
+        if (!is_dir($storageDir) || !is_writable($storageDir)) {
+            $errors[] = 'Business logo storage is not writable.';
+            return $errors;
+        }
+
+        try {
+            $token = bin2hex(random_bytes(4));
+        } catch (\Throwable) {
+            $token = (string) mt_rand(1000, 9999);
+        }
+        $fileName = 'business-logo-' . date('YmdHis') . '-' . $token . '.' . $extension;
+        $target = $storageDir . '/' . $fileName;
+        if (!@move_uploaded_file($tmpPath, $target)) {
+            $errors[] = 'Could not save uploaded logo.';
+            return $errors;
+        }
+
+        $this->removeStoredLogo((string) ($existingBusiness['logo_path'] ?? ''));
+        $data['logo_path'] = 'storage/business_logos/' . $fileName;
+        $data['logo_mime_type'] = $mimeType;
+        return $errors;
+    }
+
+    private function businessLogoStorageRoot(): string
+    {
+        return BASE_PATH . '/storage/business_logos';
+    }
+
+    private function removeStoredLogo(string $relativePath): void
+    {
+        $relativePath = trim($relativePath);
+        if ($relativePath === '') {
+            return;
+        }
+
+        $absolute = BASE_PATH . '/' . ltrim($relativePath, '/');
+        $logoRoot = $this->businessLogoStorageRoot();
+        if (!str_starts_with($absolute, $logoRoot . '/')) {
+            return;
+        }
+
+        if (is_file($absolute)) {
+            @unlink($absolute);
+        }
+    }
+
+    private function toNullableDecimal(mixed $value): ?float
+    {
+        $raw = trim((string) ($value ?? ''));
+        if ($raw === '') {
+            return null;
+        }
+
+        $normalized = str_replace([',', '$', '%'], '', $raw);
+        if (!is_numeric($normalized)) {
+            return null;
+        }
+
+        return round((float) $normalized, 4);
     }
 }

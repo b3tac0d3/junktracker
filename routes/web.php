@@ -121,6 +121,7 @@ $router->get('/admin/lookups/{id}/edit', [AdminLookupsController::class, 'edit']
 $router->post('/admin/lookups/{id}/edit', [AdminLookupsController::class, 'update']);
 $router->post('/admin/lookups/{id}/delete', [AdminLookupsController::class, 'delete']);
 $router->get('/site-admin', [SiteAdminController::class, 'index']);
+$router->get('/site-admin/businesses/new', [SiteAdminController::class, 'createBusiness']);
 $router->get('/site-admin/businesses/{id}', [SiteAdminController::class, 'showBusiness']);
 $router->get('/site-admin/businesses/{id}/edit', [SiteAdminController::class, 'editBusiness']);
 $router->post('/site-admin/businesses', [SiteAdminController::class, 'storeBusiness']);
@@ -194,6 +195,7 @@ $router->get('/jobs/{id}/documents/new', [JobDocumentsController::class, 'create
 $router->post('/jobs/{id}/documents/new', [JobDocumentsController::class, 'store']);
 $router->get('/jobs/{id}/documents/{documentId}/edit', [JobDocumentsController::class, 'edit']);
 $router->post('/jobs/{id}/documents/{documentId}/edit', [JobDocumentsController::class, 'update']);
+$router->post('/jobs/{id}/documents/{documentId}/convert-to-invoice', [JobDocumentsController::class, 'convertToInvoice']);
 $router->post('/jobs/{id}/documents/{documentId}/delete', [JobDocumentsController::class, 'delete']);
 $router->get('/jobs/{id}/documents/{documentId}/pdf', [JobDocumentsController::class, 'pdf']);
 $router->get('/jobs/{id}/documents/{documentId}', [JobDocumentsController::class, 'show']);

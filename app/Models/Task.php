@@ -882,18 +882,196 @@ final class Task
 
     private static function attachLinkData(array $rows): array
     {
+        $batchLinks = self::resolveLinksBatch($rows);
+
         foreach ($rows as &$row) {
-            $link = self::resolveLink(
-                (string) ($row['link_type'] ?? 'general'),
-                isset($row['link_id']) ? (int) $row['link_id'] : null
-            );
+            $linkType = (string) ($row['link_type'] ?? 'general');
+            $linkId = isset($row['link_id']) ? (int) $row['link_id'] : null;
+            $cacheKey = self::linkCacheKey($linkType, $linkId);
+            $link = ($cacheKey !== null && isset($batchLinks[$cacheKey]))
+                ? $batchLinks[$cacheKey]
+                : self::resolveLink($linkType, $linkId);
             $row['link_label'] = $link['label'] ?? '—';
             $row['link_url'] = $link['url'] ?? null;
-            $row['link_type_label'] = $link['type_label'] ?? self::linkTypeLabel((string) ($row['link_type'] ?? 'general'));
+            $row['link_type_label'] = $link['type_label'] ?? self::linkTypeLabel($linkType);
         }
         unset($row);
 
         return $rows;
+    }
+
+    private static function resolveLinksBatch(array $rows): array
+    {
+        $idsByType = [];
+
+        foreach ($rows as $row) {
+            $type = self::normalizeLinkType((string) ($row['link_type'] ?? 'general'));
+            $id = isset($row['link_id']) ? (int) $row['link_id'] : 0;
+            if ($type === 'general' || $id <= 0) {
+                continue;
+            }
+
+            $idsByType[$type][$id] = true;
+        }
+
+        if ($idsByType === []) {
+            return [];
+        }
+
+        $links = [];
+        foreach ($idsByType as $type => $idMap) {
+            $ids = array_map('intval', array_keys($idMap));
+            if ($ids === []) {
+                continue;
+            }
+
+            $labels = self::fetchLabelsByType($type, $ids);
+            foreach ($ids as $id) {
+                $label = $labels[$id] ?? (self::linkTypeLabel($type) . ' #' . $id);
+                $links[$type . ':' . $id] = [
+                    'label' => $label,
+                    'url' => self::linkUrlForType($type, $id),
+                    'type_label' => self::linkTypeLabel($type),
+                ];
+            }
+        }
+
+        return $links;
+    }
+
+    private static function fetchLabelsByType(string $type, array $ids): array
+    {
+        return match ($type) {
+            'client' => self::fetchIdLabelMap(
+                'SELECT c.id,
+                        COALESCE(
+                            NULLIF(c.business_name, \'\'),
+                            NULLIF(TRIM(CONCAT_WS(\' \', c.first_name, c.last_name)), \'\'),
+                            CONCAT(\'Client #\', c.id)
+                        ) AS label
+                 FROM clients c
+                 WHERE c.id IN (%s)',
+                $ids
+            ),
+            'estate' => self::fetchIdLabelMap(
+                'SELECT e.id, e.name AS label
+                 FROM estates e
+                 WHERE e.id IN (%s)',
+                $ids
+            ),
+            'company' => self::fetchIdLabelMap(
+                'SELECT c.id, c.name AS label
+                 FROM companies c
+                 WHERE c.id IN (%s)',
+                $ids
+            ),
+            'employee' => self::fetchIdLabelMap(
+                'SELECT e.id,
+                        COALESCE(NULLIF(TRIM(CONCAT_WS(\' \', e.first_name, e.last_name)), \'\'), CONCAT(\'Employee #\', e.id)) AS label
+                 FROM employees e
+                 WHERE e.id IN (%s)',
+                $ids
+            ),
+            'job' => self::fetchIdLabelMap(
+                'SELECT j.id, COALESCE(NULLIF(j.name, \'\'), CONCAT(\'Job #\', j.id)) AS label
+                 FROM jobs j
+                 WHERE j.id IN (%s)',
+                $ids
+            ),
+            'expense' => self::fetchIdLabelMap(
+                'SELECT e.id,
+                        CONCAT(
+                            \'Expense #\', e.id,
+                            \' • \', COALESCE(NULLIF(ec.name, \'\'), NULLIF(e.category, \'\'), \'Expense\'),
+                            \' • $\', FORMAT(e.amount, 2)
+                        ) AS label
+                 FROM expenses e
+                 LEFT JOIN expense_categories ec ON ec.id = e.expense_category_id
+                 WHERE e.id IN (%s)',
+                $ids
+            ),
+            'prospect' => self::fetchIdLabelMap(
+                'SELECT p.id,
+                        CONCAT(
+                            \'Prospect #\', p.id,
+                            \' • \',
+                            COALESCE(
+                                NULLIF(c.business_name, \'\'),
+                                NULLIF(TRIM(CONCAT_WS(\' \', c.first_name, c.last_name)), \'\'),
+                                CONCAT(\'Client #\', c.id)
+                            )
+                        ) AS label
+                 FROM prospects p
+                 LEFT JOIN clients c ON c.id = p.client_id
+                 WHERE p.id IN (%s)',
+                $ids
+            ),
+            'sale' => self::fetchIdLabelMap(
+                'SELECT s.id, COALESCE(NULLIF(s.name, \'\'), CONCAT(\'Sale #\', s.id)) AS label
+                 FROM sales s
+                 WHERE s.id IN (%s)',
+                $ids
+            ),
+            default => [],
+        };
+    }
+
+    private static function fetchIdLabelMap(string $sqlTemplate, array $ids): array
+    {
+        $normalized = array_values(array_unique(array_filter(
+            array_map('intval', $ids),
+            static fn (int $value): bool => $value > 0
+        )));
+
+        if ($normalized === []) {
+            return [];
+        }
+
+        $placeholders = implode(',', array_fill(0, count($normalized), '?'));
+        $sql = sprintf($sqlTemplate, $placeholders);
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute($normalized);
+        $rows = $stmt->fetchAll();
+
+        $map = [];
+        foreach ($rows as $row) {
+            $id = (int) ($row['id'] ?? 0);
+            if ($id <= 0) {
+                continue;
+            }
+
+            $map[$id] = (string) ($row['label'] ?? '');
+        }
+
+        return $map;
+    }
+
+    private static function linkUrlForType(string $type, int $id): ?string
+    {
+        if ($id <= 0) {
+            return null;
+        }
+
+        return match ($type) {
+            'client' => '/clients/' . $id,
+            'estate' => '/estates/' . $id,
+            'company' => '/companies/' . $id,
+            'job' => '/jobs/' . $id,
+            'prospect' => '/prospects/' . $id,
+            'sale' => '/sales/' . $id,
+            default => null,
+        };
+    }
+
+    private static function linkCacheKey(string $type, ?int $id): ?string
+    {
+        $normalizedType = self::normalizeLinkType($type);
+        $normalizedId = $id !== null ? (int) $id : 0;
+        if ($normalizedType === 'general' || $normalizedId <= 0) {
+            return null;
+        }
+
+        return $normalizedType . ':' . $normalizedId;
     }
 
     private static function normalizeLinkType(string $type): string

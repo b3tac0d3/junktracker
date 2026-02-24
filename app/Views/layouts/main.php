@@ -288,7 +288,7 @@ $canViewServiceSection = can_access('jobs', 'view')
                         <div class="small text-muted mt-1 opacity-75"><?= e($activeBusinessName) ?></div>
                     <?php endif; ?>
                     <?php if ($appVersion !== ''): ?>
-                        <div class="small text-muted mt-1 opacity-50" style="font-size: 0.65rem;">v<?= e($appVersion) ?></div>
+                        <div class="small mt-1 opacity-75 sidenav-version-tag" style="font-size: 0.65rem;">v<?= e($appVersion) ?></div>
                     <?php endif; ?>
                 </div>
             </nav>
@@ -300,7 +300,12 @@ $canViewServiceSection = can_access('jobs', 'view')
             <footer class="py-4 bg-light mt-auto">
                 <div class="container-fluid px-4">
                     <div class="d-flex align-items-center justify-content-between small">
-                        <div class="text-muted">Copyright &copy; JunkTracker <?= date('Y') ?> · v<?= e($appVersion) ?></div>
+                        <div class="text-muted">
+                            Copyright &copy; JunkTracker <?= date('Y') ?>
+                            <?php if ($appVersion !== ''): ?>
+                                &middot; <span class="footer-version-tag">v<?= e($appVersion) ?></span>
+                            <?php endif; ?>
+                        </div>
                         <div>
                             <a href="<?= url('/privacy-policy') ?>" class="text-decoration-none text-muted">Privacy Policy</a>
                             &middot;

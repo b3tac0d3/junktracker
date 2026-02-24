@@ -1,7 +1,11 @@
 <?php
-    $settings = is_array($settings ?? null) ? $settings : [];
-    $isReady = !empty($isReady);
+$business = is_array($business ?? null) ? $business : [];
+$businessId = (int) ($businessId ?? current_business_id());
+$isSiteAdmin = !empty($isSiteAdmin);
+$logoPath = trim((string) ($business['logo_path'] ?? ''));
+$logoUrl = $logoPath !== '' ? url('/' . ltrim($logoPath, '/')) : '';
 ?>
+
 <div class="container-fluid px-4">
     <div class="d-flex flex-wrap align-items-center justify-content-between mt-4 mb-3 gap-3">
         <div>
@@ -12,87 +16,100 @@
                 <li class="breadcrumb-item active">Business Info</li>
             </ol>
         </div>
-        <a class="btn btn-outline-secondary" href="<?= url('/admin') ?>">Back to Admin</a>
+        <div class="d-flex gap-2 mobile-two-col-buttons">
+            <?php if ($isSiteAdmin && $businessId > 0): ?>
+                <a class="btn btn-primary" href="<?= url('/site-admin/businesses/' . $businessId . '/edit') ?>">
+                    <i class="fas fa-pen me-1"></i>
+                    Edit Business Profile
+                </a>
+            <?php endif; ?>
+            <a class="btn btn-outline-secondary" href="<?= url('/admin') ?>">Back to Admin</a>
+        </div>
     </div>
 
-    <?php if ($success = flash('success')): ?>
-        <div class="alert alert-success"><?= e($success) ?></div>
-    <?php endif; ?>
     <?php if ($error = flash('error')): ?>
         <div class="alert alert-danger"><?= e($error) ?></div>
     <?php endif; ?>
 
-    <?php if (!$isReady): ?>
-        <div class="alert alert-warning">`app_settings` table is not available yet. Run migrations to enable persisted business settings.</div>
-    <?php endif; ?>
-
-    <form method="post" action="<?= url('/admin/business-info') ?>" class="card border-0 shadow-sm">
-        <?= csrf_field() ?>
-        <div class="card-header"><i class="fas fa-building me-1"></i>Business Profile</div>
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <span><i class="fas fa-building me-1"></i>Current Business Profile</span>
+            <span class="badge bg-secondary">ID #<?= e((string) $businessId) ?></span>
+        </div>
         <div class="card-body">
-            <div class="row g-3">
-                <div class="col-md-6">
-                    <label class="form-label" for="business_name">Business Name</label>
-                    <input class="form-control" id="business_name" name="business_name" type="text" value="<?= e((string) old('business.name', $settings['business.name'] ?? '')) ?>" required />
+            <?php if (empty($business)): ?>
+                <div class="text-muted">No business profile found for the active workspace.</div>
+            <?php else: ?>
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <div class="text-muted small">Business Name</div>
+                        <div class="fw-semibold"><?= e((string) ($business['name'] ?? '—')) ?></div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="text-muted small">Legal Name</div>
+                        <div class="fw-semibold"><?= e((string) ($business['legal_name'] ?? '—')) ?></div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="text-muted small">Email</div>
+                        <div class="fw-semibold"><?= e((string) ($business['email'] ?? '—')) ?></div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="text-muted small">Phone</div>
+                        <div class="fw-semibold"><?= e((string) ($business['phone'] ?? '—')) ?></div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="text-muted small">Website</div>
+                        <div class="fw-semibold"><?= e((string) ($business['website'] ?? '—')) ?></div>
+                    </div>
+                    <div class="col-md-8">
+                        <div class="text-muted small">Address</div>
+                        <div class="fw-semibold">
+                            <?php
+                                $parts = [];
+                                foreach (['address_line1', 'address_line2'] as $k) {
+                                    $line = trim((string) ($business[$k] ?? ''));
+                                    if ($line !== '') {
+                                        $parts[] = $line;
+                                    }
+                                }
+                                $cityStateZip = trim(
+                                    (string) ($business['city'] ?? '')
+                                    . ((string) ($business['city'] ?? '') !== '' && (string) ($business['state'] ?? '') !== '' ? ', ' : '')
+                                    . (string) ($business['state'] ?? '')
+                                    . ((string) ($business['postal_code'] ?? '') !== '' ? ' ' . (string) $business['postal_code'] : '')
+                                );
+                                if ($cityStateZip !== '') {
+                                    $parts[] = $cityStateZip;
+                                }
+                                if (!empty($business['country'])) {
+                                    $parts[] = (string) $business['country'];
+                                }
+                            ?>
+                            <?= e(!empty($parts) ? implode(' | ', $parts) : '—') ?>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <div class="text-muted small">Tax ID</div>
+                        <div class="fw-semibold"><?= e((string) (($business['tax_id'] ?? '') !== '' ? $business['tax_id'] : '—')) ?></div>
+                    </div>
+                    <div class="col-md-2">
+                        <div class="text-muted small">Default Tax Rate</div>
+                        <div class="fw-semibold"><?= e(number_format((float) ($business['invoice_default_tax_rate'] ?? 0), 2) . '%') ?></div>
+                    </div>
+                    <div class="col-md-2">
+                        <div class="text-muted small">Timezone</div>
+                        <div class="fw-semibold"><?= e((string) (($business['timezone'] ?? '') !== '' ? $business['timezone'] : '—')) ?></div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="text-muted small">Logo</div>
+                        <?php if ($logoUrl !== ''): ?>
+                            <img src="<?= e($logoUrl) ?>" alt="Business logo" style="max-height:72px; max-width:220px; border:1px solid #dbe4f0; border-radius:8px; padding:4px; background:#fff;" />
+                        <?php else: ?>
+                            <div class="fw-semibold">—</div>
+                        <?php endif; ?>
+                    </div>
                 </div>
-                <div class="col-md-6">
-                    <label class="form-label" for="business_legal_name">Legal Name</label>
-                    <input class="form-control" id="business_legal_name" name="business_legal_name" type="text" value="<?= e((string) old('business.legal_name', $settings['business.legal_name'] ?? '')) ?>" />
-                </div>
-
-                <div class="col-md-4">
-                    <label class="form-label" for="business_email">Email</label>
-                    <input class="form-control" id="business_email" name="business_email" type="email" value="<?= e((string) old('business.email', $settings['business.email'] ?? '')) ?>" />
-                </div>
-                <div class="col-md-4">
-                    <label class="form-label" for="business_phone">Phone</label>
-                    <input class="form-control" id="business_phone" name="business_phone" type="text" value="<?= e((string) old('business.phone', $settings['business.phone'] ?? '')) ?>" />
-                </div>
-                <div class="col-md-4">
-                    <label class="form-label" for="business_website">Website</label>
-                    <input class="form-control" id="business_website" name="business_website" type="url" value="<?= e((string) old('business.website', $settings['business.website'] ?? '')) ?>" placeholder="https://..." />
-                </div>
-
-                <div class="col-md-6">
-                    <label class="form-label" for="business_address_line1">Address Line 1</label>
-                    <input class="form-control" id="business_address_line1" name="business_address_line1" type="text" value="<?= e((string) old('business.address_line1', $settings['business.address_line1'] ?? '')) ?>" />
-                </div>
-                <div class="col-md-6">
-                    <label class="form-label" for="business_address_line2">Address Line 2</label>
-                    <input class="form-control" id="business_address_line2" name="business_address_line2" type="text" value="<?= e((string) old('business.address_line2', $settings['business.address_line2'] ?? '')) ?>" />
-                </div>
-
-                <div class="col-md-4">
-                    <label class="form-label" for="business_city">City</label>
-                    <input class="form-control" id="business_city" name="business_city" type="text" value="<?= e((string) old('business.city', $settings['business.city'] ?? '')) ?>" />
-                </div>
-                <div class="col-md-3">
-                    <label class="form-label" for="business_state">State</label>
-                    <input class="form-control" id="business_state" name="business_state" type="text" value="<?= e((string) old('business.state', $settings['business.state'] ?? '')) ?>" />
-                </div>
-                <div class="col-md-3">
-                    <label class="form-label" for="business_postal_code">Postal Code</label>
-                    <input class="form-control" id="business_postal_code" name="business_postal_code" type="text" value="<?= e((string) old('business.postal_code', $settings['business.postal_code'] ?? '')) ?>" />
-                </div>
-                <div class="col-md-2">
-                    <label class="form-label" for="business_country">Country</label>
-                    <input class="form-control" id="business_country" name="business_country" type="text" value="<?= e((string) old('business.country', $settings['business.country'] ?? 'US')) ?>" />
-                </div>
-
-                <div class="col-md-4">
-                    <label class="form-label" for="business_tax_id">Tax ID / EIN</label>
-                    <input class="form-control" id="business_tax_id" name="business_tax_id" type="text" value="<?= e((string) old('business.tax_id', $settings['business.tax_id'] ?? '')) ?>" />
-                </div>
-                <div class="col-md-4">
-                    <label class="form-label" for="business_timezone">Timezone</label>
-                    <input class="form-control" id="business_timezone" name="business_timezone" type="text" value="<?= e((string) old('business.timezone', $settings['business.timezone'] ?? 'America/New_York')) ?>" />
-                </div>
-            </div>
+            <?php endif; ?>
         </div>
-        <div class="card-footer d-flex gap-2 mobile-two-col-buttons">
-            <button class="btn btn-primary" type="submit" <?= !$isReady ? 'disabled' : '' ?>>Save Business Info</button>
-            <a class="btn btn-outline-secondary" href="<?= url('/admin') ?>">Cancel</a>
-        </div>
-    </form>
+    </div>
 </div>
-
