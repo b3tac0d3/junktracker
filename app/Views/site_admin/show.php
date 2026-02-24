@@ -3,6 +3,8 @@
     $businessId = (int) ($business['id'] ?? 0);
     $isCurrentWorkspace = !empty($isCurrentWorkspace);
     $isActive = (int) ($business['is_active'] ?? 0) === 1;
+    $logoPath = trim((string) ($business['logo_path'] ?? ''));
+    $logoUrl = $logoPath !== '' ? url('/' . ltrim($logoPath, '/')) : '';
 ?>
 
 <div class="container-fluid px-4">
@@ -73,6 +75,53 @@
                 <div class="col-md-6">
                     <div class="text-muted small">Website</div>
                     <div class="fw-semibold"><?= e((string) ($business['website'] ?? '—')) ?></div>
+                </div>
+                <div class="col-md-6">
+                    <div class="text-muted small">Address</div>
+                    <div class="fw-semibold">
+                        <?php
+                            $address = [];
+                            foreach (['address_line1', 'address_line2'] as $key) {
+                                $line = trim((string) ($business[$key] ?? ''));
+                                if ($line !== '') {
+                                    $address[] = $line;
+                                }
+                            }
+                            $cityStateZip = trim(
+                                (string) ($business['city'] ?? '')
+                                . ((string) ($business['city'] ?? '') !== '' && (string) ($business['state'] ?? '') !== '' ? ', ' : '')
+                                . (string) ($business['state'] ?? '')
+                                . ((string) ($business['postal_code'] ?? '') !== '' ? ' ' . (string) $business['postal_code'] : '')
+                            );
+                            if ($cityStateZip !== '') {
+                                $address[] = $cityStateZip;
+                            }
+                            if (!empty($business['country'])) {
+                                $address[] = (string) $business['country'];
+                            }
+                        ?>
+                        <?= e(!empty($address) ? implode(' | ', $address) : '—') ?>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="text-muted small">Tax ID / EIN</div>
+                    <div class="fw-semibold"><?= e((string) (($business['tax_id'] ?? '') !== '' ? $business['tax_id'] : '—')) ?></div>
+                </div>
+                <div class="col-md-3">
+                    <div class="text-muted small">Default Invoice Tax Rate</div>
+                    <div class="fw-semibold"><?= e(number_format((float) ($business['invoice_default_tax_rate'] ?? 0), 2) . '%') ?></div>
+                </div>
+                <div class="col-md-3">
+                    <div class="text-muted small">Timezone</div>
+                    <div class="fw-semibold"><?= e((string) (($business['timezone'] ?? '') !== '' ? $business['timezone'] : '—')) ?></div>
+                </div>
+                <div class="col-md-6">
+                    <div class="text-muted small">Logo</div>
+                    <?php if ($logoUrl !== ''): ?>
+                        <img src="<?= e($logoUrl) ?>" alt="Business logo" style="max-height:72px; max-width:220px; border:1px solid #dbe4f0; border-radius:8px; padding:4px; background:#fff;" />
+                    <?php else: ?>
+                        <div class="fw-semibold">—</div>
+                    <?php endif; ?>
                 </div>
                 <div class="col-md-4">
                     <div class="text-muted small">Users</div>

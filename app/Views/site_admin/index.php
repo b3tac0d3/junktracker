@@ -17,6 +17,10 @@
             </ol>
         </div>
         <div class="d-flex gap-2 mobile-two-col-buttons">
+            <a class="btn btn-success" href="<?= url('/site-admin/businesses/new') ?>">
+                <i class="fas fa-plus me-1"></i>
+                Add Business
+            </a>
             <a class="btn btn-outline-primary" href="<?= url('/admin') ?>">Open Admin Workspace</a>
             <a class="btn btn-primary" href="<?= url('/site-admin/support') ?>">Open Support Queue</a>
         </div>
@@ -35,37 +39,18 @@
         </div>
     <?php endif; ?>
 
-    <div class="row g-4 mb-4">
-        <div class="col-lg-4">
-            <div class="card h-100">
-                <div class="card-header">
-                    <i class="fas fa-circle-check me-1"></i>
-                    Active Workspace
-                </div>
-                <div class="card-body">
-                    <div class="text-muted small">Current Business</div>
-                    <div class="h5 mb-1"><?= e((string) ($currentBusiness['name'] ?? 'Not selected')) ?></div>
-                    <div class="text-muted small mb-3">
-                        ID #<?= e((string) ($currentBusiness['id'] ?? $currentBusinessId)) ?>
-                    </div>
-                    <p class="text-muted small mb-0">Use “Work Inside” on a business below to switch context for users, jobs, tasks, and notifications.</p>
-                </div>
-            </div>
+    <div class="card mb-4">
+        <div class="card-header">
+            <i class="fas fa-circle-check me-1"></i>
+            Active Workspace
         </div>
-        <div class="col-lg-8">
-            <div class="card h-100">
-                <div class="card-header">
-                    <i class="fas fa-building me-1"></i>
-                    Add Business
-                </div>
-                <div class="card-body">
-                    <?php
-                        $action = url('/site-admin/businesses');
-                        $formValues = [];
-                        require __DIR__ . '/_form.php';
-                    ?>
-                </div>
+        <div class="card-body">
+            <div class="text-muted small">Current Business</div>
+            <div class="h5 mb-1"><?= e((string) ($currentBusiness['name'] ?? 'Not selected')) ?></div>
+            <div class="text-muted small mb-3">
+                ID #<?= e((string) ($currentBusiness['id'] ?? $currentBusinessId)) ?>
             </div>
+            <p class="text-muted small mb-0">Use “Work Inside” on a business below to switch context for users, jobs, tasks, and notifications.</p>
         </div>
     </div>
 

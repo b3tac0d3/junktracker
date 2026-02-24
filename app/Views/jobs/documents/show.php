@@ -1,6 +1,8 @@
 <?php
     $jobId = (int) ($job['id'] ?? 0);
     $documentId = (int) ($document['id'] ?? 0);
+    $lineItems = is_array($lineItems ?? null) ? $lineItems : [];
+    $canConvertToInvoice = !empty($canConvertToInvoice);
     $typeLabel = \App\Models\JobDocument::typeLabel((string) ($document['document_type'] ?? 'document'));
     $statusLabel = \App\Models\JobDocument::statusLabel((string) ($document['status'] ?? 'draft'));
     $statusClass = match ((string) ($document['status'] ?? 'draft')) {
@@ -23,6 +25,15 @@
             </ol>
         </div>
         <div class="d-flex gap-2 mobile-two-col-buttons">
+            <?php if ($canConvertToInvoice && can_access('jobs', 'edit')): ?>
+                <form method="post" action="<?= url('/jobs/' . $jobId . '/documents/' . $documentId . '/convert-to-invoice') ?>">
+                    <?= csrf_field() ?>
+                    <button class="btn btn-success" type="submit">
+                        <i class="fas fa-retweet me-1"></i>
+                        Convert to Invoice
+                    </button>
+                </form>
+            <?php endif; ?>
             <a class="btn btn-info text-white" href="<?= url('/jobs/' . $jobId . '/documents/' . $documentId . '/pdf') ?>" target="_blank" rel="noopener">
                 <i class="fas fa-file-pdf me-1"></i>
                 PDF / Print
@@ -68,7 +79,19 @@
                             <div class="fw-semibold"><?= e((string) (($document['title'] ?? '') !== '' ? $document['title'] : '—')) ?></div>
                         </div>
                         <div class="col-md-4">
-                            <div class="text-muted small">Amount</div>
+                            <div class="text-muted small">Net Subtotal</div>
+                            <div class="fw-semibold"><?= isset($document['subtotal_amount']) && $document['subtotal_amount'] !== null ? e('$' . number_format((float) $document['subtotal_amount'], 2)) : e('$' . number_format((float) ($document['amount'] ?? 0), 2)) ?></div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="text-muted small">Tax Rate</div>
+                            <div class="fw-semibold"><?= e(number_format((float) ($document['tax_rate'] ?? 0), 2) . '%') ?></div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="text-muted small">Tax Amount</div>
+                            <div class="fw-semibold"><?= e('$' . number_format((float) ($document['tax_amount'] ?? 0), 2)) ?></div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="text-muted small">Gross Total</div>
                             <div class="fw-semibold"><?= isset($document['amount']) && $document['amount'] !== null ? e('$' . number_format((float) $document['amount'], 2)) : '—' ?></div>
                         </div>
                         <div class="col-md-4">
@@ -92,9 +115,105 @@
                             <div class="fw-semibold"><?= e(format_datetime($document['paid_at'] ?? null)) ?></div>
                         </div>
                         <div class="col-12">
-                            <div class="text-muted small">Notes</div>
+                            <div class="text-muted small">Customer Note</div>
+                            <div class="fw-semibold" style="white-space: pre-wrap;"><?= e((string) (($document['customer_note'] ?? '') !== '' ? $document['customer_note'] : '—')) ?></div>
+                        </div>
+                        <div class="col-12">
+                            <div class="text-muted small">Internal Note</div>
                             <div class="fw-semibold" style="white-space: pre-wrap;"><?= e((string) (($document['note'] ?? '') !== '' ? $document['note'] : '—')) ?></div>
                         </div>
+                        <div class="col-12">
+                            <div class="text-muted small">Job Address</div>
+                            <div class="fw-semibold">
+                                <?php
+                                    $addressParts = [];
+                                    foreach (['job_address_1', 'job_address_2'] as $addressKey) {
+                                        $line = trim((string) ($document[$addressKey] ?? ''));
+                                        if ($line !== '') {
+                                            $addressParts[] = $line;
+                                        }
+                                    }
+                                    $cityStateZip = trim(
+                                        (string) ($document['job_city'] ?? '')
+                                        . ((string) ($document['job_city'] ?? '') !== '' && (string) ($document['job_state'] ?? '') !== '' ? ', ' : '')
+                                        . (string) ($document['job_state'] ?? '')
+                                        . ((string) ($document['job_zip'] ?? '') !== '' ? ' ' . (string) $document['job_zip'] : '')
+                                    );
+                                    if ($cityStateZip !== '') {
+                                        $addressParts[] = $cityStateZip;
+                                    }
+                                ?>
+                                <?= e(!empty($addressParts) ? implode(' | ', $addressParts) : '—') ?>
+                            </div>
+                        </div>
+                        <div class="col-12">
+                            <div class="text-muted small">Customer / Estate</div>
+                            <div class="fw-semibold">
+                                <?php
+                                    $clientLabel = trim((string) ($document['client_name'] ?? ''));
+                                    $estateLabel = trim((string) ($document['estate_name'] ?? ''));
+                                    if ($clientLabel !== '' && $estateLabel !== '') {
+                                        echo e($clientLabel . ' / ' . $estateLabel);
+                                    } elseif ($clientLabel !== '') {
+                                        echo e($clientLabel);
+                                    } elseif ($estateLabel !== '') {
+                                        echo e($estateLabel);
+                                    } else {
+                                        echo '—';
+                                    }
+                                ?>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card mb-4">
+                <div class="card-header">
+                    <i class="fas fa-list-ul me-1"></i>
+                    Line Items
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-sm table-striped align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Type</th>
+                                    <th>Description</th>
+                                    <th>Taxable</th>
+                                    <th>Qty</th>
+                                    <th>Unit</th>
+                                    <th>Total</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php if (empty($lineItems)): ?>
+                                    <tr>
+                                        <td colspan="6" class="text-muted">No line items.</td>
+                                    </tr>
+                                <?php else: ?>
+                                    <?php foreach ($lineItems as $item): ?>
+                                        <tr>
+                                            <td><?= e((string) (($item['item_type_label'] ?? '') !== '' ? $item['item_type_label'] : '—')) ?></td>
+                                            <td>
+                                                <div class="fw-semibold"><?= e((string) ($item['item_description'] ?? '')) ?></div>
+                                                <?php if (!empty($item['line_note'])): ?>
+                                                    <div class="small text-muted"><?= e((string) $item['line_note']) ?></div>
+                                                <?php endif; ?>
+                                            </td>
+                                            <td>
+                                                <span class="badge <?= (int) ($item['is_taxable'] ?? 1) === 1 ? 'bg-success' : 'bg-secondary' ?>">
+                                                    <?= (int) ($item['is_taxable'] ?? 1) === 1 ? 'Yes' : 'No' ?>
+                                                </span>
+                                            </td>
+                                            <td><?= e(number_format((float) ($item['quantity'] ?? 0), 2)) ?></td>
+                                            <td><?= e('$' . number_format((float) ($item['unit_price'] ?? 0), 2)) ?></td>
+                                            <td class="fw-semibold"><?= e('$' . number_format((float) ($item['line_total'] ?? 0), 2)) ?></td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                <?php endif; ?>
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             </div>

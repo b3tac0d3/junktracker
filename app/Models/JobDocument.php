@@ -9,6 +9,15 @@ use Core\Database;
 final class JobDocument
 {
     public const TYPES = ['estimate', 'invoice'];
+    public const DEFAULT_ITEM_TYPES = [
+        ['code' => 'service', 'label' => 'Service', 'sort_order' => 10],
+        ['code' => 'labor', 'label' => 'Labor', 'sort_order' => 20],
+        ['code' => 'tools', 'label' => 'Tools / Equipment', 'sort_order' => 30],
+        ['code' => 'supplies', 'label' => 'Supplies', 'sort_order' => 40],
+        ['code' => 'disposal', 'label' => 'Disposal / Dump Fee', 'sort_order' => 50],
+        ['code' => 'travel', 'label' => 'Travel / Delivery', 'sort_order' => 60],
+        ['code' => 'other', 'label' => 'Other', 'sort_order' => 99],
+    ];
     public const STATUSES = [
         'draft',
         'quote_sent',
@@ -37,12 +46,17 @@ final class JobDocument
                 title VARCHAR(190) NOT NULL,
                 status VARCHAR(30) NOT NULL DEFAULT "draft",
                 amount DECIMAL(12,2) NULL,
+                subtotal_amount DECIMAL(12,2) NULL,
+                tax_rate DECIMAL(8,4) NULL,
+                tax_amount DECIMAL(12,2) NULL,
                 issued_at DATETIME NULL,
                 due_at DATETIME NULL,
                 sent_at DATETIME NULL,
                 approved_at DATETIME NULL,
                 paid_at DATETIME NULL,
                 note TEXT NULL,
+                customer_note TEXT NULL,
+                source_estimate_id BIGINT UNSIGNED NULL,
                 created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                 deleted_at DATETIME NULL,
@@ -53,6 +67,7 @@ final class JobDocument
                 KEY idx_job_estimate_invoices_job (job_id),
                 KEY idx_job_estimate_invoices_type_status (document_type, status),
                 KEY idx_job_estimate_invoices_deleted (deleted_at),
+                KEY idx_job_estimate_invoices_source_estimate (source_estimate_id),
                 KEY idx_job_estimate_invoices_created_by (created_by),
                 KEY idx_job_estimate_invoices_updated_by (updated_by),
                 KEY idx_job_estimate_invoices_deleted_by (deleted_by)
@@ -75,6 +90,83 @@ final class JobDocument
                 KEY idx_job_estimate_invoice_events_job (job_id, created_at),
                 KEY idx_job_estimate_invoice_events_created_by (created_by)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci'
+        );
+        $pdo->exec(
+            'CREATE TABLE IF NOT EXISTS business_document_item_types (
+                id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+                business_id BIGINT UNSIGNED NOT NULL,
+                item_code VARCHAR(50) NOT NULL,
+                item_label VARCHAR(120) NOT NULL,
+                sort_order INT NOT NULL DEFAULT 0,
+                is_active TINYINT(1) NOT NULL DEFAULT 1,
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                PRIMARY KEY (id),
+                UNIQUE KEY uniq_business_document_item_types_code (business_id, item_code),
+                KEY idx_business_document_item_types_active (business_id, is_active, sort_order)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci'
+        );
+        $pdo->exec(
+            'CREATE TABLE IF NOT EXISTS job_estimate_invoice_line_items (
+                id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+                document_id BIGINT UNSIGNED NOT NULL,
+                job_id BIGINT UNSIGNED NOT NULL,
+                item_type_id BIGINT UNSIGNED NULL,
+                item_type_label VARCHAR(120) NOT NULL,
+                item_description VARCHAR(255) NOT NULL,
+                line_note VARCHAR(255) NULL,
+                quantity DECIMAL(10,2) NOT NULL DEFAULT 1.00,
+                unit_price DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+                is_taxable TINYINT(1) NOT NULL DEFAULT 1,
+                line_total DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+                sort_order INT NOT NULL DEFAULT 0,
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                created_by BIGINT UNSIGNED NULL,
+                updated_by BIGINT UNSIGNED NULL,
+                PRIMARY KEY (id),
+                KEY idx_job_estimate_invoice_line_items_doc (document_id, sort_order, id),
+                KEY idx_job_estimate_invoice_line_items_job (job_id),
+                KEY idx_job_estimate_invoice_line_items_type (item_type_id),
+                KEY idx_job_estimate_invoice_line_items_created_by (created_by),
+                KEY idx_job_estimate_invoice_line_items_updated_by (updated_by)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci'
+        );
+
+        self::ensureColumn(
+            'job_estimate_invoices',
+            'customer_note',
+            'ALTER TABLE job_estimate_invoices ADD COLUMN customer_note TEXT NULL AFTER note'
+        );
+        self::ensureColumn(
+            'job_estimate_invoices',
+            'subtotal_amount',
+            'ALTER TABLE job_estimate_invoices ADD COLUMN subtotal_amount DECIMAL(12,2) NULL AFTER amount'
+        );
+        self::ensureColumn(
+            'job_estimate_invoices',
+            'tax_rate',
+            'ALTER TABLE job_estimate_invoices ADD COLUMN tax_rate DECIMAL(8,4) NULL AFTER subtotal_amount'
+        );
+        self::ensureColumn(
+            'job_estimate_invoices',
+            'tax_amount',
+            'ALTER TABLE job_estimate_invoices ADD COLUMN tax_amount DECIMAL(12,2) NULL AFTER tax_rate'
+        );
+        self::ensureColumn(
+            'job_estimate_invoices',
+            'source_estimate_id',
+            'ALTER TABLE job_estimate_invoices ADD COLUMN source_estimate_id BIGINT UNSIGNED NULL AFTER customer_note'
+        );
+        self::ensureColumn(
+            'job_estimate_invoice_line_items',
+            'is_taxable',
+            'ALTER TABLE job_estimate_invoice_line_items ADD COLUMN is_taxable TINYINT(1) NOT NULL DEFAULT 1 AFTER unit_price'
+        );
+        self::ensureIndex(
+            'job_estimate_invoices',
+            'idx_job_estimate_invoices_source_estimate',
+            'CREATE INDEX idx_job_estimate_invoices_source_estimate ON job_estimate_invoices (source_estimate_id)'
         );
 
         $schema = trim((string) config('database.database', ''));
@@ -135,6 +227,62 @@ final class JobDocument
                  ON DELETE SET NULL ON UPDATE CASCADE',
                 $schema
             );
+            self::ensureForeignKey(
+                'fk_job_estimate_invoices_source_estimate',
+                'ALTER TABLE job_estimate_invoices
+                 ADD CONSTRAINT fk_job_estimate_invoices_source_estimate
+                 FOREIGN KEY (source_estimate_id) REFERENCES job_estimate_invoices(id)
+                 ON DELETE SET NULL ON UPDATE CASCADE',
+                $schema
+            );
+            self::ensureForeignKey(
+                'fk_business_document_item_types_business',
+                'ALTER TABLE business_document_item_types
+                 ADD CONSTRAINT fk_business_document_item_types_business
+                 FOREIGN KEY (business_id) REFERENCES businesses(id)
+                 ON DELETE CASCADE ON UPDATE CASCADE',
+                $schema
+            );
+            self::ensureForeignKey(
+                'fk_job_estimate_invoice_line_items_doc',
+                'ALTER TABLE job_estimate_invoice_line_items
+                 ADD CONSTRAINT fk_job_estimate_invoice_line_items_doc
+                 FOREIGN KEY (document_id) REFERENCES job_estimate_invoices(id)
+                 ON DELETE CASCADE ON UPDATE CASCADE',
+                $schema
+            );
+            self::ensureForeignKey(
+                'fk_job_estimate_invoice_line_items_job',
+                'ALTER TABLE job_estimate_invoice_line_items
+                 ADD CONSTRAINT fk_job_estimate_invoice_line_items_job
+                 FOREIGN KEY (job_id) REFERENCES jobs(id)
+                 ON DELETE CASCADE ON UPDATE CASCADE',
+                $schema
+            );
+            self::ensureForeignKey(
+                'fk_job_estimate_invoice_line_items_type',
+                'ALTER TABLE job_estimate_invoice_line_items
+                 ADD CONSTRAINT fk_job_estimate_invoice_line_items_type
+                 FOREIGN KEY (item_type_id) REFERENCES business_document_item_types(id)
+                 ON DELETE SET NULL ON UPDATE CASCADE',
+                $schema
+            );
+            self::ensureForeignKey(
+                'fk_job_estimate_invoice_line_items_created_by',
+                'ALTER TABLE job_estimate_invoice_line_items
+                 ADD CONSTRAINT fk_job_estimate_invoice_line_items_created_by
+                 FOREIGN KEY (created_by) REFERENCES users(id)
+                 ON DELETE SET NULL ON UPDATE CASCADE',
+                $schema
+            );
+            self::ensureForeignKey(
+                'fk_job_estimate_invoice_line_items_updated_by',
+                'ALTER TABLE job_estimate_invoice_line_items
+                 ADD CONSTRAINT fk_job_estimate_invoice_line_items_updated_by
+                 FOREIGN KEY (updated_by) REFERENCES users(id)
+                 ON DELETE SET NULL ON UPDATE CASCADE',
+                $schema
+            );
         }
 
         self::$schemaEnsured = true;
@@ -187,20 +335,31 @@ final class JobDocument
                        d.title,
                        d.status,
                        d.amount,
+                       d.subtotal_amount,
+                       d.tax_rate,
+                       d.tax_amount,
                        d.issued_at,
                        d.due_at,
                        d.sent_at,
                        d.approved_at,
                        d.paid_at,
                        d.note,
+                       d.customer_note,
+                       d.source_estimate_id,
                        d.created_at,
                        d.updated_at,
                        d.deleted_at,
                        d.created_by,
                        d.updated_by,
+                       COALESCE(li.item_count, 0) AS line_item_count,
                        ' . $createdBySql . ' AS created_by_name,
                        ' . $updatedBySql . ' AS updated_by_name
                 FROM job_estimate_invoices d
+                LEFT JOIN (
+                    SELECT document_id, COUNT(*) AS item_count
+                    FROM job_estimate_invoice_line_items
+                    GROUP BY document_id
+                ) li ON li.document_id = d.id
                 LEFT JOIN users uc ON uc.id = d.created_by
                 LEFT JOIN users uu ON uu.id = d.updated_by
                 WHERE d.job_id = :job_id
@@ -251,6 +410,7 @@ final class JobDocument
     public static function findByIdForJob(int $jobId, int $documentId): ?array
     {
         self::ensureSchema();
+        Business::ensureTable();
 
         $createdBySql = self::userLabelSql('uc', 'd.created_by');
         $updatedBySql = self::userLabelSql('uu', 'd.updated_by');
@@ -262,12 +422,17 @@ final class JobDocument
                        d.title,
                        d.status,
                        d.amount,
+                       d.subtotal_amount,
+                       d.tax_rate,
+                       d.tax_amount,
                        d.issued_at,
                        d.due_at,
                        d.sent_at,
                        d.approved_at,
                        d.paid_at,
                        d.note,
+                       d.customer_note,
+                       d.source_estimate_id,
                        d.created_at,
                        d.updated_at,
                        d.deleted_at,
@@ -285,16 +450,34 @@ final class JobDocument
                        j.zip AS job_zip,
                        j.phone AS job_phone,
                        j.email AS job_email,
+                       j.business_id,
                        COALESCE(
                            NULLIF(c.business_name, ""),
                            NULLIF(TRIM(CONCAT_WS(" ", c.first_name, c.last_name)), ""),
                            CONCAT("Client #", c.id)
                        ) AS client_name,
                        c.email AS client_email,
-                       c.phone AS client_phone
+                       c.phone AS client_phone,
+                       COALESCE(NULLIF(e.name, ""), CONCAT("Estate #", e.id)) AS estate_name,
+                       b.name AS business_name,
+                       b.legal_name AS business_legal_name,
+                       b.email AS business_email,
+                       b.phone AS business_phone,
+                       b.website AS business_website,
+                       b.address_line1 AS business_address_line1,
+                       b.address_line2 AS business_address_line2,
+                       b.city AS business_city,
+                       b.state AS business_state,
+                       b.postal_code AS business_postal_code,
+                       b.country AS business_country,
+                       b.tax_id AS business_tax_id,
+                       b.logo_path AS business_logo_path,
+                       b.logo_mime_type AS business_logo_mime_type
                 FROM job_estimate_invoices d
                 INNER JOIN jobs j ON j.id = d.job_id
                 LEFT JOIN clients c ON c.id = j.client_id
+                LEFT JOIN estates e ON e.id = j.estate_id
+                LEFT JOIN businesses b ON b.id = j.business_id
                 LEFT JOIN users uc ON uc.id = d.created_by
                 LEFT JOIN users uu ON uu.id = d.updated_by
                 LEFT JOIN users ud ON ud.id = d.deleted_by
@@ -316,18 +499,24 @@ final class JobDocument
     {
         self::ensureSchema();
 
+        $pdo = Database::connection();
         $columns = [
             'job_id',
             'document_type',
             'title',
             'status',
             'amount',
+            'subtotal_amount',
+            'tax_rate',
+            'tax_amount',
             'issued_at',
             'due_at',
             'sent_at',
             'approved_at',
             'paid_at',
             'note',
+            'customer_note',
+            'source_estimate_id',
             'created_at',
             'updated_at',
         ];
@@ -337,12 +526,17 @@ final class JobDocument
             ':title',
             ':status',
             ':amount',
+            ':subtotal_amount',
+            ':tax_rate',
+            ':tax_amount',
             ':issued_at',
             ':due_at',
             ':sent_at',
             ':approved_at',
             ':paid_at',
             ':note',
+            ':customer_note',
+            ':source_estimate_id',
             'NOW()',
             'NOW()',
         ];
@@ -352,12 +546,17 @@ final class JobDocument
             'title' => $data['title'],
             'status' => $data['status'],
             'amount' => $data['amount'],
+            'subtotal_amount' => $data['subtotal_amount'] ?? null,
+            'tax_rate' => $data['tax_rate'] ?? null,
+            'tax_amount' => $data['tax_amount'] ?? null,
             'issued_at' => $data['issued_at'],
             'due_at' => $data['due_at'],
             'sent_at' => $data['sent_at'],
             'approved_at' => $data['approved_at'],
             'paid_at' => $data['paid_at'],
             'note' => $data['note'],
+            'customer_note' => $data['customer_note'] ?? null,
+            'source_estimate_id' => $data['source_estimate_id'] ?? null,
         ];
 
         if ($actorId !== null && Schema::hasColumn('job_estimate_invoices', 'created_by')) {
@@ -374,18 +573,32 @@ final class JobDocument
         $sql = 'INSERT INTO job_estimate_invoices (' . implode(', ', $columns) . ')
                 VALUES (' . implode(', ', $values) . ')';
 
-        $stmt = Database::connection()->prepare($sql);
-        $stmt->execute($params);
+        try {
+            $pdo->beginTransaction();
+            $stmt = $pdo->prepare($sql);
+            $stmt->execute($params);
 
-        $id = (int) Database::connection()->lastInsertId();
-        self::createEvent($jobId, $id, [
-            'event_type' => 'created',
-            'from_status' => null,
-            'to_status' => (string) ($data['status'] ?? 'draft'),
-            'event_note' => 'Document created.',
-        ], $actorId);
+            $id = (int) $pdo->lastInsertId();
+            self::syncLineItems($jobId, $id, $data['line_items'] ?? [], $actorId);
+            self::createEvent($jobId, $id, [
+                'event_type' => 'created',
+                'from_status' => null,
+                'to_status' => (string) ($data['status'] ?? 'draft'),
+                'event_note' => 'Document created.',
+            ], $actorId);
 
-        return $id;
+            if (strtolower((string) ($data['document_type'] ?? '')) === 'estimate') {
+                Job::updateQuoteAmount($jobId, self::documentAmount($id), $actorId);
+            }
+            $pdo->commit();
+
+            return $id;
+        } catch (\Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            throw $e;
+        }
     }
 
     public static function update(int $jobId, int $documentId, array $data, ?int $actorId = null): void
@@ -397,12 +610,17 @@ final class JobDocument
             'title = :title',
             'status = :status',
             'amount = :amount',
+            'subtotal_amount = :subtotal_amount',
+            'tax_rate = :tax_rate',
+            'tax_amount = :tax_amount',
             'issued_at = :issued_at',
             'due_at = :due_at',
             'sent_at = :sent_at',
             'approved_at = :approved_at',
             'paid_at = :paid_at',
             'note = :note',
+            'customer_note = :customer_note',
+            'source_estimate_id = :source_estimate_id',
             'updated_at = NOW()',
         ];
         $params = [
@@ -412,12 +630,17 @@ final class JobDocument
             'title' => $data['title'],
             'status' => $data['status'],
             'amount' => $data['amount'],
+            'subtotal_amount' => $data['subtotal_amount'] ?? null,
+            'tax_rate' => $data['tax_rate'] ?? null,
+            'tax_amount' => $data['tax_amount'] ?? null,
             'issued_at' => $data['issued_at'],
             'due_at' => $data['due_at'],
             'sent_at' => $data['sent_at'],
             'approved_at' => $data['approved_at'],
             'paid_at' => $data['paid_at'],
             'note' => $data['note'],
+            'customer_note' => $data['customer_note'] ?? null,
+            'source_estimate_id' => $data['source_estimate_id'] ?? null,
         ];
 
         if ($actorId !== null && Schema::hasColumn('job_estimate_invoices', 'updated_by')) {
@@ -431,13 +654,28 @@ final class JobDocument
                   AND id = :document_id
                   AND deleted_at IS NULL';
 
-        $stmt = Database::connection()->prepare($sql);
-        $stmt->execute($params);
+        $pdo = Database::connection();
+        try {
+            $pdo->beginTransaction();
+            $stmt = $pdo->prepare($sql);
+            $stmt->execute($params);
+            self::syncLineItems($jobId, $documentId, $data['line_items'] ?? [], $actorId);
+            if (strtolower((string) ($data['document_type'] ?? '')) === 'estimate') {
+                Job::updateQuoteAmount($jobId, self::documentAmount($documentId), $actorId);
+            }
+            $pdo->commit();
+        } catch (\Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            throw $e;
+        }
     }
 
     public static function softDelete(int $jobId, int $documentId, ?int $actorId = null): void
     {
         self::ensureSchema();
+        $current = self::findByIdForJob($jobId, $documentId);
 
         $sets = [
             'deleted_at = COALESCE(deleted_at, NOW())',
@@ -472,6 +710,10 @@ final class JobDocument
             'to_status' => null,
             'event_note' => 'Document deleted.',
         ], $actorId);
+
+        if (strtolower((string) ($current['document_type'] ?? '')) === 'estimate') {
+            self::syncLatestEstimateToJobQuote($jobId, $actorId);
+        }
     }
 
     public static function events(int $jobId, int $documentId): array
@@ -551,9 +793,511 @@ final class JobDocument
         return (int) Database::connection()->lastInsertId();
     }
 
+    public static function itemTypesForBusiness(int $businessId): array
+    {
+        self::ensureSchema();
+
+        if ($businessId <= 0) {
+            return [];
+        }
+
+        self::ensureDefaultItemTypes($businessId);
+        $stmt = Database::connection()->prepare(
+            'SELECT id, business_id, item_code, item_label, sort_order, is_active
+             FROM business_document_item_types
+             WHERE business_id = :business_id
+               AND is_active = 1
+             ORDER BY sort_order ASC, item_label ASC, id ASC'
+        );
+        $stmt->execute(['business_id' => $businessId]);
+        return $stmt->fetchAll();
+    }
+
+    public static function lineItems(int $jobId, int $documentId): array
+    {
+        self::ensureSchema();
+
+        if ($jobId <= 0 || $documentId <= 0) {
+            return [];
+        }
+
+        $sql = 'SELECT li.id,
+                       li.document_id,
+                       li.job_id,
+                       li.item_type_id,
+                       li.item_type_label,
+                       li.item_description,
+                       li.line_note,
+                       li.quantity,
+                       li.unit_price,
+                       li.is_taxable,
+                       li.line_total,
+                       li.sort_order
+                FROM job_estimate_invoice_line_items li
+                WHERE li.job_id = :job_id
+                  AND li.document_id = :document_id
+                ORDER BY li.sort_order ASC, li.id ASC';
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute([
+            'job_id' => $jobId,
+            'document_id' => $documentId,
+        ]);
+
+        return $stmt->fetchAll();
+    }
+
+    public static function estimateAlreadyConverted(int $estimateId): bool
+    {
+        self::ensureSchema();
+        if ($estimateId <= 0) {
+            return false;
+        }
+
+        $stmt = Database::connection()->prepare(
+            'SELECT 1
+             FROM job_estimate_invoices
+             WHERE source_estimate_id = :estimate_id
+               AND document_type = "invoice"
+               AND deleted_at IS NULL
+             LIMIT 1'
+        );
+        $stmt->execute(['estimate_id' => $estimateId]);
+        return (bool) $stmt->fetchColumn();
+    }
+
+    public static function convertEstimateToInvoice(int $jobId, int $estimateId, ?int $actorId = null): ?int
+    {
+        self::ensureSchema();
+
+        if ($jobId <= 0 || $estimateId <= 0) {
+            return null;
+        }
+
+        $estimate = self::findByIdForJob($jobId, $estimateId);
+        if (!$estimate || !empty($estimate['deleted_at'])) {
+            return null;
+        }
+        if (strtolower((string) ($estimate['document_type'] ?? '')) !== 'estimate') {
+            return null;
+        }
+        if (self::estimateAlreadyConverted($estimateId)) {
+            return null;
+        }
+
+        $lineItems = self::lineItems($jobId, $estimateId);
+        if (empty($lineItems) && isset($estimate['amount']) && (float) $estimate['amount'] > 0) {
+            $lineItems = [[
+                'item_type_id' => null,
+                'item_type_label' => 'Service',
+                'item_description' => trim((string) ($estimate['title'] ?? 'Service')),
+                'line_note' => '',
+                'quantity' => 1.0,
+                'unit_price' => (float) $estimate['amount'],
+                'sort_order' => 10,
+            ]];
+        }
+        $invoiceData = [
+            'document_type' => 'invoice',
+            'title' => self::invoiceTitleFromEstimate((string) ($estimate['title'] ?? '')),
+            'status' => 'draft',
+            'amount' => (float) ($estimate['amount'] ?? 0),
+            'subtotal_amount' => (float) ($estimate['subtotal_amount'] ?? 0),
+            'tax_rate' => $estimate['tax_rate'] !== null ? (float) $estimate['tax_rate'] : 0.0,
+            'tax_amount' => (float) ($estimate['tax_amount'] ?? 0),
+            'issued_at' => date('Y-m-d H:i:s'),
+            'due_at' => $estimate['due_at'] ?? null,
+            'sent_at' => null,
+            'approved_at' => null,
+            'paid_at' => null,
+            'note' => (string) ($estimate['note'] ?? ''),
+            'customer_note' => (string) ($estimate['customer_note'] ?? ''),
+            'source_estimate_id' => $estimateId,
+            'line_items' => array_map(static function (array $row): array {
+                return [
+                    'item_type_id' => isset($row['item_type_id']) && $row['item_type_id'] !== null ? (int) $row['item_type_id'] : null,
+                    'item_type_label' => trim((string) ($row['item_type_label'] ?? '')),
+                    'item_description' => trim((string) ($row['item_description'] ?? '')),
+                    'line_note' => trim((string) ($row['line_note'] ?? '')),
+                    'quantity' => (float) ($row['quantity'] ?? 1),
+                    'unit_price' => (float) ($row['unit_price'] ?? 0),
+                    'is_taxable' => isset($row['is_taxable']) && (int) $row['is_taxable'] === 0 ? 0 : 1,
+                    'sort_order' => (int) ($row['sort_order'] ?? 0),
+                ];
+            }, $lineItems),
+        ];
+
+        $invoiceId = self::create($jobId, $invoiceData, $actorId);
+        self::update($jobId, $estimateId, [
+            'document_type' => 'estimate',
+            'title' => (string) ($estimate['title'] ?? ''),
+            'status' => 'invoiced',
+            'amount' => self::documentAmount($estimateId),
+            'subtotal_amount' => (float) ($estimate['subtotal_amount'] ?? 0),
+            'tax_rate' => $estimate['tax_rate'] !== null ? (float) $estimate['tax_rate'] : 0.0,
+            'tax_amount' => (float) ($estimate['tax_amount'] ?? 0),
+            'issued_at' => $estimate['issued_at'] ?? null,
+            'due_at' => $estimate['due_at'] ?? null,
+            'sent_at' => $estimate['sent_at'] ?? null,
+            'approved_at' => $estimate['approved_at'] ?? null,
+            'paid_at' => $estimate['paid_at'] ?? null,
+            'note' => (string) ($estimate['note'] ?? ''),
+            'customer_note' => (string) ($estimate['customer_note'] ?? ''),
+            'source_estimate_id' => null,
+            'line_items' => $invoiceData['line_items'],
+        ], $actorId);
+        self::createEvent($jobId, $estimateId, [
+            'event_type' => 'converted_to_invoice',
+            'from_status' => (string) ($estimate['status'] ?? 'draft'),
+            'to_status' => 'invoiced',
+            'event_note' => 'Converted to invoice #' . $invoiceId . '.',
+        ], $actorId);
+
+        return $invoiceId;
+    }
+
+    public static function convertLatestEstimateForAcceptedJob(int $jobId, ?int $actorId = null): ?int
+    {
+        self::ensureSchema();
+        if ($jobId <= 0) {
+            return null;
+        }
+
+        $stmt = Database::connection()->prepare(
+            'SELECT id
+             FROM job_estimate_invoices
+             WHERE job_id = :job_id
+               AND document_type = "estimate"
+               AND status IN ("draft", "quote_sent", "approved")
+               AND deleted_at IS NULL
+             ORDER BY COALESCE(approved_at, sent_at, issued_at, created_at) DESC, id DESC
+             LIMIT 1'
+        );
+        $stmt->execute(['job_id' => $jobId]);
+        $estimateId = (int) ($stmt->fetchColumn() ?: 0);
+        if ($estimateId <= 0) {
+            return null;
+        }
+
+        return self::convertEstimateToInvoice($jobId, $estimateId, $actorId);
+    }
+
+    public static function businessLogoDataUri(?array $document): ?string
+    {
+        $path = trim((string) ($document['business_logo_path'] ?? ''));
+        if ($path === '') {
+            return null;
+        }
+
+        $absolute = BASE_PATH . '/' . ltrim($path, '/');
+        if (!is_file($absolute) || !is_readable($absolute)) {
+            return null;
+        }
+
+        $content = @file_get_contents($absolute);
+        if ($content === false || $content === '') {
+            return null;
+        }
+
+        $mime = trim((string) ($document['business_logo_mime_type'] ?? ''));
+        if ($mime === '' || !str_starts_with($mime, 'image/')) {
+            $detected = @mime_content_type($absolute);
+            $mime = is_string($detected) && str_starts_with($detected, 'image/') ? $detected : 'image/png';
+        }
+
+        return 'data:' . $mime . ';base64,' . base64_encode($content);
+    }
+
+    private static function ensureDefaultItemTypes(int $businessId): void
+    {
+        if ($businessId <= 0) {
+            return;
+        }
+
+        $pdo = Database::connection();
+        foreach (self::DEFAULT_ITEM_TYPES as $itemType) {
+            $stmt = $pdo->prepare(
+                'SELECT id
+                 FROM business_document_item_types
+                 WHERE business_id = :business_id
+                   AND item_code = :item_code
+                 LIMIT 1'
+            );
+            $stmt->execute([
+                'business_id' => $businessId,
+                'item_code' => (string) ($itemType['code'] ?? ''),
+            ]);
+            if ($stmt->fetchColumn()) {
+                continue;
+            }
+
+            $insert = $pdo->prepare(
+                'INSERT INTO business_document_item_types (
+                    business_id,
+                    item_code,
+                    item_label,
+                    sort_order,
+                    is_active,
+                    created_at,
+                    updated_at
+                 ) VALUES (
+                    :business_id,
+                    :item_code,
+                    :item_label,
+                    :sort_order,
+                    1,
+                    NOW(),
+                    NOW()
+                 )'
+            );
+            $insert->execute([
+                'business_id' => $businessId,
+                'item_code' => (string) ($itemType['code'] ?? ''),
+                'item_label' => (string) ($itemType['label'] ?? ''),
+                'sort_order' => (int) ($itemType['sort_order'] ?? 0),
+            ]);
+        }
+    }
+
+    private static function syncLineItems(int $jobId, int $documentId, array $lineItems, ?int $actorId = null): void
+    {
+        $pdo = Database::connection();
+        $delete = $pdo->prepare(
+            'DELETE FROM job_estimate_invoice_line_items
+             WHERE document_id = :document_id
+               AND job_id = :job_id'
+        );
+        $delete->execute([
+            'document_id' => $documentId,
+            'job_id' => $jobId,
+        ]);
+
+        $insert = $pdo->prepare(
+            'INSERT INTO job_estimate_invoice_line_items (
+                document_id,
+                job_id,
+                item_type_id,
+                item_type_label,
+                item_description,
+                line_note,
+                quantity,
+                unit_price,
+                is_taxable,
+                line_total,
+                sort_order,
+                created_at,
+                updated_at,
+                created_by,
+                updated_by
+             ) VALUES (
+                :document_id,
+                :job_id,
+                :item_type_id,
+                :item_type_label,
+                :item_description,
+                :line_note,
+                :quantity,
+                :unit_price,
+                :is_taxable,
+                :line_total,
+                :sort_order,
+                NOW(),
+                NOW(),
+                :created_by,
+                :updated_by
+             )'
+        );
+
+        $sortOrder = 10;
+        foreach ($lineItems as $row) {
+            $description = trim((string) ($row['item_description'] ?? ''));
+            if ($description === '') {
+                continue;
+            }
+
+            $quantity = (float) ($row['quantity'] ?? 1);
+            if ($quantity <= 0) {
+                $quantity = 1;
+            }
+
+            $unitPrice = (float) ($row['unit_price'] ?? 0);
+            if ($unitPrice < 0) {
+                $unitPrice = 0.0;
+            }
+
+            $itemTypeId = isset($row['item_type_id']) && $row['item_type_id'] !== null
+                ? max(0, (int) $row['item_type_id'])
+                : 0;
+            $itemTypeLabel = trim((string) ($row['item_type_label'] ?? ''));
+            if ($itemTypeLabel === '') {
+                $itemTypeLabel = 'Service';
+            }
+            $lineTotal = round($quantity * $unitPrice, 2);
+            $isTaxable = isset($row['is_taxable']) && (int) $row['is_taxable'] === 0 ? 0 : 1;
+
+            $insert->execute([
+                'document_id' => $documentId,
+                'job_id' => $jobId,
+                'item_type_id' => $itemTypeId > 0 ? $itemTypeId : null,
+                'item_type_label' => $itemTypeLabel,
+                'item_description' => $description,
+                'line_note' => trim((string) ($row['line_note'] ?? '')) ?: null,
+                'quantity' => round($quantity, 2),
+                'unit_price' => round($unitPrice, 2),
+                'is_taxable' => $isTaxable,
+                'line_total' => $lineTotal,
+                'sort_order' => (int) ($row['sort_order'] ?? $sortOrder),
+                'created_by' => $actorId,
+                'updated_by' => $actorId,
+            ]);
+            $sortOrder += 10;
+        }
+
+        self::updateDocumentAmountFromLineItems($documentId);
+    }
+
+    private static function updateDocumentAmountFromLineItems(int $documentId): void
+    {
+        $stmt = Database::connection()->prepare(
+            'SELECT COALESCE(SUM(line_total), 0) AS subtotal_amount,
+                    COALESCE(SUM(CASE WHEN COALESCE(is_taxable, 1) = 1 THEN line_total ELSE 0 END), 0) AS taxable_subtotal
+             FROM job_estimate_invoice_line_items
+             WHERE document_id = :document_id'
+        );
+        $stmt->execute(['document_id' => $documentId]);
+        $totals = $stmt->fetch() ?: [];
+        $subtotal = round((float) ($totals['subtotal_amount'] ?? 0), 2);
+        $taxableSubtotal = round((float) ($totals['taxable_subtotal'] ?? 0), 2);
+
+        $rateStmt = Database::connection()->prepare(
+            'SELECT tax_rate
+             FROM job_estimate_invoices
+             WHERE id = :id
+             LIMIT 1'
+        );
+        $rateStmt->execute(['id' => $documentId]);
+        $taxRateRaw = $rateStmt->fetchColumn();
+        $taxRate = $taxRateRaw !== false && $taxRateRaw !== null ? (float) $taxRateRaw : 0.0;
+        if ($taxRate < 0) {
+            $taxRate = 0.0;
+        }
+
+        $taxAmount = round($taxableSubtotal * ($taxRate / 100), 2);
+        $total = round($subtotal + $taxAmount, 2);
+
+        $update = Database::connection()->prepare(
+            'UPDATE job_estimate_invoices
+             SET amount = :amount,
+                 subtotal_amount = :subtotal_amount,
+                 tax_amount = :tax_amount,
+                 updated_at = NOW()
+             WHERE id = :id'
+        );
+        $update->execute([
+            'id' => $documentId,
+            'amount' => $total,
+            'subtotal_amount' => $subtotal,
+            'tax_amount' => $taxAmount,
+        ]);
+    }
+
+    private static function documentAmount(int $documentId): ?float
+    {
+        if ($documentId <= 0) {
+            return null;
+        }
+
+        $stmt = Database::connection()->prepare(
+            'SELECT amount
+             FROM job_estimate_invoices
+             WHERE id = :id
+             LIMIT 1'
+        );
+        $stmt->execute(['id' => $documentId]);
+        $value = $stmt->fetchColumn();
+
+        return $value !== false && $value !== null ? (float) $value : null;
+    }
+
+    private static function syncLatestEstimateToJobQuote(int $jobId, ?int $actorId = null): void
+    {
+        $stmt = Database::connection()->prepare(
+            'SELECT amount
+             FROM job_estimate_invoices
+             WHERE job_id = :job_id
+               AND document_type = "estimate"
+               AND deleted_at IS NULL
+             ORDER BY COALESCE(approved_at, sent_at, issued_at, created_at) DESC, id DESC
+             LIMIT 1'
+        );
+        $stmt->execute(['job_id' => $jobId]);
+        $value = $stmt->fetchColumn();
+        $amount = $value !== false && $value !== null ? (float) $value : null;
+        Job::updateQuoteAmount($jobId, $amount, $actorId);
+    }
+
+    private static function invoiceTitleFromEstimate(string $estimateTitle): string
+    {
+        $clean = trim($estimateTitle);
+        if ($clean === '') {
+            return 'Invoice';
+        }
+        if (stripos($clean, 'estimate') === 0) {
+            return 'Invoice' . substr($clean, 8);
+        }
+        return 'Invoice - ' . $clean;
+    }
+
     private static function userLabelSql(string $alias, string $fallbackColumn): string
     {
         return "COALESCE(NULLIF(TRIM(CONCAT_WS(' ', {$alias}.first_name, {$alias}.last_name)), ''), {$alias}.email, CONCAT('User #', {$fallbackColumn}))";
+    }
+
+    private static function ensureColumn(string $table, string $column, string $sql): void
+    {
+        if (!Schema::tableExists($table) || Schema::hasColumn($table, $column)) {
+            return;
+        }
+
+        try {
+            Database::connection()->exec($sql);
+        } catch (\Throwable) {
+            // Migration handles DDL in restricted environments.
+        }
+    }
+
+    private static function ensureIndex(string $table, string $indexName, string $sql): void
+    {
+        if (!Schema::tableExists($table)) {
+            return;
+        }
+
+        $schema = trim((string) config('database.database', ''));
+        if ($schema === '') {
+            return;
+        }
+
+        $stmt = Database::connection()->prepare(
+            'SELECT 1
+             FROM information_schema.STATISTICS
+             WHERE TABLE_SCHEMA = :schema
+               AND TABLE_NAME = :table_name
+               AND INDEX_NAME = :index_name
+             LIMIT 1'
+        );
+        $stmt->execute([
+            'schema' => $schema,
+            'table_name' => $table,
+            'index_name' => $indexName,
+        ]);
+        if ($stmt->fetch()) {
+            return;
+        }
+
+        try {
+            Database::connection()->exec($sql);
+        } catch (\Throwable) {
+            // Migration handles DDL in restricted environments.
+        }
     }
 
     private static function ensureForeignKey(string $constraintName, string $sql, string $schema): void

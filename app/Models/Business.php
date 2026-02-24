@@ -28,6 +28,17 @@ final class Business
                     email VARCHAR(255) NULL,
                     phone VARCHAR(50) NULL,
                     website VARCHAR(255) NULL,
+                    address_line1 VARCHAR(190) NULL,
+                    address_line2 VARCHAR(190) NULL,
+                    city VARCHAR(120) NULL,
+                    state VARCHAR(120) NULL,
+                    postal_code VARCHAR(40) NULL,
+                    country VARCHAR(80) NULL,
+                    tax_id VARCHAR(100) NULL,
+                    invoice_default_tax_rate DECIMAL(8,4) NULL,
+                    timezone VARCHAR(80) NULL,
+                    logo_path VARCHAR(255) NULL,
+                    logo_mime_type VARCHAR(120) NULL,
                     is_active TINYINT(1) NOT NULL DEFAULT 1,
                     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -44,6 +55,17 @@ final class Business
         self::ensureColumn('businesses', 'email', 'ALTER TABLE businesses ADD COLUMN email VARCHAR(255) NULL AFTER legal_name');
         self::ensureColumn('businesses', 'phone', 'ALTER TABLE businesses ADD COLUMN phone VARCHAR(50) NULL AFTER email');
         self::ensureColumn('businesses', 'website', 'ALTER TABLE businesses ADD COLUMN website VARCHAR(255) NULL AFTER phone');
+        self::ensureColumn('businesses', 'address_line1', 'ALTER TABLE businesses ADD COLUMN address_line1 VARCHAR(190) NULL AFTER website');
+        self::ensureColumn('businesses', 'address_line2', 'ALTER TABLE businesses ADD COLUMN address_line2 VARCHAR(190) NULL AFTER address_line1');
+        self::ensureColumn('businesses', 'city', 'ALTER TABLE businesses ADD COLUMN city VARCHAR(120) NULL AFTER address_line2');
+        self::ensureColumn('businesses', 'state', 'ALTER TABLE businesses ADD COLUMN state VARCHAR(120) NULL AFTER city');
+        self::ensureColumn('businesses', 'postal_code', 'ALTER TABLE businesses ADD COLUMN postal_code VARCHAR(40) NULL AFTER state');
+        self::ensureColumn('businesses', 'country', 'ALTER TABLE businesses ADD COLUMN country VARCHAR(80) NULL AFTER postal_code');
+        self::ensureColumn('businesses', 'tax_id', 'ALTER TABLE businesses ADD COLUMN tax_id VARCHAR(100) NULL AFTER country');
+        self::ensureColumn('businesses', 'invoice_default_tax_rate', 'ALTER TABLE businesses ADD COLUMN invoice_default_tax_rate DECIMAL(8,4) NULL AFTER tax_id');
+        self::ensureColumn('businesses', 'timezone', 'ALTER TABLE businesses ADD COLUMN timezone VARCHAR(80) NULL AFTER invoice_default_tax_rate');
+        self::ensureColumn('businesses', 'logo_path', 'ALTER TABLE businesses ADD COLUMN logo_path VARCHAR(255) NULL AFTER timezone');
+        self::ensureColumn('businesses', 'logo_mime_type', 'ALTER TABLE businesses ADD COLUMN logo_mime_type VARCHAR(120) NULL AFTER logo_path');
         self::ensureColumn('businesses', 'is_active', 'ALTER TABLE businesses ADD COLUMN is_active TINYINT(1) NOT NULL DEFAULT 1 AFTER website');
         self::ensureColumn('businesses', 'created_at', 'ALTER TABLE businesses ADD COLUMN created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP AFTER is_active');
         self::ensureColumn('businesses', 'updated_at', 'ALTER TABLE businesses ADD COLUMN updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP AFTER created_at');
@@ -90,6 +112,17 @@ final class Business
                        b.email,
                        b.phone,
                        b.website,
+                       b.address_line1,
+                       b.address_line2,
+                       b.city,
+                       b.state,
+                       b.postal_code,
+                       b.country,
+                       b.tax_id,
+                       b.invoice_default_tax_rate,
+                       b.timezone,
+                       b.logo_path,
+                       b.logo_mime_type,
                        b.is_active,
                        b.created_at,
                        b.updated_at';
@@ -170,7 +203,7 @@ final class Business
         }
 
         $stmt = Database::connection()->prepare(
-            'SELECT id, name, legal_name, email, phone, website, is_active, created_at, updated_at
+            'SELECT id, name, legal_name, email, phone, website, address_line1, address_line2, city, state, postal_code, country, tax_id, invoice_default_tax_rate, timezone, logo_path, logo_mime_type, is_active, created_at, updated_at
              FROM businesses
              WHERE id = :id
              LIMIT 1'
@@ -193,6 +226,17 @@ final class Business
                        b.email,
                        b.phone,
                        b.website,
+                       b.address_line1,
+                       b.address_line2,
+                       b.city,
+                       b.state,
+                       b.postal_code,
+                       b.country,
+                       b.tax_id,
+                       b.invoice_default_tax_rate,
+                       b.timezone,
+                       b.logo_path,
+                       b.logo_mime_type,
                        b.is_active,
                        b.created_at,
                        b.updated_at';
@@ -306,14 +350,67 @@ final class Business
             return 0;
         }
 
-        $columns = ['name', 'legal_name', 'email', 'phone', 'website', 'is_active', 'created_at', 'updated_at'];
-        $values = [':name', ':legal_name', ':email', ':phone', ':website', ':is_active', 'NOW()', 'NOW()'];
+        $columns = [
+            'name',
+            'legal_name',
+            'email',
+            'phone',
+            'website',
+            'address_line1',
+            'address_line2',
+            'city',
+            'state',
+            'postal_code',
+            'country',
+            'tax_id',
+            'invoice_default_tax_rate',
+            'timezone',
+            'logo_path',
+            'logo_mime_type',
+            'is_active',
+            'created_at',
+            'updated_at',
+        ];
+        $values = [
+            ':name',
+            ':legal_name',
+            ':email',
+            ':phone',
+            ':website',
+            ':address_line1',
+            ':address_line2',
+            ':city',
+            ':state',
+            ':postal_code',
+            ':country',
+            ':tax_id',
+            ':invoice_default_tax_rate',
+            ':timezone',
+            ':logo_path',
+            ':logo_mime_type',
+            ':is_active',
+            'NOW()',
+            'NOW()',
+        ];
         $params = [
             'name' => trim((string) ($data['name'] ?? '')),
             'legal_name' => trim((string) ($data['legal_name'] ?? '')),
             'email' => trim((string) ($data['email'] ?? '')),
             'phone' => trim((string) ($data['phone'] ?? '')),
             'website' => trim((string) ($data['website'] ?? '')),
+            'address_line1' => trim((string) ($data['address_line1'] ?? '')),
+            'address_line2' => trim((string) ($data['address_line2'] ?? '')),
+            'city' => trim((string) ($data['city'] ?? '')),
+            'state' => trim((string) ($data['state'] ?? '')),
+            'postal_code' => trim((string) ($data['postal_code'] ?? '')),
+            'country' => trim((string) ($data['country'] ?? '')),
+            'tax_id' => trim((string) ($data['tax_id'] ?? '')),
+            'invoice_default_tax_rate' => array_key_exists('invoice_default_tax_rate', $data) && $data['invoice_default_tax_rate'] !== null
+                ? round((float) $data['invoice_default_tax_rate'], 4)
+                : null,
+            'timezone' => trim((string) ($data['timezone'] ?? '')),
+            'logo_path' => trim((string) ($data['logo_path'] ?? '')),
+            'logo_mime_type' => trim((string) ($data['logo_mime_type'] ?? '')),
             'is_active' => !empty($data['is_active']) ? 1 : 0,
         ];
 
@@ -349,6 +446,19 @@ final class Business
             'email' => trim((string) ($data['email'] ?? '')),
             'phone' => trim((string) ($data['phone'] ?? '')),
             'website' => trim((string) ($data['website'] ?? '')),
+            'address_line1' => trim((string) ($data['address_line1'] ?? '')),
+            'address_line2' => trim((string) ($data['address_line2'] ?? '')),
+            'city' => trim((string) ($data['city'] ?? '')),
+            'state' => trim((string) ($data['state'] ?? '')),
+            'postal_code' => trim((string) ($data['postal_code'] ?? '')),
+            'country' => trim((string) ($data['country'] ?? '')),
+            'tax_id' => trim((string) ($data['tax_id'] ?? '')),
+            'invoice_default_tax_rate' => array_key_exists('invoice_default_tax_rate', $data) && $data['invoice_default_tax_rate'] !== null
+                ? round((float) $data['invoice_default_tax_rate'], 4)
+                : null,
+            'timezone' => trim((string) ($data['timezone'] ?? '')),
+            'logo_path' => trim((string) ($data['logo_path'] ?? '')),
+            'logo_mime_type' => trim((string) ($data['logo_mime_type'] ?? '')),
             'is_active' => !empty($data['is_active']) ? 1 : 0,
         ];
 
@@ -358,6 +468,17 @@ final class Business
                     email = :email,
                     phone = :phone,
                     website = :website,
+                    address_line1 = :address_line1,
+                    address_line2 = :address_line2,
+                    city = :city,
+                    state = :state,
+                    postal_code = :postal_code,
+                    country = :country,
+                    tax_id = :tax_id,
+                    invoice_default_tax_rate = :invoice_default_tax_rate,
+                    timezone = :timezone,
+                    logo_path = :logo_path,
+                    logo_mime_type = :logo_mime_type,
                     is_active = :is_active,
                     updated_at = NOW()';
 

@@ -858,6 +858,36 @@ final class Job
         $stmt->execute($params);
     }
 
+    public static function updateQuoteAmount(int $id, ?float $amount, ?int $actorId = null): void
+    {
+        if ($id <= 0) {
+            return;
+        }
+
+        $sets = [
+            'total_quote = :total_quote',
+            'updated_at = NOW()',
+        ];
+        $params = [
+            'id' => $id,
+            'total_quote' => $amount,
+        ];
+
+        if ($actorId !== null && Schema::hasColumn('jobs', 'updated_by')) {
+            $sets[] = 'updated_by = :updated_by';
+            $params['updated_by'] = $actorId;
+        }
+
+        $sql = 'UPDATE jobs
+                SET ' . implode(', ', $sets) . '
+                WHERE id = :id
+                  AND deleted_at IS NULL
+                  AND COALESCE(active, 1) = 1';
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute($params);
+    }
+
     public static function searchOwners(string $term, int $limit = 15): array
     {
         $term = trim($term);

@@ -32,7 +32,7 @@
                             <div class="text-muted">
                                 Copyright &copy; JunkTracker <?= date('Y') ?>
                                 <?php if ($appVersion !== ''): ?>
-                                    &middot; v<?= e($appVersion) ?>
+                                    &middot; <span class="footer-version-tag">v<?= e($appVersion) ?></span>
                                 <?php endif; ?>
                             </div>
                             <div>

@@ -255,6 +255,9 @@ final class DataQuality
             if (self::tableExists('job_estimate_invoice_events')) {
                 self::updateForeignKey('job_estimate_invoice_events', 'job_id', $sourceId, $targetId);
             }
+            if (self::tableExists('job_estimate_invoice_line_items')) {
+                self::updateForeignKey('job_estimate_invoice_line_items', 'job_id', $sourceId, $targetId);
+            }
 
             if (self::tableExists('job_crew')) {
                 $stmt = $pdo->prepare(

@@ -12074,3 +12074,11 @@ main .card.user-punch-link-card #user_employee_suggestions {
   --bs-table-accent-bg: #f8fbff;
   background-color: #f8fbff;
 }
+
+.footer-version-tag {
+  color: #ddd !important;
+}
+
+.sidenav-version-tag {
+  color: #ddd !important;
+}

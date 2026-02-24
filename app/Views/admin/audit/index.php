@@ -33,11 +33,11 @@
         <div class="card-header"><i class="fas fa-filter me-1"></i>Filters</div>
         <div class="card-body">
             <form method="get" action="<?= url('/admin/audit') ?>" class="row g-3">
-                <div class="col-md-3">
+                <div class="col-12 col-md-6 col-lg-3">
                     <label class="form-label" for="q">Search</label>
                     <input class="form-control" id="q" name="q" type="text" value="<?= e((string) ($filters['q'] ?? '')) ?>" />
                 </div>
-                <div class="col-md-2">
+                <div class="col-12 col-md-6 col-lg-3">
                     <label class="form-label" for="user_id">User</label>
                     <select class="form-select" id="user_id" name="user_id">
                         <option value="0">All</option>
@@ -48,7 +48,7 @@
                         <?php endforeach; ?>
                     </select>
                 </div>
-                <div class="col-md-2">
+                <div class="col-12 col-md-6 col-lg-3">
                     <label class="form-label" for="entity_table">Entity</label>
                     <select class="form-select" id="entity_table" name="entity_table">
                         <option value="">All</option>
@@ -59,7 +59,7 @@
                         <?php endforeach; ?>
                     </select>
                 </div>
-                <div class="col-md-2">
+                <div class="col-12 col-md-6 col-lg-3">
                     <label class="form-label" for="action_key">Action</label>
                     <select class="form-select" id="action_key" name="action_key">
                         <option value="">All</option>
@@ -70,15 +70,15 @@
                         <?php endforeach; ?>
                     </select>
                 </div>
-                <div class="col-md-1">
+                <div class="col-12 col-md-4 col-lg-3">
                     <label class="form-label" for="date_from">From</label>
                     <input class="form-control" id="date_from" name="date_from" type="date" value="<?= e((string) ($filters['date_from'] ?? '')) ?>" />
                 </div>
-                <div class="col-md-1">
+                <div class="col-12 col-md-4 col-lg-3">
                     <label class="form-label" for="date_to">To</label>
                     <input class="form-control" id="date_to" name="date_to" type="date" value="<?= e((string) ($filters['date_to'] ?? '')) ?>" />
                 </div>
-                <div class="col-md-1">
+                <div class="col-12 col-md-4 col-lg-3">
                     <label class="form-label" for="preset">Preset</label>
                     <select class="form-select" id="preset" name="preset">
                         <option value="all" <?= $preset === 'all' ? 'selected' : '' ?>>All</option>
@@ -87,7 +87,7 @@
                         <option value="data_changes" <?= $preset === 'data_changes' ? 'selected' : '' ?>>Changes</option>
                     </select>
                 </div>
-                <div class="col-md-1 d-flex align-items-end">
+                <div class="col-12 col-md-4 col-lg-3 d-flex align-items-end">
                     <button class="btn btn-primary w-100" type="submit">Apply</button>
                 </div>
             </form>
