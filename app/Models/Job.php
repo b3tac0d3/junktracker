@@ -976,6 +976,7 @@ final class Job
         $sql = 'SELECT
                     c.id AS client_id,
                     COALESCE(
+                        NULLIF(c.business_name, \'\'),
                         NULLIF(TRIM(CONCAT_WS(\' \', c.first_name, c.last_name)), \'\'),
                         CONCAT(\'Client #\', c.id)
                     ) AS label,
@@ -997,15 +998,15 @@ final class Job
                    AND COALESCE(co.active, 1) = 1
                 WHERE c.deleted_at IS NULL
                   AND c.active = 1
-                  AND (NULLIF(TRIM(CONCAT_WS(\' \', c.first_name, c.last_name)), \'\') IS NOT NULL)
                   AND (
-                        c.first_name LIKE :term
+                        c.business_name LIKE :term
+                        OR c.first_name LIKE :term
                         OR c.last_name LIKE :term
                         OR c.email LIKE :term
                         OR c.phone LIKE :term
                         OR co.name LIKE :term
                   )
-                GROUP BY c.id, c.first_name, c.last_name, c.email, c.phone
+                GROUP BY c.id, c.business_name, c.first_name, c.last_name, c.email, c.phone
                 ORDER BY label ASC
                 LIMIT ' . $limit;
 

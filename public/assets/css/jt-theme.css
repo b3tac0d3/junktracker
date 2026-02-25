@@ -206,3 +206,14 @@ h1, h2, h3, .h1, .h2, .h3 {
 .card-list-field-value {
     font-weight: 500;
 }
+
+.job-owner-contact-card,
+.job-owner-contact-card .card-body,
+.job-owner-contact-card .position-relative {
+    overflow: visible !important;
+}
+
+#jobOwnerResults,
+#contactResults {
+    z-index: 2200 !important;
+}

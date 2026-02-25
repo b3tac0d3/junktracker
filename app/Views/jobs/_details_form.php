@@ -32,6 +32,7 @@
     $ownerSearch = (string) old('job_owner_search', $job['owner_display_name'] ?? '');
     $contactClientId = (string) old('contact_client_id', (string) ($job['resolved_contact_client_id'] ?? ($job['client_id'] ?? '')));
     $contactSearch = (string) old('contact_search', $job['contact_display_name'] ?? '');
+    $canQuickCreateClient = can_access('clients', 'create');
     $sourceProspectId = (string) old('source_prospect_id', (string) ($job['source_prospect_id'] ?? ''));
     $cancelUrl = $isEdit
         ? url('/jobs/' . ($job['id'] ?? ''))
@@ -44,9 +45,12 @@
     <?php endif; ?>
     <input type="hidden" id="owner_lookup_url" value="<?= e(url('/jobs/lookup/owners')) ?>" />
     <input type="hidden" id="contact_lookup_url" value="<?= e(url('/jobs/lookup/contacts')) ?>" />
+    <?php if ($canQuickCreateClient): ?>
+        <input type="hidden" id="contact_create_url" value="<?= e(url('/clients/quick-create')) ?>" />
+    <?php endif; ?>
     <div class="row g-3">
         <div class="col-12">
-            <div class="card border-0 shadow-sm">
+            <div class="card border-0 shadow-sm job-owner-contact-card">
                 <div class="card-header"><i class="fas fa-clipboard-list me-1"></i>Job Basics</div>
                 <div class="card-body">
                     <div class="row g-3">
@@ -195,3 +199,41 @@
         <a class="btn btn-outline-secondary" href="<?= $cancelUrl ?>">Cancel</a>
     </div>
 </form>
+
+<?php if ($canQuickCreateClient): ?>
+    <div class="modal fade" id="addJobContactClientModal" tabindex="-1" aria-labelledby="addJobContactClientModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-md modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="addJobContactClientModalLabel">Add Client Contact</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="job_contact_client_create_error" class="alert alert-danger d-none mb-3" role="alert"></div>
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label" for="job_new_contact_first_name">First Name</label>
+                            <input class="form-control" id="job_new_contact_first_name" type="text" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="job_new_contact_last_name">Last Name</label>
+                            <input class="form-control" id="job_new_contact_last_name" type="text" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="job_new_contact_phone">Phone</label>
+                            <input class="form-control" id="job_new_contact_phone" type="text" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="job_new_contact_email">Email</label>
+                            <input class="form-control" id="job_new_contact_email" type="email" />
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="save_new_job_contact_client_btn">Save Client</button>
+                </div>
+            </div>
+        </div>
+    </div>
+<?php endif; ?>
