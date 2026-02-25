@@ -304,12 +304,16 @@ final class User
         return $stmt->fetchAll();
     }
 
-    public static function emailInUse(string $email, ?int $excludeId = null): bool
+    public static function emailInUse(string $email, ?int $excludeId = null, bool $includeInactive = false): bool
     {
         $sql = 'SELECT id
                 FROM users
                 WHERE LOWER(email) = LOWER(:email)';
         $params = ['email' => trim($email)];
+
+        if (!$includeInactive) {
+            $sql .= ' AND is_active = 1';
+        }
 
         if ($excludeId !== null && $excludeId > 0) {
             $sql .= ' AND id <> :exclude_id';
@@ -322,6 +326,77 @@ final class User
         $stmt->execute($params);
 
         return (bool) $stmt->fetchColumn();
+    }
+
+    public static function releaseEmailFromInactiveUsers(string $email, ?int $actorId = null): int
+    {
+        self::ensureAuthColumns();
+
+        $normalized = trim($email);
+        if ($normalized === '' || !filter_var($normalized, FILTER_VALIDATE_EMAIL)) {
+            return 0;
+        }
+
+        $sql = 'SELECT id, email
+                FROM users
+                WHERE LOWER(email) = LOWER(:email)
+                  AND is_active = 0';
+        $params = ['email' => $normalized];
+
+        if (Schema::hasColumn('users', 'business_id') && self::shouldApplyBusinessScope()) {
+            $sql .= ' AND business_id = :business_id_scope';
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute($params);
+        $rows = $stmt->fetchAll();
+
+        if (empty($rows)) {
+            return 0;
+        }
+
+        $released = 0;
+        foreach ($rows as $row) {
+            $id = (int) ($row['id'] ?? 0);
+            if ($id <= 0) {
+                continue;
+            }
+
+            $currentEmail = trim((string) ($row['email'] ?? ''));
+            if ($currentEmail === '' || self::isArchivedEmail($currentEmail)) {
+                continue;
+            }
+
+            $updateSql = 'UPDATE users
+                          SET email = :archived_email,
+                              updated_at = NOW()';
+            $updateParams = [
+                'id' => $id,
+                'archived_email' => self::buildArchivedEmail($currentEmail, $id),
+            ];
+
+            if ($actorId !== null && Schema::hasColumn('users', 'updated_by')) {
+                $updateSql .= ', updated_by = :updated_by';
+                $updateParams['updated_by'] = $actorId;
+            }
+            if (Schema::hasColumn('users', 'deleted_at')) {
+                $updateSql .= ', deleted_at = COALESCE(deleted_at, NOW())';
+            }
+            if ($actorId !== null && Schema::hasColumn('users', 'deleted_by')) {
+                $updateSql .= ', deleted_by = COALESCE(deleted_by, :deleted_by)';
+                $updateParams['deleted_by'] = $actorId;
+            }
+
+            $updateSql .= ' WHERE id = :id';
+            $updateStmt = Database::connection()->prepare($updateSql);
+            $updateStmt->execute($updateParams);
+            if ($updateStmt->rowCount() > 0) {
+                $released++;
+            }
+        }
+
+        return $released;
     }
 
     public static function create(array $data, ?int $actorId = null): int
@@ -716,7 +791,7 @@ final class User
         return (int) $raw === 1;
     }
 
-    public static function deactivate(int $id, ?int $actorId = null): void
+    public static function deactivate(int $id, ?int $actorId = null, ?string $currentEmail = null): void
     {
         self::ensureAuthColumns();
 
@@ -725,6 +800,16 @@ final class User
             'updated_at = NOW()',
         ];
         $params = ['id' => $id];
+
+        $email = trim((string) $currentEmail);
+        if ($email === '') {
+            $currentUser = self::findById($id);
+            $email = trim((string) ($currentUser['email'] ?? ''));
+        }
+        if ($email !== '' && !self::isArchivedEmail($email)) {
+            $sets[] = 'email = :archived_email';
+            $params['archived_email'] = self::buildArchivedEmail($email, $id);
+        }
 
         if ($actorId !== null && Schema::hasColumn('users', 'updated_by')) {
             $sets[] = 'updated_by = :updated_by';
@@ -982,5 +1067,18 @@ final class User
     private static function twoFactorHash(int $userId, string $code): string
     {
         return hash('sha256', $userId . '|' . trim($code) . '|' . app_key());
+    }
+
+    private static function buildArchivedEmail(string $email, int $id): string
+    {
+        $stamp = gmdate('YmdHis');
+        $hash = substr(hash('sha256', strtolower(trim($email)) . '|' . $id . '|' . microtime(true)), 0, 10);
+
+        return 'deleted+u' . max(1, $id) . '-' . $stamp . '-' . $hash . '@deactivated.junktracker.local';
+    }
+
+    private static function isArchivedEmail(string $email): bool
+    {
+        return str_contains(strtolower(trim($email)), '@deactivated.junktracker.local');
     }
 }

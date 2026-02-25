@@ -57,6 +57,9 @@ final class SettingsController extends Controller
             redirect('/settings');
         }
 
+        if (strcasecmp(trim((string) ($user['email'] ?? '')), trim((string) ($data['email'] ?? ''))) !== 0) {
+            User::releaseEmailFromInactiveUsers($data['email'], $userId);
+        }
         User::updateProfile($userId, $data, $userId);
         $updatedUser = User::findById($userId);
         if ($updatedUser) {

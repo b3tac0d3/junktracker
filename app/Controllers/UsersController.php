@@ -346,6 +346,7 @@ final class UsersController extends Controller
 
         $data['password'] = '';
         $data['password_confirm'] = '';
+        User::releaseEmailFromInactiveUsers($data['email'], auth_user_id());
         $userId = User::create($data, auth_user_id());
         $savedUser = User::findById($userId);
         if ($savedUser) {
@@ -428,6 +429,9 @@ final class UsersController extends Controller
             redirect($basePath . '/' . $id . '/edit');
         }
 
+        if (strcasecmp(trim((string) ($user['email'] ?? '')), trim((string) ($data['email'] ?? ''))) !== 0) {
+            User::releaseEmailFromInactiveUsers($data['email'], auth_user_id());
+        }
         User::update($id, $data, auth_user_id());
         $updatedUser = User::findById($id);
         if ($updatedUser) {
@@ -476,10 +480,9 @@ final class UsersController extends Controller
             redirect($basePath . '/' . $id);
         }
 
-        User::deactivate($id, auth_user_id());
-        $deactivatedUser = User::findById($id);
-        if ($deactivatedUser) {
-            Contact::upsertFromUser($deactivatedUser, auth_user_id());
+        User::deactivate($id, auth_user_id(), (string) ($user['email'] ?? ''));
+        if ($user) {
+            Contact::upsertFromUser($user, auth_user_id());
         }
         log_user_action('user_deactivated', 'users', $id, 'Deactivated user #' . $id . '.');
         redirect($basePath . '/' . $id);
