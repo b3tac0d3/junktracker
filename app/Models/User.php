@@ -57,7 +57,12 @@ final class User
             // index exists
         }
         try {
-            $pdo->exec('UPDATE users SET business_id = 1 WHERE business_id IS NULL OR business_id = 0');
+            $pdo->exec('UPDATE users SET business_id = 1 WHERE business_id IS NULL');
+        } catch (Throwable) {
+            // nullable column on older environments
+        }
+        try {
+            $pdo->exec('UPDATE users SET business_id = 0 WHERE role >= 4');
         } catch (Throwable) {
             // nullable column on older environments
         }
@@ -173,14 +178,9 @@ final class User
                        last_login_at,
                        two_factor_enabled
                 FROM users
-                WHERE id = :id';
-        $params = ['id' => $id];
-        if (Schema::hasColumn('users', 'business_id')) {
-            $sql .= ' AND business_id = :business_id';
-            $params['business_id'] = self::currentBusinessId();
-        }
-        $sql .= '
+                WHERE id = :id
                 LIMIT 1';
+        $params = ['id' => $id];
         $stmt = Database::connection()->prepare($sql);
         $stmt->execute($params);
         $user = $stmt->fetch();
@@ -221,6 +221,9 @@ final class User
             $where[] = 'business_id = :business_id';
             $params['business_id'] = self::currentBusinessId();
         }
+        if (Schema::hasColumn('users', 'role')) {
+            $where[] = '(role IS NULL OR role < 4)';
+        }
 
         if ($status === 'active') {
             $where[] = 'is_active = 1';
@@ -245,16 +248,68 @@ final class User
         return $stmt->fetchAll();
     }
 
+    public static function searchGlobal(string $term = '', string $status = 'active'): array
+    {
+        self::ensureAuthColumns();
+
+        $sql = 'SELECT id,
+                       first_name,
+                       last_name,
+                       email,
+                       role,
+                       business_id,
+                       password_hash,
+                       is_active,
+                       created_at,
+                       updated_at,
+                       COALESCE(last_login_at, updated_at, created_at) AS last_activity_at,
+                       password_setup_sent_at,
+                       password_setup_expires_at,
+                       password_setup_used_at,
+                       last_2fa_at,
+                       failed_login_count,
+                       last_failed_login_at,
+                       last_failed_login_ip,
+                       locked_until,
+                       last_login_at,
+                       two_factor_enabled
+                FROM users';
+        $params = [];
+        $where = [];
+
+        if (Schema::hasColumn('users', 'role')) {
+            $where[] = 'role >= 4';
+        }
+
+        if ($status === 'active') {
+            $where[] = 'is_active = 1';
+        } elseif ($status === 'inactive') {
+            $where[] = 'is_active = 0';
+        }
+
+        if ($term !== '') {
+            $where[] = '(email LIKE :term OR first_name LIKE :term OR last_name LIKE :term)';
+            $params['term'] = '%' . $term . '%';
+        }
+
+        if (!empty($where)) {
+            $sql .= ' WHERE ' . implode(' AND ', $where);
+        }
+
+        $sql .= ' ORDER BY role DESC, last_name, first_name';
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute($params);
+
+        return $stmt->fetchAll();
+    }
+
     public static function emailInUse(string $email, ?int $excludeId = null): bool
     {
         $sql = 'SELECT id
                 FROM users
                 WHERE LOWER(email) = LOWER(:email)';
         $params = ['email' => trim($email)];
-        if (Schema::hasColumn('users', 'business_id')) {
-            $sql .= ' AND business_id = :business_id';
-            $params['business_id'] = self::currentBusinessId();
-        }
 
         if ($excludeId !== null && $excludeId > 0) {
             $sql .= ' AND id <> :exclude_id';
@@ -590,7 +645,7 @@ final class User
         }
 
         $sql .= ' WHERE id = :id';
-        if (Schema::hasColumn('users', 'business_id')) {
+        if (Schema::hasColumn('users', 'business_id') && self::shouldApplyBusinessScope()) {
             $sql .= ' AND business_id = :business_id_scope';
             $fields['business_id_scope'] = self::currentBusinessId();
         }
@@ -632,7 +687,7 @@ final class User
         }
 
         $sql .= ' WHERE id = :id';
-        if (Schema::hasColumn('users', 'business_id')) {
+        if (Schema::hasColumn('users', 'business_id') && self::shouldApplyBusinessScope()) {
             $sql .= ' AND business_id = :business_id_scope';
             $fields['business_id_scope'] = self::currentBusinessId();
         }
@@ -684,7 +739,7 @@ final class User
         }
 
         $sql = 'UPDATE users SET ' . implode(', ', $sets) . ' WHERE id = :id';
-        if (Schema::hasColumn('users', 'business_id')) {
+        if (Schema::hasColumn('users', 'business_id') && self::shouldApplyBusinessScope()) {
             $sql .= ' AND business_id = :business_id_scope';
             $params['business_id_scope'] = self::currentBusinessId();
         }
@@ -884,7 +939,7 @@ final class User
                   AND password_setup_sent_at IS NOT NULL
                   AND COALESCE(password_setup_used_at, \'\') = \'\'
                   AND COALESCE(password_hash, \'\') = \'\'';
-        if (Schema::hasColumn('users', 'business_id')) {
+        if (Schema::hasColumn('users', 'business_id') && self::shouldApplyBusinessScope()) {
             $sql .= '
                   AND business_id = :business_id_scope';
             $params['business_id_scope'] = self::currentBusinessId();
@@ -903,6 +958,20 @@ final class User
         }
 
         return max(1, (int) config('app.default_business_id', 1));
+    }
+
+    private static function shouldApplyBusinessScope(): bool
+    {
+        if (!function_exists('auth_user_role')) {
+            return true;
+        }
+
+        $role = (int) auth_user_role();
+        if (function_exists('is_global_role_value')) {
+            return !is_global_role_value($role);
+        }
+
+        return $role < 4;
     }
 
     private static function tokenHash(string $raw): string

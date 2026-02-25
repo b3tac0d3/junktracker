@@ -99,7 +99,7 @@ final class UserAction
                     ON u.id = ua.user_id
                 WHERE ua.user_id = :user_id';
         $params = ['user_id' => $userId];
-        if (self::hasBusinessColumn()) {
+        if (self::hasBusinessColumn() && self::shouldApplyBusinessScope()) {
             $sql .= ' AND ua.business_id = :business_id';
             $params['business_id'] = self::currentBusinessId();
         }
@@ -166,7 +166,7 @@ final class UserAction
                     ON u.id = ua.user_id
                 WHERE 1=1';
         $params = [];
-        if (self::hasBusinessColumn()) {
+        if (self::hasBusinessColumn() && self::shouldApplyBusinessScope()) {
             $sql .= ' AND ua.business_id = :business_id';
             $params['business_id'] = self::currentBusinessId();
         }
@@ -234,7 +234,7 @@ final class UserAction
                     WHERE entity_table IS NOT NULL
                       AND entity_table <> \'\'';
             $params = [];
-            if (self::hasBusinessColumn()) {
+            if (self::hasBusinessColumn() && self::shouldApplyBusinessScope()) {
                 $sql .= ' AND business_id = :business_id';
                 $params['business_id'] = self::currentBusinessId();
             }
@@ -264,7 +264,7 @@ final class UserAction
                     FROM user_actions
                     WHERE action_key <> \'\'';
             $params = [];
-            if (self::hasBusinessColumn()) {
+            if (self::hasBusinessColumn() && self::shouldApplyBusinessScope()) {
                 $sql .= ' AND business_id = :business_id';
                 $params['business_id'] = self::currentBusinessId();
             }
@@ -295,5 +295,19 @@ final class UserAction
         }
 
         return max(1, (int) config('app.default_business_id', 1));
+    }
+
+    private static function shouldApplyBusinessScope(): bool
+    {
+        if (!function_exists('auth_user_role')) {
+            return true;
+        }
+
+        $role = (int) auth_user_role();
+        if (function_exists('is_global_role_value')) {
+            return !is_global_role_value($role);
+        }
+
+        return $role < 4;
     }
 }

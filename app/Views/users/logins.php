@@ -6,6 +6,11 @@
     $records = is_array($records ?? null) ? $records : [];
     $query = (string) ($query ?? '');
     $isReady = !empty($isReady);
+    $usersBasePath = trim((string) ($usersBasePath ?? '/users'));
+    if ($usersBasePath === '') {
+        $usersBasePath = '/users';
+    }
+    $isGlobalDirectory = !empty($isGlobalDirectory);
 ?>
 <div class="container-fluid px-4">
     <div class="d-flex flex-wrap align-items-center justify-content-between mt-4 mb-3 gap-3">
@@ -13,12 +18,17 @@
             <h1 class="mb-1">User Login Records</h1>
             <ol class="breadcrumb mb-0">
                 <li class="breadcrumb-item"><a href="<?= url('/') ?>">Dashboard</a></li>
-                <li class="breadcrumb-item"><a href="<?= url('/users') ?>">Users</a></li>
-                <li class="breadcrumb-item"><a href="<?= url('/users/' . ($user['id'] ?? '')) ?>"><?= e($userName) ?></a></li>
+                <?php if ($isGlobalDirectory): ?>
+                    <li class="breadcrumb-item"><a href="<?= url('/site-admin') ?>">Site Admin</a></li>
+                    <li class="breadcrumb-item"><a href="<?= url($usersBasePath) ?>">Global Users</a></li>
+                <?php else: ?>
+                    <li class="breadcrumb-item"><a href="<?= url($usersBasePath) ?>">Users</a></li>
+                <?php endif; ?>
+                <li class="breadcrumb-item"><a href="<?= url($usersBasePath . '/' . ($user['id'] ?? '')) ?>"><?= e($userName) ?></a></li>
                 <li class="breadcrumb-item active">Login Records</li>
             </ol>
         </div>
-        <a class="btn btn-outline-secondary" href="<?= url('/users/' . ($user['id'] ?? '')) ?>">Back to User</a>
+        <a class="btn btn-outline-secondary" href="<?= url($usersBasePath . '/' . ($user['id'] ?? '')) ?>">Back to User</a>
     </div>
 
     <?php if (!$isReady): ?>
@@ -33,14 +43,14 @@
             Search Login Records
         </div>
         <div class="card-body">
-            <form method="get" action="<?= url('/users/' . ($user['id'] ?? '') . '/logins') ?>">
+            <form method="get" action="<?= url($usersBasePath . '/' . ($user['id'] ?? '') . '/logins') ?>">
                 <div class="row g-2 align-items-center">
                     <div class="col-12 col-lg-10">
                         <div class="input-group">
                             <span class="input-group-text"><i class="fas fa-search"></i></span>
                             <input class="form-control" type="text" name="q" placeholder="Search IP, browser, OS, method..." value="<?= e($query) ?>" />
                             <?php if ($query !== ''): ?>
-                                <a class="btn btn-outline-secondary" href="<?= url('/users/' . ($user['id'] ?? '') . '/logins') ?>">Clear</a>
+                                <a class="btn btn-outline-secondary" href="<?= url($usersBasePath . '/' . ($user['id'] ?? '') . '/logins') ?>">Clear</a>
                             <?php endif; ?>
                         </div>
                     </div>

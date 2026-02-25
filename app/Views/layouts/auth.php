@@ -1,6 +1,21 @@
 <?php
     $pageTitle = $pageTitle ?? 'Authentication';
     $appVersion = trim((string) config('app.version', ''));
+    $globalFlashMessages = [];
+    foreach ([
+        'success' => 'success',
+        'error' => 'danger',
+        'warning' => 'warning',
+        'info' => 'info',
+    ] as $flashKey => $alertClass) {
+        $message = flash($flashKey);
+        if ($message !== null && trim((string) $message) !== '') {
+            $globalFlashMessages[] = [
+                'class' => $alertClass,
+                'message' => (string) $message,
+            ];
+        }
+    }
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -22,6 +37,15 @@
         <div id="layoutAuthentication">
             <div id="layoutAuthentication_content">
                 <main>
+                    <?php if (!empty($globalFlashMessages)): ?>
+                        <div class="container-fluid px-4 pt-3">
+                            <?php foreach ($globalFlashMessages as $flashItem): ?>
+                                <div class="alert alert-<?= e((string) ($flashItem['class'] ?? 'info')) ?>" role="alert">
+                                    <?= e((string) ($flashItem['message'] ?? '')) ?>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
+                    <?php endif; ?>
                     <?= $content ?>
                 </main>
             </div>
@@ -47,6 +71,7 @@
         </div>
         <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js" crossorigin="anonymous"></script>
         <script src="<?= asset('js/scripts.js') ?>"></script>
+        <script src="<?= asset('js/flash-alerts.js') ?>"></script>
         <?= $pageScripts ?? '' ?>
     </body>
 </html>

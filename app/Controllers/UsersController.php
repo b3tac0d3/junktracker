@@ -16,7 +16,8 @@ final class UsersController extends Controller
 {
     public function index(): void
     {
-        require_permission('users', 'view');
+        $isGlobalContext = $this->isGlobalDirectoryContext();
+        $this->authorizeDirectory($isGlobalContext, 'view');
 
         $query = trim($_GET['q'] ?? '');
         $status = $_GET['status'] ?? 'active';
@@ -29,7 +30,9 @@ final class UsersController extends Controller
             $inviteFilter = 'all';
         }
 
-        $users = User::search($query, $status);
+        $users = $isGlobalContext
+            ? User::searchGlobal($query, $status)
+            : User::search($query, $status);
         $users = array_values(array_filter(array_map(static function (array $user): array {
             $user['invite'] = User::inviteStatus($user);
             return $user;
@@ -56,23 +59,32 @@ final class UsersController extends Controller
         ]);
 
         $this->render('users/index', [
-            'pageTitle' => 'Users',
+            'pageTitle' => $isGlobalContext ? 'Site Admin Users' : 'Users',
             'users' => $users,
             'query' => $query,
             'status' => $status,
             'inviteFilter' => $inviteFilter,
+            'isGlobalDirectory' => $isGlobalContext,
+            'usersBasePath' => $this->usersBasePath($isGlobalContext),
             'pageScripts' => $pageScripts,
         ]);
     }
 
     public function show(array $params): void
     {
-        require_permission('users', 'view');
+        $isGlobalContext = $this->isGlobalDirectoryContext();
+        $this->authorizeDirectory($isGlobalContext, 'view');
 
         $id = isset($params['id']) ? (int) $params['id'] : 0;
         $user = $id > 0 ? User::findById($id) : null;
+        if (!$this->isUserAllowedInContext($user, $isGlobalContext)) {
+            flash('error', $isGlobalContext
+                ? 'Global site admin user not found.'
+                : 'This user is managed from the Site Admin > Global Users section.');
+            redirect($this->usersBasePath($isGlobalContext));
+        }
         $lastLogin = $id > 0 ? UserLoginRecord::latestForUser($id) : null;
-        $canManageEmployeeLink = has_role(2);
+        $canManageEmployeeLink = !$isGlobalContext && has_role(2);
         $employeeLinkSupported = Employee::supportsUserLinking();
         $linkedEmployee = ($canManageEmployeeLink && $employeeLinkSupported && $id > 0)
             ? Employee::linkedToUser($id)
@@ -80,7 +92,7 @@ final class UsersController extends Controller
         $viewer = auth_user();
         $viewerRole = (int) ($viewer['role'] ?? 0);
         $viewerId = auth_user_id();
-        $canManageRole = $user ? $this->canManageRoleValue((int) ($user['role'] ?? 0)) : false;
+        $canManageRole = $user ? $this->canManageRoleValue((int) ($user['role'] ?? 0), $isGlobalContext) : false;
         $canDeactivate = $canManageRole && !($viewerId !== null && $viewerId === $id && $viewerRole !== 99);
 
         if (!$user) {
@@ -108,6 +120,8 @@ final class UsersController extends Controller
             'canManageRole' => $canManageRole,
             'canDeactivate' => $canDeactivate,
             'inviteStatus' => $inviteStatus,
+            'isGlobalDirectory' => $isGlobalContext,
+            'usersBasePath' => $this->usersBasePath($isGlobalContext),
             'pageScripts' => $pageScripts,
         ]);
     }
@@ -162,10 +176,20 @@ final class UsersController extends Controller
             echo '404 Not Found';
             return;
         }
+        if (is_global_role_value((int) ($user['role'] ?? 0))) {
+            flash('error', 'Employee linking is not available for global site admin accounts.');
+            redirect('/site-admin/users/' . $userId);
+        }
 
         if (!Employee::supportsUserLinking()) {
             flash('error', 'Employee-to-user linking is not enabled yet. Run the user/employee link migration first.');
             redirect('/users/' . $userId);
+        }
+
+        $user = User::findById($userId);
+        if (is_array($user) && is_global_role_value((int) ($user['role'] ?? 0))) {
+            flash('error', 'Employee linking is not available for global site admin accounts.');
+            redirect('/site-admin/users/' . $userId);
         }
 
         $employeeId = (int) ($_POST['employee_id'] ?? 0);
@@ -243,14 +267,17 @@ final class UsersController extends Controller
 
     public function create(): void
     {
-        require_permission('users', 'create');
+        $isGlobalContext = $this->isGlobalDirectoryContext();
+        $this->authorizeDirectory($isGlobalContext, 'create');
 
         $this->render('users/create', [
-            'pageTitle' => 'Add User',
-            'roleOptions' => $this->assignableRoleOptions(),
+            'pageTitle' => $isGlobalContext ? 'Add Site Admin User' : 'Add User',
+            'roleOptions' => $this->assignableRoleOptions($isGlobalContext),
             'employeeLinkReview' => null,
-            'employeeLinkSupported' => Employee::supportsUserLinking() && has_role(2),
+            'employeeLinkSupported' => !$isGlobalContext && Employee::supportsUserLinking() && has_role(2),
             'canCreateEmployee' => can_access('employees', 'create'),
+            'isGlobalDirectory' => $isGlobalContext,
+            'usersBasePath' => $this->usersBasePath($isGlobalContext),
         ]);
 
         clear_old();
@@ -258,24 +285,28 @@ final class UsersController extends Controller
 
     public function store(): void
     {
-        require_permission('users', 'create');
+        $isGlobalContext = $this->isGlobalDirectoryContext();
+        $this->authorizeDirectory($isGlobalContext, 'create');
+        $basePath = $this->usersBasePath($isGlobalContext);
 
         if (!verify_csrf($_POST['csrf_token'] ?? null)) {
             flash('error', 'Your session expired. Please try again.');
-            redirect('/users/new');
+            redirect($basePath . '/new');
         }
 
         $data = $this->collectFormData();
-        $data['business_id'] = is_global_role_value((int) ($data['role'] ?? 0)) ? 0 : current_business_id();
-        $errors = $this->validate($data, true);
+        $data['business_id'] = $isGlobalContext
+            ? 0
+            : (is_global_role_value((int) ($data['role'] ?? 0)) ? 0 : current_business_id());
+        $errors = $this->validate($data, true, null, $isGlobalContext);
 
         if (!empty($errors)) {
             flash('error', implode(' ', $errors));
             flash_old($data);
-            redirect('/users/new');
+            redirect($basePath . '/new');
         }
 
-        $employeeLinkSupported = Employee::supportsUserLinking() && has_role(2);
+        $employeeLinkSupported = !$isGlobalContext && Employee::supportsUserLinking() && has_role(2);
         $canCreateEmployee = can_access('employees', 'create');
         $employeeCandidates = $employeeLinkSupported ? Employee::findUserLinkCandidates($data) : [];
         $employeeLinkReviewed = isset($_POST['employee_link_reviewed']) && (string) ($_POST['employee_link_reviewed'] ?? '') === '1';
@@ -284,12 +315,14 @@ final class UsersController extends Controller
         if ($employeeLinkSupported) {
             if (!$employeeLinkReviewed) {
                 $this->render('users/create', [
-                    'pageTitle' => 'Add User',
-                    'roleOptions' => $this->assignableRoleOptions(),
+                    'pageTitle' => $isGlobalContext ? 'Add Site Admin User' : 'Add User',
+                    'roleOptions' => $this->assignableRoleOptions($isGlobalContext),
                     'formValues' => $data,
                     'employeeLinkReview' => $this->buildEmployeeLinkReview($data, $employeeCandidates, '', $canCreateEmployee),
                     'employeeLinkSupported' => $employeeLinkSupported,
                     'canCreateEmployee' => $canCreateEmployee,
+                    'isGlobalDirectory' => $isGlobalContext,
+                    'usersBasePath' => $basePath,
                 ]);
                 return;
             }
@@ -298,12 +331,14 @@ final class UsersController extends Controller
             if ($decisionError !== null) {
                 flash('error', $decisionError);
                 $this->render('users/create', [
-                    'pageTitle' => 'Add User',
-                    'roleOptions' => $this->assignableRoleOptions(),
+                    'pageTitle' => $isGlobalContext ? 'Add Site Admin User' : 'Add User',
+                    'roleOptions' => $this->assignableRoleOptions($isGlobalContext),
                     'formValues' => $data,
                     'employeeLinkReview' => $this->buildEmployeeLinkReview($data, $employeeCandidates, $employeeLinkDecision, $canCreateEmployee),
                     'employeeLinkSupported' => $employeeLinkSupported,
                     'canCreateEmployee' => $canCreateEmployee,
+                    'isGlobalDirectory' => $isGlobalContext,
+                    'usersBasePath' => $basePath,
                 ]);
                 return;
             }
@@ -343,24 +378,32 @@ final class UsersController extends Controller
         } else {
             flash('error', trim('User created, but setup email could not be sent. Check mail settings/logs.' . $inviteExpiryLabel . ' ' . $linkMessage));
         }
-        redirect('/users/' . $userId);
+        redirect($basePath . '/' . $userId);
     }
 
     public function update(array $params): void
     {
-        require_permission('users', 'edit');
+        $isGlobalContext = $this->isGlobalDirectoryContext();
+        $this->authorizeDirectory($isGlobalContext, 'edit');
+        $basePath = $this->usersBasePath($isGlobalContext);
 
         if (!verify_csrf($_POST['csrf_token'] ?? null)) {
             flash('error', 'Your session expired. Please try again.');
-            redirect('/users/' . ($params['id'] ?? '') . '/edit');
+            redirect($basePath . '/' . ($params['id'] ?? '') . '/edit');
         }
 
         $id = isset($params['id']) ? (int) $params['id'] : 0;
         if ($id <= 0) {
-            redirect('/users');
+            redirect($basePath);
         }
 
         $existing = User::findById($id);
+        if (!$this->isUserAllowedInContext($existing, $isGlobalContext)) {
+            flash('error', $isGlobalContext
+                ? 'Global site admin user not found.'
+                : 'This user is managed from the Site Admin > Global Users section.');
+            redirect($basePath);
+        }
         if (!$existing) {
             http_response_code(404);
             if (class_exists('App\\Controllers\\ErrorController')) {
@@ -368,19 +411,21 @@ final class UsersController extends Controller
                 return;
             }
         }
-        if (!$this->canManageRoleValue((int) ($existing['role'] ?? 0))) {
+        if (!$this->canManageRoleValue((int) ($existing['role'] ?? 0), $isGlobalContext)) {
             flash('error', 'You cannot edit this user role.');
-            redirect('/users/' . $id);
+            redirect($basePath . '/' . $id);
         }
 
         $data = $this->collectFormData();
-        $data['business_id'] = is_global_role_value((int) ($data['role'] ?? 0)) ? 0 : current_business_id();
-        $errors = $this->validate($data, false, $id);
+        $data['business_id'] = $isGlobalContext
+            ? 0
+            : (is_global_role_value((int) ($data['role'] ?? 0)) ? 0 : current_business_id());
+        $errors = $this->validate($data, false, $id, $isGlobalContext);
 
         if (!empty($errors)) {
             flash('error', implode(' ', $errors));
             flash_old($data);
-            redirect('/users/' . $id . '/edit');
+            redirect($basePath . '/' . $id . '/edit');
         }
 
         User::update($id, $data, auth_user_id());
@@ -389,20 +434,22 @@ final class UsersController extends Controller
             Contact::upsertFromUser($updatedUser, auth_user_id());
         }
         log_user_action('user_updated', 'users', $id, 'Updated user #' . $id . '.');
-        redirect('/users/' . $id);
+        redirect($basePath . '/' . $id);
     }
 
     public function deactivate(array $params): void
     {
-        require_permission('users', 'delete');
+        $isGlobalContext = $this->isGlobalDirectoryContext();
+        $this->authorizeDirectory($isGlobalContext, 'delete');
+        $basePath = $this->usersBasePath($isGlobalContext);
 
         if (!verify_csrf($_POST['csrf_token'] ?? null)) {
-            redirect('/users/' . ($params['id'] ?? ''));
+            redirect($basePath . '/' . ($params['id'] ?? ''));
         }
 
         $id = isset($params['id']) ? (int) $params['id'] : 0;
         if ($id <= 0) {
-            redirect('/users');
+            redirect($basePath);
         }
 
         $viewer = auth_user();
@@ -410,17 +457,23 @@ final class UsersController extends Controller
         $viewerId = auth_user_id();
         if ($viewerId !== null && $viewerId === $id && $viewerRole !== 99) {
             flash('error', 'You cannot deactivate your own account.');
-            redirect('/users/' . $id);
+            redirect($basePath . '/' . $id);
         }
 
         $user = User::findById($id);
+        if (!$this->isUserAllowedInContext($user, $isGlobalContext)) {
+            flash('error', $isGlobalContext
+                ? 'Global site admin user not found.'
+                : 'This user is managed from the Site Admin > Global Users section.');
+            redirect($basePath);
+        }
         if (!$user) {
             flash('error', 'User not found.');
-            redirect('/users');
+            redirect($basePath);
         }
-        if (!$this->canManageRoleValue((int) ($user['role'] ?? 0))) {
+        if (!$this->canManageRoleValue((int) ($user['role'] ?? 0), $isGlobalContext)) {
             flash('error', 'You cannot deactivate this user.');
-            redirect('/users/' . $id);
+            redirect($basePath . '/' . $id);
         }
 
         User::deactivate($id, auth_user_id());
@@ -429,24 +482,32 @@ final class UsersController extends Controller
             Contact::upsertFromUser($deactivatedUser, auth_user_id());
         }
         log_user_action('user_deactivated', 'users', $id, 'Deactivated user #' . $id . '.');
-        redirect('/users/' . $id);
+        redirect($basePath . '/' . $id);
     }
 
     public function autoAcceptInvite(array $params): void
     {
-        require_permission('users', 'edit');
+        $isGlobalContext = $this->isGlobalDirectoryContext();
+        $this->authorizeDirectory($isGlobalContext, 'edit');
+        $basePath = $this->usersBasePath($isGlobalContext);
 
         if (!verify_csrf($_POST['csrf_token'] ?? null)) {
             flash('error', 'Your session expired. Please try again.');
-            redirect('/users/' . ($params['id'] ?? ''));
+            redirect($basePath . '/' . ($params['id'] ?? ''));
         }
 
         $id = isset($params['id']) ? (int) $params['id'] : 0;
         if ($id <= 0) {
-            redirect('/users');
+            redirect($basePath);
         }
 
         $user = User::findById($id);
+        if (!$this->isUserAllowedInContext($user, $isGlobalContext)) {
+            flash('error', $isGlobalContext
+                ? 'Global site admin user not found.'
+                : 'This user is managed from the Site Admin > Global Users section.');
+            redirect($basePath);
+        }
         if (!$user) {
             http_response_code(404);
             if (class_exists('App\\Controllers\\ErrorController')) {
@@ -457,22 +518,22 @@ final class UsersController extends Controller
             echo '404 Not Found';
             return;
         }
-        if (!$this->canManageRoleValue((int) ($user['role'] ?? 0))) {
+        if (!$this->canManageRoleValue((int) ($user['role'] ?? 0), $isGlobalContext)) {
             flash('error', 'You cannot manage invites for this user.');
-            redirect('/users');
+            redirect($basePath);
         }
 
         $invite = User::inviteStatus($user);
         if (!in_array((string) ($invite['status'] ?? ''), ['invited', 'expired'], true)) {
             flash('error', 'This user does not have an outstanding invite.');
-            redirect('/users/' . $id);
+            redirect($basePath . '/' . $id);
         }
 
         $temporaryPassword = $this->generateTemporaryPassword();
         $accepted = User::autoAcceptInvite($id, $temporaryPassword, auth_user_id());
         if (!$accepted) {
             flash('error', 'Unable to auto-accept this invite. Refresh and try again.');
-            redirect('/users/' . $id);
+            redirect($basePath . '/' . $id);
         }
 
         log_user_action('user_invite_auto_accepted', 'users', $id, 'Auto-accepted invite for user #' . $id . '.');
@@ -480,15 +541,23 @@ final class UsersController extends Controller
             'success',
             'Invite auto-accepted. Temporary password: ' . $temporaryPassword . ' (share securely and have them change it immediately).'
         );
-        redirect('/users/' . $id);
+        redirect($basePath . '/' . $id);
     }
 
     public function edit(array $params): void
     {
-        require_permission('users', 'edit');
+        $isGlobalContext = $this->isGlobalDirectoryContext();
+        $this->authorizeDirectory($isGlobalContext, 'edit');
+        $basePath = $this->usersBasePath($isGlobalContext);
 
         $id = isset($params['id']) ? (int) $params['id'] : 0;
         $user = $id > 0 ? User::findById($id) : null;
+        if (!$this->isUserAllowedInContext($user, $isGlobalContext)) {
+            flash('error', $isGlobalContext
+                ? 'Global site admin user not found.'
+                : 'This user is managed from the Site Admin > Global Users section.');
+            redirect($basePath);
+        }
 
         if (!$user) {
             http_response_code(404);
@@ -497,15 +566,17 @@ final class UsersController extends Controller
                 return;
             }
         }
-        if (!$this->canManageRoleValue((int) ($user['role'] ?? 0))) {
+        if (!$this->canManageRoleValue((int) ($user['role'] ?? 0), $isGlobalContext)) {
             flash('error', 'You cannot edit this user role.');
-            redirect('/users');
+            redirect($basePath);
         }
 
         $this->render('users/edit', [
             'pageTitle' => 'Edit User',
             'user' => $user,
-            'roleOptions' => $this->assignableRoleOptions(),
+            'roleOptions' => $this->assignableRoleOptions($isGlobalContext),
+            'isGlobalDirectory' => $isGlobalContext,
+            'usersBasePath' => $basePath,
         ]);
 
         clear_old();
@@ -518,31 +589,49 @@ final class UsersController extends Controller
             redirect('/login');
         }
 
-        $this->renderActivity($userId, true);
+        $this->renderActivity($userId, true, is_global_role_value(auth_user_role()));
     }
 
     public function activity(array $params): void
     {
-        require_permission('users', 'view');
+        $isGlobalContext = $this->isGlobalDirectoryContext();
+        $this->authorizeDirectory($isGlobalContext, 'view');
+        $basePath = $this->usersBasePath($isGlobalContext);
 
         $id = isset($params['id']) ? (int) $params['id'] : 0;
         if ($id <= 0) {
-            redirect('/users');
+            redirect($basePath);
         }
 
-        $this->renderActivity($id, false);
+        $user = User::findById($id);
+        if (!$this->isUserAllowedInContext($user, $isGlobalContext)) {
+            flash('error', $isGlobalContext
+                ? 'Global site admin user not found.'
+                : 'This user is managed from the Site Admin > Global Users section.');
+            redirect($basePath);
+        }
+
+        $this->renderActivity($id, false, $isGlobalContext);
     }
 
     public function logins(array $params): void
     {
-        require_permission('users', 'view');
+        $isGlobalContext = $this->isGlobalDirectoryContext();
+        $this->authorizeDirectory($isGlobalContext, 'view');
+        $basePath = $this->usersBasePath($isGlobalContext);
 
         $id = isset($params['id']) ? (int) $params['id'] : 0;
         if ($id <= 0) {
-            redirect('/users');
+            redirect($basePath);
         }
 
         $user = User::findById($id);
+        if (!$this->isUserAllowedInContext($user, $isGlobalContext)) {
+            flash('error', $isGlobalContext
+                ? 'Global site admin user not found.'
+                : 'This user is managed from the Site Admin > Global Users section.');
+            redirect($basePath);
+        }
         if (!$user) {
             http_response_code(404);
             if (class_exists('App\\Controllers\\ErrorController')) {
@@ -567,6 +656,8 @@ final class UsersController extends Controller
             'records' => $records,
             'query' => $query,
             'isReady' => UserLoginRecord::isAvailable(),
+            'isGlobalDirectory' => $isGlobalContext,
+            'usersBasePath' => $basePath,
             'pageScripts' => $pageScripts,
         ]);
     }
@@ -590,7 +681,7 @@ final class UsersController extends Controller
         return $data;
     }
 
-    private function validate(array $data, bool $isCreate, ?int $userId = null): array
+    private function validate(array $data, bool $isCreate, ?int $userId = null, bool $isGlobalContext = false): array
     {
         $errors = [];
 
@@ -608,7 +699,7 @@ final class UsersController extends Controller
         if ($data['password'] !== '' && strlen($data['password']) < 8) {
             $errors[] = 'Password must be at least 8 characters.';
         }
-        $allowedRoles = array_keys($this->assignableRoleOptions());
+        $allowedRoles = array_keys($this->assignableRoleOptions($isGlobalContext));
         if (!in_array((int) $data['role'], $allowedRoles, true)) {
             $errors[] = 'Selected role is not allowed.';
         }
@@ -616,13 +707,34 @@ final class UsersController extends Controller
         return $errors;
     }
 
-    private function assignableRoleOptions(): array
+    private function assignableRoleOptions(bool $isGlobalContext = false): array
     {
-        return assignable_role_options_for_user(auth_user_role());
+        $role = auth_user_role();
+        if ($isGlobalContext) {
+            $options = [4 => 'Site Admin'];
+            if ($role === 99) {
+                $options[99] = 'Dev';
+            }
+
+            return $options;
+        }
+
+        $options = assignable_role_options_for_user($role);
+        unset($options[4], $options[99]);
+
+        return $options;
     }
 
-    private function canManageRoleValue(int $targetRole): bool
+    private function canManageRoleValue(int $targetRole, bool $isGlobalContext = false): bool
     {
+        if ($isGlobalContext) {
+            if (!is_global_role_value($targetRole)) {
+                return false;
+            }
+        } elseif (is_global_role_value($targetRole)) {
+            return false;
+        }
+
         return can_manage_role(auth_user_role(), $targetRole);
     }
 
@@ -654,9 +766,16 @@ final class UsersController extends Controller
         return Mailer::send($email, $subject, $body);
     }
 
-    private function renderActivity(int $userId, bool $isOwn): void
+    private function renderActivity(int $userId, bool $isOwn, bool $isGlobalContext = false): void
     {
+        $basePath = $this->usersBasePath($isGlobalContext);
         $user = User::findById($userId);
+        if (!$this->isUserAllowedInContext($user, $isGlobalContext)) {
+            flash('error', $isGlobalContext
+                ? 'Global site admin user not found.'
+                : 'This user is managed from the Site Admin > Global Users section.');
+            redirect($basePath);
+        }
         if (!$user) {
             http_response_code(404);
             if (class_exists('App\\Controllers\\ErrorController')) {
@@ -689,6 +808,8 @@ final class UsersController extends Controller
             'actionOptions' => UserAction::actionOptions(),
             'isOwnActivity' => $isOwn,
             'isLogReady' => UserAction::isAvailable(),
+            'isGlobalDirectory' => $isGlobalContext,
+            'usersBasePath' => $basePath,
             'pageScripts' => $pageScripts,
         ]);
     }
@@ -700,6 +821,58 @@ final class UsersController extends Controller
         if (!has_role(2)) {
             redirect('/401');
         }
+    }
+
+    private function authorizeDirectory(bool $isGlobalContext, string $permission): void
+    {
+        if ($isGlobalContext) {
+            require_role(4);
+            return;
+        }
+
+        require_permission('users', $permission);
+    }
+
+    private function isGlobalDirectoryContext(): bool
+    {
+        if (is_site_admin_global_context()) {
+            return true;
+        }
+
+        $requestUri = (string) ($_SERVER['REQUEST_URI'] ?? '');
+        if ($requestUri === '') {
+            return false;
+        }
+
+        $path = (string) (parse_url($requestUri, PHP_URL_PATH) ?? '');
+        if ($path === '') {
+            return false;
+        }
+
+        $basePath = trim((string) config('app.base_path', ''));
+        if ($basePath !== '' && str_starts_with($path, $basePath)) {
+            $path = substr($path, strlen($basePath));
+            if ($path === '') {
+                $path = '/';
+            }
+        }
+
+        return str_starts_with($path, '/site-admin/users');
+    }
+
+    private function usersBasePath(bool $isGlobalContext): string
+    {
+        return $isGlobalContext ? '/site-admin/users' : '/users';
+    }
+
+    private function isUserAllowedInContext(?array $user, bool $isGlobalContext): bool
+    {
+        if (!is_array($user)) {
+            return false;
+        }
+
+        $role = (int) ($user['role'] ?? 0);
+        return $isGlobalContext ? is_global_role_value($role) : !is_global_role_value($role);
     }
 
     private function buildEmployeeLinkReview(

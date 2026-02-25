@@ -7,8 +7,12 @@
     $employeeLinkSupported = !empty($employeeLinkSupported);
     $canCreateEmployee = !empty($canCreateEmployee);
     $canManageTwoFactor = $isEdit && has_role(3);
+    $usersBasePath = trim((string) ($usersBasePath ?? '/users'));
+    if ($usersBasePath === '') {
+        $usersBasePath = '/users';
+    }
 ?>
-<form method="post" action="<?= url(isset($user['id']) ? '/users/' . $user['id'] : '/users') ?>">
+<form method="post" action="<?= url(isset($user['id']) ? ($usersBasePath . '/' . $user['id']) : $usersBasePath) ?>">
     <?= csrf_field() ?>
     <div class="row g-3">
         <div class="col-md-6">
@@ -169,9 +173,9 @@
     <div class="mt-4 d-flex gap-2 mobile-two-col-buttons">
         <button class="btn btn-primary" type="submit">Save User</button>
         <?php if (!empty($user['id'])): ?>
-            <a class="btn btn-outline-secondary" href="<?= url('/users/' . $user['id']) ?>">Cancel</a>
+            <a class="btn btn-outline-secondary" href="<?= url($usersBasePath . '/' . $user['id']) ?>">Cancel</a>
         <?php else: ?>
-            <a class="btn btn-outline-secondary" href="<?= url('/users') ?>">Cancel</a>
+            <a class="btn btn-outline-secondary" href="<?= url($usersBasePath) ?>">Cancel</a>
         <?php endif; ?>
     </div>
 </form>

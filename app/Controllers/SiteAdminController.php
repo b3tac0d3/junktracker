@@ -5,7 +5,11 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Models\Business;
+use App\Models\SiteAdminTicket;
+use App\Models\UserAction;
 use Core\Controller;
+use Core\Database;
+use Throwable;
 
 final class SiteAdminController extends Controller
 {
@@ -20,16 +24,22 @@ final class SiteAdminController extends Controller
         }
 
         $businesses = Business::search($query, $status);
-        $currentBusinessId = current_business_id();
-        $currentBusiness = Business::findById($currentBusinessId);
+        $activeWorkspaceId = (int) ($_SESSION['active_business_id'] ?? 0);
+        $currentBusiness = $activeWorkspaceId > 0 ? Business::findById($activeWorkspaceId) : null;
+        $summary = $this->globalSummary($businesses);
+        $recentChanges = $this->recentChanges();
+        $supportSummary = SiteAdminTicket::summary();
 
         $this->render('site_admin/index', [
             'pageTitle' => 'Site Admin',
             'businesses' => $businesses,
             'query' => $query,
             'status' => $status,
-            'currentBusinessId' => $currentBusinessId,
+            'activeWorkspaceId' => $activeWorkspaceId,
             'currentBusiness' => $currentBusiness,
+            'summary' => $summary,
+            'recentChanges' => $recentChanges,
+            'supportSummary' => $supportSummary,
             'businessTableReady' => Business::isAvailable(),
         ]);
 
@@ -213,6 +223,30 @@ final class SiteAdminController extends Controller
         redirect($next);
     }
 
+    public function exitBusinessContext(): void
+    {
+        $this->authorize();
+
+        if (!verify_csrf($_POST['csrf_token'] ?? null)) {
+            flash('error', 'Your session expired. Please try again.');
+            redirect('/site-admin');
+        }
+
+        $activeBusinessId = (int) ($_SESSION['active_business_id'] ?? 0);
+        if ($activeBusinessId > 0) {
+            log_user_action(
+                'business_context_switched',
+                'businesses',
+                $activeBusinessId,
+                'Exited business workspace and returned to global site admin dashboard.'
+            );
+        }
+
+        set_active_business_id(0);
+        flash('success', 'Returned to global site admin dashboard.');
+        redirect('/site-admin');
+    }
+
     public function showBusiness(array $params): void
     {
         $this->authorize();
@@ -244,6 +278,81 @@ final class SiteAdminController extends Controller
     private function authorize(): void
     {
         require_role(4);
+    }
+
+    private function globalSummary(array $businesses): array
+    {
+        $totalBusinesses = count($businesses);
+        $activeBusinesses = 0;
+        foreach ($businesses as $business) {
+            if ((int) ($business['is_active'] ?? 0) === 1) {
+                $activeBusinesses++;
+            }
+        }
+
+        $usersTotal = 0;
+        $globalAdminsTotal = 0;
+        $pendingInvites = 0;
+
+        try {
+            $sql = 'SELECT
+                        COUNT(*) AS users_total,
+                        COALESCE(SUM(CASE WHEN role >= 4 THEN 1 ELSE 0 END), 0) AS global_admins_total,
+                        COALESCE(SUM(
+                            CASE
+                                WHEN is_active = 1
+                                 AND password_setup_sent_at IS NOT NULL
+                                 AND COALESCE(password_setup_used_at, \'\') = \'\'
+                                 AND COALESCE(password_hash, \'\') = \'\'
+                                THEN 1
+                                ELSE 0
+                            END
+                        ), 0) AS pending_invites
+                    FROM users';
+            $row = Database::connection()->query($sql)->fetch();
+            if (is_array($row)) {
+                $usersTotal = (int) ($row['users_total'] ?? 0);
+                $globalAdminsTotal = (int) ($row['global_admins_total'] ?? 0);
+                $pendingInvites = (int) ($row['pending_invites'] ?? 0);
+            }
+        } catch (Throwable) {
+            // keep defaults
+        }
+
+        return [
+            'business_total' => $totalBusinesses,
+            'business_active' => $activeBusinesses,
+            'business_inactive' => max(0, $totalBusinesses - $activeBusinesses),
+            'users_total' => $usersTotal,
+            'global_admins_total' => $globalAdminsTotal,
+            'pending_invites' => $pendingInvites,
+        ];
+    }
+
+    private function recentChanges(): array
+    {
+        if (!UserAction::isAvailable()) {
+            return [];
+        }
+
+        try {
+            $sql = 'SELECT ua.id,
+                           ua.action_key,
+                           ua.entity_table,
+                           ua.entity_id,
+                           ua.summary,
+                           ua.created_at,
+                           COALESCE(NULLIF(TRIM(CONCAT_WS(\' \', u.first_name, u.last_name)), \'\'), u.email, \'System\') AS actor_name
+                    FROM user_actions ua
+                    LEFT JOIN users u ON u.id = ua.user_id
+                    ORDER BY ua.created_at DESC, ua.id DESC
+                    LIMIT 20';
+            $stmt = Database::connection()->prepare($sql);
+            $stmt->execute();
+            return $stmt->fetchAll() ?: [];
+        } catch (Throwable) {
+            return [];
+        }
     }
 
     private function validateBusinessInput(array $data, ?int $excludeId = null): array

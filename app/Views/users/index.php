@@ -1,16 +1,28 @@
+<?php
+    $usersBasePath = trim((string) ($usersBasePath ?? '/users'));
+    if ($usersBasePath === '') {
+        $usersBasePath = '/users';
+    }
+    $isGlobalDirectory = !empty($isGlobalDirectory);
+?>
 <div class="container-fluid px-4">
     <div class="d-flex flex-wrap align-items-center justify-content-between mt-4 mb-3 gap-3">
         <div>
-            <h1 class="mb-1">Users</h1>
+            <h1 class="mb-1"><?= e($isGlobalDirectory ? 'Site Admin Users' : 'Users') ?></h1>
             <ol class="breadcrumb mb-0">
                 <li class="breadcrumb-item"><a href="<?= url('/') ?>">Dashboard</a></li>
-                <li class="breadcrumb-item active">Users</li>
+                <?php if ($isGlobalDirectory): ?>
+                    <li class="breadcrumb-item"><a href="<?= url('/site-admin') ?>">Site Admin</a></li>
+                    <li class="breadcrumb-item active">Global Users</li>
+                <?php else: ?>
+                    <li class="breadcrumb-item active">Users</li>
+                <?php endif; ?>
             </ol>
         </div>
         <div class="d-flex gap-2 mobile-two-col-buttons">
-            <a class="btn btn-primary" href="<?= url('/users/new') ?>">
+            <a class="btn btn-primary" href="<?= url($usersBasePath . '/new') ?>">
                 <i class="fas fa-user-plus me-1"></i>
-                Add User
+                <?= e($isGlobalDirectory ? 'Add Site Admin' : 'Add User') ?>
             </a>
         </div>
     </div>
@@ -37,7 +49,7 @@
         </div>
         <div class="collapse <?= $activeFilterCount > 0 ? 'show' : '' ?>" id="usersFilterCollapse">
             <div class="card-body">
-                <form method="get" action="<?= url('/users') ?>">
+                <form method="get" action="<?= url($usersBasePath) ?>">
                     <div class="row g-3">
                         <div class="col-12 col-lg-6">
                             <label class="form-label small fw-bold text-muted">Search</label>
@@ -67,7 +79,7 @@
                         </div>
                         <div class="col-12 d-flex gap-2 mobile-two-col-buttons">
                             <button class="btn btn-primary" type="submit">Apply Filters</button>
-                            <a class="btn btn-outline-secondary" href="<?= url('/users') ?>">Clear</a>
+                            <a class="btn btn-outline-secondary" href="<?= url($usersBasePath) ?>">Clear</a>
                         </div>
                     </div>
                 </form>
@@ -103,7 +115,7 @@
                     </thead>
                     <tbody>
                         <?php foreach ($users as $user): ?>
-                            <?php $rowHref = url('/users/' . $user['id']); ?>
+                            <?php $rowHref = url($usersBasePath . '/' . $user['id']); ?>
                             <?php $invite = is_array($user['invite'] ?? null) ? $user['invite'] : ['label' => 'N/A', 'badge_class' => 'bg-secondary']; ?>
                             <tr data-href="<?= $rowHref ?>" style="cursor: pointer;">
                                 <td data-href="<?= $rowHref ?>"><?= e((string) $user['id']) ?></td>

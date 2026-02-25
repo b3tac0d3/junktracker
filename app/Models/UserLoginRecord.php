@@ -102,14 +102,14 @@ final class UserLoginRecord
                        logged_in_at
                 FROM user_login_records
                 WHERE user_id = :user_id
-                  ' . (self::hasBusinessColumn() ? 'AND business_id = :business_id' : '') . '
+                  ' . (self::hasBusinessColumn() && self::shouldApplyBusinessScope() ? 'AND business_id = :business_id' : '') . '
                 ORDER BY logged_in_at DESC, id DESC
                 LIMIT 1';
 
         try {
             $stmt = Database::connection()->prepare($sql);
             $params = ['user_id' => $userId];
-            if (self::hasBusinessColumn()) {
+            if (self::hasBusinessColumn() && self::shouldApplyBusinessScope()) {
                 $params['business_id'] = self::currentBusinessId();
             }
             $stmt->execute($params);
@@ -139,7 +139,7 @@ final class UserLoginRecord
                 FROM user_login_records
                 WHERE user_id = :user_id';
         $params = ['user_id' => $userId];
-        if (self::hasBusinessColumn()) {
+        if (self::hasBusinessColumn() && self::shouldApplyBusinessScope()) {
             $sql .= ' AND business_id = :business_id';
             $params['business_id'] = self::currentBusinessId();
         }
@@ -182,6 +182,20 @@ final class UserLoginRecord
         }
 
         return max(1, (int) config('app.default_business_id', 1));
+    }
+
+    private static function shouldApplyBusinessScope(): bool
+    {
+        if (!function_exists('auth_user_role')) {
+            return true;
+        }
+
+        $role = (int) auth_user_role();
+        if (function_exists('is_global_role_value')) {
+            return !is_global_role_value($role);
+        }
+
+        return $role < 4;
     }
 
     private static function normalizeContext(array $context): array
