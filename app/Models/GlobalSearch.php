@@ -586,6 +586,7 @@ final class GlobalSearch
                 FROM disposal_locations
                 WHERE deleted_at IS NULL
                   AND COALESCE(active, 1) = 1
+                  ' . (Schema::hasColumn('disposal_locations', 'business_id') ? 'AND business_id = :business_id' : '') . '
                   AND (
                         name LIKE :term
                         OR city LIKE :term
@@ -596,7 +597,11 @@ final class GlobalSearch
                 LIMIT ' . max(1, min($limit, 100));
 
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute(['term' => '%' . $query . '%']);
+        $params = ['term' => '%' . $query . '%'];
+        if (Schema::hasColumn('disposal_locations', 'business_id')) {
+            $params['business_id'] = self::currentBusinessId();
+        }
+        $stmt->execute($params);
 
         return $stmt->fetchAll();
     }
@@ -607,6 +612,7 @@ final class GlobalSearch
                 FROM expense_categories
                 WHERE deleted_at IS NULL
                   AND COALESCE(active, 1) = 1
+                  ' . (Schema::hasColumn('expense_categories', 'business_id') ? 'AND business_id = :business_id' : '') . '
                   AND (
                         name LIKE :term
                         OR note LIKE :term
@@ -615,7 +621,11 @@ final class GlobalSearch
                 LIMIT ' . max(1, min($limit, 100));
 
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute(['term' => '%' . $query . '%']);
+        $params = ['term' => '%' . $query . '%'];
+        if (Schema::hasColumn('expense_categories', 'business_id')) {
+            $params['business_id'] = self::currentBusinessId();
+        }
+        $stmt->execute($params);
 
         return $stmt->fetchAll();
     }
@@ -662,5 +672,14 @@ final class GlobalSearch
         }
 
         return rtrim(substr($value, 0, max(1, $max - 3))) . '...';
+    }
+
+    private static function currentBusinessId(): int
+    {
+        if (function_exists('current_business_id')) {
+            return max(0, (int) current_business_id());
+        }
+
+        return max(1, (int) config('app.default_business_id', 1));
     }
 }

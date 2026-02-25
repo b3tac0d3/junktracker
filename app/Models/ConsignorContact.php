@@ -35,12 +35,17 @@ final class ConsignorContact
                 LEFT JOIN users u_created ON u_created.id = cc.created_by
                 LEFT JOIN users u_updated ON u_updated.id = cc.updated_by
                 WHERE cc.consignor_id = :consignor_id
+                  ' . (Schema::hasColumn('consignor_contacts', 'business_id') ? 'AND cc.business_id = :business_id' : '') . '
                   AND cc.deleted_at IS NULL
                   AND COALESCE(cc.active, 1) = 1
                 ORDER BY cc.contacted_at DESC, cc.id DESC';
 
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute(['consignor_id' => $consignorId]);
+        $params = ['consignor_id' => $consignorId];
+        if (Schema::hasColumn('consignor_contacts', 'business_id')) {
+            $params['business_id'] = Consignor::currentBusinessId();
+        }
+        $stmt->execute($params);
 
         return $stmt->fetchAll();
     }
@@ -49,40 +54,54 @@ final class ConsignorContact
     {
         Consignor::ensureSchema();
 
-        $sql = 'INSERT INTO consignor_contacts (
-                    consignor_id,
-                    link_type,
-                    link_id,
-                    contact_method,
-                    direction,
-                    subject,
-                    notes,
-                    contacted_at,
-                    follow_up_at,
-                    active,
-                    created_by,
-                    updated_by,
-                    created_at,
-                    updated_at
-                ) VALUES (
-                    :consignor_id,
-                    :link_type,
-                    :link_id,
-                    :contact_method,
-                    :direction,
-                    :subject,
-                    :notes,
-                    :contacted_at,
-                    :follow_up_at,
-                    1,
-                    :created_by,
-                    :updated_by,
-                    NOW(),
-                    NOW()
-                )';
+        $consignor = Consignor::findById($consignorId);
+        if (!$consignor) {
+            return 0;
+        }
+
+        $columns = [
+            'consignor_id',
+            'link_type',
+            'link_id',
+            'contact_method',
+            'direction',
+            'subject',
+            'notes',
+            'contacted_at',
+            'follow_up_at',
+            'active',
+            'created_by',
+            'updated_by',
+            'created_at',
+            'updated_at',
+        ];
+        $values = [
+            ':consignor_id',
+            ':link_type',
+            ':link_id',
+            ':contact_method',
+            ':direction',
+            ':subject',
+            ':notes',
+            ':contacted_at',
+            ':follow_up_at',
+            '1',
+            ':created_by',
+            ':updated_by',
+            'NOW()',
+            'NOW()',
+        ];
+
+        if (Schema::hasColumn('consignor_contacts', 'business_id')) {
+            array_splice($columns, 1, 0, ['business_id']);
+            array_splice($values, 1, 0, [':business_id']);
+        }
+
+        $sql = 'INSERT INTO consignor_contacts (' . implode(', ', $columns) . ')
+                VALUES (' . implode(', ', $values) . ')';
 
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute([
+        $params = [
             'consignor_id' => $consignorId,
             'link_type' => $data['link_type'] ?? 'general',
             'link_id' => $data['link_id'] ?? null,
@@ -94,7 +113,11 @@ final class ConsignorContact
             'follow_up_at' => $data['follow_up_at'],
             'created_by' => $actorId,
             'updated_by' => $actorId,
-        ]);
+        ];
+        if (Schema::hasColumn('consignor_contacts', 'business_id')) {
+            $params['business_id'] = (int) ($consignor['business_id'] ?? Consignor::currentBusinessId());
+        }
+        $stmt->execute($params);
 
         return (int) Database::connection()->lastInsertId();
     }

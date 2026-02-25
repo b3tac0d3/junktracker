@@ -39,6 +39,11 @@ final class Contact
         $where = [];
         $params = [];
 
+        if (Schema::hasColumn('contacts', 'business_id')) {
+            $where[] = 'c.business_id = :business_id_scope';
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
+
         if ($status === 'active') {
             $where[] = '(c.deleted_at IS NULL AND COALESCE(c.is_active, 1) = 1)';
         } elseif ($status === 'inactive') {
@@ -100,10 +105,15 @@ final class Contact
                 LEFT JOIN users u_updated ON u_updated.id = c.updated_by
                 LEFT JOIN users u_deleted ON u_deleted.id = c.deleted_by
                 WHERE c.id = :id
+                  ' . (Schema::hasColumn('contacts', 'business_id') ? 'AND c.business_id = :business_id_scope' : '') . '
                 LIMIT 1';
 
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute(['id' => $id]);
+        $params = ['id' => $id];
+        if (Schema::hasColumn('contacts', 'business_id')) {
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
+        $stmt->execute($params);
         $row = $stmt->fetch();
 
         return $row ?: null;
@@ -113,54 +123,64 @@ final class Contact
     {
         self::ensureTable();
 
+        $columns = [
+            'contact_type',
+            'first_name',
+            'last_name',
+            'display_name',
+            'phone',
+            'email',
+            'address_1',
+            'address_2',
+            'city',
+            'state',
+            'zip',
+            'company_id',
+            'linked_client_id',
+            'source_type',
+            'source_id',
+            'note',
+            'is_active',
+            'created_by',
+            'updated_by',
+            'created_at',
+            'updated_at',
+        ];
+        $values = [
+            ':contact_type',
+            ':first_name',
+            ':last_name',
+            ':display_name',
+            ':phone',
+            ':email',
+            ':address_1',
+            ':address_2',
+            ':city',
+            ':state',
+            ':zip',
+            ':company_id',
+            ':linked_client_id',
+            ':source_type',
+            ':source_id',
+            ':note',
+            ':is_active',
+            ':created_by',
+            ':updated_by',
+            'NOW()',
+            'NOW()',
+        ];
+        if (Schema::hasColumn('contacts', 'business_id')) {
+            $columns[] = 'business_id';
+            $values[] = ':business_id';
+        }
+
         $sql = 'INSERT INTO contacts (
-                    contact_type,
-                    first_name,
-                    last_name,
-                    display_name,
-                    phone,
-                    email,
-                    address_1,
-                    address_2,
-                    city,
-                    state,
-                    zip,
-                    company_id,
-                    linked_client_id,
-                    source_type,
-                    source_id,
-                    note,
-                    is_active,
-                    created_by,
-                    updated_by,
-                    created_at,
-                    updated_at
+                    ' . implode(', ', $columns) . '
                 ) VALUES (
-                    :contact_type,
-                    :first_name,
-                    :last_name,
-                    :display_name,
-                    :phone,
-                    :email,
-                    :address_1,
-                    :address_2,
-                    :city,
-                    :state,
-                    :zip,
-                    :company_id,
-                    :linked_client_id,
-                    :source_type,
-                    :source_id,
-                    :note,
-                    :is_active,
-                    :created_by,
-                    :updated_by,
-                    NOW(),
-                    NOW()
+                    ' . implode(', ', $values) . '
                 )';
 
-        $stmt = Database::connection()->prepare($sql);
-        $stmt->execute([
+        $params = [
             'contact_type' => self::normalizeType((string) ($data['contact_type'] ?? 'general')),
             'first_name' => self::nullIfEmpty((string) ($data['first_name'] ?? '')),
             'last_name' => self::nullIfEmpty((string) ($data['last_name'] ?? '')),
@@ -180,7 +200,13 @@ final class Contact
             'is_active' => !empty($data['is_active']) ? 1 : 0,
             'created_by' => $actorId,
             'updated_by' => $actorId,
-        ]);
+        ];
+        if (Schema::hasColumn('contacts', 'business_id')) {
+            $params['business_id'] = self::currentBusinessId();
+        }
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute($params);
 
         return (int) Database::connection()->lastInsertId();
     }
@@ -211,10 +237,10 @@ final class Contact
                     updated_by = :updated_by,
                     updated_at = NOW(),
                     deleted_at = CASE WHEN :is_active = 1 THEN NULL ELSE COALESCE(deleted_at, NOW()) END
-                WHERE id = :id';
+                WHERE id = :id
+                  ' . (Schema::hasColumn('contacts', 'business_id') ? 'AND business_id = :business_id_scope' : '') . '';
 
-        $stmt = Database::connection()->prepare($sql);
-        $stmt->execute([
+        $params = [
             'id' => $id,
             'contact_type' => self::normalizeType((string) ($data['contact_type'] ?? 'general')),
             'first_name' => self::nullIfEmpty((string) ($data['first_name'] ?? '')),
@@ -232,7 +258,13 @@ final class Contact
             'note' => self::nullIfEmpty((string) ($data['note'] ?? '')),
             'is_active' => !empty($data['is_active']) ? 1 : 0,
             'updated_by' => $actorId,
-        ]);
+        ];
+        if (Schema::hasColumn('contacts', 'business_id')) {
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute($params);
     }
 
     public static function deactivate(int $id, ?int $actorId = null): void
@@ -249,12 +281,17 @@ final class Contact
                  deleted_by = COALESCE(deleted_by, :actor_id),
                  updated_by = :actor_id,
                  updated_at = NOW()
-             WHERE id = :id'
+             WHERE id = :id
+               ' . (Schema::hasColumn('contacts', 'business_id') ? 'AND business_id = :business_id_scope' : '') . ''
         );
-        $stmt->execute([
+        $params = [
             'id' => $id,
             'actor_id' => $actorId,
-        ]);
+        ];
+        if (Schema::hasColumn('contacts', 'business_id')) {
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
+        $stmt->execute($params);
     }
 
     public static function upsertFromUser(array $userData, ?int $actorId = null): ?int
@@ -423,13 +460,18 @@ final class Contact
              SET linked_client_id = :client_id,
                  updated_by = :updated_by,
                  updated_at = NOW()
-             WHERE id = :id'
+             WHERE id = :id
+               ' . (Schema::hasColumn('contacts', 'business_id') ? 'AND business_id = :business_id_scope' : '') . ''
         );
-        $stmt->execute([
+        $params = [
             'id' => $contactId,
             'client_id' => $clientId,
             'updated_by' => $actorId,
-        ]);
+        ];
+        if (Schema::hasColumn('contacts', 'business_id')) {
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
+        $stmt->execute($params);
 
         return $clientId;
     }
@@ -447,13 +489,18 @@ final class Contact
              FROM contacts
              WHERE source_type = :source_type
                AND source_id = :source_id
+               ' . (Schema::hasColumn('contacts', 'business_id') ? 'AND business_id = :business_id_scope' : '') . '
              ORDER BY id DESC
              LIMIT 1'
         );
-        $stmt->execute([
+        $params = [
             'source_type' => $normalizedType,
             'source_id' => $sourceId,
-        ]);
+        ];
+        if (Schema::hasColumn('contacts', 'business_id')) {
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
+        $stmt->execute($params);
         $row = $stmt->fetch();
 
         return $row ?: null;
@@ -470,10 +517,15 @@ final class Contact
             'SELECT *
              FROM contacts
              WHERE linked_client_id = :client_id
+               ' . (Schema::hasColumn('contacts', 'business_id') ? 'AND business_id = :business_id_scope' : '') . '
              ORDER BY id DESC
              LIMIT 1'
         );
-        $stmt->execute(['client_id' => $clientId]);
+        $params = ['client_id' => $clientId];
+        if (Schema::hasColumn('contacts', 'business_id')) {
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
+        $stmt->execute($params);
         $row = $stmt->fetch();
 
         return $row ?: null;
@@ -520,6 +572,7 @@ final class Contact
         Database::connection()->exec(
             'CREATE TABLE IF NOT EXISTS contacts (
                 id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+                business_id BIGINT UNSIGNED NOT NULL DEFAULT 1,
                 contact_type VARCHAR(40) NOT NULL DEFAULT \'general\',
                 first_name VARCHAR(80) NULL,
                 last_name VARCHAR(80) NULL,
@@ -544,6 +597,7 @@ final class Contact
                 created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                 PRIMARY KEY (id),
+                KEY idx_contacts_business (business_id),
                 KEY idx_contacts_name (display_name),
                 KEY idx_contacts_type (contact_type),
                 KEY idx_contacts_company (company_id),
@@ -555,6 +609,15 @@ final class Contact
         );
 
         self::$tableEnsured = true;
+    }
+
+    private static function currentBusinessId(): int
+    {
+        if (function_exists('current_business_id')) {
+            return max(0, (int) current_business_id());
+        }
+
+        return max(1, (int) config('app.default_business_id', 1));
     }
 
     private static function normalizeType(string $type): string

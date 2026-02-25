@@ -36,12 +36,17 @@ final class ConsignorContract
                 LEFT JOIN users u_created ON u_created.id = cc.created_by
                 LEFT JOIN users u_updated ON u_updated.id = cc.updated_by
                 WHERE cc.consignor_id = :consignor_id
+                  ' . (Schema::hasColumn('consignor_contracts', 'business_id') ? 'AND cc.business_id = :business_id' : '') . '
                   AND cc.deleted_at IS NULL
                   AND COALESCE(cc.active, 1) = 1
                 ORDER BY cc.contract_signed_at DESC, cc.id DESC';
 
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute(['consignor_id' => $consignorId]);
+        $params = ['consignor_id' => $consignorId];
+        if (Schema::hasColumn('consignor_contracts', 'business_id')) {
+            $params['business_id'] = Consignor::currentBusinessId();
+        }
+        $stmt->execute($params);
 
         return $stmt->fetchAll();
     }
@@ -57,10 +62,15 @@ final class ConsignorContract
         $sql = 'SELECT cc.*
                 FROM consignor_contracts cc
                 WHERE cc.id = :id
+                ' . (Schema::hasColumn('consignor_contracts', 'business_id') ? 'AND cc.business_id = :business_id' : '') . '
                 LIMIT 1';
 
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute(['id' => $id]);
+        $params = ['id' => $id];
+        if (Schema::hasColumn('consignor_contracts', 'business_id')) {
+            $params['business_id'] = Consignor::currentBusinessId();
+        }
+        $stmt->execute($params);
         $row = $stmt->fetch();
 
         return $row ?: null;
@@ -70,42 +80,55 @@ final class ConsignorContract
     {
         Consignor::ensureSchema();
 
-        $sql = 'INSERT INTO consignor_contracts (
-                    consignor_id,
-                    contract_title,
-                    original_file_name,
-                    stored_file_name,
-                    storage_path,
-                    mime_type,
-                    file_size,
-                    contract_signed_at,
-                    expires_at,
-                    notes,
-                    active,
-                    created_by,
-                    updated_by,
-                    created_at,
-                    updated_at
-                ) VALUES (
-                    :consignor_id,
-                    :contract_title,
-                    :original_file_name,
-                    :stored_file_name,
-                    :storage_path,
-                    :mime_type,
-                    :file_size,
-                    :contract_signed_at,
-                    :expires_at,
-                    :notes,
-                    1,
-                    :created_by,
-                    :updated_by,
-                    NOW(),
-                    NOW()
-                )';
+        $consignor = Consignor::findById($consignorId);
+        if (!$consignor) {
+            return 0;
+        }
+
+        $columns = [
+            'consignor_id',
+            'contract_title',
+            'original_file_name',
+            'stored_file_name',
+            'storage_path',
+            'mime_type',
+            'file_size',
+            'contract_signed_at',
+            'expires_at',
+            'notes',
+            'active',
+            'created_by',
+            'updated_by',
+            'created_at',
+            'updated_at',
+        ];
+        $values = [
+            ':consignor_id',
+            ':contract_title',
+            ':original_file_name',
+            ':stored_file_name',
+            ':storage_path',
+            ':mime_type',
+            ':file_size',
+            ':contract_signed_at',
+            ':expires_at',
+            ':notes',
+            '1',
+            ':created_by',
+            ':updated_by',
+            'NOW()',
+            'NOW()',
+        ];
+        if (Schema::hasColumn('consignor_contracts', 'business_id')) {
+            array_splice($columns, 1, 0, ['business_id']);
+            array_splice($values, 1, 0, [':business_id']);
+        }
+
+        $sql = 'INSERT INTO consignor_contracts (' . implode(', ', $columns) . ')
+                VALUES (' . implode(', ', $values) . ')';
 
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute([
+        $params = [
             'consignor_id' => $consignorId,
             'contract_title' => $data['contract_title'],
             'original_file_name' => $data['original_file_name'],
@@ -118,7 +141,11 @@ final class ConsignorContract
             'notes' => $data['notes'] !== '' ? $data['notes'] : null,
             'created_by' => $actorId,
             'updated_by' => $actorId,
-        ]);
+        ];
+        if (Schema::hasColumn('consignor_contracts', 'business_id')) {
+            $params['business_id'] = (int) ($consignor['business_id'] ?? Consignor::currentBusinessId());
+        }
+        $stmt->execute($params);
 
         return (int) Database::connection()->lastInsertId();
     }
@@ -133,13 +160,18 @@ final class ConsignorContract
                     updated_by = :updated_by,
                     deleted_by = COALESCE(deleted_by, :deleted_by),
                     updated_at = NOW()
-                WHERE id = :id';
+                WHERE id = :id
+                ' . (Schema::hasColumn('consignor_contracts', 'business_id') ? 'AND business_id = :business_id' : '');
 
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute([
+        $params = [
             'id' => $id,
             'updated_by' => $actorId,
             'deleted_by' => $actorId,
-        ]);
+        ];
+        if (Schema::hasColumn('consignor_contracts', 'business_id')) {
+            $params['business_id'] = Consignor::currentBusinessId();
+        }
+        $stmt->execute($params);
     }
 }

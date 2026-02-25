@@ -192,7 +192,7 @@ final class AdminPanel
     private static function currentBusinessId(): int
     {
         if (function_exists('current_business_id')) {
-            return max(1, (int) current_business_id());
+            return max(0, (int) current_business_id());
         }
 
         return max(1, (int) config('app.default_business_id', 1));

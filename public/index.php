@@ -58,6 +58,10 @@ require dirname(__DIR__) . '/app/bootstrap.php';
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 header('Pragma: no-cache');
 header('Expires: 0');
+header('X-Frame-Options: SAMEORIGIN');
+header('X-Content-Type-Options: nosniff');
+header('Referrer-Policy: strict-origin-when-cross-origin');
+header('Permissions-Policy: geolocation=(self), camera=(), microphone=(), payment=()');
 
 if (config('app.noindex', true)) {
     header('X-Robots-Tag: noindex, nofollow, noarchive, nosnippet, noimageindex');
@@ -86,6 +90,32 @@ if (!is_authenticated()) {
     $isAsset = $path === '/assets' || str_starts_with($path, '/assets/');
     if (!$isAsset && !in_array($path, $publicPaths, true)) {
         redirect('/login');
+    }
+}
+
+if (is_authenticated()) {
+    $isGlobalContext = is_site_admin_global_context();
+    $isAsset = $path === '/assets' || str_starts_with($path, '/assets/');
+    if ($isGlobalContext && !$isAsset) {
+        $allowedGlobalPrefixes = [
+            '/site-admin',
+            '/logout',
+            '/settings',
+            '/activity-log',
+        ];
+
+        $isAllowedGlobalPath = false;
+        foreach ($allowedGlobalPrefixes as $prefix) {
+            if ($path === $prefix || str_starts_with($path, $prefix . '/')) {
+                $isAllowedGlobalPath = true;
+                break;
+            }
+        }
+
+        if (!$isAllowedGlobalPath) {
+            flash('error', 'Select a business workspace before accessing business data.');
+            redirect('/site-admin');
+        }
     }
 }
 

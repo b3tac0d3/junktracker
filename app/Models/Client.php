@@ -12,6 +12,8 @@ final class Client
     {
         self::ensureCompanyLinkTable();
 
+        $businessScope = self::businessScopeClause('clients', 'cl');
+
         $sql = 'SELECT cl.id,
                        cl.first_name,
                        cl.last_name,
@@ -36,6 +38,12 @@ final class Client
 
         $where = [];
         $params = [];
+
+        $businessScope = self::businessScopeClause('clients', 'cl');
+        if ($businessScope !== null) {
+            $where[] = $businessScope;
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
 
         if ($status === 'active') {
             $where[] = '(cl.deleted_at IS NULL AND cl.active = 1)';
@@ -136,12 +144,17 @@ final class Client
                    AND co.deleted_at IS NULL
                    AND COALESCE(co.active, 1) = 1'
                 . $auditJoins . '
-                WHERE cl.id = :id
+                WHERE cl.id = :id'
+                . ($businessScope !== null ? ' AND ' . $businessScope : '') . '
                 GROUP BY cl.id
                 LIMIT 1';
 
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute(['id' => $id]);
+        $params = ['id' => $id];
+        if ($businessScope !== null) {
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
+        $stmt->execute($params);
 
         $client = $stmt->fetch();
         return $client ?: null;
@@ -214,6 +227,11 @@ final class Client
             $values[] = ':updated_by';
             $params['updated_by'] = $actorId;
         }
+        if (Schema::hasColumn('clients', 'business_id')) {
+            $columns[] = 'business_id';
+            $values[] = ':business_id';
+            $params['business_id'] = self::currentBusinessId();
+        }
 
         $sql = 'INSERT INTO clients (' . implode(', ', $columns) . ')
                 VALUES (' . implode(', ', $values) . ')';
@@ -268,6 +286,10 @@ final class Client
         }
 
         $sql = 'UPDATE clients SET ' . implode(', ', $sets) . ' WHERE id = :id';
+        if (Schema::hasColumn('clients', 'business_id')) {
+            $sql .= ' AND business_id = :business_id_scope';
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
         $stmt = Database::connection()->prepare($sql);
         $stmt->execute($params);
     }
@@ -293,6 +315,10 @@ final class Client
         }
 
         $sql = 'UPDATE clients SET ' . implode(', ', $sets) . ' WHERE id = :id';
+        if (Schema::hasColumn('clients', 'business_id')) {
+            $sql .= ' AND business_id = :business_id_scope';
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
         $stmt = Database::connection()->prepare($sql);
         $stmt->execute($params);
     }
@@ -310,15 +336,28 @@ final class Client
                 FROM companies_x_clients cxc
                 INNER JOIN companies co
                     ON co.id = cxc.company_id
+                INNER JOIN clients cl
+                    ON cl.id = cxc.client_id
                 WHERE cxc.client_id = :client_id
                   AND cxc.deleted_at IS NULL
                   AND COALESCE(cxc.active, 1) = 1
                   AND co.deleted_at IS NULL
-                  AND COALESCE(co.active, 1) = 1
+                  AND COALESCE(co.active, 1) = 1';
+
+        $params = ['client_id' => $clientId];
+        if (Schema::hasColumn('clients', 'business_id')) {
+            $sql .= ' AND cl.business_id = :business_id_scope';
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
+        if (Schema::hasColumn('companies', 'business_id')) {
+            $sql .= ' AND co.business_id = :business_id_scope';
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
+        $sql .= '
                 ORDER BY co.name ASC';
 
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute(['client_id' => $clientId]);
+        $stmt->execute($params);
 
         return $stmt->fetchAll();
     }
@@ -330,16 +369,28 @@ final class Client
         $sql = 'SELECT co.id, co.name
                 FROM companies_x_clients cxc
                 INNER JOIN companies co ON co.id = cxc.company_id
+                INNER JOIN clients cl ON cl.id = cxc.client_id
                 WHERE cxc.client_id = :client_id
                   AND cxc.deleted_at IS NULL
                   AND COALESCE(cxc.active, 1) = 1
                   AND co.deleted_at IS NULL
-                  AND COALESCE(co.active, 1) = 1
+                  AND COALESCE(co.active, 1) = 1';
+
+        $params = ['client_id' => $clientId];
+        if (Schema::hasColumn('clients', 'business_id')) {
+            $sql .= ' AND cl.business_id = :business_id_scope';
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
+        if (Schema::hasColumn('companies', 'business_id')) {
+            $sql .= ' AND co.business_id = :business_id_scope';
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
+        $sql .= '
                 ORDER BY cxc.id DESC
                 LIMIT 1';
 
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute(['client_id' => $clientId]);
+        $stmt->execute($params);
         $company = $stmt->fetch();
 
         return $company ?: null;
@@ -348,6 +399,13 @@ final class Client
     public static function syncCompanyLink(int $clientId, ?int $companyId, ?int $actorId = null): void
     {
         self::ensureCompanyLinkTable();
+
+        if (self::findById($clientId) === null) {
+            return;
+        }
+        if ($companyId !== null && $companyId > 0 && Company::findById($companyId) === null) {
+            return;
+        }
 
         $deactivateSets = [
             'active = 0',
@@ -453,6 +511,7 @@ final class Client
                 FROM clients cl
                 WHERE cl.deleted_at IS NULL
                   AND cl.active = 1
+                  ' . (Schema::hasColumn('clients', 'business_id') ? 'AND cl.business_id = :business_id_scope' : '') . '
                   AND (
                         cl.first_name LIKE :term
                         OR cl.last_name LIKE :term
@@ -463,7 +522,11 @@ final class Client
                 LIMIT ' . $limit;
 
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute(['term' => '%' . $term . '%']);
+        $params = ['term' => '%' . $term . '%'];
+        if (Schema::hasColumn('clients', 'business_id')) {
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
+        $stmt->execute($params);
 
         return $stmt->fetchAll();
     }
@@ -495,6 +558,10 @@ final class Client
         if ($excludeId !== null && $excludeId > 0) {
             $where[] = 'cl.id <> :exclude_id';
             $params['exclude_id'] = $excludeId;
+        }
+        if (Schema::hasColumn('clients', 'business_id')) {
+            $where[] = 'cl.business_id = :business_id_scope';
+            $params['business_id_scope'] = self::currentBusinessId();
         }
         if ($hasEmail) {
             $matchClauses[] = 'LOWER(TRIM(COALESCE(cl.email, ""))) = :email_exact';
@@ -752,6 +819,10 @@ final class Client
     private static function buildClientJobFilter(string $jobAlias, int $clientId): array
     {
         $conditions = [sprintf('%s.client_id = :client_id', $jobAlias)];
+        $params = ['client_id' => $clientId];
+        if (Schema::hasColumn('jobs', 'business_id')) {
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
         if (Schema::hasColumn('jobs', 'contact_client_id')) {
             $conditions[] = sprintf('%s.contact_client_id = :client_id', $jobAlias);
         }
@@ -763,7 +834,7 @@ final class Client
             );
         }
 
-        return ['(' . implode(' OR ', $conditions) . ')', ['client_id' => $clientId]];
+        return ['(' . implode(' OR ', $conditions) . ')', $params];
     }
 
     private static function buildActiveRecordWhere(string $table, string $alias): array
@@ -774,6 +845,9 @@ final class Client
         }
         if (Schema::hasColumn($table, 'active')) {
             $where[] = sprintf('COALESCE(%s.active, 1) = 1', $alias);
+        }
+        if (Schema::hasColumn($table, 'business_id')) {
+            $where[] = sprintf('%s.business_id = :business_id_scope', $alias);
         }
 
         return $where;
@@ -807,6 +881,24 @@ final class Client
             'sales_count' => 0,
             'combined_gross_total' => 0.0,
         ];
+    }
+
+    private static function businessScopeClause(string $table, string $alias): ?string
+    {
+        if (!Schema::hasColumn($table, 'business_id')) {
+            return null;
+        }
+
+        return $alias . '.business_id = :business_id_scope';
+    }
+
+    private static function currentBusinessId(): int
+    {
+        if (function_exists('current_business_id')) {
+            return max(0, (int) current_business_id());
+        }
+
+        return max(1, (int) config('app.default_business_id', 1));
     }
 
     private static function ensureCompanyLinkTable(): void

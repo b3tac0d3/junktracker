@@ -217,3 +217,12 @@ h1, h2, h3, .h1, .h2, .h3 {
 #contactResults {
     z-index: 2200 !important;
 }
+
+.quick-add-menu {
+    min-width: 16rem;
+}
+
+.quick-add-nav-link {
+    padding-left: 0.75rem !important;
+    padding-right: 0.75rem !important;
+}

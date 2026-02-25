@@ -34,12 +34,17 @@ final class ConsignorPayout
                 LEFT JOIN users u_created ON u_created.id = cp.created_by
                 LEFT JOIN users u_updated ON u_updated.id = cp.updated_by
                 WHERE cp.consignor_id = :consignor_id
+                  ' . (Schema::hasColumn('consignor_payouts', 'business_id') ? 'AND cp.business_id = :business_id' : '') . '
                   AND cp.deleted_at IS NULL
                   AND COALESCE(cp.active, 1) = 1
                 ORDER BY cp.payout_date DESC, cp.id DESC';
 
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute(['consignor_id' => $consignorId]);
+        $params = ['consignor_id' => $consignorId];
+        if (Schema::hasColumn('consignor_payouts', 'business_id')) {
+            $params['business_id'] = Consignor::currentBusinessId();
+        }
+        $stmt->execute($params);
 
         return $stmt->fetchAll();
     }
@@ -48,38 +53,51 @@ final class ConsignorPayout
     {
         Consignor::ensureSchema();
 
-        $sql = 'INSERT INTO consignor_payouts (
-                    consignor_id,
-                    payout_date,
-                    amount,
-                    estimate_amount,
-                    payout_method,
-                    reference_no,
-                    status,
-                    notes,
-                    active,
-                    created_by,
-                    updated_by,
-                    created_at,
-                    updated_at
-                ) VALUES (
-                    :consignor_id,
-                    :payout_date,
-                    :amount,
-                    :estimate_amount,
-                    :payout_method,
-                    :reference_no,
-                    :status,
-                    :notes,
-                    1,
-                    :created_by,
-                    :updated_by,
-                    NOW(),
-                    NOW()
-                )';
+        $consignor = Consignor::findById($consignorId);
+        if (!$consignor) {
+            return 0;
+        }
+
+        $columns = [
+            'consignor_id',
+            'payout_date',
+            'amount',
+            'estimate_amount',
+            'payout_method',
+            'reference_no',
+            'status',
+            'notes',
+            'active',
+            'created_by',
+            'updated_by',
+            'created_at',
+            'updated_at',
+        ];
+        $values = [
+            ':consignor_id',
+            ':payout_date',
+            ':amount',
+            ':estimate_amount',
+            ':payout_method',
+            ':reference_no',
+            ':status',
+            ':notes',
+            '1',
+            ':created_by',
+            ':updated_by',
+            'NOW()',
+            'NOW()',
+        ];
+        if (Schema::hasColumn('consignor_payouts', 'business_id')) {
+            array_splice($columns, 1, 0, ['business_id']);
+            array_splice($values, 1, 0, [':business_id']);
+        }
+
+        $sql = 'INSERT INTO consignor_payouts (' . implode(', ', $columns) . ')
+                VALUES (' . implode(', ', $values) . ')';
 
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute([
+        $params = [
             'consignor_id' => $consignorId,
             'payout_date' => $data['payout_date'],
             'amount' => $data['amount'],
@@ -90,7 +108,11 @@ final class ConsignorPayout
             'notes' => $data['notes'] !== '' ? $data['notes'] : null,
             'created_by' => $actorId,
             'updated_by' => $actorId,
-        ]);
+        ];
+        if (Schema::hasColumn('consignor_payouts', 'business_id')) {
+            $params['business_id'] = (int) ($consignor['business_id'] ?? Consignor::currentBusinessId());
+        }
+        $stmt->execute($params);
 
         return (int) Database::connection()->lastInsertId();
     }

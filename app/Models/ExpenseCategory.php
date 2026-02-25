@@ -16,10 +16,15 @@ final class ExpenseCategory
                 FROM expense_categories
                 WHERE deleted_at IS NULL
                   AND active = 1
+                  ' . (Schema::hasColumn('expense_categories', 'business_id') ? 'AND business_id = :business_id_scope' : '') . '
                 ORDER BY name';
 
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute();
+        $params = [];
+        if (Schema::hasColumn('expense_categories', 'business_id')) {
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
+        $stmt->execute($params);
 
         return $stmt->fetchAll();
     }
@@ -32,10 +37,15 @@ final class ExpenseCategory
                 FROM expense_categories
                 WHERE id = :id
                   AND deleted_at IS NULL
+                  ' . (Schema::hasColumn('expense_categories', 'business_id') ? 'AND business_id = :business_id_scope' : '') . '
                 LIMIT 1';
 
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute(['id' => $id]);
+        $params = ['id' => $id];
+        if (Schema::hasColumn('expense_categories', 'business_id')) {
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
+        $stmt->execute($params);
         $category = $stmt->fetch();
 
         return $category ?: null;
@@ -61,6 +71,11 @@ final class ExpenseCategory
             $columns[] = 'updated_by';
             $values[] = ':updated_by';
             $params['updated_by'] = $actorId;
+        }
+        if (Schema::hasColumn('expense_categories', 'business_id')) {
+            $columns[] = 'business_id';
+            $values[] = ':business_id';
+            $params['business_id'] = self::currentBusinessId();
         }
 
         $sql = 'INSERT INTO expense_categories (' . implode(', ', $columns) . ')
@@ -96,6 +111,10 @@ final class ExpenseCategory
                 SET ' . implode(', ', $sets) . '
                 WHERE id = :id
                   AND deleted_at IS NULL';
+        if (Schema::hasColumn('expense_categories', 'business_id')) {
+            $sql .= ' AND business_id = :business_id_scope';
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
 
         $stmt = Database::connection()->prepare($sql);
         $stmt->execute($params);
@@ -125,6 +144,10 @@ final class ExpenseCategory
                 SET ' . implode(', ', $sets) . '
                 WHERE id = :id
                   AND deleted_at IS NULL';
+        if (Schema::hasColumn('expense_categories', 'business_id')) {
+            $sql .= ' AND business_id = :business_id_scope';
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
 
         $stmt = Database::connection()->prepare($sql);
         $stmt->execute($params);
@@ -154,5 +177,14 @@ final class ExpenseCategory
 
         Database::connection()->exec($sql);
         $ensured = true;
+    }
+
+    private static function currentBusinessId(): int
+    {
+        if (function_exists('current_business_id')) {
+            return max(0, (int) current_business_id());
+        }
+
+        return max(1, (int) config('app.default_business_id', 1));
     }
 }

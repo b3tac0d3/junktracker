@@ -209,8 +209,8 @@ function current_business_id(): int
             return $activeBusinessId;
         }
 
-        // Site admins/dev are global users; do not bind scope to their user record.
-        return $fallback;
+        // Site admins/dev without an active workspace are in global context.
+        return 0;
     }
 
     $businessId = isset($user['business_id']) ? (int) $user['business_id'] : 0;
@@ -571,14 +571,14 @@ function can_access(string $module, string $action = 'view'): bool
     }
 
     try {
-        if (class_exists(\App\Models\RolePermission::class) && \App\Models\RolePermission::isAvailable()) {
+        if (class_exists(\App\Models\RolePermission::class)) {
             return \App\Models\RolePermission::allows($role, $module, $action);
         }
     } catch (\Throwable) {
-        // Fall through to permissive behavior for compatibility.
+        // Fall through to secure deny behavior.
     }
 
-    return true;
+    return false;
 }
 
 function require_permission(string $module, string $action = 'view'): void
@@ -916,7 +916,8 @@ function attempt_remember_login(): void
     if ($role >= 4 || $role === 99) {
         set_active_business_id(0);
     } else {
-        set_active_business_id(0);
+        $businessId = isset($user['business_id']) ? (int) $user['business_id'] : 0;
+        set_active_business_id($businessId > 0 ? $businessId : ((int) config('app.default_business_id', 1)));
     }
 
     try {

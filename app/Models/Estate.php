@@ -31,6 +31,11 @@ final class Estate
         $where = [];
         $params = [];
 
+        if (Schema::hasColumn('estates', 'business_id')) {
+            $where[] = 'e.business_id = :business_id_scope';
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
+
         if ($status === 'active') {
             $where[] = '(e.deleted_at IS NULL AND e.active = 1)';
         } elseif ($status === 'inactive') {
@@ -124,10 +129,15 @@ final class Estate
                 LEFT JOIN clients c ON c.id = e.client_id
                 ' . $auditJoins . '
                 WHERE e.id = :id
+                  ' . (Schema::hasColumn('estates', 'business_id') ? 'AND e.business_id = :business_id_scope' : '') . '
                 LIMIT 1';
 
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute(['id' => $id]);
+        $params = ['id' => $id];
+        if (Schema::hasColumn('estates', 'business_id')) {
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
+        $stmt->execute($params);
         $estate = $stmt->fetch();
 
         return $estate ?: null;
@@ -192,6 +202,11 @@ final class Estate
             $values[] = ':updated_by';
             $params['updated_by'] = $actorId;
         }
+        if (Schema::hasColumn('estates', 'business_id')) {
+            $columns[] = 'business_id';
+            $values[] = ':business_id';
+            $params['business_id'] = self::currentBusinessId();
+        }
 
         $sql = 'INSERT INTO estates (' . implode(', ', $columns) . ')
                 VALUES (' . implode(', ', $values) . ')';
@@ -243,6 +258,10 @@ final class Estate
         $sql = 'UPDATE estates
                 SET ' . implode(', ', $sets) . '
                 WHERE id = :id';
+        if (Schema::hasColumn('estates', 'business_id')) {
+            $sql .= ' AND business_id = :business_id_scope';
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
 
         $stmt = Database::connection()->prepare($sql);
         $stmt->execute($params);
@@ -265,10 +284,16 @@ final class Estate
                 WHERE e.id = :estate_id
                   AND c.deleted_at IS NULL
                   AND c.active = 1
+                  ' . (Schema::hasColumn('estates', 'business_id') ? 'AND e.business_id = :business_id_scope' : '') . '
+                  ' . (Schema::hasColumn('clients', 'business_id') ? 'AND c.business_id = :business_id_scope' : '') . '
                 LIMIT 1';
 
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute(['estate_id' => $estateId]);
+        $params = ['estate_id' => $estateId];
+        if (Schema::hasColumn('estates', 'business_id') || Schema::hasColumn('clients', 'business_id')) {
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
+        $stmt->execute($params);
         $client = $stmt->fetch();
 
         return $client ?: null;
@@ -299,6 +324,8 @@ final class Estate
                     WHERE e.id = :estate_id_primary
                       AND c.deleted_at IS NULL
                       AND c.active = 1
+                      ' . (Schema::hasColumn('estates', 'business_id') ? 'AND e.business_id = :business_id_scope' : '') . '
+                      ' . (Schema::hasColumn('clients', 'business_id') ? 'AND c.business_id = :business_id_scope' : '') . '
 
                     UNION
 
@@ -315,19 +342,26 @@ final class Estate
                         c2.state
                     FROM estates_x_clients exc
                     INNER JOIN clients c2 ON c2.id = exc.client_id
+                    INNER JOIN estates e2 ON e2.id = exc.estate_id
                     WHERE exc.estate_id = :estate_id_linked
                       AND exc.deleted_at IS NULL
                       AND COALESCE(exc.active, 1) = 1
                       AND c2.deleted_at IS NULL
                       AND c2.active = 1
+                      ' . (Schema::hasColumn('estates', 'business_id') ? 'AND e2.business_id = :business_id_scope' : '') . '
+                      ' . (Schema::hasColumn('clients', 'business_id') ? 'AND c2.business_id = :business_id_scope' : '') . '
                 ) clients
                 ORDER BY label ASC';
 
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute([
+        $params = [
             'estate_id_primary' => $estateId,
             'estate_id_linked' => $estateId,
-        ]);
+        ];
+        if (Schema::hasColumn('estates', 'business_id') || Schema::hasColumn('clients', 'business_id')) {
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
+        $stmt->execute($params);
 
         return $stmt->fetchAll();
     }
@@ -345,12 +379,17 @@ final class Estate
                 FROM estates e
                 WHERE e.deleted_at IS NULL
                   AND e.active = 1
+                  ' . (Schema::hasColumn('estates', 'business_id') ? 'AND e.business_id = :business_id_scope' : '') . '
                   AND e.name LIKE :term
                 ORDER BY e.name ASC
                 LIMIT ' . $limit;
 
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute(['term' => '%' . $term . '%']);
+        $params = ['term' => '%' . $term . '%'];
+        if (Schema::hasColumn('estates', 'business_id')) {
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
+        $stmt->execute($params);
 
         return $stmt->fetchAll();
     }
@@ -380,5 +419,14 @@ final class Estate
 
         $hasTable = (bool) $stmt->fetchColumn();
         return $hasTable;
+    }
+
+    private static function currentBusinessId(): int
+    {
+        if (function_exists('current_business_id')) {
+            return max(0, (int) current_business_id());
+        }
+
+        return max(1, (int) config('app.default_business_id', 1));
     }
 }

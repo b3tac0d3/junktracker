@@ -138,6 +138,11 @@ final class AttachmentsController extends Controller
         $module = $this->moduleForLinkType($linkType);
         require_permission($module, 'view');
 
+        if (!$this->linkExists($linkType, $linkId)) {
+            $this->renderNotFound();
+            return;
+        }
+
         $storagePath = trim((string) ($attachment['storage_path'] ?? ''));
         if ($storagePath === '') {
             $this->renderNotFound();
@@ -190,6 +195,11 @@ final class AttachmentsController extends Controller
         $module = $this->moduleForLinkType($linkType);
         require_permission($module, 'edit');
 
+        if (!$this->linkExists($linkType, $linkId)) {
+            $this->renderNotFound();
+            return;
+        }
+
         if (!verify_csrf($_POST['csrf_token'] ?? null)) {
             flash('error', 'Your session expired. Please try again.');
             redirect($this->returnPath($this->defaultReturnPath($linkType, $linkId)));
@@ -224,6 +234,11 @@ final class AttachmentsController extends Controller
 
         $module = $this->moduleForLinkType($linkType);
         require_permission($module, 'edit');
+
+        if (!$this->linkExists($linkType, $linkId)) {
+            $this->renderNotFound();
+            return;
+        }
 
         $returnPath = $this->returnPath($this->defaultReturnPath($linkType, $linkId));
         if (!verify_csrf($_POST['csrf_token'] ?? null)) {

@@ -1101,6 +1101,7 @@ final class Task
                 FROM clients c
                 WHERE c.deleted_at IS NULL
                   AND COALESCE(c.active, 1) = 1
+                  ' . self::businessScopeSql('clients', 'c') . '
                   AND (
                       c.business_name LIKE :term
                       OR c.first_name LIKE :term
@@ -1110,7 +1111,9 @@ final class Task
                 ORDER BY label ASC
                 LIMIT ' . $limit;
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute(['term' => '%' . $term . '%']);
+        $params = ['term' => '%' . $term . '%'];
+        self::applyBusinessParam($params, 'clients');
+        $stmt->execute($params);
         return $stmt->fetchAll();
     }
 
@@ -1122,6 +1125,7 @@ final class Task
                 FROM estates e
                 WHERE e.deleted_at IS NULL
                   AND COALESCE(e.active, 1) = 1
+                  ' . self::businessScopeSql('estates', 'e') . '
                   AND (
                       e.name LIKE :term
                       OR e.city LIKE :term
@@ -1130,7 +1134,9 @@ final class Task
                 ORDER BY e.name ASC
                 LIMIT ' . $limit;
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute(['term' => '%' . $term . '%']);
+        $params = ['term' => '%' . $term . '%'];
+        self::applyBusinessParam($params, 'estates');
+        $stmt->execute($params);
         return $stmt->fetchAll();
     }
 
@@ -1142,11 +1148,14 @@ final class Task
                 FROM companies c
                 WHERE c.deleted_at IS NULL
                   AND COALESCE(c.active, 1) = 1
+                  ' . self::businessScopeSql('companies', 'c') . '
                   AND c.name LIKE :term
                 ORDER BY c.name ASC
                 LIMIT ' . $limit;
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute(['term' => '%' . $term . '%']);
+        $params = ['term' => '%' . $term . '%'];
+        self::applyBusinessParam($params, 'companies');
+        $stmt->execute($params);
         return $stmt->fetchAll();
     }
 
@@ -1158,6 +1167,7 @@ final class Task
                 FROM employees e
                 WHERE (e.deleted_at IS NULL)
                   AND COALESCE(e.active, 1) = 1
+                  ' . self::businessScopeSql('employees', 'e') . '
                   AND (
                       e.first_name LIKE :term
                       OR e.last_name LIKE :term
@@ -1166,7 +1176,9 @@ final class Task
                 ORDER BY label ASC
                 LIMIT ' . $limit;
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute(['term' => '%' . $term . '%']);
+        $params = ['term' => '%' . $term . '%'];
+        self::applyBusinessParam($params, 'employees');
+        $stmt->execute($params);
         return $stmt->fetchAll();
     }
 
@@ -1178,6 +1190,7 @@ final class Task
                 FROM jobs j
                 WHERE j.deleted_at IS NULL
                   AND COALESCE(j.active, 1) = 1
+                  ' . self::businessScopeSql('jobs', 'j') . '
                   AND (
                       j.name LIKE :term
                       OR CAST(j.id AS CHAR) LIKE :term
@@ -1187,7 +1200,9 @@ final class Task
                 ORDER BY j.id DESC
                 LIMIT ' . $limit;
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute(['term' => '%' . $term . '%']);
+        $params = ['term' => '%' . $term . '%'];
+        self::applyBusinessParam($params, 'jobs');
+        $stmt->execute($params);
         return $stmt->fetchAll();
     }
 
@@ -1205,6 +1220,7 @@ final class Task
                 LEFT JOIN jobs j ON j.id = e.job_id
                 WHERE e.deleted_at IS NULL
                   AND COALESCE(e.is_active, 1) = 1
+                  ' . self::businessScopeSql('expenses', 'e') . '
                   AND (
                       CAST(e.id AS CHAR) LIKE :term
                       OR e.category LIKE :term
@@ -1215,7 +1231,9 @@ final class Task
                 ORDER BY e.id DESC
                 LIMIT ' . $limit;
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute(['term' => '%' . $term . '%']);
+        $params = ['term' => '%' . $term . '%'];
+        self::applyBusinessParam($params, 'expenses');
+        $stmt->execute($params);
         return $stmt->fetchAll();
     }
 
@@ -1234,7 +1252,9 @@ final class Task
                        CONCAT(\'Status: \', p.status) AS meta
                 FROM prospects p
                 LEFT JOIN clients c ON c.id = p.client_id
-                WHERE (
+                WHERE 1=1
+                  ' . self::businessScopeSql('prospects', 'p') . '
+                  AND (
                     CAST(p.id AS CHAR) LIKE :term
                     OR p.note LIKE :term
                     OR p.next_step LIKE :term
@@ -1245,7 +1265,9 @@ final class Task
                 ORDER BY p.id DESC
                 LIMIT ' . $limit;
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute(['term' => '%' . $term . '%']);
+        $params = ['term' => '%' . $term . '%'];
+        self::applyBusinessParam($params, 'prospects');
+        $stmt->execute($params);
         return $stmt->fetchAll();
     }
 
@@ -1257,6 +1279,7 @@ final class Task
                 FROM sales s
                 WHERE s.deleted_at IS NULL
                   AND COALESCE(s.active, 1) = 1
+                  ' . self::businessScopeSql('sales', 's') . '
                   AND (
                       CAST(s.id AS CHAR) LIKE :term
                       OR s.name LIKE :term
@@ -1266,7 +1289,9 @@ final class Task
                 ORDER BY s.id DESC
                 LIMIT ' . $limit;
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute(['term' => '%' . $term . '%']);
+        $params = ['term' => '%' . $term . '%'];
+        self::applyBusinessParam($params, 'sales');
+        $stmt->execute($params);
         return $stmt->fetchAll();
     }
 
@@ -1279,25 +1304,34 @@ final class Task
                     ) AS label
                 FROM clients c
                 WHERE c.id = :id
+                  ' . self::businessScopeSql('clients', 'c') . '
                 LIMIT 1';
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute(['id' => $id]);
+        $params = ['id' => $id];
+        self::applyBusinessParam($params, 'clients');
+        $stmt->execute($params);
         $row = $stmt->fetch();
         return $row ?: null;
     }
 
     private static function findEstateById(int $id): ?array
     {
-        $stmt = Database::connection()->prepare('SELECT name AS label FROM estates WHERE id = :id LIMIT 1');
-        $stmt->execute(['id' => $id]);
+        $sql = 'SELECT name AS label FROM estates WHERE id = :id' . self::businessScopeSql('estates') . ' LIMIT 1';
+        $stmt = Database::connection()->prepare($sql);
+        $params = ['id' => $id];
+        self::applyBusinessParam($params, 'estates');
+        $stmt->execute($params);
         $row = $stmt->fetch();
         return $row ?: null;
     }
 
     private static function findCompanyById(int $id): ?array
     {
-        $stmt = Database::connection()->prepare('SELECT name AS label FROM companies WHERE id = :id LIMIT 1');
-        $stmt->execute(['id' => $id]);
+        $sql = 'SELECT name AS label FROM companies WHERE id = :id' . self::businessScopeSql('companies') . ' LIMIT 1';
+        $stmt = Database::connection()->prepare($sql);
+        $params = ['id' => $id];
+        self::applyBusinessParam($params, 'companies');
+        $stmt->execute($params);
         $row = $stmt->fetch();
         return $row ?: null;
     }
@@ -1307,9 +1341,12 @@ final class Task
         $sql = 'SELECT COALESCE(NULLIF(TRIM(CONCAT_WS(\' \', first_name, last_name)), \'\'), CONCAT(\'Employee #\', id)) AS label
                 FROM employees
                 WHERE id = :id
+                  ' . self::businessScopeSql('employees') . '
                 LIMIT 1';
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute(['id' => $id]);
+        $params = ['id' => $id];
+        self::applyBusinessParam($params, 'employees');
+        $stmt->execute($params);
         $row = $stmt->fetch();
         return $row ?: null;
     }
@@ -1319,9 +1356,12 @@ final class Task
         $sql = 'SELECT COALESCE(NULLIF(name, \'\'), CONCAT(\'Job #\', id)) AS label
                 FROM jobs
                 WHERE id = :id
+                  ' . self::businessScopeSql('jobs') . '
                 LIMIT 1';
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute(['id' => $id]);
+        $params = ['id' => $id];
+        self::applyBusinessParam($params, 'jobs');
+        $stmt->execute($params);
         $row = $stmt->fetch();
         return $row ?: null;
     }
@@ -1336,9 +1376,12 @@ final class Task
                 FROM expenses e
                 LEFT JOIN expense_categories ec ON ec.id = e.expense_category_id
                 WHERE e.id = :id
+                  ' . self::businessScopeSql('expenses', 'e') . '
                 LIMIT 1';
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute(['id' => $id]);
+        $params = ['id' => $id];
+        self::applyBusinessParam($params, 'expenses');
+        $stmt->execute($params);
         $row = $stmt->fetch();
         return $row ?: null;
     }
@@ -1357,9 +1400,12 @@ final class Task
                 FROM prospects p
                 LEFT JOIN clients c ON c.id = p.client_id
                 WHERE p.id = :id
+                  ' . self::businessScopeSql('prospects', 'p') . '
                 LIMIT 1';
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute(['id' => $id]);
+        $params = ['id' => $id];
+        self::applyBusinessParam($params, 'prospects');
+        $stmt->execute($params);
         $row = $stmt->fetch();
         return $row ?: null;
     }
@@ -1369,17 +1415,39 @@ final class Task
         $sql = 'SELECT COALESCE(NULLIF(name, \'\'), CONCAT(\'Sale #\', id)) AS label
                 FROM sales
                 WHERE id = :id
+                  ' . self::businessScopeSql('sales') . '
                 LIMIT 1';
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute(['id' => $id]);
+        $params = ['id' => $id];
+        self::applyBusinessParam($params, 'sales');
+        $stmt->execute($params);
         $row = $stmt->fetch();
         return $row ?: null;
+    }
+
+    private static function businessScopeSql(string $table, ?string $alias = null): string
+    {
+        if (!Schema::hasColumn($table, 'business_id')) {
+            return '';
+        }
+
+        $prefix = $alias !== null && $alias !== '' ? ($alias . '.') : '';
+        return ' AND ' . $prefix . 'business_id = :business_id_scope';
+    }
+
+    private static function applyBusinessParam(array &$params, string $table): void
+    {
+        if (!Schema::hasColumn($table, 'business_id')) {
+            return;
+        }
+
+        $params['business_id_scope'] = self::currentBusinessId();
     }
 
     private static function currentBusinessId(): int
     {
         if (function_exists('current_business_id')) {
-            return max(1, (int) current_business_id());
+            return max(0, (int) current_business_id());
         }
 
         return max(1, (int) config('app.default_business_id', 1));

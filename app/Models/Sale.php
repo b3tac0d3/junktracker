@@ -50,6 +50,16 @@ final class Sale
         $where = [];
         $params = [];
 
+        if (Schema::hasColumn('sales', 'business_id')) {
+            $businessId = self::currentBusinessId();
+            if ($businessId <= 0) {
+                $where[] = '1 = 0';
+            } else {
+                $where[] = 's.business_id = :business_id';
+                $params['business_id'] = $businessId;
+            }
+        }
+
         $query = trim((string) ($filters['q'] ?? ''));
         if ($query !== '') {
             $searchClauses = [
@@ -172,11 +182,20 @@ final class Sale
                     ' . $deletedByNameSelect . ' AS deleted_by_name
                 FROM sales s'
                 . $joins . '
-                WHERE s.id = :id
+                WHERE s.id = :id' . (Schema::hasColumn('sales', 'business_id') ? '
+                  AND s.business_id = :business_id' : '') . '
                 LIMIT 1';
 
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute(['id' => $id]);
+        $params = ['id' => $id];
+        if (Schema::hasColumn('sales', 'business_id')) {
+            $businessId = self::currentBusinessId();
+            if ($businessId <= 0) {
+                return null;
+            }
+            $params['business_id'] = $businessId;
+        }
+        $stmt->execute($params);
         $sale = $stmt->fetch();
 
         return $sale ?: null;
@@ -224,6 +243,15 @@ final class Sale
             $columns[] = 'disposal_location_id';
             $values[] = ':disposal_location_id';
             $params['disposal_location_id'] = $data['disposal_location_id'];
+        }
+        if (Schema::hasColumn('sales', 'business_id')) {
+            $businessId = self::currentBusinessId();
+            if ($businessId <= 0) {
+                throw new \RuntimeException('No active business workspace selected.');
+            }
+            $columns[] = 'business_id';
+            $values[] = ':business_id';
+            $params['business_id'] = $businessId;
         }
         if ($hasActive) {
             $columns[] = 'active';
@@ -281,6 +309,14 @@ final class Sale
         $sql = 'UPDATE sales
                 SET ' . implode(', ', $sets) . '
                 WHERE id = :id';
+        if (Schema::hasColumn('sales', 'business_id')) {
+            $businessId = self::currentBusinessId();
+            if ($businessId <= 0) {
+                return;
+            }
+            $sql .= ' AND business_id = :business_id_scope';
+            $params['business_id_scope'] = $businessId;
+        }
 
         $stmt = Database::connection()->prepare($sql);
         $stmt->execute($params);
@@ -325,6 +361,14 @@ final class Sale
         $sql = 'UPDATE sales
                 SET ' . implode(', ', $sets) . '
                 WHERE id = :id';
+        if (Schema::hasColumn('sales', 'business_id')) {
+            $businessId = self::currentBusinessId();
+            if ($businessId <= 0) {
+                return;
+            }
+            $sql .= ' AND business_id = :business_id_scope';
+            $params['business_id_scope'] = $businessId;
+        }
 
         $stmt = Database::connection()->prepare($sql);
         $stmt->execute($params);
@@ -339,11 +383,21 @@ final class Sale
         $sql = 'SELECT id, name
                 FROM disposal_locations
                 WHERE deleted_at IS NULL
-                  AND active = 1
+                  AND active = 1';
+        $params = [];
+        if (Schema::hasColumn('disposal_locations', 'business_id')) {
+            $businessId = self::currentBusinessId();
+            if ($businessId <= 0) {
+                return [];
+            }
+            $sql .= ' AND business_id = :business_id';
+            $params['business_id'] = $businessId;
+        }
+        $sql .= '
                 ORDER BY name ASC';
 
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute();
+        $stmt->execute($params);
 
         return $stmt->fetchAll();
     }
@@ -384,5 +438,14 @@ final class Sale
         }
 
         return $summary;
+    }
+
+    private static function currentBusinessId(): int
+    {
+        if (function_exists('current_business_id')) {
+            return (int) current_business_id();
+        }
+
+        return (int) config('app.default_business_id', 1);
     }
 }

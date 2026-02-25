@@ -33,6 +33,11 @@ final class Job
         $where = [];
         $params = [];
 
+        if (Schema::hasColumn('jobs', 'business_id')) {
+            $where[] = 'j.business_id = :business_id_scope';
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
+
         if (!empty($filters['q'])) {
             $where[] = '(j.name LIKE :q OR c.first_name LIKE :q OR c.last_name LIKE :q OR c.business_name LIKE :q)';
             $params['q'] = '%' . $filters['q'] . '%';
@@ -118,6 +123,11 @@ final class Job
                 WHERE COALESCE(jsw.scheduled_start_at, j.scheduled_date) IS NOT NULL';
 
         $params = [];
+
+        if (Schema::hasColumn('jobs', 'business_id')) {
+            $sql .= ' AND j.business_id = :business_id_scope';
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
 
         if ($recordStatus === 'active') {
             $sql .= ' AND j.deleted_at IS NULL AND COALESCE(j.active, 1) = 1';
@@ -248,6 +258,11 @@ final class Job
 
         $params = [];
 
+        if (Schema::hasColumn('jobs', 'business_id')) {
+            $sql .= ' AND j.business_id = :business_id_scope';
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
+
         if ($recordStatus === 'active') {
             $sql .= ' AND j.deleted_at IS NULL AND COALESCE(j.active, 1) = 1';
         } elseif ($recordStatus === 'deleted') {
@@ -299,7 +314,7 @@ final class Job
 
     public static function updateScheduledDate(int $jobId, ?string $scheduledDate, ?int $actorId = null, ?string $scheduledEndDate = null): bool
     {
-        if ($jobId <= 0) {
+        if ($jobId <= 0 || !self::isJobAccessible($jobId)) {
             return false;
         }
 
@@ -321,6 +336,10 @@ final class Job
                 WHERE id = :id
                   AND deleted_at IS NULL
                   AND COALESCE(active, 1) = 1';
+        if (Schema::hasColumn('jobs', 'business_id')) {
+            $sql .= ' AND business_id = :business_id_scope';
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
 
         $stmt = Database::connection()->prepare($sql);
         $stmt->execute($params);
@@ -387,6 +406,10 @@ final class Job
         if ($excludeId !== null && $excludeId > 0) {
             $where[] = 'j.id <> :exclude_id';
             $params['exclude_id'] = $excludeId;
+        }
+        if (Schema::hasColumn('jobs', 'business_id')) {
+            $where[] = 'j.business_id = :business_id_scope';
+            $params['business_id_scope'] = self::currentBusinessId();
         }
         $selfScopedUserId = self::selfScopedUserId();
         if ($selfScopedUserId !== null && Schema::hasColumn('jobs', 'created_by')) {
@@ -530,6 +553,7 @@ final class Job
                 FROM jobs j
                 WHERE j.deleted_at IS NULL
                   AND COALESCE(j.active, 1) = 1
+                  ' . (Schema::hasColumn('jobs', 'business_id') ? 'AND j.business_id = :business_id_scope' : '') . '
                   AND (
                         j.name LIKE :term
                         OR CAST(j.id AS CHAR) LIKE :term
@@ -538,6 +562,9 @@ final class Job
                       )';
 
         $params = ['term' => '%' . $term . '%'];
+        if (Schema::hasColumn('jobs', 'business_id')) {
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
         $selfScopedUserId = self::selfScopedUserId();
         if ($selfScopedUserId !== null && Schema::hasColumn('jobs', 'created_by')) {
             $sql .= ' AND j.created_by = :self_scope_user_id';
@@ -574,6 +601,10 @@ final class Job
         }
 
         $sql = 'UPDATE jobs SET ' . implode(', ', $sets) . ' WHERE id = :id';
+        if (Schema::hasColumn('jobs', 'business_id')) {
+            $sql .= ' AND business_id = :business_id_scope';
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
         $stmt = Database::connection()->prepare($sql);
         $stmt->execute($params);
     }
@@ -634,6 +665,10 @@ final class Job
 
         $where = ['j.id = :id'];
         $params = ['id' => $id];
+        if (Schema::hasColumn('jobs', 'business_id')) {
+            $where[] = 'j.business_id = :business_id_scope';
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
         $selfScopedUserId = self::selfScopedUserId();
         if ($selfScopedUserId !== null && Schema::hasColumn('jobs', 'created_by')) {
             $where[] = 'j.created_by = :self_scope_user_id';
@@ -746,6 +781,11 @@ final class Job
             $values[] = ':updated_by';
             $params['updated_by'] = $actorId;
         }
+        if (Schema::hasColumn('jobs', 'business_id')) {
+            $columns[] = 'business_id';
+            $values[] = ':business_id';
+            $params['business_id'] = self::currentBusinessId();
+        }
 
         $sql = 'INSERT INTO jobs (' . implode(', ', $columns) . ')
                 VALUES (' . implode(', ', $values) . ')';
@@ -824,6 +864,10 @@ final class Job
         }
 
         $sql = 'UPDATE jobs SET ' . implode(', ', $sets) . ' WHERE id = :id';
+        if (Schema::hasColumn('jobs', 'business_id')) {
+            $sql .= ' AND business_id = :business_id_scope';
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
 
         $stmt = Database::connection()->prepare($sql);
         $stmt->execute($params);
@@ -853,6 +897,10 @@ final class Job
                 WHERE id = :id
                   AND deleted_at IS NULL
                   AND COALESCE(active, 1) = 1';
+        if (Schema::hasColumn('jobs', 'business_id')) {
+            $sql .= ' AND business_id = :business_id_scope';
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
 
         $stmt = Database::connection()->prepare($sql);
         $stmt->execute($params);
@@ -883,6 +931,10 @@ final class Job
                 WHERE id = :id
                   AND deleted_at IS NULL
                   AND COALESCE(active, 1) = 1';
+        if (Schema::hasColumn('jobs', 'business_id')) {
+            $sql .= ' AND business_id = :business_id_scope';
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
 
         $stmt = Database::connection()->prepare($sql);
         $stmt->execute($params);
@@ -910,6 +962,7 @@ final class Job
                     FROM clients c
                     WHERE c.deleted_at IS NULL
                       AND c.active = 1
+                      ' . (Schema::hasColumn('clients', 'business_id') ? 'AND c.business_id = :business_id_scope' : '') . '
                       AND (
                             c.business_name LIKE :client_term
                             OR c.first_name LIKE :client_term
@@ -927,6 +980,7 @@ final class Job
                     FROM estates e
                     WHERE e.deleted_at IS NULL
                       AND e.active = 1
+                      ' . (Schema::hasColumn('estates', 'business_id') ? 'AND e.business_id = :business_id_scope' : '') . '
                       AND (
                             e.name LIKE :estate_term
                             OR e.city LIKE :estate_term
@@ -944,6 +998,7 @@ final class Job
                     FROM companies co
                     WHERE co.deleted_at IS NULL
                       AND COALESCE(co.active, 1) = 1
+                      ' . (Schema::hasColumn('companies', 'business_id') ? 'AND co.business_id = :business_id_scope' : '') . '
                       AND (
                             co.name LIKE :company_term
                             OR co.city LIKE :company_term
@@ -956,11 +1011,15 @@ final class Job
 
         $stmt = Database::connection()->prepare($sql);
         $search = '%' . $term . '%';
-        $stmt->execute([
+        $params = [
             'client_term' => $search,
             'estate_term' => $search,
             'company_term' => $search,
-        ]);
+        ];
+        if (Schema::hasColumn('clients', 'business_id') || Schema::hasColumn('estates', 'business_id') || Schema::hasColumn('companies', 'business_id')) {
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
+        $stmt->execute($params);
 
         return $stmt->fetchAll();
     }
@@ -998,6 +1057,7 @@ final class Job
                    AND COALESCE(co.active, 1) = 1
                 WHERE c.deleted_at IS NULL
                   AND c.active = 1
+                  ' . (Schema::hasColumn('clients', 'business_id') ? 'AND c.business_id = :business_id_scope' : '') . '
                   AND (
                         c.business_name LIKE :term
                         OR c.first_name LIKE :term
@@ -1011,7 +1071,11 @@ final class Job
                 LIMIT ' . $limit;
 
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute(['term' => '%' . $term . '%']);
+        $params = ['term' => '%' . $term . '%'];
+        if (Schema::hasColumn('clients', 'business_id')) {
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
+        $stmt->execute($params);
 
         return $stmt->fetchAll();
     }
@@ -1047,10 +1111,15 @@ final class Job
                 WHERE c.id = :id
                   AND c.deleted_at IS NULL
                   AND c.active = 1
+                  ' . (Schema::hasColumn('clients', 'business_id') ? 'AND c.business_id = :business_id_scope' : '') . '
                 LIMIT 1';
 
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute(['id' => $clientId]);
+        $params = ['id' => $clientId];
+        if (Schema::hasColumn('clients', 'business_id')) {
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
+        $stmt->execute($params);
         $client = $stmt->fetch();
 
         return $client ?: null;
@@ -1069,10 +1138,15 @@ final class Job
                 WHERE c.id = :id
                   AND c.deleted_at IS NULL
                   AND c.active = 1
+                  ' . (Schema::hasColumn('clients', 'business_id') ? 'AND c.business_id = :business_id_scope' : '') . '
                 LIMIT 1';
 
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute(['id' => $ownerId]);
+        $params = ['id' => $ownerId];
+        if (Schema::hasColumn('clients', 'business_id')) {
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
+        $stmt->execute($params);
         $owner = $stmt->fetch();
         if (!$owner) {
             return null;
@@ -1093,10 +1167,15 @@ final class Job
                 WHERE e.id = :id
                   AND e.deleted_at IS NULL
                   AND e.active = 1
+                  ' . (Schema::hasColumn('estates', 'business_id') ? 'AND e.business_id = :business_id_scope' : '') . '
                 LIMIT 1';
 
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute(['id' => $ownerId]);
+        $params = ['id' => $ownerId];
+        if (Schema::hasColumn('estates', 'business_id')) {
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
+        $stmt->execute($params);
         $owner = $stmt->fetch();
         if (!$owner) {
             return null;
@@ -1117,10 +1196,15 @@ final class Job
                 WHERE co.id = :id
                   AND co.deleted_at IS NULL
                   AND COALESCE(co.active, 1) = 1
+                  ' . (Schema::hasColumn('companies', 'business_id') ? 'AND co.business_id = :business_id_scope' : '') . '
                 LIMIT 1';
 
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute(['id' => $ownerId]);
+        $params = ['id' => $ownerId];
+        if (Schema::hasColumn('companies', 'business_id')) {
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
+        $stmt->execute($params);
         $owner = $stmt->fetch();
         if (!$owner) {
             return null;
@@ -1254,6 +1338,10 @@ final class Job
 
     public static function markPaid(int $jobId, ?string $paidAt = null, ?int $actorId = null): void
     {
+        if (!self::isJobAccessible($jobId)) {
+            return;
+        }
+
         $paidAt = $paidAt ?? date('Y-m-d H:i:s');
         $sets = [
             'paid = 1',
@@ -1270,12 +1358,20 @@ final class Job
         }
 
         $sql = 'UPDATE jobs SET ' . implode(', ', $sets) . ' WHERE id = :id';
+        if (Schema::hasColumn('jobs', 'business_id')) {
+            $sql .= ' AND business_id = :business_id_scope';
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
         $stmt = Database::connection()->prepare($sql);
         $stmt->execute($params);
     }
 
     public static function markUnpaid(int $jobId, ?int $actorId = null): void
     {
+        if (!self::isJobAccessible($jobId)) {
+            return;
+        }
+
         $sets = [
             'paid = 0',
             'paid_date = NULL',
@@ -1288,6 +1384,10 @@ final class Job
         }
 
         $sql = 'UPDATE jobs SET ' . implode(', ', $sets) . ' WHERE id = :id';
+        if (Schema::hasColumn('jobs', 'business_id')) {
+            $sql .= ' AND business_id = :business_id_scope';
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
         $stmt = Database::connection()->prepare($sql);
         $stmt->execute($params);
     }
@@ -1314,6 +1414,10 @@ final class Job
 
     public static function paymentSnapshot(int $jobId): array
     {
+        if (!self::isJobAccessible($jobId)) {
+            return [];
+        }
+
         $sql = 'SELECT
                     COALESCE(NULLIF(j.total_billed, 0), NULLIF(j.total_quote, 0), 0) AS invoice_amount,
                     COALESCE(SUM(CASE WHEN ja.action_type = \'payment\' THEN COALESCE(ja.amount, 0) ELSE 0 END), 0) AS payment_total,
@@ -1327,11 +1431,16 @@ final class Job
                 FROM jobs j
                 LEFT JOIN job_actions ja ON ja.job_id = j.id
                 WHERE j.id = :id
+                  ' . (Schema::hasColumn('jobs', 'business_id') ? 'AND j.business_id = :business_id_scope' : '') . '
                 GROUP BY j.id
                 LIMIT 1';
 
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute(['id' => $jobId]);
+        $params = ['id' => $jobId];
+        if (Schema::hasColumn('jobs', 'business_id')) {
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
+        $stmt->execute($params);
         $row = $stmt->fetch();
         if (!$row) {
             return [];
@@ -1364,29 +1473,47 @@ final class Job
 
     public static function actions(int $jobId): array
     {
+        if (!self::isJobAccessible($jobId)) {
+            return [];
+        }
+
         $sql = 'SELECT id, action_type, action_at, amount, ref_table, ref_id, note, created_at
                 FROM job_actions
                 WHERE job_id = :job_id
+                  ' . (Schema::hasColumn('job_actions', 'business_id') ? 'AND business_id = :business_id_scope' : '') . '
                 ORDER BY action_at DESC, id DESC';
 
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute(['job_id' => $jobId]);
+        $params = ['job_id' => $jobId];
+        if (Schema::hasColumn('job_actions', 'business_id')) {
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
+        $stmt->execute($params);
 
         return $stmt->fetchAll();
     }
 
     public static function findAction(int $jobId, int $actionId): ?array
     {
+        if (!self::isJobAccessible($jobId)) {
+            return null;
+        }
+
         $sql = 'SELECT id, job_id, action_type, action_at, amount, ref_table, ref_id, note
                 FROM job_actions
                 WHERE job_id = :job_id AND id = :id
+                  ' . (Schema::hasColumn('job_actions', 'business_id') ? 'AND business_id = :business_id_scope' : '') . '
                 LIMIT 1';
 
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute([
+        $params = [
             'job_id' => $jobId,
             'id' => $actionId,
-        ]);
+        ];
+        if (Schema::hasColumn('job_actions', 'business_id')) {
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
+        $stmt->execute($params);
 
         $action = $stmt->fetch();
         return $action ?: null;
@@ -1394,6 +1521,10 @@ final class Job
 
     public static function createAction(int $jobId, array $data, ?int $actorId = null): int
     {
+        if (!self::isJobAccessible($jobId)) {
+            return 0;
+        }
+
         $columns = ['job_id', 'action_type', 'action_at', 'amount', 'ref_table', 'ref_id', 'note', 'created_at'];
         $values = [':job_id', ':action_type', ':action_at', ':amount', ':ref_table', ':ref_id', ':note', 'NOW()'];
         $params = [
@@ -1411,6 +1542,11 @@ final class Job
             $values[] = ':created_by';
             $params['created_by'] = $actorId;
         }
+        if (Schema::hasColumn('job_actions', 'business_id')) {
+            $columns[] = 'business_id';
+            $values[] = ':business_id';
+            $params['business_id'] = self::currentBusinessId();
+        }
 
         $sql = 'INSERT INTO job_actions (' . implode(', ', $columns) . ')
                 VALUES (' . implode(', ', $values) . ')';
@@ -1423,6 +1559,10 @@ final class Job
 
     public static function updateAction(int $jobId, int $actionId, array $data, ?int $actorId = null): void
     {
+        if (!self::isJobAccessible($jobId)) {
+            return;
+        }
+
         $sets = [
             'action_type = :action_type',
             'action_at = :action_at',
@@ -1450,6 +1590,10 @@ final class Job
         $sql = 'UPDATE job_actions
                 SET ' . implode(', ', $sets) . '
                 WHERE id = :id AND job_id = :job_id';
+        if (Schema::hasColumn('job_actions', 'business_id')) {
+            $sql .= ' AND business_id = :business_id_scope';
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
 
         $stmt = Database::connection()->prepare($sql);
         $stmt->execute($params);
@@ -1457,30 +1601,53 @@ final class Job
 
     public static function deleteAction(int $jobId, int $actionId): void
     {
-        $stmt = Database::connection()->prepare('DELETE FROM job_actions WHERE id = :id AND job_id = :job_id');
-        $stmt->execute([
+        if (!self::isJobAccessible($jobId)) {
+            return;
+        }
+
+        $sql = 'DELETE FROM job_actions WHERE id = :id AND job_id = :job_id';
+        $params = [
             'id' => $actionId,
             'job_id' => $jobId,
-        ]);
+        ];
+        if (Schema::hasColumn('job_actions', 'business_id')) {
+            $sql .= ' AND business_id = :business_id_scope';
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute($params);
     }
 
     public static function billingEntries(int $jobId): array
     {
+        if (!self::isJobAccessible($jobId)) {
+            return [];
+        }
+
         $placeholders = implode(', ', array_fill(0, count(self::BILLING_TYPES), '?'));
         $sql = 'SELECT id, action_type, action_at, amount, note
                 FROM job_actions
                 WHERE job_id = ?
+                  ' . (Schema::hasColumn('job_actions', 'business_id') ? 'AND business_id = ?' : '') . '
                   AND action_type IN (' . $placeholders . ')
                 ORDER BY action_at DESC, id DESC';
 
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute(array_merge([$jobId], self::BILLING_TYPES));
+        $args = [$jobId];
+        if (Schema::hasColumn('job_actions', 'business_id')) {
+            $args[] = self::currentBusinessId();
+        }
+        $stmt->execute(array_merge($args, self::BILLING_TYPES));
 
         return $stmt->fetchAll();
     }
 
     public static function expenses(int $jobId): array
     {
+        if (!self::isJobAccessible($jobId)) {
+            return [];
+        }
+
         self::ensureExpenseCategoryColumn();
 
         $sql = 'SELECT e.id, e.expense_category_id, e.category, e.description, e.amount, e.expense_date, e.created_at, ec.name AS expense_category_name, dl.name AS disposal_location_name
@@ -1489,16 +1656,25 @@ final class Job
                 LEFT JOIN disposal_locations dl ON dl.id = e.disposal_location_id
                 WHERE e.job_id = :job_id
                   AND (e.deleted_at IS NULL)
+                  ' . (Schema::hasColumn('expenses', 'business_id') ? 'AND e.business_id = :business_id_scope' : '') . '
                 ORDER BY e.expense_date DESC, e.id DESC';
 
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute(['job_id' => $jobId]);
+        $params = ['job_id' => $jobId];
+        if (Schema::hasColumn('expenses', 'business_id')) {
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
+        $stmt->execute($params);
 
         return $stmt->fetchAll();
     }
 
     public static function findExpense(int $jobId, int $expenseId): ?array
     {
+        if (!self::isJobAccessible($jobId)) {
+            return null;
+        }
+
         self::ensureExpenseCategoryColumn();
 
         $sql = 'SELECT id, job_id, disposal_location_id, expense_category_id, category, description, amount, expense_date
@@ -1506,13 +1682,18 @@ final class Job
                 WHERE id = :id
                   AND job_id = :job_id
                   AND deleted_at IS NULL
+                  ' . (Schema::hasColumn('expenses', 'business_id') ? 'AND business_id = :business_id_scope' : '') . '
                 LIMIT 1';
 
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute([
+        $params = [
             'id' => $expenseId,
             'job_id' => $jobId,
-        ]);
+        ];
+        if (Schema::hasColumn('expenses', 'business_id')) {
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
+        $stmt->execute($params);
 
         $expense = $stmt->fetch();
         return $expense ?: null;
@@ -1523,6 +1704,9 @@ final class Job
         self::ensureExpenseCategoryColumn();
 
         $normalizedJobId = ($jobId !== null && $jobId > 0) ? $jobId : null;
+        if ($normalizedJobId !== null && !self::isJobAccessible($normalizedJobId)) {
+            return 0;
+        }
 
         $columns = ['job_id', 'disposal_location_id', 'expense_category_id', 'category', 'description', 'amount', 'expense_date', 'is_active', 'created_at'];
         $values = [':job_id', ':disposal_location_id', ':expense_category_id', ':category', ':description', ':amount', ':expense_date', '1', 'NOW()'];
@@ -1541,6 +1725,11 @@ final class Job
             $values[] = ':created_by';
             $params['created_by'] = $actorId;
         }
+        if (Schema::hasColumn('expenses', 'business_id')) {
+            $columns[] = 'business_id';
+            $values[] = ':business_id';
+            $params['business_id'] = self::currentBusinessId();
+        }
 
         $sql = 'INSERT INTO expenses (' . implode(', ', $columns) . ')
                 VALUES (' . implode(', ', $values) . ')';
@@ -1553,6 +1742,10 @@ final class Job
 
     public static function updateExpense(int $jobId, int $expenseId, array $data, ?int $actorId = null): void
     {
+        if (!self::isJobAccessible($jobId)) {
+            return;
+        }
+
         self::ensureExpenseCategoryColumn();
 
         $sets = [
@@ -1583,6 +1776,10 @@ final class Job
         $sql = 'UPDATE expenses
                 SET ' . implode(', ', $sets) . '
                 WHERE id = :id AND job_id = :job_id AND deleted_at IS NULL';
+        if (Schema::hasColumn('expenses', 'business_id')) {
+            $sql .= ' AND business_id = :business_id_scope';
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
 
         $stmt = Database::connection()->prepare($sql);
         $stmt->execute($params);
@@ -1590,6 +1787,10 @@ final class Job
 
     public static function deleteExpense(int $jobId, int $expenseId, ?int $actorId = null): void
     {
+        if (!self::isJobAccessible($jobId)) {
+            return;
+        }
+
         $sets = ['is_active = 0', 'deleted_at = NOW()', 'updated_at = NOW()'];
         $params = [
             'id' => $expenseId,
@@ -1607,6 +1808,10 @@ final class Job
         $sql = 'UPDATE expenses
                 SET ' . implode(', ', $sets) . '
                 WHERE id = :id AND job_id = :job_id AND deleted_at IS NULL';
+        if (Schema::hasColumn('expenses', 'business_id')) {
+            $sql .= ' AND business_id = :business_id_scope';
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
 
         $stmt = Database::connection()->prepare($sql);
         $stmt->execute($params);
@@ -1614,33 +1819,51 @@ final class Job
 
     public static function disposals(int $jobId): array
     {
+        if (!self::isJobAccessible($jobId)) {
+            return [];
+        }
+
         $sql = 'SELECT d.id, d.event_date, d.type, d.amount, d.note, dl.name AS disposal_location_name
                 FROM job_disposal_events d
                 LEFT JOIN disposal_locations dl ON dl.id = d.disposal_location_id
                 WHERE d.job_id = :job_id
                   AND d.deleted_at IS NULL
+                  ' . (Schema::hasColumn('job_disposal_events', 'business_id') ? 'AND d.business_id = :business_id_scope' : '') . '
                 ORDER BY d.event_date DESC, d.id DESC';
 
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute(['job_id' => $jobId]);
+        $params = ['job_id' => $jobId];
+        if (Schema::hasColumn('job_disposal_events', 'business_id')) {
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
+        $stmt->execute($params);
 
         return $stmt->fetchAll();
     }
 
     public static function findDisposal(int $jobId, int $disposalId): ?array
     {
+        if (!self::isJobAccessible($jobId)) {
+            return null;
+        }
+
         $sql = 'SELECT id, job_id, disposal_location_id, event_date, type, amount, note
                 FROM job_disposal_events
                 WHERE id = :id
                   AND job_id = :job_id
                   AND deleted_at IS NULL
+                  ' . (Schema::hasColumn('job_disposal_events', 'business_id') ? 'AND business_id = :business_id_scope' : '') . '
                 LIMIT 1';
 
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute([
+        $params = [
             'id' => $disposalId,
             'job_id' => $jobId,
-        ]);
+        ];
+        if (Schema::hasColumn('job_disposal_events', 'business_id')) {
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
+        $stmt->execute($params);
 
         $disposal = $stmt->fetch();
         return $disposal ?: null;
@@ -1648,6 +1871,10 @@ final class Job
 
     public static function createDisposal(int $jobId, array $data, ?int $actorId = null): int
     {
+        if (!self::isJobAccessible($jobId)) {
+            return 0;
+        }
+
         $columns = ['job_id', 'disposal_location_id', 'event_date', 'type', 'amount', 'note', 'active', 'created_at', 'updated_at'];
         $values = [':job_id', ':disposal_location_id', ':event_date', ':type', ':amount', ':note', '1', 'NOW()', 'NOW()'];
         $params = [
@@ -1669,6 +1896,11 @@ final class Job
             $values[] = ':updated_by';
             $params['updated_by'] = $actorId;
         }
+        if (Schema::hasColumn('job_disposal_events', 'business_id')) {
+            $columns[] = 'business_id';
+            $values[] = ':business_id';
+            $params['business_id'] = self::currentBusinessId();
+        }
 
         $sql = 'INSERT INTO job_disposal_events (' . implode(', ', $columns) . ')
                 VALUES (' . implode(', ', $values) . ')';
@@ -1681,6 +1913,10 @@ final class Job
 
     public static function updateDisposal(int $jobId, int $disposalId, array $data, ?int $actorId = null): void
     {
+        if (!self::isJobAccessible($jobId)) {
+            return;
+        }
+
         $sets = [
             'disposal_location_id = :disposal_location_id',
             'event_date = :event_date',
@@ -1707,6 +1943,10 @@ final class Job
         $sql = 'UPDATE job_disposal_events
                 SET ' . implode(', ', $sets) . '
                 WHERE id = :id AND job_id = :job_id AND deleted_at IS NULL';
+        if (Schema::hasColumn('job_disposal_events', 'business_id')) {
+            $sql .= ' AND business_id = :business_id_scope';
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
 
         $stmt = Database::connection()->prepare($sql);
         $stmt->execute($params);
@@ -1714,6 +1954,10 @@ final class Job
 
     public static function deleteDisposal(int $jobId, int $disposalId, ?int $actorId = null): void
     {
+        if (!self::isJobAccessible($jobId)) {
+            return;
+        }
+
         $sets = ['active = 0', 'deleted_at = NOW()', 'updated_at = NOW()'];
         $params = [
             'id' => $disposalId,
@@ -1731,6 +1975,10 @@ final class Job
         $sql = 'UPDATE job_disposal_events
                 SET ' . implode(', ', $sets) . '
                 WHERE id = :id AND job_id = :job_id AND deleted_at IS NULL';
+        if (Schema::hasColumn('job_disposal_events', 'business_id')) {
+            $sql .= ' AND business_id = :business_id_scope';
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
 
         $stmt = Database::connection()->prepare($sql);
         $stmt->execute($params);
@@ -1742,16 +1990,25 @@ final class Job
                 FROM disposal_locations
                 WHERE deleted_at IS NULL
                   AND active = 1
+                  ' . (Schema::hasColumn('disposal_locations', 'business_id') ? 'AND business_id = :business_id_scope' : '') . '
                 ORDER BY name';
 
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute();
+        $params = [];
+        if (Schema::hasColumn('disposal_locations', 'business_id')) {
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
+        $stmt->execute($params);
 
         return $stmt->fetchAll();
     }
 
     public static function crewMembers(int $jobId): array
     {
+        if (!self::isJobAccessible($jobId)) {
+            return [];
+        }
+
         self::ensureCrewTable();
 
         $sql = 'SELECT jc.id,
@@ -1767,10 +2024,15 @@ final class Job
                   AND COALESCE(jc.active, 1) = 1
                   AND e.deleted_at IS NULL
                   AND COALESCE(e.active, 1) = 1
+                  ' . (Schema::hasColumn('employees', 'business_id') ? 'AND e.business_id = :business_id_scope' : '') . '
                 ORDER BY employee_name ASC';
 
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute(['job_id' => $jobId]);
+        $params = ['job_id' => $jobId];
+        if (Schema::hasColumn('employees', 'business_id')) {
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
+        $stmt->execute($params);
 
         return $stmt->fetchAll();
     }
@@ -1780,7 +2042,7 @@ final class Job
         self::ensureCrewTable();
 
         $term = trim($term);
-        if ($jobId <= 0 || $term === '') {
+        if ($jobId <= 0 || !self::isJobAccessible($jobId) || $term === '') {
             return [];
         }
 
@@ -1793,6 +2055,7 @@ final class Job
                 FROM employees e
                 WHERE e.deleted_at IS NULL
                   AND COALESCE(e.active, 1) = 1
+                  ' . (Schema::hasColumn('employees', 'business_id') ? 'AND e.business_id = :business_id_scope' : '') . '
                   AND (
                         e.first_name LIKE :term
                         OR e.last_name LIKE :term
@@ -1813,10 +2076,14 @@ final class Job
                 LIMIT ' . $limit;
 
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute([
+        $params = [
             'job_id' => $jobId,
             'term' => '%' . $term . '%',
-        ]);
+        ];
+        if (Schema::hasColumn('employees', 'business_id')) {
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
+        $stmt->execute($params);
 
         return $stmt->fetchAll();
     }
@@ -1825,7 +2092,7 @@ final class Job
     {
         self::ensureCrewTable();
 
-        if ($jobId <= 0 || $employeeId <= 0) {
+        if ($jobId <= 0 || $employeeId <= 0 || !self::isJobAccessible($jobId)) {
             return false;
         }
 
@@ -1848,6 +2115,10 @@ final class Job
 
     public static function addCrewMember(int $jobId, int $employeeId, ?int $actorId = null): void
     {
+        if (!self::isJobAccessible($jobId)) {
+            return;
+        }
+
         self::ensureCrewTable();
 
         $updateSets = [
@@ -1902,6 +2173,10 @@ final class Job
 
     public static function removeCrewMember(int $jobId, int $employeeId, ?int $actorId = null): void
     {
+        if (!self::isJobAccessible($jobId)) {
+            return;
+        }
+
         self::ensureCrewTable();
 
         $sets = [
@@ -1936,6 +2211,15 @@ final class Job
 
     public static function summary(int $jobId): array
     {
+        if (!self::isJobAccessible($jobId)) {
+            return [
+                'deposit_total' => 0,
+                'expense_total' => 0,
+                'disposal_total' => 0,
+                'action_count' => 0,
+            ];
+        }
+
         $sql = 'SELECT
                     COALESCE((SELECT SUM(CASE WHEN ja.action_type = \'deposit\' THEN COALESCE(ja.amount, 0) ELSE 0 END)
                               FROM job_actions ja
@@ -1971,6 +2255,20 @@ final class Job
 
     public static function profitabilitySnapshot(int $jobId): array
     {
+        if (!self::isJobAccessible($jobId)) {
+            return [
+                'invoice_amount' => 0.0,
+                'billing_collected' => 0.0,
+                'scrap_total' => 0.0,
+                'dump_total' => 0.0,
+                'expense_total' => 0.0,
+                'labor_total' => 0.0,
+                'revenue_total' => 0.0,
+                'cost_total' => 0.0,
+                'net_estimate' => 0.0,
+            ];
+        }
+
         $sql = 'SELECT
                     COALESCE(j.total_billed, j.total_quote, 0) AS invoice_amount,
                     COALESCE((
@@ -2198,6 +2496,34 @@ final class Job
         }
 
         return substr($digits, 0, 5);
+    }
+
+    private static function isJobAccessible(int $jobId): bool
+    {
+        if ($jobId <= 0) {
+            return false;
+        }
+
+        $sql = 'SELECT 1 FROM jobs WHERE id = :id';
+        $params = ['id' => $jobId];
+        if (Schema::hasColumn('jobs', 'business_id')) {
+            $sql .= ' AND business_id = :business_id_scope';
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
+        $sql .= ' LIMIT 1';
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute($params);
+        return (bool) $stmt->fetchColumn();
+    }
+
+    private static function currentBusinessId(): int
+    {
+        if (function_exists('current_business_id')) {
+            return max(0, (int) current_business_id());
+        }
+
+        return max(1, (int) config('app.default_business_id', 1));
     }
 
     private static function selfScopedUserId(): ?int

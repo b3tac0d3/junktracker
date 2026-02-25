@@ -89,10 +89,21 @@ final class Expense
         $sql = 'SELECT id, name
                 FROM expense_categories
                 WHERE deleted_at IS NULL
-                  AND COALESCE(active, 1) = 1
+                  AND COALESCE(active, 1) = 1';
+        $params = [];
+        if (Schema::hasColumn('expense_categories', 'business_id')) {
+            $businessId = self::currentBusinessId();
+            if ($businessId <= 0) {
+                return [];
+            }
+            $sql .= ' AND business_id = :business_id';
+            $params['business_id'] = $businessId;
+        }
+        $sql .= '
                 ORDER BY name ASC';
 
-        $stmt = Database::connection()->query($sql);
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute($params);
         return $stmt->fetchAll();
     }
 
@@ -100,6 +111,16 @@ final class Expense
     {
         $where = [];
         $params = [];
+
+        if (Schema::hasColumn('expenses', 'business_id')) {
+            $businessId = self::currentBusinessId();
+            if ($businessId <= 0) {
+                $where[] = '1 = 0';
+            } else {
+                $where[] = 'e.business_id = :business_id';
+                $params['business_id'] = $businessId;
+            }
+        }
 
         $recordStatus = (string) ($filters['record_status'] ?? 'active');
         if ($recordStatus === 'active') {
@@ -148,5 +169,14 @@ final class Expense
         }
 
         return [implode(' AND ', $where), $params];
+    }
+
+    private static function currentBusinessId(): int
+    {
+        if (function_exists('current_business_id')) {
+            return (int) current_business_id();
+        }
+
+        return (int) config('app.default_business_id', 1);
     }
 }

@@ -17,13 +17,45 @@ final class DashboardKpiSnapshot
 
         Database::connection()->exec('CREATE TABLE IF NOT EXISTS dashboard_kpi_snapshots (
             id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            business_id BIGINT UNSIGNED NOT NULL DEFAULT 1,
             snapshot_date DATE NOT NULL,
             metrics_json LONGTEXT NOT NULL,
             created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             PRIMARY KEY (id),
-            UNIQUE KEY uniq_dashboard_kpi_snapshots_date (snapshot_date)
+            UNIQUE KEY uniq_dashboard_kpi_snapshots_business_date (business_id, snapshot_date),
+            KEY idx_dashboard_kpi_snapshots_business (business_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
+
+        if (!Schema::hasColumn('dashboard_kpi_snapshots', 'business_id')) {
+            try {
+                Database::connection()->exec('ALTER TABLE dashboard_kpi_snapshots ADD COLUMN business_id BIGINT UNSIGNED NOT NULL DEFAULT 1 AFTER id');
+            } catch (\Throwable) {
+                // ignore drift
+            }
+        }
+        if (Schema::hasColumn('dashboard_kpi_snapshots', 'business_id')) {
+            try {
+                Database::connection()->exec('UPDATE dashboard_kpi_snapshots SET business_id = 1 WHERE business_id IS NULL OR business_id = 0');
+            } catch (\Throwable) {
+                // ignore drift
+            }
+            try {
+                Database::connection()->exec('ALTER TABLE dashboard_kpi_snapshots DROP INDEX uniq_dashboard_kpi_snapshots_date');
+            } catch (\Throwable) {
+                // ignore drift
+            }
+            try {
+                Database::connection()->exec('ALTER TABLE dashboard_kpi_snapshots ADD UNIQUE KEY uniq_dashboard_kpi_snapshots_business_date (business_id, snapshot_date)');
+            } catch (\Throwable) {
+                // ignore drift
+            }
+            try {
+                Database::connection()->exec('CREATE INDEX idx_dashboard_kpi_snapshots_business ON dashboard_kpi_snapshots (business_id)');
+            } catch (\Throwable) {
+                // ignore drift
+            }
+        }
 
         $ensured = true;
     }
@@ -49,17 +81,27 @@ final class DashboardKpiSnapshot
         }
 
         $sql = 'INSERT INTO dashboard_kpi_snapshots
-                    (snapshot_date, metrics_json, created_at, updated_at)
+                    (business_id, snapshot_date, metrics_json, created_at, updated_at)
                 VALUES
-                    (:snapshot_date, :metrics_json, NOW(), NOW())
+                    (:business_id, :snapshot_date, :metrics_json, NOW(), NOW())
                 ON DUPLICATE KEY UPDATE
                     metrics_json = VALUES(metrics_json),
                     updated_at = NOW()';
 
         $stmt = Database::connection()->prepare($sql);
         $stmt->execute([
+            'business_id' => self::currentBusinessId(),
             'snapshot_date' => $date,
             'metrics_json' => $json,
         ]);
+    }
+
+    private static function currentBusinessId(): int
+    {
+        if (function_exists('current_business_id')) {
+            return max(0, (int) current_business_id());
+        }
+
+        return max(1, (int) config('app.default_business_id', 1));
     }
 }

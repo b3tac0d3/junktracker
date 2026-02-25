@@ -38,6 +38,11 @@ final class Employee
         $where = [];
         $params = [];
 
+        if (Schema::hasColumn('employees', 'business_id')) {
+            $where[] = 'e.business_id = :business_id_scope';
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
+
         if ($status === 'active') {
             $where[] = '(e.deleted_at IS NULL AND COALESCE(e.active, 1) = 1)';
         } elseif ($status === 'inactive') {
@@ -121,10 +126,15 @@ final class Employee
                 FROM employees e'
                 . $auditJoins . '
                 WHERE e.id = :id
+                  ' . (Schema::hasColumn('employees', 'business_id') ? 'AND e.business_id = :business_id_scope' : '') . '
                 LIMIT 1';
 
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute(['id' => $id]);
+        $params = ['id' => $id];
+        if (Schema::hasColumn('employees', 'business_id')) {
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
+        $stmt->execute($params);
         $employee = $stmt->fetch();
 
         return $employee ?: null;
@@ -154,14 +164,21 @@ final class Employee
                        FROM employees e
                        WHERE e.deleted_at IS NULL
                          AND COALESCE(e.active, 1) = 1
+                         ' . (Schema::hasColumn('employees', 'business_id') ? 'AND e.business_id = :business_id_scope' : '') . '
                          AND ';
+        $baseParams = [];
+        if (Schema::hasColumn('employees', 'business_id')) {
+            $baseParams['business_id_scope'] = self::currentBusinessId();
+        }
 
         if ($userId > 0 && Schema::hasColumn('employees', 'user_id')) {
             $sql = $baseSelect . 'e.user_id = :user_id
                                   ORDER BY e.id ASC
                                   LIMIT 1';
             $stmt = Database::connection()->prepare($sql);
-            $stmt->execute(['user_id' => $userId]);
+            $params = $baseParams;
+            $params['user_id'] = $userId;
+            $stmt->execute($params);
             $row = $stmt->fetch();
             if ($row) {
                 return $row;
@@ -173,7 +190,9 @@ final class Employee
                                   ORDER BY e.id ASC
                                   LIMIT 2';
             $stmt = Database::connection()->prepare($sql);
-            $stmt->execute(['email' => $email]);
+            $params = $baseParams;
+            $params['email'] = $email;
+            $stmt->execute($params);
             $rows = $stmt->fetchAll();
             if (count($rows) === 1) {
                 return $rows[0];
@@ -186,10 +205,10 @@ final class Employee
                                   ORDER BY e.id ASC
                                   LIMIT 2';
             $stmt = Database::connection()->prepare($sql);
-            $stmt->execute([
-                'first_name' => $firstName,
-                'last_name' => $lastName,
-            ]);
+            $params = $baseParams;
+            $params['first_name'] = $firstName;
+            $params['last_name'] = $lastName;
+            $stmt->execute($params);
             $rows = $stmt->fetchAll();
             if (count($rows) === 1) {
                 return $rows[0];
@@ -216,10 +235,15 @@ final class Employee
                        COALESCE(NULLIF(TRIM(CONCAT_WS(\' \', e.first_name, e.last_name)), \'\'), CONCAT(\'Employee #\', e.id)) AS name
                 FROM employees e
                 WHERE e.user_id = :user_id
+                  ' . (Schema::hasColumn('employees', 'business_id') ? 'AND e.business_id = :business_id_scope' : '') . '
                 LIMIT 1';
 
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute(['user_id' => $userId]);
+        $params = ['user_id' => $userId];
+        if (Schema::hasColumn('employees', 'business_id')) {
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
+        $stmt->execute($params);
         $row = $stmt->fetch();
 
         return $row ?: null;
@@ -243,8 +267,12 @@ final class Employee
                 FROM employees e
                 LEFT JOIN users u ON u.id = e.user_id
                 WHERE e.deleted_at IS NULL
-                  AND COALESCE(e.active, 1) = 1';
+                  AND COALESCE(e.active, 1) = 1
+                  ' . (Schema::hasColumn('employees', 'business_id') ? 'AND e.business_id = :business_id_scope' : '') . '';
         $params = [];
+        if (Schema::hasColumn('employees', 'business_id')) {
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
 
         if ($term !== '') {
             $sql .= ' AND (
@@ -313,9 +341,13 @@ final class Employee
                 LEFT JOIN users u ON u.id = e.user_id
                 WHERE e.deleted_at IS NULL
                   AND COALESCE(e.active, 1) = 1
+                  ' . (Schema::hasColumn('employees', 'business_id') ? 'AND e.business_id = :business_id_scope' : '') . '
                   AND (' . implode(' OR ', $conditions) . ')
                 ORDER BY match_score DESC, e.last_name ASC, e.first_name ASC, e.id ASC
                 LIMIT 10';
+        if (Schema::hasColumn('employees', 'business_id')) {
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
 
         $stmt = Database::connection()->prepare($sql);
         $stmt->execute($params);
@@ -347,10 +379,15 @@ final class Employee
                 WHERE e.id = :id
                   AND e.deleted_at IS NULL
                   AND COALESCE(e.active, 1) = 1
+                  ' . (Schema::hasColumn('employees', 'business_id') ? 'AND e.business_id = :business_id_scope' : '') . '
                 LIMIT 1';
 
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute(['id' => $id]);
+        $params = ['id' => $id];
+        if (Schema::hasColumn('employees', 'business_id')) {
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
+        $stmt->execute($params);
         $row = $stmt->fetch();
 
         return $row ?: null;
@@ -376,6 +413,10 @@ final class Employee
             $clearSql = 'UPDATE employees
                          SET ' . implode(', ', $clearSets) . '
                          WHERE user_id = :user_id';
+            if (Schema::hasColumn('employees', 'business_id')) {
+                $clearSql .= ' AND business_id = :business_id_scope';
+                $clearParams['business_id_scope'] = self::currentBusinessId();
+            }
             $clearStmt = $pdo->prepare($clearSql);
             $clearStmt->execute($clearParams);
 
@@ -392,7 +433,11 @@ final class Employee
             $assignSql = 'UPDATE employees
                           SET ' . implode(', ', $assignSets) . '
                           WHERE id = :employee_id
+                          ' . (Schema::hasColumn('employees', 'business_id') ? 'AND business_id = :business_id_scope' : '') . '
                           LIMIT 1';
+            if (Schema::hasColumn('employees', 'business_id')) {
+                $assignParams['business_id_scope'] = self::currentBusinessId();
+            }
             $assignStmt = $pdo->prepare($assignSql);
             $assignStmt->execute($assignParams);
 
@@ -425,6 +470,10 @@ final class Employee
         $sql = 'UPDATE employees
                 SET ' . implode(', ', $sets) . '
                 WHERE user_id = :user_id';
+        if (Schema::hasColumn('employees', 'business_id')) {
+            $sql .= ' AND business_id = :business_id_scope';
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
 
         $stmt = Database::connection()->prepare($sql);
         $stmt->execute($params);
@@ -492,6 +541,11 @@ final class Employee
             $values[] = ':updated_by';
             $params['updated_by'] = $actorId;
         }
+        if (Schema::hasColumn('employees', 'business_id')) {
+            $columns[] = 'business_id';
+            $values[] = ':business_id';
+            $params['business_id'] = self::currentBusinessId();
+        }
 
         $sql = 'INSERT INTO employees (' . implode(', ', $columns) . ')
                 VALUES (' . implode(', ', $values) . ')';
@@ -558,8 +612,21 @@ final class Employee
         $sql = 'UPDATE employees
                 SET ' . implode(', ', $sets) . '
                 WHERE id = :id';
+        if (Schema::hasColumn('employees', 'business_id')) {
+            $sql .= ' AND business_id = :business_id_scope';
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
 
         $stmt = Database::connection()->prepare($sql);
         $stmt->execute($params);
+    }
+
+    private static function currentBusinessId(): int
+    {
+        if (function_exists('current_business_id')) {
+            return max(0, (int) current_business_id());
+        }
+
+        return max(1, (int) config('app.default_business_id', 1));
     }
 }

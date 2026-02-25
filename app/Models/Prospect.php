@@ -45,6 +45,11 @@ final class Prospect
         $where = [];
         $params = [];
 
+        if (self::hasColumn('business_id')) {
+            $where[] = 'p.business_id = :business_id_scope';
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
+
         $query = trim((string) ($filters['q'] ?? ''));
         if ($query !== '') {
             $where[] = '(CAST(p.id AS CHAR) LIKE :q
@@ -143,10 +148,15 @@ final class Prospect
                 LEFT JOIN clients c ON c.id = p.client_id'
                 . $auditJoins . '
                 WHERE p.id = :id
+                  ' . (self::hasColumn('business_id') ? 'AND p.business_id = :business_id_scope' : '') . '
                 LIMIT 1';
 
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute(['id' => $id]);
+        $params = ['id' => $id];
+        if (self::hasColumn('business_id')) {
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
+        $stmt->execute($params);
         $prospect = $stmt->fetch();
 
         return $prospect ?: null;
@@ -200,6 +210,11 @@ final class Prospect
             $values[] = ':updated_by';
             $params['updated_by'] = $actorId;
         }
+        if (self::hasColumn('business_id')) {
+            $columns[] = 'business_id';
+            $values[] = ':business_id';
+            $params['business_id'] = self::currentBusinessId();
+        }
 
         $sql = 'INSERT INTO prospects (' . implode(', ', $columns) . ')
                 VALUES (' . implode(', ', $values) . ')';
@@ -243,6 +258,10 @@ final class Prospect
         $sql = 'UPDATE prospects
                 SET ' . implode(', ', $sets) . '
                 WHERE id = :id';
+        if (self::hasColumn('business_id')) {
+            $sql .= ' AND business_id = :business_id_scope';
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
 
         $stmt = Database::connection()->prepare($sql);
         $stmt->execute($params);
@@ -271,6 +290,10 @@ final class Prospect
         $sql = 'UPDATE prospects
                 SET ' . implode(', ', $sets) . '
                 WHERE id = :id';
+        if (self::hasColumn('business_id')) {
+            $sql .= ' AND business_id = :business_id_scope';
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
 
         $stmt = Database::connection()->prepare($sql);
         $stmt->execute($params);
@@ -308,6 +331,10 @@ final class Prospect
         $sql = 'UPDATE prospects
                 SET ' . implode(', ', $sets) . '
                 WHERE id = :id';
+        if (self::hasColumn('business_id')) {
+            $sql .= ' AND business_id = :business_id_scope';
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
 
         $stmt = Database::connection()->prepare($sql);
         $stmt->execute($params);
@@ -315,15 +342,31 @@ final class Prospect
 
     public static function clientExists(int $clientId): bool
     {
+        self::ensureColumns();
+
         $sql = 'SELECT id
                 FROM clients
                 WHERE id = :id
                   AND deleted_at IS NULL
                   AND COALESCE(active, 1) = 1
+                  ' . (Schema::hasColumn('clients', 'business_id') ? 'AND business_id = :business_id_scope' : '') . '
                 LIMIT 1';
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute(['id' => $clientId]);
+        $params = ['id' => $clientId];
+        if (Schema::hasColumn('clients', 'business_id')) {
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
+        $stmt->execute($params);
         return (bool) $stmt->fetch();
+    }
+
+    private static function currentBusinessId(): int
+    {
+        if (function_exists('current_business_id')) {
+            return max(0, (int) current_business_id());
+        }
+
+        return max(1, (int) config('app.default_business_id', 1));
     }
 
     private static function hasColumn(string $column): bool

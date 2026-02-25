@@ -64,6 +64,56 @@ $canViewPhotoLibrary = can_access('jobs', 'view')
 $canViewServiceSection = can_access('jobs', 'view')
     || can_access('prospects', 'view')
     || $canViewPhotoLibrary;
+
+$requestPath = (string) (parse_url((string) ($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_PATH) ?? '');
+$quickAddJobId = 0;
+if (preg_match('#/jobs/(\d+)(?:/|$)#', $requestPath, $jobMatch)) {
+    $quickAddJobId = (int) ($jobMatch[1] ?? 0);
+}
+
+$quickAddItems = [];
+if ($isGlobalAdminContext) {
+    if ($showSiteAdminNav) {
+        $quickAddItems[] = ['label' => 'Add Business', 'url' => url('/site-admin/businesses/new'), 'icon' => 'fa-building'];
+        $quickAddItems[] = ['label' => 'Add Global User', 'url' => url('/site-admin/users/new'), 'icon' => 'fa-user-shield'];
+    }
+} else {
+    if (can_access('jobs', 'create')) {
+        $quickAddItems[] = ['label' => 'Add Job', 'url' => url('/jobs/new'), 'icon' => 'fa-calendar-plus'];
+        $quickAddItems[] = [
+            'label' => $quickAddJobId > 0 ? 'Add Invoice (This Job)' : 'Add Invoice',
+            'url' => $quickAddJobId > 0 ? url('/jobs/' . $quickAddJobId . '/documents/new?type=invoice') : url('/jobs'),
+            'icon' => 'fa-file-invoice-dollar',
+        ];
+    }
+    if (can_access('clients', 'create')) {
+        $quickAddItems[] = ['label' => 'Add Customer', 'url' => url('/clients/new'), 'icon' => 'fa-user-plus'];
+    }
+    if (can_access('prospects', 'create')) {
+        $quickAddItems[] = ['label' => 'Add Prospect', 'url' => url('/prospects/new'), 'icon' => 'fa-bullseye'];
+    }
+    if (can_access('companies', 'create')) {
+        $quickAddItems[] = ['label' => 'Add Company', 'url' => url('/companies/new'), 'icon' => 'fa-building'];
+    }
+    if (can_access('estates', 'create')) {
+        $quickAddItems[] = ['label' => 'Add Estate', 'url' => url('/estates/new'), 'icon' => 'fa-house'];
+    }
+    if (can_access('sales', 'create')) {
+        $quickAddItems[] = ['label' => 'Add Sale', 'url' => url('/sales/new'), 'icon' => 'fa-dollar-sign'];
+    }
+    if (can_access('expenses', 'create')) {
+        $quickAddItems[] = ['label' => 'Add Expense', 'url' => url('/expenses/new'), 'icon' => 'fa-receipt'];
+    }
+    if (can_access('tasks', 'create')) {
+        $quickAddItems[] = ['label' => 'Add Task', 'url' => url('/tasks/new'), 'icon' => 'fa-list-check'];
+    }
+    if (can_access('time_tracking', 'create')) {
+        $quickAddItems[] = ['label' => 'Add Time Entry', 'url' => url('/time-tracking/new'), 'icon' => 'fa-clock'];
+    }
+    if (can_access('contacts', 'create')) {
+        $quickAddItems[] = ['label' => 'Add Network Contact', 'url' => url('/network/new'), 'icon' => 'fa-address-card'];
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -104,6 +154,22 @@ $canViewServiceSection = can_access('jobs', 'view')
         </form>
         <!-- Navbar-->
         <ul class="navbar-nav ms-auto ms-md-0 me-3 me-lg-4">
+            <?php if (!empty($quickAddItems)): ?>
+                <li class="nav-item dropdown nav-quick-add-item">
+                    <a class="nav-link dropdown-toggle quick-add-nav-link" href="#" id="quickAddDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false" title="Quick Add" aria-label="Quick Add">
+                        <i class="fas fa-plus fa-fw"></i>
+                    </a>
+                    <ul class="dropdown-menu dropdown-menu-end quick-add-menu" aria-labelledby="quickAddDropdown">
+                        <?php foreach ($quickAddItems as $item): ?>
+                            <li>
+                                <a class="dropdown-item" href="<?= e((string) ($item['url'] ?? '#')) ?>">
+                                    <i class="fas <?= e((string) ($item['icon'] ?? 'fa-circle')) ?> me-2 text-primary"></i><?= e((string) ($item['label'] ?? 'Add')) ?>
+                                </a>
+                            </li>
+                        <?php endforeach; ?>
+                    </ul>
+                </li>
+            <?php endif; ?>
             <li class="nav-item">
                 <a
                     class="nav-link position-relative nav-notification-link"

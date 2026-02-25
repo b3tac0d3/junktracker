@@ -427,7 +427,8 @@ final class AuthController extends Controller
         if ($role >= 4 || $role === 99) {
             set_active_business_id(0);
         } else {
-            set_active_business_id(0);
+            $businessId = isset($user['business_id']) ? (int) $user['business_id'] : 0;
+            set_active_business_id($businessId > 0 ? $businessId : ((int) config('app.default_business_id', 1)));
         }
 
         remember_login($user, $remember);

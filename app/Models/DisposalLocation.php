@@ -14,10 +14,15 @@ final class DisposalLocation
                 FROM disposal_locations
                 WHERE deleted_at IS NULL
                   AND active = 1
+                  ' . (Schema::hasColumn('disposal_locations', 'business_id') ? 'AND business_id = :business_id_scope' : '') . '
                 ORDER BY name';
 
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute();
+        $params = [];
+        if (Schema::hasColumn('disposal_locations', 'business_id')) {
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
+        $stmt->execute($params);
 
         return $stmt->fetchAll();
     }
@@ -28,10 +33,15 @@ final class DisposalLocation
                 FROM disposal_locations
                 WHERE id = :id
                   AND deleted_at IS NULL
+                  ' . (Schema::hasColumn('disposal_locations', 'business_id') ? 'AND business_id = :business_id_scope' : '') . '
                 LIMIT 1';
 
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute(['id' => $id]);
+        $params = ['id' => $id];
+        if (Schema::hasColumn('disposal_locations', 'business_id')) {
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
+        $stmt->execute($params);
         $location = $stmt->fetch();
 
         return $location ?: null;
@@ -63,6 +73,11 @@ final class DisposalLocation
             $columns[] = 'updated_by';
             $values[] = ':updated_by';
             $params['updated_by'] = $actorId;
+        }
+        if (Schema::hasColumn('disposal_locations', 'business_id')) {
+            $columns[] = 'business_id';
+            $values[] = ':business_id';
+            $params['business_id'] = self::currentBusinessId();
         }
 
         $sql = 'INSERT INTO disposal_locations (' . implode(', ', $columns) . ')
@@ -112,6 +127,10 @@ final class DisposalLocation
                 SET ' . implode(', ', $sets) . '
                 WHERE id = :id
                   AND deleted_at IS NULL';
+        if (Schema::hasColumn('disposal_locations', 'business_id')) {
+            $sql .= ' AND business_id = :business_id_scope';
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
 
         $stmt = Database::connection()->prepare($sql);
         $stmt->execute($params);
@@ -139,6 +158,10 @@ final class DisposalLocation
                 SET ' . implode(', ', $sets) . '
                 WHERE id = :id
                   AND deleted_at IS NULL';
+        if (Schema::hasColumn('disposal_locations', 'business_id')) {
+            $sql .= ' AND business_id = :business_id_scope';
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
 
         $stmt = Database::connection()->prepare($sql);
         $stmt->execute($params);
@@ -158,6 +181,7 @@ final class DisposalLocation
                 WHERE deleted_at IS NULL
                   AND active = 1
                   AND type = :type
+                  ' . (Schema::hasColumn('disposal_locations', 'business_id') ? 'AND business_id = :business_id_scope' : '') . '
                   AND (
                         name LIKE :term
                         OR city LIKE :term
@@ -167,10 +191,14 @@ final class DisposalLocation
                 LIMIT ' . $limit;
 
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute([
+        $params = [
             'type' => $type,
             'term' => '%' . $term . '%',
-        ]);
+        ];
+        if (Schema::hasColumn('disposal_locations', 'business_id')) {
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
+        $stmt->execute($params);
 
         return $stmt->fetchAll();
     }
@@ -183,15 +211,29 @@ final class DisposalLocation
                   AND type = :type
                   AND deleted_at IS NULL
                   AND active = 1
+                  ' . (Schema::hasColumn('disposal_locations', 'business_id') ? 'AND business_id = :business_id_scope' : '') . '
                 LIMIT 1';
 
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute([
+        $params = [
             'id' => $id,
             'type' => $type,
-        ]);
+        ];
+        if (Schema::hasColumn('disposal_locations', 'business_id')) {
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
+        $stmt->execute($params);
 
         $location = $stmt->fetch();
         return $location ?: null;
+    }
+
+    private static function currentBusinessId(): int
+    {
+        if (function_exists('current_business_id')) {
+            return max(0, (int) current_business_id());
+        }
+
+        return max(1, (int) config('app.default_business_id', 1));
     }
 }

@@ -21,6 +21,7 @@ final class Consignor
         $pdo->exec(
             'CREATE TABLE IF NOT EXISTS consignors (
                 id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+                business_id BIGINT UNSIGNED NOT NULL DEFAULT 1,
                 first_name VARCHAR(80) NULL,
                 last_name VARCHAR(80) NULL,
                 business_name VARCHAR(150) NULL,
@@ -48,6 +49,7 @@ final class Consignor
                 updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                 PRIMARY KEY (id),
                 UNIQUE KEY uniq_consignors_number (consignor_number),
+                KEY idx_consignors_business (business_id),
                 KEY idx_consignors_name (last_name, first_name, business_name),
                 KEY idx_consignors_active (active, deleted_at),
                 KEY idx_consignors_next_payment_due (next_payment_due_date),
@@ -72,6 +74,7 @@ final class Consignor
             'CREATE TABLE IF NOT EXISTS consignor_contacts (
                 id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
                 consignor_id BIGINT UNSIGNED NOT NULL,
+                business_id BIGINT UNSIGNED NOT NULL DEFAULT 1,
                 link_type VARCHAR(30) NOT NULL DEFAULT \'general\',
                 link_id BIGINT UNSIGNED NULL,
                 contact_method VARCHAR(20) NOT NULL DEFAULT \'call\',
@@ -89,6 +92,7 @@ final class Consignor
                 updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                 PRIMARY KEY (id),
                 KEY idx_consignor_contacts_consignor_date (consignor_id, contacted_at),
+                KEY idx_consignor_contacts_business (business_id),
                 KEY idx_consignor_contacts_link (link_type, link_id),
                 KEY idx_consignor_contacts_active (active, deleted_at),
                 KEY idx_consignor_contacts_created_by (created_by),
@@ -113,6 +117,7 @@ final class Consignor
             'CREATE TABLE IF NOT EXISTS consignor_contracts (
                 id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
                 consignor_id BIGINT UNSIGNED NOT NULL,
+                business_id BIGINT UNSIGNED NOT NULL DEFAULT 1,
                 contract_title VARCHAR(150) NOT NULL,
                 original_file_name VARCHAR(255) NOT NULL,
                 stored_file_name VARCHAR(255) NOT NULL,
@@ -131,6 +136,7 @@ final class Consignor
                 updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                 PRIMARY KEY (id),
                 KEY idx_consignor_contracts_consignor (consignor_id),
+                KEY idx_consignor_contracts_business (business_id),
                 KEY idx_consignor_contracts_active (active, deleted_at),
                 KEY idx_consignor_contracts_created_by (created_by),
                 KEY idx_consignor_contracts_updated_by (updated_by),
@@ -154,6 +160,7 @@ final class Consignor
             'CREATE TABLE IF NOT EXISTS consignor_payouts (
                 id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
                 consignor_id BIGINT UNSIGNED NOT NULL,
+                business_id BIGINT UNSIGNED NOT NULL DEFAULT 1,
                 payout_date DATE NOT NULL,
                 amount DECIMAL(12,2) NOT NULL,
                 estimate_amount DECIMAL(12,2) NULL,
@@ -170,6 +177,7 @@ final class Consignor
                 updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                 PRIMARY KEY (id),
                 KEY idx_consignor_payouts_consignor_date (consignor_id, payout_date),
+                KEY idx_consignor_payouts_business (business_id),
                 KEY idx_consignor_payouts_status (status),
                 KEY idx_consignor_payouts_active (active, deleted_at),
                 KEY idx_consignor_payouts_created_by (created_by),
@@ -196,6 +204,7 @@ final class Consignor
     private static function ensureConsignorColumns(\PDO $pdo): void
     {
         $alterMap = [
+            'business_id' => 'ALTER TABLE consignors ADD COLUMN business_id BIGINT UNSIGNED NOT NULL DEFAULT 1 AFTER id',
             'consignor_number' => 'ALTER TABLE consignors ADD COLUMN consignor_number VARCHAR(40) NULL AFTER zip',
             'consignment_start_date' => 'ALTER TABLE consignors ADD COLUMN consignment_start_date DATE NULL AFTER consignor_number',
             'consignment_end_date' => 'ALTER TABLE consignors ADD COLUMN consignment_end_date DATE NULL AFTER consignment_start_date',
@@ -222,6 +231,72 @@ final class Consignor
             $pdo->exec('CREATE INDEX idx_consignors_next_payment_due ON consignors (next_payment_due_date)');
         } catch (Throwable) {
             // index may already exist
+        }
+        try {
+            $pdo->exec('CREATE INDEX idx_consignors_business ON consignors (business_id)');
+        } catch (Throwable) {
+            // index may already exist
+        }
+
+        $childColumns = [
+            ['table' => 'consignor_contacts', 'column' => 'business_id', 'sql' => 'ALTER TABLE consignor_contacts ADD COLUMN business_id BIGINT UNSIGNED NOT NULL DEFAULT 1 AFTER consignor_id'],
+            ['table' => 'consignor_contracts', 'column' => 'business_id', 'sql' => 'ALTER TABLE consignor_contracts ADD COLUMN business_id BIGINT UNSIGNED NOT NULL DEFAULT 1 AFTER consignor_id'],
+            ['table' => 'consignor_payouts', 'column' => 'business_id', 'sql' => 'ALTER TABLE consignor_payouts ADD COLUMN business_id BIGINT UNSIGNED NOT NULL DEFAULT 1 AFTER consignor_id'],
+        ];
+
+        foreach ($childColumns as $child) {
+            if (!Schema::hasColumn($child['table'], $child['column'])) {
+                try {
+                    $pdo->exec($child['sql']);
+                } catch (Throwable) {
+                    // ignore drift
+                }
+            }
+        }
+
+        try {
+            $pdo->exec('CREATE INDEX idx_consignor_contacts_business ON consignor_contacts (business_id)');
+        } catch (Throwable) {
+            // index may already exist
+        }
+        try {
+            $pdo->exec('CREATE INDEX idx_consignor_contracts_business ON consignor_contracts (business_id)');
+        } catch (Throwable) {
+            // index may already exist
+        }
+        try {
+            $pdo->exec('CREATE INDEX idx_consignor_payouts_business ON consignor_payouts (business_id)');
+        } catch (Throwable) {
+            // index may already exist
+        }
+
+        if (Schema::hasColumn('consignors', 'business_id')) {
+            try {
+                $pdo->exec('UPDATE consignors SET business_id = 1 WHERE business_id IS NULL OR business_id = 0');
+            } catch (Throwable) {
+                // ignore drift
+            }
+        }
+        if (Schema::hasColumn('consignor_contacts', 'business_id') && Schema::hasColumn('consignors', 'business_id')) {
+            try {
+                $pdo->exec('UPDATE consignor_contacts cc INNER JOIN consignors c ON c.id = cc.consignor_id SET cc.business_id = c.business_id WHERE cc.business_id IS NULL OR cc.business_id = 0');
+            } catch (Throwable) {
+                // ignore drift
+            }
+        }
+        if (Schema::hasColumn('consignor_contracts', 'business_id') && Schema::hasColumn('consignors', 'business_id')) {
+            try {
+                $pdo->exec('UPDATE consignor_contracts cc INNER JOIN consignors c ON c.id = cc.consignor_id SET cc.business_id = c.business_id WHERE cc.business_id IS NULL OR cc.business_id = 0');
+            } catch (Throwable) {
+                // ignore drift
+            }
+        }
+        if (Schema::hasColumn('consignor_payouts', 'business_id') && Schema::hasColumn('consignors', 'business_id')) {
+            try {
+                $pdo->exec('UPDATE consignor_payouts cp INNER JOIN consignors c ON c.id = cp.consignor_id SET cp.business_id = c.business_id WHERE cp.business_id IS NULL OR cp.business_id = 0');
+            } catch (Throwable) {
+                // ignore drift
+            }
         }
     }
 
@@ -272,6 +347,11 @@ final class Consignor
 
         $where = [];
         $params = [];
+
+        if (Schema::hasColumn('consignors', 'business_id')) {
+            $where[] = 'c.business_id = :business_id';
+            $params['business_id'] = self::currentBusinessId();
+        }
 
         if ($status === 'active') {
             $where[] = '(c.deleted_at IS NULL AND COALESCE(c.active, 1) = 1)';
@@ -375,11 +455,19 @@ final class Consignor
                 LEFT JOIN users u_created ON u_created.id = c.created_by
                 LEFT JOIN users u_updated ON u_updated.id = c.updated_by
                 LEFT JOIN users u_deleted ON u_deleted.id = c.deleted_by
-                WHERE c.id = :id
+                WHERE c.id = :id';
+
+        $params = ['id' => $id];
+        if (Schema::hasColumn('consignors', 'business_id')) {
+            $sql .= ' AND c.business_id = :business_id';
+            $params['business_id'] = self::currentBusinessId();
+        }
+
+        $sql .= '
                 LIMIT 1';
 
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute(['id' => $id]);
+        $stmt->execute($params);
         $row = $stmt->fetch();
 
         return $row ?: null;
@@ -389,58 +477,66 @@ final class Consignor
     {
         self::ensureSchema();
 
-        $sql = 'INSERT INTO consignors (
-                    first_name,
-                    last_name,
-                    business_name,
-                    phone,
-                    email,
-                    address_1,
-                    address_2,
-                    city,
-                    state,
-                    zip,
-                    consignor_number,
-                    consignment_start_date,
-                    consignment_end_date,
-                    payment_schedule,
-                    next_payment_due_date,
-                    inventory_estimate_amount,
-                    inventory_description,
-                    note,
-                    active,
-                    created_by,
-                    updated_by,
-                    created_at,
-                    updated_at
-                ) VALUES (
-                    :first_name,
-                    :last_name,
-                    :business_name,
-                    :phone,
-                    :email,
-                    :address_1,
-                    :address_2,
-                    :city,
-                    :state,
-                    :zip,
-                    :consignor_number,
-                    :consignment_start_date,
-                    :consignment_end_date,
-                    :payment_schedule,
-                    :next_payment_due_date,
-                    :inventory_estimate_amount,
-                    :inventory_description,
-                    :note,
-                    :active,
-                    :created_by,
-                    :updated_by,
-                    NOW(),
-                    NOW()
-                )';
+        $columns = [
+            'first_name',
+            'last_name',
+            'business_name',
+            'phone',
+            'email',
+            'address_1',
+            'address_2',
+            'city',
+            'state',
+            'zip',
+            'consignor_number',
+            'consignment_start_date',
+            'consignment_end_date',
+            'payment_schedule',
+            'next_payment_due_date',
+            'inventory_estimate_amount',
+            'inventory_description',
+            'note',
+            'active',
+            'created_by',
+            'updated_by',
+            'created_at',
+            'updated_at',
+        ];
+        $values = [
+            ':first_name',
+            ':last_name',
+            ':business_name',
+            ':phone',
+            ':email',
+            ':address_1',
+            ':address_2',
+            ':city',
+            ':state',
+            ':zip',
+            ':consignor_number',
+            ':consignment_start_date',
+            ':consignment_end_date',
+            ':payment_schedule',
+            ':next_payment_due_date',
+            ':inventory_estimate_amount',
+            ':inventory_description',
+            ':note',
+            ':active',
+            ':created_by',
+            ':updated_by',
+            'NOW()',
+            'NOW()',
+        ];
+        if (Schema::hasColumn('consignors', 'business_id')) {
+            array_unshift($columns, 'business_id');
+            array_unshift($values, ':business_id');
+        }
+
+        $sql = 'INSERT INTO consignors (' . implode(', ', $columns) . ')
+                VALUES (' . implode(', ', $values) . ')';
 
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute([
+        $params = [
             'first_name' => $data['first_name'] !== '' ? $data['first_name'] : null,
             'last_name' => $data['last_name'] !== '' ? $data['last_name'] : null,
             'business_name' => $data['business_name'] !== '' ? $data['business_name'] : null,
@@ -462,7 +558,13 @@ final class Consignor
             'active' => $data['active'],
             'created_by' => $actorId,
             'updated_by' => $actorId,
-        ]);
+        ];
+
+        if (Schema::hasColumn('consignors', 'business_id')) {
+            $params['business_id'] = self::currentBusinessId();
+        }
+
+        $stmt->execute($params);
 
         return (int) Database::connection()->lastInsertId();
     }
@@ -495,8 +597,7 @@ final class Consignor
                     updated_at = NOW()
                 WHERE id = :id';
 
-        $stmt = Database::connection()->prepare($sql);
-        $stmt->execute([
+        $params = [
             'id' => $id,
             'first_name' => $data['first_name'] !== '' ? $data['first_name'] : null,
             'last_name' => $data['last_name'] !== '' ? $data['last_name'] : null,
@@ -518,7 +619,15 @@ final class Consignor
             'note' => $data['note'] !== '' ? $data['note'] : null,
             'active' => $data['active'],
             'updated_by' => $actorId,
-        ]);
+        ];
+
+        if (Schema::hasColumn('consignors', 'business_id')) {
+            $sql .= ' AND business_id = :business_id';
+            $params['business_id'] = self::currentBusinessId();
+        }
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute($params);
     }
 
     public static function softDelete(int $id, ?int $actorId = null): void
@@ -533,12 +642,19 @@ final class Consignor
                     updated_at = NOW()
                 WHERE id = :id';
 
-        $stmt = Database::connection()->prepare($sql);
-        $stmt->execute([
+        $params = [
             'id' => $id,
             'updated_by' => $actorId,
             'deleted_by' => $actorId,
-        ]);
+        ];
+
+        if (Schema::hasColumn('consignors', 'business_id')) {
+            $sql .= ' AND business_id = :business_id';
+            $params['business_id'] = self::currentBusinessId();
+        }
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute($params);
     }
 
     public static function lookup(string $term, int $limit = 10): array
@@ -559,6 +675,7 @@ final class Consignor
                 FROM consignors c
                 WHERE c.deleted_at IS NULL
                   AND COALESCE(c.active, 1) = 1
+                  ' . (Schema::hasColumn('consignors', 'business_id') ? 'AND c.business_id = :business_id' : '') . '
                   AND (
                         c.first_name LIKE :term
                         OR c.last_name LIKE :term
@@ -572,7 +689,11 @@ final class Consignor
                 LIMIT ' . $limit;
 
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute(['term' => '%' . $term . '%']);
+        $params = ['term' => '%' . $term . '%'];
+        if (Schema::hasColumn('consignors', 'business_id')) {
+            $params['business_id'] = self::currentBusinessId();
+        }
+        $stmt->execute($params);
 
         return $stmt->fetchAll();
     }
@@ -591,6 +712,11 @@ final class Consignor
                 WHERE consignor_number = :consignor_number';
         $params = ['consignor_number' => $normalized];
 
+        if (Schema::hasColumn('consignors', 'business_id')) {
+            $sql .= ' AND business_id = :business_id';
+            $params['business_id'] = self::currentBusinessId();
+        }
+
         if ($excludeId !== null && $excludeId > 0) {
             $sql .= ' AND id <> :exclude_id';
             $params['exclude_id'] = $excludeId;
@@ -603,5 +729,14 @@ final class Consignor
         $row = $stmt->fetch();
 
         return $row ?: null;
+    }
+
+    public static function currentBusinessId(): int
+    {
+        if (function_exists('current_business_id')) {
+            return max(0, (int) current_business_id());
+        }
+
+        return max(1, (int) config('app.default_business_id', 1));
     }
 }

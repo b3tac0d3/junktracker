@@ -34,6 +34,7 @@ final class Attachment
         $pdo->exec(
             'CREATE TABLE IF NOT EXISTS attachments (
                 id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+                business_id BIGINT UNSIGNED NOT NULL DEFAULT 1,
                 link_type VARCHAR(40) NOT NULL,
                 link_id BIGINT UNSIGNED NOT NULL,
                 tag VARCHAR(40) NOT NULL DEFAULT "other",
@@ -50,6 +51,7 @@ final class Attachment
                 updated_by BIGINT UNSIGNED NULL,
                 deleted_by BIGINT UNSIGNED NULL,
                 PRIMARY KEY (id),
+                KEY idx_attachments_business (business_id),
                 KEY idx_attachments_link (link_type, link_id),
                 KEY idx_attachments_tag (tag),
                 KEY idx_attachments_deleted (deleted_at),
@@ -140,13 +142,18 @@ final class Attachment
                 WHERE a.link_type = :link_type
                   AND a.link_id = :link_id
                   AND a.deleted_at IS NULL
+                  ' . (Schema::hasColumn('attachments', 'business_id') ? 'AND a.business_id = :business_id_scope' : '') . '
                 ORDER BY a.created_at DESC, a.id DESC';
 
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute([
+        $params = [
             'link_type' => $normalizedType,
             'link_id' => $linkId,
-        ]);
+        ];
+        if (Schema::hasColumn('attachments', 'business_id')) {
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
+        $stmt->execute($params);
 
         return $stmt->fetchAll();
     }
@@ -183,10 +190,15 @@ final class Attachment
                 LEFT JOIN users uu ON uu.id = a.updated_by
                 LEFT JOIN users ud ON ud.id = a.deleted_by
                 WHERE a.id = :id
+                  ' . (Schema::hasColumn('attachments', 'business_id') ? 'AND a.business_id = :business_id_scope' : '') . '
                 LIMIT 1';
 
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute(['id' => $id]);
+        $params = ['id' => $id];
+        if (Schema::hasColumn('attachments', 'business_id')) {
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
+        $stmt->execute($params);
 
         $row = $stmt->fetch();
         return $row ?: null;
@@ -244,6 +256,11 @@ final class Attachment
             $values[] = ':updated_by';
             $params['updated_by'] = $actorId;
         }
+        if (Schema::hasColumn('attachments', 'business_id')) {
+            $columns[] = 'business_id';
+            $values[] = ':business_id';
+            $params['business_id'] = self::currentBusinessId();
+        }
 
         $sql = 'INSERT INTO attachments (' . implode(', ', $columns) . ')
                 VALUES (' . implode(', ', $values) . ')';
@@ -277,6 +294,10 @@ final class Attachment
                 SET ' . implode(', ', $sets) . '
                 WHERE id = :id
                   AND deleted_at IS NULL';
+        if (Schema::hasColumn('attachments', 'business_id')) {
+            $sql .= ' AND business_id = :business_id_scope';
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
 
         $stmt = Database::connection()->prepare($sql);
         $stmt->execute($params);
@@ -304,6 +325,10 @@ final class Attachment
                 SET ' . implode(', ', $sets) . '
                 WHERE id = :id
                   AND deleted_at IS NULL';
+        if (Schema::hasColumn('attachments', 'business_id')) {
+            $sql .= ' AND business_id = :business_id_scope';
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
 
         $stmt = Database::connection()->prepare($sql);
         $stmt->execute($params);
@@ -356,6 +381,10 @@ final class Attachment
             "COALESCE(a.mime_type, '') LIKE 'image/%'",
         ];
         $params = [];
+        if (Schema::hasColumn('attachments', 'business_id')) {
+            $where[] = 'a.business_id = :business_id_scope';
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
 
         $allowedPlaceholders = [];
         foreach ($allowed as $index => $type) {
@@ -518,6 +547,7 @@ final class Attachment
                 WHERE a.link_type = \'job\'
                   AND a.deleted_at IS NULL
                   AND COALESCE(a.mime_type, \'\') LIKE \'image/%\'
+                  ' . (Schema::hasColumn('attachments', 'business_id') ? 'AND a.business_id = :business_id_scope' : '') . '
                   AND a.tag IN (' . implode(', ', $tagPlaceholders) . ')' .
                   (!empty($jobWhere) ? ' AND ' . implode(' AND ', $jobWhere) : '') .
                   $searchClause . '
@@ -542,10 +572,15 @@ final class Attachment
                        COALESCE(NULLIF(j.name, \'\'), CONCAT(\'Job #\', j.id)) AS name
                 FROM jobs j
                 WHERE j.id = :id
+                  ' . (Schema::hasColumn('jobs', 'business_id') ? 'AND j.business_id = :business_id_scope' : '') . '
                 LIMIT 1';
 
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute(['id' => $jobId]);
+        $params = ['id' => $jobId];
+        if (Schema::hasColumn('jobs', 'business_id')) {
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
+        $stmt->execute($params);
         $row = $stmt->fetch();
 
         return $row ?: null;
@@ -586,8 +621,12 @@ final class Attachment
                   AND a.link_id = :job_id
                   AND a.deleted_at IS NULL
                   AND COALESCE(a.mime_type, \'\') LIKE \'image/%\'
+                  ' . (Schema::hasColumn('attachments', 'business_id') ? 'AND a.business_id = :business_id_scope' : '') . '
                   AND a.tag IN (' . implode(', ', $tagPlaceholders) . ')
                 GROUP BY a.tag';
+        if (Schema::hasColumn('attachments', 'business_id')) {
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
 
         $stmt = Database::connection()->prepare($sql);
         $stmt->execute($params);
@@ -642,6 +681,10 @@ final class Attachment
             'a.deleted_at IS NULL',
             "COALESCE(a.mime_type, '') LIKE 'image/%'",
         ];
+        if (Schema::hasColumn('attachments', 'business_id')) {
+            $where[] = 'a.business_id = :business_id_scope';
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
 
         $search = trim($search);
         if ($search !== '') {
@@ -731,8 +774,12 @@ final class Attachment
                 WHERE a.id IN (' . implode(', ', $idPlaceholders) . ')
                   AND a.deleted_at IS NULL
                   AND COALESCE(a.mime_type, \'\') LIKE \'image/%\'
+                  ' . (Schema::hasColumn('attachments', 'business_id') ? 'AND a.business_id = :business_id_scope' : '') . '
                   AND a.link_type IN (' . implode(', ', $typePlaceholders) . ')
                 ORDER BY a.created_at DESC, a.id DESC';
+        if (Schema::hasColumn('attachments', 'business_id')) {
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
 
         $stmt = Database::connection()->prepare($sql);
         $stmt->execute($params);
@@ -790,5 +837,14 @@ final class Attachment
         } catch (\Throwable) {
             // Keep runtime stable when constraints cannot be applied on an existing environment.
         }
+    }
+
+    private static function currentBusinessId(): int
+    {
+        if (function_exists('current_business_id')) {
+            return max(0, (int) current_business_id());
+        }
+
+        return max(1, (int) config('app.default_business_id', 1));
     }
 }

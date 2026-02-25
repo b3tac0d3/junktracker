@@ -42,6 +42,11 @@ final class ClientContact
         $where = [];
         $params = [];
 
+        if (Schema::hasColumn('client_contacts', 'business_id')) {
+            $where[] = 'cc.business_id = :business_id_scope';
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
+
         $recordStatus = (string) ($filters['record_status'] ?? 'active');
         if ($recordStatus === 'active') {
             $where[] = '(cc.deleted_at IS NULL AND cc.active = 1)';
@@ -112,10 +117,15 @@ final class ClientContact
                 LEFT JOIN users uu ON uu.id = cc.updated_by
                 LEFT JOIN users ud ON ud.id = cc.deleted_by
                 WHERE cc.id = :id
+                  ' . (Schema::hasColumn('client_contacts', 'business_id') ? 'AND cc.business_id = :business_id_scope' : '') . '
                 LIMIT 1';
 
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute(['id' => $id]);
+        $params = ['id' => $id];
+        if (Schema::hasColumn('client_contacts', 'business_id')) {
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
+        $stmt->execute($params);
         $contact = $stmt->fetch();
         if (!$contact) {
             return null;
@@ -135,13 +145,20 @@ final class ClientContact
     {
         self::ensureTable();
 
+        $columns = ['client_id', 'link_type', 'link_id', 'contact_method', 'direction', 'subject', 'notes', 'contacted_at', 'follow_up_at', 'created_by', 'updated_by', 'active', 'created_at', 'updated_at'];
+        $values = [':client_id', ':link_type', ':link_id', ':contact_method', ':direction', ':subject', ':notes', ':contacted_at', ':follow_up_at', ':created_by', ':updated_by', '1', 'NOW()', 'NOW()'];
+        if (Schema::hasColumn('client_contacts', 'business_id')) {
+            $columns[] = 'business_id';
+            $values[] = ':business_id';
+        }
+
         $sql = 'INSERT INTO client_contacts
-                    (client_id, link_type, link_id, contact_method, direction, subject, notes, contacted_at, follow_up_at, created_by, updated_by, active, created_at, updated_at)
+                    (' . implode(', ', $columns) . ')
                 VALUES
-                    (:client_id, :link_type, :link_id, :contact_method, :direction, :subject, :notes, :contacted_at, :follow_up_at, :created_by, :updated_by, 1, NOW(), NOW())';
+                    (' . implode(', ', $values) . ')';
 
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute([
+        $params = [
             'client_id' => $data['client_id'],
             'link_type' => $data['link_type'],
             'link_id' => $data['link_id'],
@@ -153,7 +170,11 @@ final class ClientContact
             'follow_up_at' => $data['follow_up_at'],
             'created_by' => $actorId,
             'updated_by' => $actorId,
-        ]);
+        ];
+        if (Schema::hasColumn('client_contacts', 'business_id')) {
+            $params['business_id'] = self::currentBusinessId();
+        }
+        $stmt->execute($params);
 
         return (int) Database::connection()->lastInsertId();
     }
@@ -165,9 +186,14 @@ final class ClientContact
                 WHERE id = :id
                   AND deleted_at IS NULL
                   AND COALESCE(active, 1) = 1
+                  ' . (Schema::hasColumn('clients', 'business_id') ? 'AND business_id = :business_id_scope' : '') . '
                 LIMIT 1';
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute(['id' => $clientId]);
+        $params = ['id' => $clientId];
+        if (Schema::hasColumn('clients', 'business_id')) {
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
+        $stmt->execute($params);
 
         return (bool) $stmt->fetchColumn();
     }
@@ -203,6 +229,7 @@ final class ClientContact
                 LEFT JOIN clients c ON c.id = cc.client_id
                 WHERE cc.deleted_at IS NULL
                   AND cc.active = 1
+                  ' . (Schema::hasColumn('client_contacts', 'business_id') ? 'AND cc.business_id = :business_id_scope' : '') . '
                   AND (
                       (cc.link_type = :prospect_link_type AND cc.link_id = :prospect_id)';
 
@@ -210,6 +237,9 @@ final class ClientContact
             'prospect_link_type' => 'prospect',
             'prospect_id' => $prospectId,
         ];
+        if (Schema::hasColumn('client_contacts', 'business_id')) {
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
 
         if ($clientId !== null && $clientId > 0) {
             $sql .= ' OR cc.client_id = :client_id';
@@ -246,6 +276,7 @@ final class ClientContact
         Database::connection()->exec(
             'CREATE TABLE IF NOT EXISTS client_contacts (
                 id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+                business_id BIGINT UNSIGNED NOT NULL DEFAULT 1,
                 client_id BIGINT UNSIGNED NOT NULL,
                 link_type VARCHAR(30) NOT NULL DEFAULT \'general\',
                 link_id BIGINT UNSIGNED NULL,
@@ -263,6 +294,7 @@ final class ClientContact
                 created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                 PRIMARY KEY (id),
+                KEY idx_client_contacts_business (business_id),
                 KEY idx_client_contacts_client_date (client_id, contacted_at),
                 KEY idx_client_contacts_link (link_type, link_id),
                 KEY idx_client_contacts_method (contact_method),
@@ -274,5 +306,14 @@ final class ClientContact
         );
 
         $ensured = true;
+    }
+
+    private static function currentBusinessId(): int
+    {
+        if (function_exists('current_business_id')) {
+            return max(0, (int) current_business_id());
+        }
+
+        return max(1, (int) config('app.default_business_id', 1));
     }
 }

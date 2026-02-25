@@ -37,17 +37,21 @@ final class DataQuality
                 self::updateForeignKey('jobs', 'contact_client_id', $sourceId, $targetId);
             }
             if (Schema::hasColumn('jobs', 'job_owner_type') && Schema::hasColumn('jobs', 'job_owner_id')) {
-                $stmt = $pdo->prepare(
-                    'UPDATE jobs
-                     SET job_owner_id = :target_id,
-                         updated_at = NOW()
-                     WHERE job_owner_type = "client"
-                       AND job_owner_id = :source_id'
-                );
-                $stmt->execute([
+                $sql = 'UPDATE jobs
+                        SET job_owner_id = :target_id,
+                            updated_at = NOW()
+                        WHERE job_owner_type = "client"
+                          AND job_owner_id = :source_id';
+                $params = [
                     'target_id' => $targetId,
                     'source_id' => $sourceId,
-                ]);
+                ];
+                if (Schema::hasColumn('jobs', 'business_id')) {
+                    $sql .= ' AND business_id = :business_id';
+                    $params['business_id'] = self::currentBusinessId();
+                }
+                $stmt = $pdo->prepare($sql);
+                $stmt->execute($params);
             }
 
             self::updateForeignKey('prospects', 'client_id', $sourceId, $targetId);
@@ -55,31 +59,39 @@ final class DataQuality
             self::updateForeignKey('client_contacts', 'client_id', $sourceId, $targetId);
 
             if (self::tableExists('todos') && Schema::hasColumn('todos', 'link_type') && Schema::hasColumn('todos', 'link_id')) {
-                $stmt = $pdo->prepare(
-                    'UPDATE todos
-                     SET link_id = :target_id,
-                         updated_at = NOW()
-                     WHERE link_type = "client"
-                       AND link_id = :source_id'
-                );
-                $stmt->execute([
+                $sql = 'UPDATE todos
+                        SET link_id = :target_id,
+                            updated_at = NOW()
+                        WHERE link_type = "client"
+                          AND link_id = :source_id';
+                $params = [
                     'target_id' => $targetId,
                     'source_id' => $sourceId,
-                ]);
+                ];
+                if (Schema::hasColumn('todos', 'business_id')) {
+                    $sql .= ' AND business_id = :business_id';
+                    $params['business_id'] = self::currentBusinessId();
+                }
+                $stmt = $pdo->prepare($sql);
+                $stmt->execute($params);
             }
 
             if (self::tableExists('attachments') && Schema::hasColumn('attachments', 'link_type') && Schema::hasColumn('attachments', 'link_id')) {
-                $stmt = $pdo->prepare(
-                    'UPDATE attachments
-                     SET link_id = :target_id,
-                         updated_at = NOW()
-                     WHERE link_type = "client"
-                       AND link_id = :source_id'
-                );
-                $stmt->execute([
+                $sql = 'UPDATE attachments
+                        SET link_id = :target_id,
+                            updated_at = NOW()
+                        WHERE link_type = "client"
+                          AND link_id = :source_id';
+                $params = [
                     'target_id' => $targetId,
                     'source_id' => $sourceId,
-                ]);
+                ];
+                if (Schema::hasColumn('attachments', 'business_id')) {
+                    $sql .= ' AND business_id = :business_id';
+                    $params['business_id'] = self::currentBusinessId();
+                }
+                $stmt = $pdo->prepare($sql);
+                $stmt->execute($params);
             }
 
             if (self::tableExists('companies_x_clients')) {
@@ -114,8 +126,11 @@ final class DataQuality
             $stmt = $pdo->prepare(
                 'UPDATE clients
                  SET ' . implode(', ', $sets) . '
-                 WHERE id = :id'
+                 WHERE id = :id' . (Schema::hasColumn('clients', 'business_id') ? ' AND business_id = :business_id' : '')
             );
+            if (Schema::hasColumn('clients', 'business_id')) {
+                $params['business_id'] = self::currentBusinessId();
+            }
             $stmt->execute($params);
 
             $pdo->commit();
@@ -156,45 +171,57 @@ final class DataQuality
             }
 
             if (Schema::hasColumn('jobs', 'job_owner_type') && Schema::hasColumn('jobs', 'job_owner_id')) {
-                $stmt = $pdo->prepare(
-                    'UPDATE jobs
-                     SET job_owner_id = :target_id,
-                         updated_at = NOW()
-                     WHERE job_owner_type = "company"
-                       AND job_owner_id = :source_id'
-                );
-                $stmt->execute([
+                $sql = 'UPDATE jobs
+                        SET job_owner_id = :target_id,
+                            updated_at = NOW()
+                        WHERE job_owner_type = "company"
+                          AND job_owner_id = :source_id';
+                $params = [
                     'target_id' => $targetId,
                     'source_id' => $sourceId,
-                ]);
+                ];
+                if (Schema::hasColumn('jobs', 'business_id')) {
+                    $sql .= ' AND business_id = :business_id';
+                    $params['business_id'] = self::currentBusinessId();
+                }
+                $stmt = $pdo->prepare($sql);
+                $stmt->execute($params);
             }
 
             if (self::tableExists('todos') && Schema::hasColumn('todos', 'link_type') && Schema::hasColumn('todos', 'link_id')) {
-                $stmt = $pdo->prepare(
-                    'UPDATE todos
-                     SET link_id = :target_id,
-                         updated_at = NOW()
-                     WHERE link_type = "company"
-                       AND link_id = :source_id'
-                );
-                $stmt->execute([
+                $sql = 'UPDATE todos
+                        SET link_id = :target_id,
+                            updated_at = NOW()
+                        WHERE link_type = "company"
+                          AND link_id = :source_id';
+                $params = [
                     'target_id' => $targetId,
                     'source_id' => $sourceId,
-                ]);
+                ];
+                if (Schema::hasColumn('todos', 'business_id')) {
+                    $sql .= ' AND business_id = :business_id';
+                    $params['business_id'] = self::currentBusinessId();
+                }
+                $stmt = $pdo->prepare($sql);
+                $stmt->execute($params);
             }
 
             if (self::tableExists('attachments') && Schema::hasColumn('attachments', 'link_type') && Schema::hasColumn('attachments', 'link_id')) {
-                $stmt = $pdo->prepare(
-                    'UPDATE attachments
-                     SET link_id = :target_id,
-                         updated_at = NOW()
-                     WHERE link_type = "company"
-                       AND link_id = :source_id'
-                );
-                $stmt->execute([
+                $sql = 'UPDATE attachments
+                        SET link_id = :target_id,
+                            updated_at = NOW()
+                        WHERE link_type = "company"
+                          AND link_id = :source_id';
+                $params = [
                     'target_id' => $targetId,
                     'source_id' => $sourceId,
-                ]);
+                ];
+                if (Schema::hasColumn('attachments', 'business_id')) {
+                    $sql .= ' AND business_id = :business_id';
+                    $params['business_id'] = self::currentBusinessId();
+                }
+                $stmt = $pdo->prepare($sql);
+                $stmt->execute($params);
             }
 
             $sets = [
@@ -215,8 +242,11 @@ final class DataQuality
             $stmt = $pdo->prepare(
                 'UPDATE companies
                  SET ' . implode(', ', $sets) . '
-                 WHERE id = :id'
+                 WHERE id = :id' . (Schema::hasColumn('companies', 'business_id') ? ' AND business_id = :business_id' : '')
             );
+            if (Schema::hasColumn('companies', 'business_id')) {
+                $params['business_id'] = self::currentBusinessId();
+            }
             $stmt->execute($params);
 
             $pdo->commit();
@@ -281,31 +311,39 @@ final class DataQuality
             }
 
             if (self::tableExists('todos') && Schema::hasColumn('todos', 'link_type') && Schema::hasColumn('todos', 'link_id')) {
-                $stmt = $pdo->prepare(
-                    'UPDATE todos
-                     SET link_id = :target_id,
-                         updated_at = NOW()
-                     WHERE link_type = "job"
-                       AND link_id = :source_id'
-                );
-                $stmt->execute([
+                $sql = 'UPDATE todos
+                        SET link_id = :target_id,
+                            updated_at = NOW()
+                        WHERE link_type = "job"
+                          AND link_id = :source_id';
+                $params = [
                     'target_id' => $targetId,
                     'source_id' => $sourceId,
-                ]);
+                ];
+                if (Schema::hasColumn('todos', 'business_id')) {
+                    $sql .= ' AND business_id = :business_id';
+                    $params['business_id'] = self::currentBusinessId();
+                }
+                $stmt = $pdo->prepare($sql);
+                $stmt->execute($params);
             }
 
             if (self::tableExists('attachments') && Schema::hasColumn('attachments', 'link_type') && Schema::hasColumn('attachments', 'link_id')) {
-                $stmt = $pdo->prepare(
-                    'UPDATE attachments
-                     SET link_id = :target_id,
-                         updated_at = NOW()
-                     WHERE link_type = "job"
-                       AND link_id = :source_id'
-                );
-                $stmt->execute([
+                $sql = 'UPDATE attachments
+                        SET link_id = :target_id,
+                            updated_at = NOW()
+                        WHERE link_type = "job"
+                          AND link_id = :source_id';
+                $params = [
                     'target_id' => $targetId,
                     'source_id' => $sourceId,
-                ]);
+                ];
+                if (Schema::hasColumn('attachments', 'business_id')) {
+                    $sql .= ' AND business_id = :business_id';
+                    $params['business_id'] = self::currentBusinessId();
+                }
+                $stmt = $pdo->prepare($sql);
+                $stmt->execute($params);
             }
 
             Job::softDelete($sourceId, $actorId);
@@ -323,10 +361,19 @@ final class DataQuality
         $sql = 'SELECT id, first_name, last_name, business_name, email, phone, city, state, zip
                 FROM clients
                 WHERE deleted_at IS NULL
-                  AND COALESCE(active, 1) = 1
+                  AND COALESCE(active, 1) = 1';
+        $params = [];
+        if (Schema::hasColumn('clients', 'business_id')) {
+            $sql .= ' AND business_id = :business_id';
+            $params['business_id'] = self::currentBusinessId();
+        }
+
+        $sql .= '
                 ORDER BY id DESC';
 
-        $rows = Database::connection()->query($sql)->fetchAll();
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute($params);
+        $rows = $stmt->fetchAll();
         return self::buildDuplicates($rows, 'client', [
             [
                 'label' => 'Matching email',
@@ -386,10 +433,19 @@ final class DataQuality
         $sql = 'SELECT id, name, phone, city, state
                 FROM companies
                 WHERE deleted_at IS NULL
-                  AND COALESCE(active, 1) = 1
+                  AND COALESCE(active, 1) = 1';
+        $params = [];
+        if (Schema::hasColumn('companies', 'business_id')) {
+            $sql .= ' AND business_id = :business_id';
+            $params['business_id'] = self::currentBusinessId();
+        }
+
+        $sql .= '
                 ORDER BY id DESC';
 
-        $rows = Database::connection()->query($sql)->fetchAll();
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute($params);
+        $rows = $stmt->fetchAll();
         return self::buildDuplicates($rows, 'company', [
             [
                 'label' => 'Matching company name',
@@ -435,10 +491,19 @@ final class DataQuality
         $sql = 'SELECT id, name, address_1, city, state, zip, phone, job_status
                 FROM jobs
                 WHERE deleted_at IS NULL
-                  AND COALESCE(active, 1) = 1
+                  AND COALESCE(active, 1) = 1';
+        $params = [];
+        if (Schema::hasColumn('jobs', 'business_id')) {
+            $sql .= ' AND business_id = :business_id';
+            $params['business_id'] = self::currentBusinessId();
+        }
+
+        $sql .= '
                 ORDER BY id DESC';
 
-        $rows = Database::connection()->query($sql)->fetchAll();
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute($params);
+        $rows = $stmt->fetchAll();
         return self::buildDuplicates($rows, 'job', [
             [
                 'label' => 'Matching name + address',
@@ -553,12 +618,18 @@ final class DataQuality
         $sql = 'UPDATE ' . $table . '
                 SET ' . $column . ' = :target_id
                 WHERE ' . $column . ' = :source_id';
-
-        $stmt = Database::connection()->prepare($sql);
-        $stmt->execute([
+        $params = [
             'target_id' => $targetId,
             'source_id' => $sourceId,
-        ]);
+        ];
+
+        if (Schema::hasColumn($table, 'business_id')) {
+            $sql .= ' AND business_id = :business_id';
+            $params['business_id'] = self::currentBusinessId();
+        }
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute($params);
     }
 
     private static function tableExists(string $table): bool
@@ -613,5 +684,14 @@ final class DataQuality
     {
         $digits = preg_replace('/\D+/', '', $value) ?? '';
         return substr($digits, 0, 5);
+    }
+
+    private static function currentBusinessId(): int
+    {
+        if (function_exists('current_business_id')) {
+            return max(0, (int) current_business_id());
+        }
+
+        return max(1, (int) config('app.default_business_id', 1));
     }
 }
