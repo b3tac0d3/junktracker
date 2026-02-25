@@ -19,6 +19,10 @@ final class HomeController extends Controller
             redirect('/punch-clock');
         }
 
+        if (is_site_admin_global_context()) {
+            redirect('/site-admin');
+        }
+
         require_permission('dashboard', 'view');
 
         $overview = Dashboard::overview();

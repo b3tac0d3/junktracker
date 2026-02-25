@@ -25,6 +25,11 @@
     }
     $lastLoginOs = trim((string) ($lastLogin['os_name'] ?? ''));
     $lastLoginDevice = trim((string) ($lastLogin['device_type'] ?? ''));
+    $usersBasePath = trim((string) ($usersBasePath ?? '/users'));
+    if ($usersBasePath === '') {
+        $usersBasePath = '/users';
+    }
+    $isGlobalDirectory = !empty($isGlobalDirectory);
 ?>
 <div class="container-fluid px-4">
     <div class="d-flex flex-wrap align-items-center justify-content-between mt-4 mb-3 gap-3">
@@ -32,22 +37,27 @@
             <h1 class="mb-1">User Details</h1>
             <ol class="breadcrumb mb-0">
                 <li class="breadcrumb-item"><a href="<?= url('/') ?>">Dashboard</a></li>
-                <li class="breadcrumb-item"><a href="<?= url('/users') ?>">Users</a></li>
+                <?php if ($isGlobalDirectory): ?>
+                    <li class="breadcrumb-item"><a href="<?= url('/site-admin') ?>">Site Admin</a></li>
+                    <li class="breadcrumb-item"><a href="<?= url($usersBasePath) ?>">Global Users</a></li>
+                <?php else: ?>
+                    <li class="breadcrumb-item"><a href="<?= url($usersBasePath) ?>">Users</a></li>
+                <?php endif; ?>
                 <li class="breadcrumb-item active">#<?= e((string) ($user['id'] ?? '')) ?></li>
             </ol>
         </div>
         <div class="entity-action-buttons">
             <?php if ($canManageRole): ?>
-                <a class="btn btn-warning" href="<?= url('/users/' . ($user['id'] ?? '') . '/edit') ?>">
+                <a class="btn btn-warning" href="<?= url($usersBasePath . '/' . ($user['id'] ?? '') . '/edit') ?>">
                     <i class="fas fa-pen me-1"></i>
                     Edit User
                 </a>
             <?php endif; ?>
-            <a class="btn btn-info text-white" href="<?= url('/users/' . ($user['id'] ?? '') . '/activity') ?>">
+            <a class="btn btn-info text-white" href="<?= url($usersBasePath . '/' . ($user['id'] ?? '') . '/activity') ?>">
                 <i class="fas fa-clock-rotate-left me-1"></i>
                 Activity Log
             </a>
-            <a class="btn btn-primary" href="<?= url('/users/' . ($user['id'] ?? '') . '/logins') ?>">
+            <a class="btn btn-primary" href="<?= url($usersBasePath . '/' . ($user['id'] ?? '') . '/logins') ?>">
                 <i class="fas fa-shield-alt me-1"></i>
                 Login Records
             </a>
@@ -72,7 +82,9 @@
             <?php else: ?>
                 <span class="badge bg-secondary align-self-center">Inactive</span>
             <?php endif; ?>
-            <a class="btn btn-outline-secondary" href="<?= url('/users') ?>">Back to Users</a>
+            <a class="btn btn-outline-secondary" href="<?= url($usersBasePath) ?>">
+                <?= e($isGlobalDirectory ? 'Back to Global Users' : 'Back to Users') ?>
+            </a>
         </div>
     </div>
 
@@ -322,7 +334,7 @@
                     </div>
                     <div class="modal-footer">
                         <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
-                        <form method="post" action="<?= url('/users/' . ($user['id'] ?? '') . '/invite-auto-accept') ?>">
+                        <form method="post" action="<?= url($usersBasePath . '/' . ($user['id'] ?? '') . '/invite-auto-accept') ?>">
                             <?= csrf_field() ?>
                             <button class="btn btn-success" type="submit">Auto-Accept Invite</button>
                         </form>
@@ -345,7 +357,7 @@
                     </div>
                     <div class="modal-footer">
                         <button type="button" class="btn btn-danger" data-bs-dismiss="modal">Cancel</button>
-                        <form method="post" action="<?= url('/users/' . ($user['id'] ?? '') . '/deactivate') ?>">
+                        <form method="post" action="<?= url($usersBasePath . '/' . ($user['id'] ?? '') . '/deactivate') ?>">
                             <?= csrf_field() ?>
                             <button class="btn btn-danger" type="submit">Deactivate User</button>
                         </form>

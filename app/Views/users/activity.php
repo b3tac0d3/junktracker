@@ -10,14 +10,19 @@
     if ($userName === '') {
         $userName = (string) ($user['email'] ?? ('User #' . ($user['id'] ?? '')));
     }
+    $usersBasePath = trim((string) ($usersBasePath ?? '/users'));
+    if ($usersBasePath === '') {
+        $usersBasePath = '/users';
+    }
+    $isGlobalDirectory = !empty($isGlobalDirectory);
 
-    $entityUrlFor = static function (?string $table, ?int $id): ?string {
+    $entityUrlFor = static function (?string $table, ?int $id) use ($usersBasePath, $user): ?string {
         if ($id === null || $id <= 0 || $table === null || $table === '') {
             return null;
         }
 
         return match ($table) {
-            'users' => url('/users/' . $id),
+            'users' => url($usersBasePath . '/' . $id),
             'jobs' => url('/jobs/' . $id),
             'clients' => url('/clients/' . $id),
             'companies' => url('/companies/' . $id),
@@ -28,7 +33,7 @@
             'employees' => url('/employees/' . $id),
             'tasks' => url('/tasks/' . $id),
             'employee_time_entries' => url('/time-tracking/' . $id),
-            'user_login_records' => url('/users/' . ($user['id'] ?? '') . '/logins'),
+            'user_login_records' => url($usersBasePath . '/' . ($user['id'] ?? '') . '/logins'),
             default => null,
         };
     };
@@ -42,8 +47,13 @@
                 <?php if (!empty($isOwnActivity)): ?>
                     <li class="breadcrumb-item active">Activity Log</li>
                 <?php else: ?>
-                    <li class="breadcrumb-item"><a href="<?= url('/users') ?>">Users</a></li>
-                    <li class="breadcrumb-item"><a href="<?= url('/users/' . ($user['id'] ?? '')) ?>"><?= e($userName) ?></a></li>
+                    <?php if ($isGlobalDirectory): ?>
+                        <li class="breadcrumb-item"><a href="<?= url('/site-admin') ?>">Site Admin</a></li>
+                        <li class="breadcrumb-item"><a href="<?= url($usersBasePath) ?>">Global Users</a></li>
+                    <?php else: ?>
+                        <li class="breadcrumb-item"><a href="<?= url($usersBasePath) ?>">Users</a></li>
+                    <?php endif; ?>
+                    <li class="breadcrumb-item"><a href="<?= url($usersBasePath . '/' . ($user['id'] ?? '')) ?>"><?= e($userName) ?></a></li>
                     <li class="breadcrumb-item active">Activity Log</li>
                 <?php endif; ?>
             </ol>
@@ -52,7 +62,7 @@
             <?php if (!empty($isOwnActivity)): ?>
                 <a class="btn btn-outline-secondary" href="<?= url('/settings') ?>">Back to Settings</a>
             <?php else: ?>
-                <a class="btn btn-outline-secondary" href="<?= url('/users/' . ($user['id'] ?? '')) ?>">Back to User</a>
+                <a class="btn btn-outline-secondary" href="<?= url($usersBasePath . '/' . ($user['id'] ?? '')) ?>">Back to User</a>
             <?php endif; ?>
         </div>
     </div>
@@ -69,7 +79,7 @@
             Filter Activity
         </div>
         <div class="card-body">
-            <?php $activityBaseUrl = !empty($isOwnActivity) ? url('/activity-log') : url('/users/' . ($user['id'] ?? '') . '/activity'); ?>
+            <?php $activityBaseUrl = !empty($isOwnActivity) ? url('/activity-log') : url($usersBasePath . '/' . ($user['id'] ?? '') . '/activity'); ?>
             <form method="get" action="<?= $activityBaseUrl ?>">
                 <div class="row g-2 align-items-end">
                     <div class="col-12 col-lg-4">

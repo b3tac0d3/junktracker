@@ -4,12 +4,16 @@ $currentUser = auth_user();
 $displayName = $currentUser ? trim(($currentUser['first_name'] ?? '') . ' ' . ($currentUser['last_name'] ?? '')) : 'Guest';
 $isPunchOnlyRole = $currentUser && (int) ($currentUser['role'] ?? -1) === 0;
 $showSiteAdminNav = $currentUser && has_role(4);
+$siteAdminActiveWorkspaceId = (int) ($_SESSION['active_business_id'] ?? 0);
+$isGlobalAdminContext = $showSiteAdminNav && $siteAdminActiveWorkspaceId <= 0;
 $appVersion = trim((string) config('app.version', ''));
 $activeBusinessName = '';
 $siteAdminSupportUnread = 0;
 if ($showSiteAdminNav) {
     try {
-        $activeBusiness = \App\Models\Business::findById(current_business_id());
+        $activeBusiness = $siteAdminActiveWorkspaceId > 0
+            ? \App\Models\Business::findById($siteAdminActiveWorkspaceId)
+            : null;
         $activeBusinessName = trim((string) ($activeBusiness['name'] ?? ''));
     } catch (\Throwable) {
         $activeBusinessName = '';
@@ -26,6 +30,21 @@ if ($currentUser && can_access('notifications', 'view')) {
         $notificationUnread = \App\Models\NotificationCenter::unreadCount((int) ($currentUser['id'] ?? 0));
     } catch (\Throwable) {
         $notificationUnread = 0;
+    }
+}
+$globalFlashMessages = [];
+foreach ([
+    'success' => 'success',
+    'error' => 'danger',
+    'warning' => 'warning',
+    'info' => 'info',
+] as $flashKey => $alertClass) {
+    $message = flash($flashKey);
+    if ($message !== null && trim((string) $message) !== '') {
+        $globalFlashMessages[] = [
+            'class' => $alertClass,
+            'message' => (string) $message,
+        ];
     }
 }
 
@@ -100,6 +119,15 @@ $canViewServiceSection = can_access('jobs', 'view')
             <li class="nav-item dropdown">
                 <a class="nav-link dropdown-toggle" id="navbarDropdown" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false"><i class="fas fa-user fa-fw"></i></a>
                 <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="navbarDropdown">
+                    <?php if ($showSiteAdminNav && !$isGlobalAdminContext): ?>
+                        <li>
+                            <form method="post" action="<?= url('/site-admin/exit-business') ?>">
+                                <?= csrf_field() ?>
+                                <button class="dropdown-item" type="submit">Return to Global Admin</button>
+                            </form>
+                        </li>
+                        <li><hr class="dropdown-divider" /></li>
+                    <?php endif; ?>
                     <li><a class="dropdown-item" href="<?= url('/settings') ?>">Settings</a></li>
                     <li><a class="dropdown-item" href="<?= url('/activity-log') ?>">Activity Log</a></li>
                     <li><a class="dropdown-item" href="<?= url('/support/new') ?>">Contact Site Admin</a></li>
@@ -122,13 +150,13 @@ $canViewServiceSection = can_access('jobs', 'view')
                     <div class="nav">
                         <div class="sb-sidenav-menu-heading">Overview</div>
                         <?php if (can_access('dashboard', 'view')): ?>
-                            <a class="nav-link" href="<?= url('/') ?>">
+                            <a class="nav-link" href="<?= url($isGlobalAdminContext ? '/site-admin' : '/') ?>">
                                 <div class="sb-nav-link-icon"><i class="fas fa-gauge-high"></i></div>
-                                Dashboard
+                                <?= e($isGlobalAdminContext ? 'Global Dashboard' : 'Dashboard') ?>
                             </a>
                         <?php endif; ?>
 
-                        <?php if (can_access('notifications', 'view')): ?>
+                        <?php if (can_access('notifications', 'view') && !$isGlobalAdminContext): ?>
                             <a class="nav-link" href="<?= url('/notifications') ?>">
                                 <div class="sb-nav-link-icon"><i class="fas fa-bell"></i></div>
                                 Notifications
@@ -138,14 +166,14 @@ $canViewServiceSection = can_access('jobs', 'view')
                             </a>
                         <?php endif; ?>
 
-                        <?php if (can_access('tasks', 'view')): ?>
+                        <?php if (can_access('tasks', 'view') && !$isGlobalAdminContext): ?>
                             <a class="nav-link" href="<?= url('/tasks') ?>">
                                 <div class="sb-nav-link-icon"><i class="fas fa-check-double"></i></div>
                                 Tasks
                             </a>
                         <?php endif; ?>
 
-                        <?php if ($canViewServiceSection): ?>
+                        <?php if ($canViewServiceSection && !$isGlobalAdminContext): ?>
                             <div class="sb-sidenav-menu-heading">Service</div>
                             <?php if (can_access('jobs', 'view')): ?>
                                 <a class="nav-link" href="<?= url('/jobs') ?>">
@@ -173,7 +201,7 @@ $canViewServiceSection = can_access('jobs', 'view')
                             <?php endif; ?>
                         <?php endif; ?>
 
-                        <?php if (can_access('sales', 'view') || $canViewCustomersSection): ?>
+                        <?php if ((can_access('sales', 'view') || $canViewCustomersSection) && !$isGlobalAdminContext): ?>
                             <div class="sb-sidenav-menu-heading">Business</div>
                             <?php if (can_access('sales', 'view')): ?>
                                 <a class="nav-link" href="<?= url('/sales') ?>">
@@ -219,7 +247,7 @@ $canViewServiceSection = can_access('jobs', 'view')
                             <?php endif; ?>
                         <?php endif; ?>
 
-                        <?php if (can_access('time_tracking', 'view')): ?>
+                        <?php if (can_access('time_tracking', 'view') && !$isGlobalAdminContext): ?>
                             <div class="sb-sidenav-menu-heading">Operations</div>
                             <a class="nav-link" href="<?= url('/time-tracking') ?>">
                                 <div class="sb-nav-link-icon"><i class="fas fa-clock"></i></div>
@@ -231,27 +259,29 @@ $canViewServiceSection = can_access('jobs', 'view')
                             </a>
                         <?php endif; ?>
 
-                        <div class="sb-sidenav-menu-heading">Admin</div>
-                        <?php if (can_access('employees', 'view')): ?>
-                            <a class="nav-link" href="<?= url('/employees') ?>">
-                                <div class="sb-nav-link-icon"><i class="fas fa-id-card"></i></div>
-                                Employees
-                            </a>
-                        <?php endif; ?>
-                        <?php if (can_access('reports', 'view')): ?>
-                            <a class="nav-link" href="<?= url('/reports') ?>">
-                                <div class="sb-nav-link-icon"><i class="fas fa-chart-line"></i></div>
-                                Reports
-                            </a>
-                        <?php endif; ?>
-                        <?php if (can_access('admin', 'view')): ?>
-                            <a class="nav-link" href="<?= url('/admin') ?>">
-                                <div class="sb-nav-link-icon"><i class="fas fa-sliders-h"></i></div>
-                                Admin
-                            </a>
+                        <?php if (!$isGlobalAdminContext): ?>
+                            <div class="sb-sidenav-menu-heading">Admin</div>
+                            <?php if (can_access('employees', 'view')): ?>
+                                <a class="nav-link" href="<?= url('/employees') ?>">
+                                    <div class="sb-nav-link-icon"><i class="fas fa-id-card"></i></div>
+                                    Employees
+                                </a>
+                            <?php endif; ?>
+                            <?php if (can_access('reports', 'view')): ?>
+                                <a class="nav-link" href="<?= url('/reports') ?>">
+                                    <div class="sb-nav-link-icon"><i class="fas fa-chart-line"></i></div>
+                                    Reports
+                                </a>
+                            <?php endif; ?>
+                            <?php if (can_access('admin', 'view')): ?>
+                                <a class="nav-link" href="<?= url('/admin') ?>">
+                                    <div class="sb-nav-link-icon"><i class="fas fa-sliders-h"></i></div>
+                                    Admin
+                                </a>
+                            <?php endif; ?>
                         <?php endif; ?>
 
-                        <div class="sb-sidenav-menu-heading">Dev</div>
+                        <div class="sb-sidenav-menu-heading"><?= e($isGlobalAdminContext ? 'Site Admin' : 'Dev') ?></div>
                         <?php if ($showSiteAdminNav): ?>
                             <a class="nav-link collapsed" href="#" data-bs-toggle="collapse" data-bs-target="#collapseSiteAdminMenu" aria-expanded="false" aria-controls="collapseSiteAdminMenu">
                                 <div class="sb-nav-link-icon"><i class="fas fa-shield-alt"></i></div>
@@ -264,6 +294,7 @@ $canViewServiceSection = can_access('jobs', 'view')
                             <div class="collapse" id="collapseSiteAdminMenu" data-bs-parent="#sidenavAccordion">
                                 <nav class="sb-sidenav-menu-nested nav">
                                     <a class="nav-link" href="<?= url('/site-admin') ?>">Businesses</a>
+                                    <a class="nav-link" href="<?= url('/site-admin/users') ?>">Global Users</a>
                                     <a class="nav-link d-flex align-items-center" href="<?= url('/site-admin/support') ?>">
                                         <span>Support Queue</span>
                                         <?php if ($siteAdminSupportUnread > 0): ?>
@@ -286,6 +317,8 @@ $canViewServiceSection = can_access('jobs', 'view')
                     <div class="fw-semibold text-white"><?= e($displayName !== '' ? $displayName : 'Guest') ?></div>
                     <?php if ($activeBusinessName !== ''): ?>
                         <div class="small text-muted mt-1 opacity-75"><?= e($activeBusinessName) ?></div>
+                    <?php elseif ($isGlobalAdminContext): ?>
+                        <div class="small text-muted mt-1 opacity-75">Global Admin Mode</div>
                     <?php endif; ?>
                     <?php if ($appVersion !== ''): ?>
                         <div class="small mt-1 opacity-75 sidenav-version-tag" style="font-size: 0.65rem;">v<?= e($appVersion) ?></div>
@@ -295,6 +328,15 @@ $canViewServiceSection = can_access('jobs', 'view')
         </div>
         <div id="layoutSidenav_content">
             <main>
+                <?php if (!empty($globalFlashMessages)): ?>
+                    <div class="container-fluid px-4 pt-3">
+                        <?php foreach ($globalFlashMessages as $flashItem): ?>
+                            <div class="alert alert-<?= e((string) ($flashItem['class'] ?? 'info')) ?>" role="alert">
+                                <?= e((string) ($flashItem['message'] ?? '')) ?>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                <?php endif; ?>
                 <?= $content ?>
             </main>
             <footer class="py-4 bg-light mt-auto">
@@ -324,6 +366,7 @@ $canViewServiceSection = can_access('jobs', 'view')
     <script src="<?= asset('js/notification-badge-sync.js') ?>"></script>
     <script src="<?= asset('js/datatable-external-top.js') ?>"></script>
     <script src="<?= asset('js/mobile-filter-accordion.js') ?>"></script>
+    <script src="<?= asset('js/flash-alerts.js') ?>"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.8.0/Chart.min.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/simple-datatables@7.1.2/dist/umd/simple-datatables.min.js" crossorigin="anonymous"></script>
     <script src="<?= asset('js/datatables-simple-demo.js') ?>"></script>
