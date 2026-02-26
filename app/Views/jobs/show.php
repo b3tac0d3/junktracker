@@ -950,7 +950,6 @@
                                                         name="is_completed"
                                                         value="1"
                                                         <?= $isCompleted ? 'checked' : '' ?>
-                                                        onchange="this.form.submit()"
                                                     />
                                                 </form>
                                             </td>

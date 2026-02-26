@@ -116,9 +116,12 @@
                         <label class="form-label small fw-bold text-muted">End</label>
                         <input class="form-control" type="date" name="end_date" value="<?= e((string) ($filters['end_date'] ?? '')) ?>" />
                     </div>
-                    <div class="col-12 d-flex gap-2 mobile-two-col-buttons">
-                        <button class="btn btn-primary" type="submit">Apply Filters</button>
-                        <a class="btn btn-outline-secondary" href="<?= url('/expenses') ?>">Clear</a>
+                    <div class="col-12 col-lg-4 jt-filter-actions">
+                        <label class="form-label small fw-bold text-muted d-block">&nbsp;</label>
+                        <div class="d-flex gap-2 mobile-two-col-buttons">
+                            <button class="btn btn-primary px-4" type="submit">Apply Filters</button>
+                            <a class="btn btn-outline-secondary px-4" href="<?= url('/expenses') ?>">Clear</a>
+                        </div>
                     </div>
                 </div>
             </form>
@@ -127,7 +130,7 @@
                     <div class="col-12 col-lg-5">
                         <form method="get" action="<?= url('/expenses') ?>">
                             <label class="form-label small fw-bold text-muted">Saved Filters</label>
-                            <div class="input-group">
+                            <div class="input-group jt-preset-input-group">
                                 <select class="form-select" name="preset_id">
                                     <option value="">Choose preset...</option>
                                     <?php foreach ($savedPresets as $preset): ?>
@@ -149,7 +152,7 @@
                             <input type="hidden" name="return_to" value="<?= e($currentReturnTo) ?>" />
                             <input type="hidden" name="filters_json" value='<?= e((string) json_encode($currentFilters)) ?>' />
                             <label class="form-label small fw-bold text-muted">Save Current Filters</label>
-                            <div class="input-group">
+                            <div class="input-group jt-preset-input-group">
                                 <input class="form-control" type="text" name="preset_name" placeholder="Preset name..." />
                                 <button class="btn btn-outline-success" type="submit">Save</button>
                             </div>

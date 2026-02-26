@@ -17,17 +17,20 @@ $currentReturnTo = $currentPath . ($currentQuery !== '' ? '?' . $currentQuery : 
 ?>
 
 <div class="container-fluid px-4">
-    <div class="d-flex flex-wrap align-items-center justify-content-between mt-4 mb-3 gap-3">
+    <div class="d-flex flex-column flex-lg-row align-items-start justify-content-between mt-4 mb-3 gap-3">
         <div>
             <h1 class="mb-1">Network Clients</h1>
+            <p class="text-muted small mb-1">
+                Network contacts are people in your network who aren't related to jobs such as vendors, buyers, consultants, etc. Anyone related to your business at a backend level who you want to keep contact info and records on.
+            </p>
             <ol class="breadcrumb mb-0">
                 <li class="breadcrumb-item"><a href="<?= url('/') ?>">Dashboard</a></li>
                 <li class="breadcrumb-item active">Network</li>
             </ol>
         </div>
-        <a class="btn btn-primary" href="<?= url('/network/new') ?>">
+        <a class="btn btn-primary ms-lg-auto" href="<?= url('/network/new') ?>">
             <i class="fas fa-plus me-1"></i>
-            Add Network Client
+            Add Network Contact
         </a>
     </div>
 

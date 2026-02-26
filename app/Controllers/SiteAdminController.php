@@ -22,12 +22,17 @@ final class SiteAdminController extends Controller
         if (!in_array($status, ['active', 'inactive', 'all'], true)) {
             $status = 'active';
         }
+        $recentLimit = (int) ($_GET['recent_limit'] ?? 10);
+        $recentLimitOptions = [10, 25, 50, 100];
+        if (!in_array($recentLimit, $recentLimitOptions, true)) {
+            $recentLimit = 10;
+        }
 
         $businesses = Business::search($query, $status);
         $activeWorkspaceId = (int) ($_SESSION['active_business_id'] ?? 0);
         $currentBusiness = $activeWorkspaceId > 0 ? Business::findById($activeWorkspaceId) : null;
         $summary = $this->globalSummary($businesses);
-        $recentChanges = $this->recentChanges();
+        $recentChanges = $this->recentChanges($recentLimit);
         $supportSummary = SiteAdminTicket::summary();
 
         $this->render('site_admin/index', [
@@ -39,6 +44,8 @@ final class SiteAdminController extends Controller
             'currentBusiness' => $currentBusiness,
             'summary' => $summary,
             'recentChanges' => $recentChanges,
+            'recentLimit' => $recentLimit,
+            'recentLimitOptions' => $recentLimitOptions,
             'supportSummary' => $supportSummary,
             'businessTableReady' => Business::isAvailable(),
         ]);
@@ -329,11 +336,13 @@ final class SiteAdminController extends Controller
         ];
     }
 
-    private function recentChanges(): array
+    private function recentChanges(int $limit = 10): array
     {
         if (!UserAction::isAvailable()) {
             return [];
         }
+
+        $limit = max(1, min(200, $limit));
 
         try {
             $sql = 'SELECT ua.id,
@@ -346,8 +355,9 @@ final class SiteAdminController extends Controller
                     FROM user_actions ua
                     LEFT JOIN users u ON u.id = ua.user_id
                     ORDER BY ua.created_at DESC, ua.id DESC
-                    LIMIT 20';
+                    LIMIT :limit';
             $stmt = Database::connection()->prepare($sql);
+            $stmt->bindValue(':limit', $limit, \PDO::PARAM_INT);
             $stmt->execute();
             return $stmt->fetchAll() ?: [];
         } catch (Throwable) {

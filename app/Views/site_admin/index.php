@@ -8,6 +8,12 @@
     $summary = is_array($summary ?? null) ? $summary : [];
     $recentChanges = is_array($recentChanges ?? null) ? $recentChanges : [];
     $supportSummary = is_array($supportSummary ?? null) ? $supportSummary : [];
+    $recentLimit = (int) ($recentLimit ?? 10);
+    $recentLimitOptions = is_array($recentLimitOptions ?? null) ? $recentLimitOptions : [10, 25, 50, 100];
+    $activeFilterCount = count(array_filter([
+        $query !== '',
+        $status !== 'active',
+    ]));
 ?>
 
 <div class="container-fluid px-4">
@@ -110,7 +116,22 @@
     <div class="card mb-4">
         <div class="card-header d-flex align-items-center justify-content-between">
             <span><i class="fas fa-clock-rotate-left me-1"></i> Recent Changes</span>
-            <a class="small" href="<?= url('/admin/audit') ?>">Open Audit Log</a>
+            <div class="d-flex align-items-center gap-2">
+                <form class="d-flex align-items-center gap-2" method="get" action="<?= url('/site-admin') ?>">
+                    <input type="hidden" name="q" value="<?= e($query) ?>" />
+                    <input type="hidden" name="status" value="<?= e($status) ?>" />
+                    <label class="small text-muted mb-0" for="recent_limit">Rows</label>
+                    <select class="form-select form-select-sm w-auto" id="recent_limit" name="recent_limit" onchange="this.form.submit()">
+                        <?php foreach ($recentLimitOptions as $limitOption): ?>
+                            <?php $limitOption = (int) $limitOption; ?>
+                            <option value="<?= e((string) $limitOption) ?>" <?= $recentLimit === $limitOption ? 'selected' : '' ?>>
+                                <?= e((string) $limitOption) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </form>
+                <a class="small" href="<?= url('/admin/audit') ?>">Open Audit Log</a>
+            </div>
         </div>
         <div class="card-body">
             <?php if (empty($recentChanges)): ?>
@@ -144,18 +165,24 @@
         </div>
     </div>
 
-    <div class="card mb-4">
-        <div class="card-header">
-            <i class="fas fa-diagram-project me-1"></i>
-            Company Directory
+    <div class="card mb-3 jt-filter-card">
+        <div class="card-header d-flex align-items-center justify-content-between py-2">
+            <div class="d-flex align-items-center">
+                <i class="fas fa-filter me-2 text-primary"></i>
+                <span class="fw-semibold">Company Filters</span>
+                <?php if ($activeFilterCount > 0): ?>
+                    <span class="badge bg-primary ms-2 rounded-pill"><?= e((string) $activeFilterCount) ?> active</span>
+                <?php endif; ?>
+            </div>
         </div>
         <div class="card-body">
-            <form class="row g-2 align-items-end mb-3" method="get" action="<?= url('/site-admin') ?>">
-                <div class="col-md-6">
+            <form class="row g-2 align-items-end" method="get" action="<?= url('/site-admin') ?>">
+                <input type="hidden" name="recent_limit" value="<?= e((string) $recentLimit) ?>" />
+                <div class="col-12 col-lg-6">
                     <label class="form-label" for="q">Search</label>
                     <input class="form-control" id="q" name="q" type="text" value="<?= e($query) ?>" placeholder="Search by name or email..." />
                 </div>
-                <div class="col-md-3">
+                <div class="col-12 col-lg-3">
                     <label class="form-label" for="status">Status</label>
                     <select class="form-select" id="status" name="status">
                         <option value="active" <?= $status === 'active' ? 'selected' : '' ?>>Active</option>
@@ -163,16 +190,24 @@
                         <option value="all" <?= $status === 'all' ? 'selected' : '' ?>>All</option>
                     </select>
                 </div>
-                <div class="col-md-3 d-flex gap-2 mobile-two-col-buttons">
+                <div class="col-12 col-lg-3 d-flex gap-2 mobile-two-col-buttons">
                     <button class="btn btn-primary" type="submit">Apply</button>
                     <a class="btn btn-outline-secondary" href="<?= url('/site-admin') ?>">Clear</a>
                 </div>
             </form>
+        </div>
+    </div>
 
+    <div class="card mb-4">
+        <div class="card-header">
+            <i class="fas fa-diagram-project me-1"></i>
+            Company Directory
+        </div>
+        <div class="card-body">
             <?php if (empty($businesses)): ?>
                 <div class="text-muted">No businesses found.</div>
             <?php else: ?>
-                <div class="table-responsive">
+                <div class="d-none d-md-block table-responsive">
                     <table class="table table-hover align-middle mb-0">
                         <thead>
                             <tr>
@@ -234,6 +269,62 @@
                             <?php endforeach; ?>
                         </tbody>
                     </table>
+                </div>
+
+                <div class="d-grid gap-3 d-md-none">
+                    <?php foreach ($businesses as $business): ?>
+                        <?php
+                            $businessId = (int) ($business['id'] ?? 0);
+                            $isCurrent = $businessId > 0 && $businessId === $activeWorkspaceId;
+                            $isActive = (int) ($business['is_active'] ?? 0) === 1;
+                        ?>
+                        <div class="card-list-item p-3">
+                            <div class="d-flex justify-content-between align-items-start gap-2 mb-3">
+                                <div class="fw-semibold"><?= e((string) ($business['name'] ?? ('Business #' . $businessId))) ?></div>
+                                <?php if ($isCurrent): ?>
+                                    <span class="badge bg-success">Current</span>
+                                <?php elseif ($isActive): ?>
+                                    <span class="badge bg-secondary">Available</span>
+                                <?php else: ?>
+                                    <span class="badge bg-danger">Inactive</span>
+                                <?php endif; ?>
+                            </div>
+                            <div class="row g-2 mb-3">
+                                <div class="col-6">
+                                    <div class="card-list-field-label">ID</div>
+                                    <div class="card-list-field-value">#<?= e((string) $businessId) ?></div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="card-list-field-label">Users</div>
+                                    <div class="card-list-field-value"><?= e((string) ((int) ($business['users_count'] ?? 0))) ?></div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="card-list-field-label">Jobs</div>
+                                    <div class="card-list-field-value"><?= e((string) ((int) ($business['jobs_count'] ?? 0))) ?></div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="card-list-field-label">Updated</div>
+                                    <div class="card-list-field-value small"><?= e(format_datetime($business['updated_at'] ?? null)) ?></div>
+                                </div>
+                            </div>
+                            <?php if (!empty($business['legal_name'])): ?>
+                                <div class="small text-muted mb-3"><?= e((string) ($business['legal_name'] ?? '')) ?></div>
+                            <?php endif; ?>
+                            <div class="d-grid gap-2">
+                                <a class="btn btn-outline-primary btn-sm w-100" href="<?= url('/site-admin/businesses/' . $businessId) ?>">View Profile</a>
+                                <?php if ($isActive): ?>
+                                    <form method="post" action="<?= url('/site-admin/switch-business') ?>">
+                                        <?= csrf_field() ?>
+                                        <input type="hidden" name="business_id" value="<?= e((string) $businessId) ?>" />
+                                        <input type="hidden" name="next" value="/" />
+                                        <button class="btn btn-sm <?= $isCurrent ? 'btn-outline-success' : 'btn-primary' ?> w-100" type="submit">
+                                            <?= $isCurrent ? 'Current Workspace' : 'Work Inside' ?>
+                                        </button>
+                                    </form>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                    <?php endforeach; ?>
                 </div>
             <?php endif; ?>
         </div>

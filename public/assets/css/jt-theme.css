@@ -150,6 +150,26 @@ h1, h2, h3, .h1, .h2, .h3 {
     transform: rotate(180deg);
 }
 
+.jt-filter-card .jt-filter-actions.mobile-two-col-buttons,
+.jt-filter-card .jt-filter-actions .mobile-two-col-buttons {
+    align-items: stretch;
+}
+
+.jt-filter-card .jt-filter-actions.mobile-two-col-buttons > .btn,
+.jt-filter-card .jt-filter-actions .mobile-two-col-buttons > .btn,
+.jt-filter-card .jt-filter-actions.mobile-two-col-buttons > form,
+.jt-filter-card .jt-filter-actions .mobile-two-col-buttons > form {
+    min-height: 2.65rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.jt-filter-card .jt-filter-actions.mobile-two-col-buttons > form > .btn,
+.jt-filter-card .jt-filter-actions .mobile-two-col-buttons > form > .btn {
+    width: 100%;
+}
+
 .text-end-numeric {
     text-align: right;
     font-variant-numeric: tabular-nums;
@@ -184,27 +204,134 @@ h1, h2, h3, .h1, .h2, .h3 {
     box-shadow: 0 0 0 0.2rem rgba(37, 99, 235, 0.15);
 }
 
-/* Card List Mobile Component (Extended) */
+/* Compact Record List Component */
+.card-list-component {
+    width: 100%;
+}
+
+.card-list-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+}
+
 .card-list-item {
     border: 1px solid var(--jt-border-subtle);
     border-radius: 0.75rem;
-    transition: box-shadow 0.15s ease;
+    background: #fff;
+    padding: 0.7rem 0.9rem;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
-.card-list-item:hover {
-    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+.card-list-item.is-clickable {
+    cursor: pointer;
+}
+
+.card-list-item.is-clickable:hover {
+    border-color: #b8cff2;
+    box-shadow: 0 3px 10px rgba(15, 23, 42, 0.08);
+}
+
+.card-list-item-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75rem;
+}
+
+.card-list-item-title {
+    color: var(--jt-primary);
+    font-size: 1.05rem;
+    font-weight: 700;
+    line-height: 1.3;
+    margin: 0;
+}
+
+a.card-list-item-title {
+    text-decoration: none;
+}
+
+a.card-list-item-title:hover {
+    text-decoration: underline;
+}
+
+.card-list-item-meta {
+    margin-top: 0.45rem;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.35rem 0.9rem;
+}
+
+.card-list-field {
+    min-width: 0;
+    display: flex;
+    align-items: baseline;
+    gap: 0.4rem;
+}
+
+.card-list-field.is-checkbox {
+    align-items: center;
+}
+
+.card-list-field.is-checkbox .card-list-field-label {
+    margin-bottom: 0;
+}
+
+.card-list-field.is-checkbox .card-list-field-value {
+    display: inline-flex;
+    align-items: center;
 }
 
 .card-list-field-label {
-    font-size: 0.65rem;
+    font-size: 0.68rem;
     font-weight: 700;
     color: var(--jt-text-muted);
     text-transform: uppercase;
     letter-spacing: 0.05em;
+    white-space: nowrap;
 }
 
 .card-list-field-value {
+    font-size: 0.95rem;
     font-weight: 500;
+    color: var(--jt-text-main);
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.card-list-field-value .badge {
+    vertical-align: middle;
+}
+
+.card-list-actions-inline {
+    display: inline-flex;
+    gap: 0.4rem;
+    align-items: center;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+.card-list-actions-inline .btn,
+.card-list-actions-inline > a,
+.card-list-actions-inline > form {
+    margin: 0;
+}
+
+.card-list-actions-inline > form > .btn {
+    width: 100%;
+}
+
+.card-list-item-empty {
+    color: var(--jt-text-muted);
+}
+
+.card-list-parent > .card-body {
+    padding-top: 0.4rem !important;
+}
+
+.card-list-parent > .card-body .table-responsive {
+    border: 0 !important;
+    background: transparent !important;
 }
 
 .job-owner-contact-card,
@@ -225,4 +352,101 @@ h1, h2, h3, .h1, .h2, .h3 {
 .quick-add-nav-link {
     padding-left: 0.75rem !important;
     padding-right: 0.75rem !important;
+}
+
+.task-quick-list .list-group-item {
+    border-left: 0;
+    border-right: 0;
+    padding: 0.85rem 0.25rem;
+}
+
+.task-quick-list .task-quick-item:first-child {
+    border-top: 0;
+}
+
+.task-quick-list .task-quick-item.is-complete {
+    opacity: 0.88;
+}
+
+.task-quick-list .task-quick-title {
+    font-weight: 600;
+}
+
+.filter-presets-section .input-group {
+    flex-wrap: nowrap;
+}
+
+.filter-presets-section .input-group > .form-control,
+.filter-presets-section .input-group > .form-select {
+    min-width: 0;
+}
+
+.filter-presets-section .input-group > .btn {
+    min-width: 5.5rem;
+    white-space: nowrap;
+}
+
+@media (min-width: 768px) {
+    .jt-filter-card .jt-filter-actions.mobile-two-col-buttons,
+    .jt-filter-card .jt-filter-actions .mobile-two-col-buttons {
+        width: auto;
+        flex-wrap: nowrap;
+    }
+
+    .jt-filter-card .jt-filter-actions.mobile-two-col-buttons > .btn,
+    .jt-filter-card .jt-filter-actions .mobile-two-col-buttons > .btn,
+    .jt-filter-card .jt-filter-actions.mobile-two-col-buttons > form,
+    .jt-filter-card .jt-filter-actions .mobile-two-col-buttons > form {
+        flex: 0 0 auto;
+        min-width: 8rem;
+    }
+
+    .jt-filter-card .jt-filter-actions.mobile-two-col-buttons > form > .btn,
+    .jt-filter-card .jt-filter-actions .mobile-two-col-buttons > form > .btn {
+        min-width: 8rem;
+    }
+
+    .card-list-item {
+        padding: 0.72rem 0.95rem;
+    }
+
+    .card-list-item-title {
+        font-size: 1rem;
+    }
+
+    .card-list-item-meta {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .card-list-actions-inline > form > .btn {
+        width: auto;
+    }
+}
+
+@media (max-width: 991.98px) {
+    .card-list-item-meta {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 575.98px) {
+    .card-list-item {
+        padding: 0.68rem 0.75rem;
+    }
+
+    .card-list-item-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.45rem;
+    }
+
+    .card-list-item-meta {
+        grid-template-columns: 1fr;
+        gap: 0.25rem;
+    }
+
+    .card-list-actions-inline {
+        width: 100%;
+        justify-content: flex-start;
+    }
 }

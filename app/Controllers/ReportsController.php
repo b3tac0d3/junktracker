@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Controllers;
 
+use App\Models\PerformanceSnapshot;
 use App\Models\ReportingHub;
 use Core\Controller;
 
@@ -158,6 +159,141 @@ final class ReportsController extends Controller
 
         flash('success', 'Report preset deleted.');
         redirect('/reports');
+    }
+
+    public function snapshot(): void
+    {
+        require_permission('reports', 'view');
+
+        $businessId = function_exists('current_business_id') ? (int) current_business_id() : 1;
+        if ($businessId <= 0) {
+            flash('warning', 'Select a business workspace to use snapshots.');
+            redirect('/site-admin');
+        }
+
+        $snapshotId = (int) ($this->toIntOrNull($_GET['snapshot_id'] ?? null) ?? 0);
+        $preset = trim((string) ($_GET['preset'] ?? 'month'));
+        if ($preset === '') {
+            $preset = 'month';
+        }
+
+        $range = PerformanceSnapshot::resolveRange(
+            $preset,
+            (string) ($_GET['start_date'] ?? ''),
+            (string) ($_GET['end_date'] ?? '')
+        );
+
+        $selectedSnapshot = null;
+        $report = [];
+        $isSavedSnapshot = false;
+
+        if ($snapshotId > 0) {
+            $selectedSnapshot = PerformanceSnapshot::findSnapshot($snapshotId);
+            if (is_array($selectedSnapshot)) {
+                $savedPayload = is_array($selectedSnapshot['payload'] ?? null) ? $selectedSnapshot['payload'] : [];
+                $report = $savedPayload;
+                $range = ReportingHub::normalizeDateRange(
+                    (string) ($selectedSnapshot['start_date'] ?? $range['start_date']),
+                    (string) ($selectedSnapshot['end_date'] ?? $range['end_date'])
+                );
+                $isSavedSnapshot = true;
+                $preset = 'custom';
+            } else {
+                flash('warning', 'Snapshot not found for this business.');
+            }
+        }
+
+        if (empty($report)) {
+            $report = PerformanceSnapshot::buildReport($range['start_date'], $range['end_date']);
+        }
+
+        $snapshots = PerformanceSnapshot::snapshots(24);
+        $comparisonRanges = is_array($report['comparison_ranges'] ?? null) ? $report['comparison_ranges'] : [];
+        $summary = is_array($report['summary'] ?? null) ? $report['summary'] : [];
+        $comparison = is_array($report['comparison'] ?? null) ? $report['comparison'] : [];
+        $expenseBreakdown = is_array($report['expense_breakdown'] ?? null) ? $report['expense_breakdown'] : [];
+        $jobs = is_array($report['jobs'] ?? null) ? $report['jobs'] : [];
+        $sales = is_array($report['sales'] ?? null) ? $report['sales'] : [];
+        $charts = is_array($report['charts'] ?? null) ? $report['charts'] : [];
+
+        $pageScripts = implode("\n", [
+            '<script src="' . asset('js/reports-snapshot.js') . '?v=' . rawurlencode((string) config('app.version', 'dev')) . '"></script>',
+        ]);
+
+        $this->render('reports/snapshot', [
+            'pageTitle' => 'Snapshot Hub',
+            'range' => $range,
+            'preset' => $preset,
+            'summary' => $summary,
+            'comparison' => $comparison,
+            'comparisonRanges' => $comparisonRanges,
+            'expenseBreakdown' => $expenseBreakdown,
+            'jobs' => $jobs,
+            'sales' => $sales,
+            'charts' => $charts,
+            'snapshots' => $snapshots,
+            'snapshotId' => $snapshotId,
+            'selectedSnapshot' => $selectedSnapshot,
+            'isSavedSnapshot' => $isSavedSnapshot,
+            'pageScripts' => $pageScripts,
+        ]);
+    }
+
+    public function saveSnapshot(): void
+    {
+        require_permission('reports', 'create');
+
+        $businessId = function_exists('current_business_id') ? (int) current_business_id() : 1;
+        if ($businessId <= 0) {
+            flash('warning', 'Select a business workspace to save snapshots.');
+            redirect('/site-admin');
+        }
+
+        if (!verify_csrf($_POST['csrf_token'] ?? null)) {
+            flash('error', 'Your session expired. Please try again.');
+            redirect('/reports/snapshot');
+        }
+
+        $preset = trim((string) ($_POST['preset'] ?? 'month'));
+        if ($preset === '') {
+            $preset = 'month';
+        }
+
+        $range = PerformanceSnapshot::resolveRange(
+            $preset,
+            (string) ($_POST['start_date'] ?? ''),
+            (string) ($_POST['end_date'] ?? '')
+        );
+        $label = trim((string) ($_POST['snapshot_label'] ?? ''));
+
+        $report = PerformanceSnapshot::buildReport($range['start_date'], $range['end_date']);
+        $snapshotId = PerformanceSnapshot::saveSnapshot(
+            auth_user_id() ?? 0,
+            $label,
+            $range['start_date'],
+            $range['end_date'],
+            $report
+        );
+
+        if ($snapshotId <= 0) {
+            flash('error', 'Unable to save snapshot right now. Please try again.');
+            $query = http_build_query([
+                'preset' => $preset,
+                'start_date' => $range['start_date'],
+                'end_date' => $range['end_date'],
+            ]);
+            redirect('/reports/snapshot' . ($query !== '' ? '?' . $query : ''));
+        }
+
+        log_user_action(
+            'snapshot_saved',
+            'performance_snapshots',
+            $snapshotId,
+            'Saved performance snapshot "' . ($label !== '' ? $label : ('Snapshot ' . $range['start_date'] . ' to ' . $range['end_date'])) . '".'
+        );
+
+        flash('success', 'Snapshot saved.');
+        redirect('/reports/snapshot?snapshot_id=' . $snapshotId);
     }
 
     private function exportCsv(

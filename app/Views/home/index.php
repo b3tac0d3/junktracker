@@ -95,7 +95,7 @@
                         <div class="dashboard-top-actions-buttons">
                             <a class="btn btn-primary" href="<?= url('/jobs/new') ?>"><i class="fas fa-plus me-1"></i>Add Job</a>
                             <a class="btn btn-warning text-dark" href="<?= url('/prospects/new') ?>"><i class="fas fa-user-plus me-1"></i>Add Prospect</a>
-                            <a class="btn btn-success" href="<?= url('/time-tracking/open') ?>"><i class="fas fa-user-clock me-1"></i>Open Punch Clock</a>
+                            <a class="btn btn-success" href="<?= url('/clients/new') ?>"><i class="fas fa-user me-1"></i>Add Client</a>
                             <a class="btn btn-info text-white" href="<?= url('/expenses/new') ?>"><i class="fas fa-receipt me-1"></i>Add Expense</a>
                             <a class="btn btn-outline-secondary" href="<?= url('/sales/new') ?>"><i class="fas fa-sack-dollar me-1"></i>Add Sale</a>
                             <a class="btn btn-outline-dark" href="<?= url('/tasks/new') ?>"><i class="fas fa-list-check me-1"></i>Add Task</a>
@@ -173,7 +173,7 @@
                 <div class="dashboard-top-actions-buttons">
                     <a class="btn btn-primary" href="<?= url('/jobs/new') ?>"><i class="fas fa-plus me-1"></i>Add Job</a>
                     <a class="btn btn-warning text-dark" href="<?= url('/prospects/new') ?>"><i class="fas fa-user-plus me-1"></i>Add Prospect</a>
-                    <a class="btn btn-success" href="<?= url('/time-tracking/open') ?>"><i class="fas fa-user-clock me-1"></i>Open Punch Clock</a>
+                    <a class="btn btn-success" href="<?= url('/clients/new') ?>"><i class="fas fa-user me-1"></i>Add Client</a>
                     <a class="btn btn-info text-white" href="<?= url('/expenses/new') ?>"><i class="fas fa-receipt me-1"></i>Add Expense</a>
                     <a class="btn btn-outline-secondary" href="<?= url('/sales/new') ?>"><i class="fas fa-sack-dollar me-1"></i>Add Sale</a>
                     <a class="btn btn-outline-dark" href="<?= url('/tasks/new') ?>"><i class="fas fa-list-check me-1"></i>Add Task</a>
@@ -492,91 +492,66 @@
                     <a class="small text-decoration-none" href="<?= url('/tasks') ?>">Open Tasks</a>
                 </div>
                 <div class="card-body p-0">
-                    <div class="table-responsive">
-                        <table class="table table-striped table-hover align-middle mb-0 js-card-list-source">
-                            <thead>
-                                <tr>
-                                    <th>Done</th>
-                                    <th>Bucket</th>
-                                    <th>Task</th>
-                                    <th>Linked</th>
-                                    <th>Assigned</th>
-                                    <th>Due</th>
-                                    <th>Priority</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <?php if (empty($overdueTasks) && empty($upcomingTasks)): ?>
-                                    <tr>
-                                        <td colspan="7" class="text-muted">No overdue or upcoming tasks.</td>
-                                    </tr>
-                                <?php else: ?>
-                                    <?php foreach ($overdueTasks as $taskRow): ?>
-                                        <?php $taskId = (int) ($taskRow['id'] ?? 0); ?>
-                                        <tr data-task-id="<?= e((string) $taskId) ?>">
-                                            <td>
-                                                <form method="post" action="<?= url('/tasks/' . $taskId . '/toggle-complete') ?>" class="js-task-toggle-form">
-                                                    <?= csrf_field() ?>
-                                                    <input type="hidden" name="return_to" value="/" />
-                                                    <input type="hidden" name="is_completed" value="0" />
-                                                    <input class="form-check-input" type="checkbox" name="is_completed" value="1" onchange="this.form.submit()" />
-                                                </form>
-                                            </td>
-                                            <td><span class="badge bg-danger">Overdue</span></td>
-                                            <td>
-                                                <a class="text-decoration-none js-task-title" href="<?= url('/tasks/' . $taskId) ?>">
-                                                    <?= e((string) (($taskRow['title'] ?? '') !== '' ? $taskRow['title'] : ('Task #' . $taskId))) ?>
-                                                </a>
-                                            </td>
-                                            <td>
-                                                <?php if (!empty($taskRow['link_url'])): ?>
-                                                    <a class="text-decoration-none" href="<?= url((string) $taskRow['link_url']) ?>">
-                                                        <?= e((string) ($taskRow['link_label'] ?? '—')) ?>
-                                                    </a>
-                                                <?php else: ?>
-                                                    <?= e((string) ($taskRow['link_label'] ?? '—')) ?>
-                                                <?php endif; ?>
-                                            </td>
-                                            <td><?= e((string) (($taskRow['assigned_user_name'] ?? '') !== '' ? $taskRow['assigned_user_name'] : 'Unassigned')) ?></td>
-                                            <td class="text-danger fw-semibold"><?= e(format_datetime($taskRow['due_at'] ?? null)) ?></td>
-                                            <td><?= e((string) ($taskRow['importance'] ?? '—')) ?></td>
-                                        </tr>
-                                    <?php endforeach; ?>
-                                    <?php foreach ($upcomingTasks as $taskRow): ?>
-                                        <?php $taskId = (int) ($taskRow['id'] ?? 0); ?>
-                                        <tr data-task-id="<?= e((string) $taskId) ?>">
-                                            <td>
-                                                <form method="post" action="<?= url('/tasks/' . $taskId . '/toggle-complete') ?>" class="js-task-toggle-form">
-                                                    <?= csrf_field() ?>
-                                                    <input type="hidden" name="return_to" value="/" />
-                                                    <input type="hidden" name="is_completed" value="0" />
-                                                    <input class="form-check-input" type="checkbox" name="is_completed" value="1" onchange="this.form.submit()" />
-                                                </form>
-                                            </td>
-                                            <td><span class="badge bg-warning text-dark">Upcoming</span></td>
-                                            <td>
-                                                <a class="text-decoration-none js-task-title" href="<?= url('/tasks/' . $taskId) ?>">
-                                                    <?= e((string) (($taskRow['title'] ?? '') !== '' ? $taskRow['title'] : ('Task #' . $taskId))) ?>
-                                                </a>
-                                            </td>
-                                            <td>
-                                                <?php if (!empty($taskRow['link_url'])): ?>
-                                                    <a class="text-decoration-none" href="<?= url((string) $taskRow['link_url']) ?>">
-                                                        <?= e((string) ($taskRow['link_label'] ?? '—')) ?>
-                                                    </a>
-                                                <?php else: ?>
-                                                    <?= e((string) ($taskRow['link_label'] ?? '—')) ?>
-                                                <?php endif; ?>
-                                            </td>
-                                            <td><?= e((string) (($taskRow['assigned_user_name'] ?? '') !== '' ? $taskRow['assigned_user_name'] : 'Unassigned')) ?></td>
-                                            <td><?= e(format_datetime($taskRow['due_at'] ?? null)) ?></td>
-                                            <td><?= e((string) ($taskRow['importance'] ?? '—')) ?></td>
-                                        </tr>
-                                    <?php endforeach; ?>
-                                <?php endif; ?>
-                            </tbody>
-                        </table>
-                    </div>
+                    <ul class="list-group task-quick-list dashboard-task-list px-3 py-2" data-empty-text="No overdue or upcoming tasks.">
+                        <?php if (empty($overdueTasks) && empty($upcomingTasks)): ?>
+                            <li class="list-group-item text-muted dashboard-task-empty">No overdue or upcoming tasks.</li>
+                        <?php else: ?>
+                            <?php foreach ($overdueTasks as $taskRow): ?>
+                                <?php
+                                    $taskId = (int) ($taskRow['id'] ?? 0);
+                                    $taskTitle = (string) (($taskRow['title'] ?? '') !== '' ? $taskRow['title'] : ('Task #' . $taskId));
+                                    $assignedName = (string) (($taskRow['assigned_user_name'] ?? '') !== '' ? $taskRow['assigned_user_name'] : 'Unassigned');
+                                ?>
+                                <li class="list-group-item task-quick-item dashboard-task-item" data-task-id="<?= e((string) $taskId) ?>">
+                                    <div class="d-flex align-items-start gap-3">
+                                        <form method="post" action="<?= url('/tasks/' . $taskId . '/toggle-complete') ?>" class="js-task-toggle-form mb-0">
+                                            <?= csrf_field() ?>
+                                            <input type="hidden" name="return_to" value="/" />
+                                            <input type="hidden" name="is_completed" value="0" />
+                                            <input class="form-check-input mt-1" type="checkbox" name="is_completed" value="1" />
+                                        </form>
+                                        <div class="min-w-0 w-100">
+                                            <a class="task-quick-title text-decoration-none js-task-title d-inline-block mb-1" href="<?= url('/tasks/' . $taskId) ?>">
+                                                <?= e($taskTitle) ?>
+                                            </a>
+                                            <div class="small text-muted">
+                                                <span class="text-danger fw-semibold me-2"><?= e(format_datetime($taskRow['due_at'] ?? null)) ?></span>
+                                                <span class="me-2">&middot;</span>
+                                                <span><?= e($assignedName) ?></span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </li>
+                            <?php endforeach; ?>
+                            <?php foreach ($upcomingTasks as $taskRow): ?>
+                                <?php
+                                    $taskId = (int) ($taskRow['id'] ?? 0);
+                                    $taskTitle = (string) (($taskRow['title'] ?? '') !== '' ? $taskRow['title'] : ('Task #' . $taskId));
+                                    $assignedName = (string) (($taskRow['assigned_user_name'] ?? '') !== '' ? $taskRow['assigned_user_name'] : 'Unassigned');
+                                ?>
+                                <li class="list-group-item task-quick-item dashboard-task-item" data-task-id="<?= e((string) $taskId) ?>">
+                                    <div class="d-flex align-items-start gap-3">
+                                        <form method="post" action="<?= url('/tasks/' . $taskId . '/toggle-complete') ?>" class="js-task-toggle-form mb-0">
+                                            <?= csrf_field() ?>
+                                            <input type="hidden" name="return_to" value="/" />
+                                            <input type="hidden" name="is_completed" value="0" />
+                                            <input class="form-check-input mt-1" type="checkbox" name="is_completed" value="1" />
+                                        </form>
+                                        <div class="min-w-0 w-100">
+                                            <a class="task-quick-title text-decoration-none js-task-title d-inline-block mb-1" href="<?= url('/tasks/' . $taskId) ?>">
+                                                <?= e($taskTitle) ?>
+                                            </a>
+                                            <div class="small text-muted">
+                                                <span class="me-2"><?= e(format_datetime($taskRow['due_at'] ?? null)) ?></span>
+                                                <span class="me-2">&middot;</span>
+                                                <span><?= e($assignedName) ?></span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </li>
+                            <?php endforeach; ?>
+                        <?php endif; ?>
+                    </ul>
                 </div>
             </div>
         </div>

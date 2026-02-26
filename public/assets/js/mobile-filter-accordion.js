@@ -2,7 +2,9 @@
   "use strict";
 
   const mobileBreakpoint = window.matchMedia("(max-width: 767.98px)");
-  const cards = Array.from(document.querySelectorAll(".card"));
+  const cards = Array.from(
+    document.querySelectorAll('.card.jt-filter-card, .card[data-mobile-filter="true"]')
+  ).filter((card) => String(card.getAttribute('data-mobile-filter') || '').toLowerCase() !== 'false');
   let filterIndex = 0;
 
   const isGetForm = (form) => {

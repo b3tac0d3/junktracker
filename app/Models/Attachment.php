@@ -494,10 +494,14 @@ final class Attachment
         $limit = max(1, min($limit, 1000));
         $params = [];
         $tagPlaceholders = [];
+        $coverTagPlaceholders = [];
         foreach (self::PHOTO_TAGS as $index => $tag) {
             $key = 'tag_' . $index;
+            $coverKey = 'cover_tag_' . $index;
             $tagPlaceholders[] = ':' . $key;
+            $coverTagPlaceholders[] = ':' . $coverKey;
             $params[$key] = $tag;
+            $params[$coverKey] = $tag;
         }
 
         $jobWhere = [];
@@ -530,7 +534,7 @@ final class Attachment
                           AND a2.link_id = j.id
                           AND a2.deleted_at IS NULL
                           AND COALESCE(a2.mime_type, \'\') LIKE \'image/%\'
-                          AND a2.tag IN (' . implode(', ', $tagPlaceholders) . ')
+                          AND a2.tag IN (' . implode(', ', $coverTagPlaceholders) . ')
                         ORDER BY
                             CASE a2.tag
                                 WHEN \'after_photo\' THEN 1
@@ -554,6 +558,10 @@ final class Attachment
                 GROUP BY j.id, j.name
                 ORDER BY MAX(a.created_at) DESC, j.id DESC
                 LIMIT ' . $limit;
+
+        if (Schema::hasColumn('attachments', 'business_id')) {
+            $params['business_id_scope'] = self::currentBusinessId();
+        }
 
         $stmt = Database::connection()->prepare($sql);
         $stmt->execute($params);

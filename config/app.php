@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 return [
     'name' => 'JunkTracker',
-    'version' => '2.2 (beta)',
+    'version' => '2.3 (beta)',
     'env' => getenv('APP_ENV') ?: 'local',
     'debug' => getenv('APP_DEBUG') !== false
         ? !in_array(strtolower(trim((string) getenv('APP_DEBUG'))), ['0', 'false', 'off', 'no'], true)

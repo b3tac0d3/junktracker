@@ -11,6 +11,7 @@
     $linkedContactId = (int) ($linkedContact['id'] ?? 0);
     $workSummary = is_array($workSummary ?? null) ? $workSummary : [];
     $completedJobs = is_array($completedJobs ?? null) ? $completedJobs : [];
+    $companies = is_array($companies ?? null) ? $companies : [];
     $money = static fn (mixed $value): string => '$' . number_format((float) ($value ?? 0), 2);
     $clientPath = '/clients/' . (string) ($client['id'] ?? '');
 ?>
@@ -24,40 +25,63 @@
                 <li class="breadcrumb-item active">#<?= e((string) ($client['id'] ?? '')) ?></li>
             </ol>
         </div>
-        <div class="d-flex gap-2 mobile-two-col-buttons">
-            <a class="btn btn-primary" href="<?= url('/client-contacts/new?client_id=' . ($client['id'] ?? '')) ?>">
-                <i class="fas fa-phone me-1"></i>
-                Log Contact
-            </a>
-            <?php if (can_access('contacts', 'create') || ($linkedContactId > 0 && can_access('contacts', 'view'))): ?>
-                <?php if ($linkedContactId > 0): ?>
-                    <a class="btn btn-info" href="<?= url('/network/' . $linkedContactId) ?>">
-                        <i class="fas fa-address-card me-1"></i>
-                        View Network Client
-                    </a>
-                <?php elseif (can_access('contacts', 'create')): ?>
-                    <form method="post" action="<?= url('/clients/' . ($client['id'] ?? '') . '/save-contact') ?>">
-                        <?= csrf_field() ?>
-                        <button class="btn btn-info" type="submit">
-                            <i class="fas fa-address-card me-1"></i>
-                            Save as Network Client
-                        </button>
-                    </form>
-                <?php endif; ?>
-            <?php endif; ?>
-            <a class="btn btn-warning" href="<?= url('/clients/' . ($client['id'] ?? '') . '/edit') ?>">
-                <i class="fas fa-pen me-1"></i>
-                Edit Client
-            </a>
-            <?php if (empty($client['deleted_at']) && !empty($client['active'])): ?>
-                <button class="btn btn-danger" type="button" data-bs-toggle="modal" data-bs-target="#deactivateClientModal">
-                    <i class="fas fa-user-slash me-1"></i>
-                    Deactivate
+        <div class="d-flex align-items-center gap-2">
+            <div class="dropdown">
+                <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                    <i class="fas fa-bars me-1"></i>
+                    Actions
                 </button>
-            <?php else: ?>
+                <ul class="dropdown-menu dropdown-menu-end">
+                    <li>
+                        <a class="dropdown-item" href="<?= url('/client-contacts/new?client_id=' . ($client['id'] ?? '')) ?>">
+                            <i class="fas fa-phone me-2"></i>
+                            Log Contact
+                        </a>
+                    </li>
+                    <?php if (can_access('contacts', 'create') || ($linkedContactId > 0 && can_access('contacts', 'view'))): ?>
+                        <?php if ($linkedContactId > 0): ?>
+                            <li>
+                                <a class="dropdown-item" href="<?= url('/network/' . $linkedContactId) ?>">
+                                    <i class="fas fa-address-card me-2"></i>
+                                    View Network Client
+                                </a>
+                            </li>
+                        <?php elseif (can_access('contacts', 'create')): ?>
+                            <li>
+                                <form method="post" action="<?= url('/clients/' . ($client['id'] ?? '') . '/save-contact') ?>">
+                                    <?= csrf_field() ?>
+                                    <button class="dropdown-item" type="submit">
+                                        <i class="fas fa-address-card me-2"></i>
+                                        Save as Network Client
+                                    </button>
+                                </form>
+                            </li>
+                        <?php endif; ?>
+                    <?php endif; ?>
+                    <li>
+                        <a class="dropdown-item" href="<?= url('/clients/' . ($client['id'] ?? '') . '/edit') ?>">
+                            <i class="fas fa-pen me-2"></i>
+                            Edit Client
+                        </a>
+                    </li>
+                    <?php if (empty($client['deleted_at']) && !empty($client['active'])): ?>
+                        <li><hr class="dropdown-divider"></li>
+                        <li>
+                            <button class="dropdown-item text-danger" type="button" data-bs-toggle="modal" data-bs-target="#deactivateClientModal">
+                                <i class="fas fa-user-slash me-2"></i>
+                                Deactivate
+                            </button>
+                        </li>
+                    <?php endif; ?>
+                </ul>
+            </div>
+            <?php if (!empty($client['deleted_at']) || empty($client['active'])): ?>
                 <span class="badge bg-secondary align-self-center">Inactive</span>
             <?php endif; ?>
-            <a class="btn btn-outline-secondary" href="<?= url('/clients') ?>">Back to Clients</a>
+            <a class="btn btn-outline-secondary" href="<?= url('/clients') ?>">
+                <i class="fas fa-arrow-left me-1"></i>
+                Back to Clients
+            </a>
         </div>
     </div>
 
@@ -379,7 +403,6 @@
                                                 name="is_completed"
                                                 value="1"
                                                 <?= $isCompleted ? 'checked' : '' ?>
-                                                onchange="this.form.submit()"
                                             />
                                         </form>
                                     </td>

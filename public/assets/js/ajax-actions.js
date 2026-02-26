@@ -77,7 +77,41 @@ window.addEventListener('DOMContentLoaded', () => {
 
     const updateTaskRow = (form, payload) => {
         const row = form.closest('tr');
-        if (!row) {
+        const cardItem = form.closest('.card-list-item');
+        const cardList = cardItem ? cardItem.closest('.card-list-list') : null;
+        const dashboardItem = form.closest('.dashboard-task-item');
+        const dashboardList = dashboardItem ? dashboardItem.closest('.dashboard-task-list') : null;
+        const buildEmptyCard = () => {
+            if (!cardList) {
+                return;
+            }
+            if (cardList.querySelector('.card-list-item')) {
+                return;
+            }
+
+            const empty = document.createElement('div');
+            empty.className = 'card-list-item card-list-item-empty text-muted';
+            empty.textContent = 'No overdue or upcoming tasks.';
+            cardList.appendChild(empty);
+        };
+        const buildEmptyDashboard = () => {
+            if (!dashboardList) {
+                return;
+            }
+            if (dashboardList.querySelector('.dashboard-task-item')) {
+                return;
+            }
+            if (dashboardList.querySelector('.dashboard-task-empty')) {
+                return;
+            }
+
+            const empty = document.createElement('li');
+            empty.className = 'list-group-item text-muted dashboard-task-empty';
+            empty.textContent = dashboardList.dataset.emptyText || 'No overdue or upcoming tasks.';
+            dashboardList.appendChild(empty);
+        };
+
+        if (!row && !cardItem && !dashboardItem) {
             return;
         }
 
@@ -86,6 +120,38 @@ window.addEventListener('DOMContentLoaded', () => {
         const isCompleted = payload?.task?.is_completed === undefined
             ? Boolean(checkbox && checkbox.checked)
             : completedFromPayload;
+
+        if (cardItem) {
+            const title = cardItem.querySelector('.card-list-item-title');
+            if (title) {
+                title.classList.toggle('text-muted', isCompleted);
+                title.classList.toggle('text-decoration-line-through', isCompleted);
+            }
+
+            if (isCompleted) {
+                cardItem.remove();
+                buildEmptyCard();
+            }
+            return;
+        }
+
+        if (dashboardItem) {
+            const title = dashboardItem.querySelector('.js-task-title');
+            if (title) {
+                title.classList.toggle('text-muted', isCompleted);
+                title.classList.toggle('text-decoration-line-through', isCompleted);
+            }
+
+            if (isCompleted) {
+                dashboardItem.remove();
+                buildEmptyDashboard();
+            }
+            return;
+        }
+
+        if (!row) {
+            return;
+        }
         const table = row.closest('table');
         const inTaskIndex = table && table.id === 'tasksTable';
 
@@ -205,6 +271,37 @@ window.addEventListener('DOMContentLoaded', () => {
 
         window.location.reload();
     };
+
+    document.addEventListener('change', (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLInputElement)) {
+            return;
+        }
+        if (target.type !== 'checkbox' || target.name !== 'is_completed') {
+            return;
+        }
+
+        const form = target.closest('form');
+        if (!(form instanceof HTMLFormElement)) {
+            return;
+        }
+
+        const action = form.action || form.getAttribute('action') || '';
+        if (!taskTogglePattern.test(action)) {
+            return;
+        }
+        if (form.dataset.ajaxPending === '1') {
+            return;
+        }
+
+        if (typeof form.requestSubmit === 'function') {
+            form.requestSubmit();
+            return;
+        }
+
+        const submitEvent = new Event('submit', { bubbles: true, cancelable: true });
+        form.dispatchEvent(submitEvent);
+    });
 
     document.addEventListener('submit', async (event) => {
         const form = event.target;

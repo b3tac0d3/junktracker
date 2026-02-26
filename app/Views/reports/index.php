@@ -43,6 +43,10 @@
             </ol>
         </div>
         <div class="d-flex gap-2 mobile-two-col-buttons">
+            <a class="btn btn-outline-primary" href="<?= url('/reports/snapshot') ?>">
+                <i class="fas fa-camera-retro me-1"></i>
+                Snapshot Hub
+            </a>
             <a class="btn btn-outline-primary" href="<?= url('/reports?' . $queryForExport) ?>">
                 <i class="fas fa-file-csv me-1"></i>
                 Export Current CSV

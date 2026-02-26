@@ -98,10 +98,7 @@ final class TasksController extends Controller
             return;
         }
 
-        $pageScripts = implode("\n", [
-            '<script src="https://cdn.jsdelivr.net/npm/simple-datatables@7.1.2/dist/umd/simple-datatables.min.js" crossorigin="anonymous"></script>',
-            '<script src="' . asset('js/tasks-table.js') . '"></script>',
-        ]);
+        $pageScripts = '<script src="' . asset('js/tasks-quick-add.js') . '"></script>';
 
         $this->render('tasks/index', [
             'pageTitle' => 'Tasks',
@@ -125,11 +122,49 @@ final class TasksController extends Controller
     {
         $this->authorize('create');
 
+        $quickFilters = [
+            'q' => trim((string) ($_GET['q'] ?? '')),
+            'status' => (string) ($_GET['status'] ?? 'all'),
+            'assignment_status' => 'all',
+            'importance' => null,
+            'link_type' => 'all',
+            'owner_scope' => 'all',
+            'assigned_user_id' => null,
+            'record_status' => 'active',
+            'due_start' => '',
+            'due_end' => '',
+            'current_user_id' => auth_user_id() ?? 0,
+        ];
+        if (!in_array($quickFilters['status'], array_merge(['all'], Task::STATUSES), true)) {
+            $quickFilters['status'] = 'all';
+        }
+
+        $tasks = Task::filter($quickFilters);
+        if (count($tasks) > 150) {
+            $tasks = array_slice($tasks, 0, 150);
+        }
+
+        $this->render('tasks/quick', [
+            'pageTitle' => 'Quick Add Tasks',
+            'tasks' => $tasks,
+            'quickFilters' => $quickFilters,
+            'statusOptions' => Task::STATUSES,
+            'pageScripts' => '<script src="' . asset('js/tasks-quick-add.js') . '"></script>',
+        ]);
+
+        clear_old();
+    }
+
+    public function createFull(): void
+    {
+        $this->authorize('create');
+
         $task = $this->prefillTask();
 
         $this->render('tasks/create', [
             'pageTitle' => 'Add Task',
             'task' => $task,
+            'entryMode' => 'full',
             'users' => Task::users(),
             'statusOptions' => Task::STATUSES,
             'linkTypes' => Task::LINK_TYPES,
@@ -144,23 +179,57 @@ final class TasksController extends Controller
     public function store(): void
     {
         $this->authorize('create');
+        $newTaskRedirect = trim((string) ($_POST['entry_mode'] ?? '')) === 'full' ? '/tasks/new/full' : '/tasks/new';
 
         if (!verify_csrf($_POST['csrf_token'] ?? null)) {
-            flash('error', 'Your session expired. Please try again.');
-            redirect('/tasks/new');
+            $message = 'Your session expired. Please try again.';
+            if (expects_json_response()) {
+                json_response([
+                    'ok' => false,
+                    'message' => $message,
+                ], 419);
+                return;
+            }
+
+            flash('error', $message);
+            redirect($newTaskRedirect);
         }
 
         $data = $this->collectFormData();
         $errors = $this->validate($data);
 
         if (!empty($errors)) {
-            flash('error', implode(' ', $errors));
+            $message = implode(' ', $errors);
+            if (expects_json_response()) {
+                json_response([
+                    'ok' => false,
+                    'message' => $message,
+                ], 422);
+                return;
+            }
+
+            flash('error', $message);
             flash_old($_POST);
-            redirect('/tasks/new');
+            redirect($newTaskRedirect);
         }
 
         $taskId = Task::create($data, auth_user_id());
         log_user_action('task_created', 'todos', $taskId, 'Created task: ' . ($data['title'] ?: ('Task #' . $taskId)));
+        if (expects_json_response()) {
+            $task = Task::findById($taskId);
+            json_response([
+                'ok' => true,
+                'message' => 'Task added.',
+                'task' => $this->taskJsonPayload($task ?: [
+                    'id' => $taskId,
+                    'title' => $data['title'],
+                    'status' => $data['status'],
+                    'due_at' => $data['due_at'],
+                ]),
+            ]);
+            return;
+        }
+
         flash('success', 'Task added.');
         redirect('/tasks/' . $taskId);
     }
@@ -644,6 +713,27 @@ final class TasksController extends Controller
 
         $currentRole = (int) ((auth_user()['role'] ?? 0));
         return $currentRole === 99 || $currentRole >= 2;
+    }
+
+    private function taskJsonPayload(array $task): array
+    {
+        $status = (string) ($task['status'] ?? 'open');
+        if (!in_array($status, Task::STATUSES, true)) {
+            $status = 'open';
+        }
+
+        $id = (int) ($task['id'] ?? 0);
+        $title = trim((string) ($task['title'] ?? ''));
+
+        return [
+            'id' => $id,
+            'title' => $title !== '' ? $title : ('Task #' . $id),
+            'status' => $status,
+            'is_completed' => $status === 'closed',
+            'url' => url('/tasks/' . $id),
+            'due_at' => $task['due_at'] ?? null,
+            'due_at_label' => format_datetime($task['due_at'] ?? null),
+        ];
     }
 
     private function renderNotFound(): void

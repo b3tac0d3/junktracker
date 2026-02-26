@@ -22,10 +22,16 @@ $currentReturnTo = $currentPath . ($currentQuery !== '' ? '?' . $currentQuery : 
                 <li class="breadcrumb-item active">Clients</li>
             </ol>
         </div>
-        <a class="btn btn-primary" href="<?= url('/clients/new') ?>">
-            <i class="fas fa-user-plus me-1"></i>
-            Add Client
-        </a>
+        <div class="d-flex gap-2 mobile-two-col-buttons ms-md-auto justify-content-md-end">
+            <a class="btn btn-outline-primary" href="<?= url('/client-contacts') ?>">
+                <i class="fas fa-address-book me-1"></i>
+                Contact Records
+            </a>
+            <a class="btn btn-primary" href="<?= url('/clients/new') ?>">
+                <i class="fas fa-user-plus me-1"></i>
+                Add Client
+            </a>
+        </div>
     </div>
 
     <?php if ($success = flash('success')): ?>

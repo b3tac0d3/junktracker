@@ -299,9 +299,6 @@ if ($isGlobalAdminContext) {
                                         <?php if (can_access('clients', 'view')): ?>
                                             <a class="nav-link" href="<?= url('/clients') ?>">Clients</a>
                                         <?php endif; ?>
-                                        <?php if (can_access('client_contacts', 'view')): ?>
-                                            <a class="nav-link" href="<?= url('/client-contacts') ?>">Contacts</a>
-                                        <?php endif; ?>
                                         <?php if (can_access('consignors', 'view')): ?>
                                             <a class="nav-link" href="<?= url('/consignors') ?>">Consignors</a>
                                         <?php endif; ?>
@@ -337,6 +334,10 @@ if ($isGlobalAdminContext) {
                                 <a class="nav-link" href="<?= url('/reports') ?>">
                                     <div class="sb-nav-link-icon"><i class="fas fa-chart-line"></i></div>
                                     Reports
+                                </a>
+                                <a class="nav-link" href="<?= url('/reports/snapshot') ?>">
+                                    <div class="sb-nav-link-icon"><i class="fas fa-camera-retro"></i></div>
+                                    Snapshots
                                 </a>
                             <?php endif; ?>
                             <?php if (can_access('admin', 'view')): ?>

@@ -3,6 +3,10 @@
         return (cell && cell.textContent ? cell.textContent : '').replace(/\s+/g, ' ').trim();
     }
 
+    function cleanText(value) {
+        return (value || '').replace(/\s+/g, ' ').trim();
+    }
+
     function hasActionElements(cell) {
         if (!cell) {
             return false;
@@ -48,7 +52,7 @@
             return explicit;
         }
 
-        const preferred = ['name', 'title', 'job', 'client', 'company', 'estate', 'prospect', 'employee', 'user', 'email'];
+        const preferred = ['name', 'title', 'task', 'job', 'client', 'company', 'estate', 'prospect', 'employee', 'user', 'email', 'alert', 'subject'];
         for (let i = 0; i < headers.length; i += 1) {
             if (i === actionIndex) {
                 continue;
@@ -69,10 +73,18 @@
         return 0;
     }
 
+    function shouldSkipFieldLabel(label) {
+        const normalized = (label || '').trim().toLowerCase();
+        return normalized === '' || normalized === 'id' || normalized === '#';
+    }
+
     function resolveFieldIndexes(table, headers, primaryIndex, actionIndex) {
-        const explicit = (table.dataset.cardFields || '').split(',').map((value) => Number.parseInt(value.trim(), 10)).filter((value) => Number.isInteger(value) && value >= 0);
+        const explicit = (table.dataset.cardFields || '')
+            .split(',')
+            .map((value) => Number.parseInt(value.trim(), 10))
+            .filter((value) => Number.isInteger(value) && value >= 0);
         if (explicit.length) {
-            return explicit.slice(0, 5);
+            return explicit.slice(0, 4);
         }
 
         const indexes = [];
@@ -80,13 +92,12 @@
             if (i === primaryIndex || i === actionIndex) {
                 continue;
             }
-
-            if ((headers[i] || '').trim() === '') {
+            if (shouldSkipFieldLabel(headers[i])) {
                 continue;
             }
 
             indexes.push(i);
-            if (indexes.length >= 5) {
+            if (indexes.length >= 3) {
                 break;
             }
         }
@@ -94,66 +105,122 @@
         return indexes;
     }
 
-    function renderFieldRow(label, valueHtml) {
+    function resolveRowHref(row, titleCell, actionCell) {
+        const rowHref = row.getAttribute('data-href');
+        if (rowHref && rowHref.trim() !== '') {
+            return rowHref.trim();
+        }
+
+        const cellAnchor = titleCell ? titleCell.querySelector('a[href]') : null;
+        if (cellAnchor) {
+            return cellAnchor.getAttribute('href') || '';
+        }
+
+        const fallbackAnchors = Array.from(row.querySelectorAll('a[href]'));
+        const usableAnchor = fallbackAnchors.find(function (anchor) {
+            if (!actionCell) {
+                return true;
+            }
+            return !actionCell.contains(anchor);
+        });
+        if (usableAnchor) {
+            return usableAnchor.getAttribute('href') || '';
+        }
+
+        return '';
+    }
+
+    function renderFieldRow(label, valueHtml, isCheckboxField) {
         const wrapper = document.createElement('div');
         wrapper.className = 'card-list-field';
+        if (isCheckboxField) {
+            wrapper.classList.add('is-checkbox');
+        }
 
-        const labelNode = document.createElement('div');
-        labelNode.className = 'card-list-field-label';
-        labelNode.textContent = label;
-
-        const valueNode = document.createElement('div');
+        const valueNode = document.createElement('span');
         valueNode.className = 'card-list-field-value';
         valueNode.innerHTML = valueHtml;
 
-        wrapper.appendChild(labelNode);
+        if (!isCheckboxField) {
+            const labelNode = document.createElement('span');
+            labelNode.className = 'card-list-field-label';
+            labelNode.textContent = label;
+            wrapper.appendChild(labelNode);
+        }
         wrapper.appendChild(valueNode);
 
         return wrapper;
     }
 
-    function buildCard(row, headers, primaryIndex, fieldIndexes, actionIndex) {
+    function cloneActions(cell) {
+        if (!cell || !hasActionElements(cell)) {
+            return null;
+        }
+
+        const actionGroup = document.createElement('div');
+        actionGroup.className = 'card-list-actions-inline';
+
+        const fragment = document.createElement('div');
+        fragment.innerHTML = cell.innerHTML;
+
+        Array.from(fragment.children).forEach(function (node) {
+            if (node.classList && node.classList.contains('btn')) {
+                node.classList.add('btn-sm');
+            }
+
+            if (node.tagName === 'FORM') {
+                node.classList.add('card-list-action-form');
+                const formButtons = node.querySelectorAll('.btn');
+                formButtons.forEach((button) => button.classList.add('btn-sm'));
+            }
+
+            actionGroup.appendChild(node);
+        });
+
+        return actionGroup.childElementCount > 0 ? actionGroup : null;
+    }
+
+    function buildRowItem(row, headers, primaryIndex, fieldIndexes, actionIndex) {
         const cells = Array.from(row.querySelectorAll('td'));
         if (!cells.length) {
             return null;
         }
 
+        const item = document.createElement('div');
+        item.className = 'card-list-item';
+
         if (cells.length === 1 && cells[0].hasAttribute('colspan')) {
-            const col = document.createElement('div');
-            col.className = 'col-12';
-
-            const emptyCard = document.createElement('div');
-            emptyCard.className = 'card card-list-item h-100';
-
-            const body = document.createElement('div');
-            body.className = 'card-body text-muted card-list-empty';
-            body.innerHTML = cells[0].innerHTML;
-
-            emptyCard.appendChild(body);
-            col.appendChild(emptyCard);
-            return col;
+            item.classList.add('card-list-item-empty', 'text-muted');
+            item.innerHTML = cells[0].innerHTML;
+            return item;
         }
 
         const titleCell = cells[primaryIndex] || cells[0];
+        const actionCell = actionIndex >= 0 ? cells[actionIndex] : null;
+        const rowHref = resolveRowHref(row, titleCell, actionCell);
         const titleHtml = titleCell ? titleCell.innerHTML : 'Record';
-        const titleText = titleCell ? titleCell.textContent.replace(/\s+/g, ' ').trim() : '';
-        const renderTitle = titleText !== '' && !hasActionElements(titleCell);
+        const titleText = cleanText(titleCell ? titleCell.textContent : '');
 
-        const col = document.createElement('div');
-        col.className = 'col-12';
+        const header = document.createElement('div');
+        header.className = 'card-list-item-header';
 
-        const card = document.createElement('div');
-        card.className = 'card card-list-item h-100';
-
-        const body = document.createElement('div');
-        body.className = 'card-body';
-
-        if (renderTitle) {
-            const title = document.createElement('div');
-            title.className = 'card-list-item-title';
-            title.innerHTML = titleHtml;
-            body.appendChild(title);
+        const title = document.createElement(rowHref !== '' && !titleCell.querySelector('a[href]') ? 'a' : 'div');
+        title.className = 'card-list-item-title';
+        if (title.tagName === 'A') {
+            title.setAttribute('href', rowHref);
         }
+        title.innerHTML = titleHtml;
+        header.appendChild(title);
+
+        const actions = cloneActions(actionCell);
+        if (actions) {
+            header.appendChild(actions);
+        }
+
+        item.appendChild(header);
+
+        const meta = document.createElement('div');
+        meta.className = 'card-list-item-meta';
 
         fieldIndexes.forEach(function (fieldIndex) {
             if (!cells[fieldIndex]) {
@@ -162,31 +229,37 @@
 
             const label = headers[fieldIndex] || 'Field';
             const valueHtml = cells[fieldIndex].innerHTML;
-            body.appendChild(renderFieldRow(label, valueHtml));
+            const valueText = cleanText(cells[fieldIndex].textContent || '');
+            const hasCheckbox = !!cells[fieldIndex].querySelector('input[type=\"checkbox\"]');
+
+            if (!hasCheckbox && (valueText === '' || valueText === '—')) {
+                return;
+            }
+
+            meta.appendChild(renderFieldRow(label, valueHtml, hasCheckbox));
         });
 
-        card.appendChild(body);
-
-        const actionCell = actionIndex >= 0 ? cells[actionIndex] : null;
-        if (actionCell && hasActionElements(actionCell)) {
-            const footer = document.createElement('div');
-            footer.className = 'card-footer bg-white';
-
-            const actionGroup = document.createElement('div');
-            actionGroup.className = 'd-flex flex-wrap gap-2 card-list-actions mobile-two-col-buttons';
-
-            const fragment = document.createElement('div');
-            fragment.innerHTML = actionCell.innerHTML;
-            Array.from(fragment.children).forEach(function (node) {
-                actionGroup.appendChild(node);
-            });
-
-            footer.appendChild(actionGroup);
-            card.appendChild(footer);
+        if (meta.childElementCount > 0) {
+            item.appendChild(meta);
         }
 
-        col.appendChild(card);
-        return col;
+        if (rowHref !== '' && titleText !== '') {
+            item.classList.add('is-clickable');
+            item.setAttribute('data-href', rowHref);
+            item.addEventListener('click', function (event) {
+                if (event.defaultPrevented) {
+                    return;
+                }
+
+                if (event.target.closest('a, button, input, select, textarea, label, form, .dropdown-menu, [data-bs-toggle], [role="button"]')) {
+                    return;
+                }
+
+                window.location.href = rowHref;
+            });
+        }
+
+        return item;
     }
 
     function buildRenderer(table, host) {
@@ -195,7 +268,7 @@
             return null;
         }
 
-        return function renderCards() {
+        return function renderRows() {
             const rows = Array.from(tbody.querySelectorAll('tr')).filter(function (row) {
                 return !row.hidden && row.style.display !== 'none';
             });
@@ -212,12 +285,12 @@
 
             host.innerHTML = '';
             const listWrapper = document.createElement('div');
-            listWrapper.className = 'card-list-grid row g-3';
+            listWrapper.className = 'card-list-list';
 
             rows.forEach(function (row) {
-                const card = buildCard(row, headers, primaryIndex, fieldIndexes, actionIndex);
-                if (card) {
-                    listWrapper.appendChild(card);
+                const item = buildRowItem(row, headers, primaryIndex, fieldIndexes, actionIndex);
+                if (item) {
+                    listWrapper.appendChild(item);
                 }
             });
 
@@ -239,12 +312,12 @@
         host.className = 'card-list-component';
         table.insertAdjacentElement('afterend', host);
 
-        const renderCards = buildRenderer(table, host);
-        if (!renderCards) {
+        const renderRows = buildRenderer(table, host);
+        if (!renderRows) {
             return;
         }
 
-        renderCards();
+        renderRows();
         table.classList.add('d-none');
         table.setAttribute('aria-hidden', 'true');
 
@@ -257,7 +330,7 @@
                 }
 
                 pending = window.setTimeout(function () {
-                    renderCards();
+                    renderRows();
                     pending = null;
                 }, 30);
             });

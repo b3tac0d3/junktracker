@@ -6,6 +6,7 @@
     $linkTypeLabels = $linkTypeLabels ?? [];
     $importanceOptions = $importanceOptions ?? [1, 2, 3, 4, 5];
     $isEdit = !empty($task['id']);
+    $entryMode = (string) ($entryMode ?? '');
 
     $title = (string) old('title', $task['title'] ?? '');
     $body = (string) old('body', $task['body'] ?? '');
@@ -35,6 +36,9 @@
 ?>
 <form method="post" action="<?= url($isEdit ? '/tasks/' . ($task['id'] ?? '') . '/edit' : '/tasks/new') ?>">
     <?= csrf_field() ?>
+    <?php if (!$isEdit && $entryMode !== ''): ?>
+        <input type="hidden" name="entry_mode" value="<?= e($entryMode) ?>" />
+    <?php endif; ?>
     <input id="task_link_lookup_url" type="hidden" value="<?= e(url('/tasks/lookup/links')) ?>" />
 
     <div class="row g-3">

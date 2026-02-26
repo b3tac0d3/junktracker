@@ -397,6 +397,18 @@ final class ClientsController extends Controller
             return;
         }
 
+        $duplicateMatch = $this->resolveQuickCreateDuplicate($firstName, $lastName, $phone, $email);
+        if ($duplicateMatch !== null) {
+            echo json_encode([
+                'ok' => true,
+                'created' => false,
+                'message' => 'Matched existing client.',
+                'client' => $duplicateMatch,
+                'csrf_token' => csrf_token(),
+            ]);
+            return;
+        }
+
         $clientId = Client::create([
             'first_name' => $firstName,
             'last_name' => $lastName,
@@ -429,6 +441,73 @@ final class ClientsController extends Controller
             ],
             'csrf_token' => csrf_token(),
         ]);
+    }
+
+    private function resolveQuickCreateDuplicate(string $firstName, string $lastName, string $phone, string $email): ?array
+    {
+        $matches = Client::findPotentialDuplicates([
+            'first_name' => $firstName,
+            'last_name' => $lastName,
+            'phone' => $phone,
+            'email' => $email,
+        ], null, 10);
+
+        if (empty($matches)) {
+            return null;
+        }
+
+        $needleEmail = strtolower(trim($email));
+        $needlePhone = $this->normalizePhone($phone);
+        $needleFirst = strtolower(trim($firstName));
+        $needleLast = strtolower(trim($lastName));
+
+        foreach ($matches as $match) {
+            if (($match['status'] ?? 'active') === 'deleted') {
+                continue;
+            }
+
+            $candidateId = (int) ($match['id'] ?? 0);
+            if ($candidateId <= 0) {
+                continue;
+            }
+
+            $candidateEmail = strtolower(trim((string) ($match['email'] ?? '')));
+            $candidatePhone = $this->normalizePhone((string) ($match['phone'] ?? ''));
+            $candidateName = strtolower(trim((string) ($match['display_name'] ?? '')));
+            $needleName = trim($needleFirst . ' ' . $needleLast);
+
+            $emailMatch = $needleEmail !== '' && $candidateEmail !== '' && $candidateEmail === $needleEmail;
+            $phoneMatch = $needlePhone !== '' && $candidatePhone !== '' && str_ends_with($candidatePhone, $needlePhone);
+            $nameMatch = $needleName !== '' && $candidateName === $needleName;
+
+            if ($emailMatch || ($nameMatch && ($phoneMatch || $needleEmail === ''))) {
+                $label = trim((string) ($match['display_name'] ?? ''));
+                if ($label === '') {
+                    $label = 'Client #' . $candidateId;
+                }
+
+                return [
+                    'id' => $candidateId,
+                    'label' => $label,
+                ];
+            }
+        }
+
+        return null;
+    }
+
+    private function normalizePhone(string $value): string
+    {
+        $digits = preg_replace('/\D+/', '', $value);
+        if ($digits === null || $digits === '') {
+            return '';
+        }
+
+        if (strlen($digits) > 10) {
+            return substr($digits, -10);
+        }
+
+        return $digits;
     }
 
     private function resolveSelectedCompany(?int $clientId): ?array

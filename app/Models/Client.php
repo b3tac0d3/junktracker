@@ -80,6 +80,7 @@ final class Client
     public static function findById(int $id): ?array
     {
         self::ensureCompanyLinkTable();
+        $businessScope = self::businessScopeClause('clients', 'cl');
         $hasCreatedBy = Schema::hasColumn('clients', 'created_by');
         $hasUpdatedBy = Schema::hasColumn('clients', 'updated_by');
         $hasDeletedBy = Schema::hasColumn('clients', 'deleted_by');
