@@ -94,15 +94,15 @@
                         </button>
                     </form>
                 <?php else: ?>
-                    <form class="js-punch-geo-form" method="post" action="<?= url('/time-tracking/open/punch-in') ?>">
-                        <?= csrf_field() ?>
-                        <?= geo_capture_fields('punch_only_punch_in') ?>
-                        <input type="hidden" name="return_to" value="<?= e($openBasePath) ?>" />
-                        <button class="btn btn-success" type="submit">
-                            <i class="fas fa-play me-1"></i>
-                            Punch In
-                        </button>
-                    </form>
+                    <button
+                        class="btn btn-success js-open-clock-punch-in"
+                        type="button"
+                        data-employee-id="<?= e((string) ((int) ($employee['id'] ?? 0))) ?>"
+                        data-employee-name="<?= e($employeeName) ?>"
+                    >
+                        <i class="fas fa-play me-1"></i>
+                        Punch In
+                    </button>
                 <?php endif; ?>
             </div>
         </div>
@@ -154,4 +154,48 @@
             <?php endif; ?>
         </div>
     </div>
+
+    <?php if (!$openEntry): ?>
+        <div class="modal fade" id="openClockPunchInModal" tabindex="-1" aria-labelledby="openClockPunchInModalLabel" aria-hidden="true">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <form class="js-punch-geo-form" method="post" action="<?= url('/time-tracking/open/punch-in') ?>" id="openClockPunchInForm">
+                        <?= csrf_field() ?>
+                        <?= geo_capture_fields('punch_only_punch_in') ?>
+                        <input type="hidden" name="employee_id" id="open_clock_punch_employee_id" value="<?= e((string) ((int) ($employee['id'] ?? 0))) ?>" />
+                        <input type="hidden" name="return_to" value="<?= e($openBasePath) ?>" />
+                        <input type="hidden" name="job_id" id="open_clock_punch_job_id" value="" />
+                        <input type="hidden" id="open_clock_job_lookup_url" value="<?= e(url('/time-tracking/lookup/jobs')) ?>" />
+
+                        <div class="modal-header">
+                            <h5 class="modal-title" id="openClockPunchInModalLabel">Punch In</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <p class="mb-3">Search for a job (optional). If left blank, this punch-in is saved as Non-Job Time.</p>
+                            <div class="position-relative">
+                                <label class="form-label" for="open_clock_punch_job_search">Job (optional)</label>
+                                <input
+                                    class="form-control"
+                                    id="open_clock_punch_job_search"
+                                    type="text"
+                                    autocomplete="off"
+                                    placeholder="Search job by name, id, city..."
+                                />
+                                <div id="open_clock_punch_job_suggestions" class="list-group position-absolute w-100 shadow-sm d-none"></div>
+                                <div class="form-text">Pick from suggestions to attach this punch to a job.</div>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                            <button class="btn btn-success" type="submit">
+                                <i class="fas fa-play me-1"></i>
+                                Punch In
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    <?php endif; ?>
 </div>

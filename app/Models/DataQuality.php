@@ -36,6 +36,9 @@ final class DataQuality
             if (Schema::hasColumn('jobs', 'contact_client_id')) {
                 self::updateForeignKey('jobs', 'contact_client_id', $sourceId, $targetId);
             }
+            if (Schema::hasColumn('jobs', 'owner_client_id')) {
+                self::updateForeignKey('jobs', 'owner_client_id', $sourceId, $targetId);
+            }
             if (Schema::hasColumn('jobs', 'job_owner_type') && Schema::hasColumn('jobs', 'job_owner_id')) {
                 $sql = 'UPDATE jobs
                         SET job_owner_id = :target_id,
@@ -186,6 +189,9 @@ final class DataQuality
                 }
                 $stmt = $pdo->prepare($sql);
                 $stmt->execute($params);
+            }
+            if (Schema::hasColumn('jobs', 'owner_company_id')) {
+                self::updateForeignKey('jobs', 'owner_company_id', $sourceId, $targetId);
             }
 
             if (self::tableExists('todos') && Schema::hasColumn('todos', 'link_type') && Schema::hasColumn('todos', 'link_id')) {

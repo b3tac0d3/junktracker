@@ -305,12 +305,26 @@ final class Dashboard
     private static function taskSummary(): array
     {
         return self::safe(static function (): array {
+            $currentUserId = (int) (auth_user_id() ?? 0);
+            if ($currentUserId <= 0) {
+                return [
+                    'total_count' => 0,
+                    'open_count' => 0,
+                    'in_progress_count' => 0,
+                    'closed_count' => 0,
+                    'overdue_count' => 0,
+                ];
+            }
+
             return Task::summary([
                 'q' => '',
                 'status' => 'all',
+                'assignment_status' => 'all',
                 'importance' => 0,
                 'link_type' => 'all',
-                'assigned_user_id' => 0,
+                'owner_scope' => 'mine',
+                'assigned_user_id' => $currentUserId,
+                'current_user_id' => $currentUserId,
                 'due_start' => '',
                 'due_end' => '',
                 'record_status' => 'active',
@@ -327,6 +341,11 @@ final class Dashboard
     private static function outstandingTasks(int $overdueLimit, int $upcomingLimit): array
     {
         return self::safe(static function () use ($overdueLimit, $upcomingLimit): array {
+            $currentUserId = (int) (auth_user_id() ?? 0);
+            if ($currentUserId <= 0) {
+                return ['overdue' => [], 'upcoming' => []];
+            }
+
             $fetch = static function (bool $overdue, int $limit): array {
                 $businessScoped = Schema::hasColumn('todos', 'business_id');
                 $businessId = self::currentBusinessId();
@@ -343,6 +362,7 @@ final class Dashboard
                         LEFT JOIN users u ON u.id = t.assigned_user_id
                         WHERE t.deleted_at IS NULL
                           AND t.status IN (\'open\', \'in_progress\')
+                          AND t.assigned_user_id = :assigned_user_id
                           AND t.due_at IS NOT NULL
                           ' . ($businessScoped ? 'AND t.business_id = :business_id' : '') . '
                           AND ' . ($overdue ? 't.due_at < NOW()' : 't.due_at >= NOW()') . '
@@ -350,7 +370,9 @@ final class Dashboard
                         LIMIT ' . max(1, min($limit, 25));
 
                 $stmt = Database::connection()->prepare($sql);
-                $params = [];
+                $params = [
+                    'assigned_user_id' => (int) (auth_user_id() ?? 0),
+                ];
                 if ($businessScoped) {
                     $params['business_id'] = $businessId;
                 }

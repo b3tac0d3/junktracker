@@ -340,7 +340,9 @@ a.card-list-item-title:hover {
     overflow: visible !important;
 }
 
-#jobOwnerResults,
+#jobOwnerClientResults,
+#jobOwnerEstateResults,
+#jobOwnerCompanyResults,
 #contactResults {
     z-index: 2200 !important;
 }

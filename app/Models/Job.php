@@ -645,6 +645,13 @@ final class Job
                            )
                        ) AS owner_display_name,
                        COALESCE(
+                           NULLIF(oc_link.business_name, \'\'),
+                           NULLIF(TRIM(CONCAT_WS(\' \', oc_link.first_name, oc_link.last_name)), \'\'),
+                           CONCAT(\'Client #\', oc_link.id)
+                       ) AS owner_client_display_name,
+                       oe_link.name AS owner_estate_display_name,
+                       om_link.name AS owner_company_display_name,
+                       COALESCE(
                            NULLIF(cc.business_name, \'\'),
                            NULLIF(TRIM(CONCAT_WS(\' \', cc.first_name, cc.last_name)), \'\'),
                            CONCAT(\'Client #\', cc.id)
@@ -661,7 +668,10 @@ final class Job
                     CASE WHEN j.job_owner_type = \'estate\' THEN j.job_owner_id END,
                     CASE WHEN j.job_owner_type IS NULL THEN j.estate_id END
                 )
-                LEFT JOIN companies om ON om.id = CASE WHEN j.job_owner_type = \'company\' THEN j.job_owner_id END';
+                LEFT JOIN companies om ON om.id = CASE WHEN j.job_owner_type = \'company\' THEN j.job_owner_id END
+                LEFT JOIN clients oc_link ON oc_link.id = COALESCE(j.owner_client_id, CASE WHEN j.job_owner_type = \'client\' THEN j.job_owner_id END, j.client_id)
+                LEFT JOIN estates oe_link ON oe_link.id = COALESCE(j.estate_id, CASE WHEN j.job_owner_type = \'estate\' THEN j.job_owner_id END)
+                LEFT JOIN companies om_link ON om_link.id = COALESCE(j.owner_company_id, CASE WHEN j.job_owner_type = \'company\' THEN j.job_owner_id END)';
 
         $where = ['j.id = :id'];
         $params = ['id' => $id];
@@ -771,6 +781,17 @@ final class Job
             'total_billed' => $data['total_billed'],
         ];
 
+        if (Schema::hasColumn('jobs', 'owner_client_id')) {
+            $columns[] = 'owner_client_id';
+            $values[] = ':owner_client_id';
+            $params['owner_client_id'] = $data['owner_client_id'] ?? null;
+        }
+        if (Schema::hasColumn('jobs', 'owner_company_id')) {
+            $columns[] = 'owner_company_id';
+            $values[] = ':owner_company_id';
+            $params['owner_company_id'] = $data['owner_company_id'] ?? null;
+        }
+
         if ($actorId !== null && Schema::hasColumn('jobs', 'created_by')) {
             $columns[] = 'created_by';
             $values[] = ':created_by';
@@ -858,6 +879,15 @@ final class Job
             'total_billed' => $data['total_billed'],
         ];
 
+        if (Schema::hasColumn('jobs', 'owner_client_id')) {
+            $sets[] = 'owner_client_id = :owner_client_id';
+            $params['owner_client_id'] = $data['owner_client_id'] ?? null;
+        }
+        if (Schema::hasColumn('jobs', 'owner_company_id')) {
+            $sets[] = 'owner_company_id = :owner_company_id';
+            $params['owner_company_id'] = $data['owner_company_id'] ?? null;
+        }
+
         if ($actorId !== null && Schema::hasColumn('jobs', 'updated_by')) {
             $sets[] = 'updated_by = :updated_by';
             $params['updated_by'] = $actorId;
@@ -940,7 +970,7 @@ final class Job
         $stmt->execute($params);
     }
 
-    public static function searchOwners(string $term, int $limit = 15): array
+    public static function searchOwners(string $term, int $limit = 15, ?string $ownerType = null): array
     {
         $term = trim($term);
         if ($term === '') {
@@ -1020,8 +1050,16 @@ final class Job
             $params['business_id_scope'] = self::currentBusinessId();
         }
         $stmt->execute($params);
+        $results = $stmt->fetchAll();
 
-        return $stmt->fetchAll();
+        if ($ownerType !== null && in_array($ownerType, self::OWNER_TYPES, true)) {
+            $results = array_values(array_filter(
+                $results,
+                static fn (array $row): bool => (string) ($row['owner_type'] ?? '') === $ownerType
+            ));
+        }
+
+        return $results;
     }
 
     public static function searchContactClients(string $term, int $limit = 15): array
@@ -1236,7 +1274,7 @@ final class Job
                 FROM information_schema.COLUMNS
                 WHERE TABLE_SCHEMA = :schema
                   AND TABLE_NAME = \'jobs\'
-                  AND COLUMN_NAME IN (\'job_owner_type\', \'job_owner_id\', \'contact_client_id\')';
+                  AND COLUMN_NAME IN (\'job_owner_type\', \'job_owner_id\', \'contact_client_id\', \'owner_client_id\', \'owner_company_id\')';
 
         $stmt = Database::connection()->prepare($sql);
         $stmt->execute(['schema' => $dbName]);
@@ -1253,6 +1291,12 @@ final class Job
         }
         if (!in_array('contact_client_id', $existing, true)) {
             Database::connection()->exec('ALTER TABLE jobs ADD COLUMN contact_client_id BIGINT UNSIGNED NULL AFTER job_owner_id');
+        }
+        if (!in_array('owner_client_id', $existing, true)) {
+            Database::connection()->exec('ALTER TABLE jobs ADD COLUMN owner_client_id BIGINT UNSIGNED NULL AFTER contact_client_id');
+        }
+        if (!in_array('owner_company_id', $existing, true)) {
+            Database::connection()->exec('ALTER TABLE jobs ADD COLUMN owner_company_id BIGINT UNSIGNED NULL AFTER owner_client_id');
         }
 
         $ensured = true;

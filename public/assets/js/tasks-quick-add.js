@@ -83,6 +83,7 @@ window.addEventListener('DOMContentLoaded', () => {
         const title = String(task.title || `Task #${id}`);
         const status = String(task.status || 'open');
         const isCompleted = !!task.is_completed || status === 'closed';
+        const ownerName = String(task.assigned_user_name || 'Unassigned');
         const taskUrl = String(task.url || taskUrlTemplate.replace('__ID__', String(id)));
         const toggleUrl = toggleUrlTemplate.replace('__ID__', String(id));
 
@@ -104,6 +105,7 @@ window.addEventListener('DOMContentLoaded', () => {
                     <a class="task-quick-title text-decoration-none${isCompleted ? ' text-muted text-decoration-line-through' : ''}" href="${escapeHtml(taskUrl)}">
                         ${escapeHtml(title)}
                     </a>
+                    <div class="small text-muted mt-1">Owner: ${escapeHtml(ownerName)}</div>
                 </div>
             </div>
         `;

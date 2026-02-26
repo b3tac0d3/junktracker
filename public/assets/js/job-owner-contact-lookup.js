@@ -1,15 +1,36 @@
 window.addEventListener('DOMContentLoaded', () => {
-    const ownerInput = document.querySelector('#job_owner_search');
-    const ownerResults = document.querySelector('#jobOwnerResults');
+    const ownerLookupUrlInput = document.querySelector('#owner_lookup_url');
     const ownerTypeInput = document.querySelector('#job_owner_type');
     const ownerIdInput = document.querySelector('#job_owner_id');
-    const ownerLookupUrlInput = document.querySelector('#owner_lookup_url');
+
+    const ownerFields = [
+        {
+            type: 'client',
+            searchInput: document.querySelector('#owner_client_search'),
+            idInput: document.querySelector('#owner_client_id'),
+            results: document.querySelector('#jobOwnerClientResults'),
+        },
+        {
+            type: 'estate',
+            searchInput: document.querySelector('#owner_estate_search'),
+            idInput: document.querySelector('#owner_estate_id'),
+            results: document.querySelector('#jobOwnerEstateResults'),
+        },
+        {
+            type: 'company',
+            searchInput: document.querySelector('#owner_company_search'),
+            idInput: document.querySelector('#owner_company_id'),
+            results: document.querySelector('#jobOwnerCompanyResults'),
+        },
+    ].filter((field) => field.searchInput && field.idInput && field.results);
+
     const contactInput = document.querySelector('#contact_search');
     const contactResults = document.querySelector('#contactResults');
     const contactIdInput = document.querySelector('#contact_client_id');
     const contactLookupUrlInput = document.querySelector('#contact_lookup_url');
     const contactCreateUrlInput = document.querySelector('#contact_create_url');
-    const form = ownerInput ? ownerInput.closest('form') : null;
+
+    const form = contactInput ? contactInput.closest('form') : null;
     const csrfInput = form ? form.querySelector('input[name="csrf_token"]') : null;
 
     const contactModalEl = document.getElementById('addJobContactClientModal');
@@ -20,7 +41,16 @@ window.addEventListener('DOMContentLoaded', () => {
     const contactNewPhone = document.getElementById('job_new_contact_phone');
     const contactNewEmail = document.getElementById('job_new_contact_email');
 
-    if (!ownerInput || !ownerResults || !ownerTypeInput || !ownerIdInput || !ownerLookupUrlInput || !contactInput || !contactResults || !contactIdInput || !contactLookupUrlInput) {
+    if (
+        !ownerLookupUrlInput
+        || !ownerTypeInput
+        || !ownerIdInput
+        || ownerFields.length === 0
+        || !contactInput
+        || !contactResults
+        || !contactIdInput
+        || !contactLookupUrlInput
+    ) {
         return;
     }
 
@@ -118,6 +148,82 @@ window.addEventListener('DOMContentLoaded', () => {
         box.classList.remove('d-none');
     };
 
+    const setPrimaryOwner = (ownerType, ownerId) => {
+        ownerTypeInput.value = ownerType || '';
+        ownerIdInput.value = ownerId ? String(ownerId) : '';
+    };
+
+    const firstSelectedOwner = () => {
+        for (const field of ownerFields) {
+            const id = Number.parseInt(field.idInput.value || '', 10);
+            if (Number.isInteger(id) && id > 0) {
+                return { type: field.type, id };
+            }
+        }
+        return null;
+    };
+
+    const refreshPrimaryOwner = () => {
+        const currentType = ownerTypeInput.value;
+        const currentId = Number.parseInt(ownerIdInput.value || '', 10);
+        if (currentType && Number.isInteger(currentId) && currentId > 0) {
+            const matchingField = ownerFields.find((field) => field.type === currentType);
+            if (matchingField) {
+                const matchingId = Number.parseInt(matchingField.idInput.value || '', 10);
+                if (Number.isInteger(matchingId) && matchingId === currentId) {
+                    return;
+                }
+            }
+        }
+
+        const selected = firstSelectedOwner();
+        if (selected) {
+            setPrimaryOwner(selected.type, selected.id);
+            return;
+        }
+
+        setPrimaryOwner('', '');
+    };
+
+    ownerFields.forEach((field) => {
+        const searchOwners = debounce(async () => {
+            const q = field.searchInput.value.trim();
+            if (q.length < 2) {
+                hideResults(field.results);
+                return;
+            }
+
+            try {
+                const response = await fetch(`${ownerLookupUrl}?type=${encodeURIComponent(field.type)}&q=${encodeURIComponent(q)}`, {
+                    headers: { Accept: 'application/json' },
+                });
+
+                if (!response.ok) {
+                    hideResults(field.results);
+                    return;
+                }
+
+                const items = await response.json();
+                renderResults(field.results, items, (item) => {
+                    const itemId = item.owner_id || '';
+                    field.searchInput.value = item.label || '';
+                    field.idInput.value = itemId;
+                    setPrimaryOwner(field.type, itemId);
+                    hideResults(field.results);
+                });
+            } catch (error) {
+                hideResults(field.results);
+                console.error(error);
+            }
+        });
+
+        field.searchInput.addEventListener('input', () => {
+            field.idInput.value = '';
+            refreshPrimaryOwner();
+            searchOwners();
+        });
+    });
+
     const renderContactResults = (items, term) => {
         contactResults.innerHTML = '';
 
@@ -147,36 +253,6 @@ window.addEventListener('DOMContentLoaded', () => {
         hideResults(contactResults);
     };
 
-    const searchOwners = debounce(async () => {
-        const q = ownerInput.value.trim();
-        if (q.length < 2) {
-            hideResults(ownerResults);
-            return;
-        }
-
-        try {
-            const response = await fetch(`${ownerLookupUrl}?q=${encodeURIComponent(q)}`, {
-                headers: { Accept: 'application/json' },
-            });
-
-            if (!response.ok) {
-                hideResults(ownerResults);
-                return;
-            }
-
-            const items = await response.json();
-            renderResults(ownerResults, items, (item) => {
-                ownerInput.value = item.label || '';
-                ownerTypeInput.value = item.owner_type || '';
-                ownerIdInput.value = item.owner_id || '';
-                hideResults(ownerResults);
-            });
-        } catch (error) {
-            hideResults(ownerResults);
-            console.error(error);
-        }
-    });
-
     const searchContacts = debounce(async () => {
         const q = contactInput.value.trim();
         if (q.length < 2) {
@@ -202,21 +278,18 @@ window.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    ownerInput.addEventListener('input', () => {
-        ownerTypeInput.value = '';
-        ownerIdInput.value = '';
-        searchOwners();
-    });
-
     contactInput.addEventListener('input', () => {
         contactIdInput.value = '';
         searchContacts();
     });
 
     document.addEventListener('click', (event) => {
-        if (!ownerResults.contains(event.target) && event.target !== ownerInput) {
-            hideResults(ownerResults);
-        }
+        ownerFields.forEach((field) => {
+            if (!field.results.contains(event.target) && event.target !== field.searchInput) {
+                hideResults(field.results);
+            }
+        });
+
         if (!contactResults.contains(event.target) && event.target !== contactInput) {
             hideResults(contactResults);
         }
@@ -304,4 +377,6 @@ window.addEventListener('DOMContentLoaded', () => {
             }
         });
     });
+
+    refreshPrimaryOwner();
 });

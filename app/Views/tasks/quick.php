@@ -103,6 +103,7 @@
                         }
                         $taskStatus = (string) ($task['status'] ?? 'open');
                         $isClosed = $taskStatus === 'closed';
+                        $assignedName = (string) (($task['assigned_user_name'] ?? '') !== '' ? $task['assigned_user_name'] : 'Unassigned');
                     ?>
                     <li class="list-group-item task-quick-item<?= $isClosed ? ' is-complete' : '' ?>" data-task-id="<?= e((string) $taskId) ?>" data-title="<?= e(strtolower($taskTitle)) ?>" data-status="<?= e($taskStatus) ?>">
                         <div class="d-flex align-items-start gap-3">
@@ -117,6 +118,7 @@
                                 <a class="task-quick-title text-decoration-none<?= $isClosed ? ' text-muted text-decoration-line-through' : '' ?>" href="<?= url('/tasks/' . $taskId) ?>">
                                     <?= e($taskTitle) ?>
                                 </a>
+                                <div class="small text-muted mt-1">Owner: <?= e($assignedName) ?></div>
                             </div>
                         </div>
                     </li>

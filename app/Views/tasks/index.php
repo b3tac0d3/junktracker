@@ -6,7 +6,9 @@
     $assignmentOptions = $assignmentOptions ?? ['all', 'pending', 'accepted', 'declined', 'unassigned'];
     $linkTypes = $linkTypes ?? ['general'];
     $linkTypeLabels = $linkTypeLabels ?? [];
-    $ownerScopes = $ownerScopes ?? ['all', 'mine', 'team'];
+    $ownerScopes = $ownerScopes ?? ['mine', 'all'];
+    $defaultOwnerScope = (string) ($defaultOwnerScope ?? 'mine');
+    $canViewAllTaskOwners = (bool) ($canViewAllTaskOwners ?? false);
     $savedPresets = is_array($savedPresets ?? null) ? $savedPresets : [];
     $selectedPresetId = isset($selectedPresetId) ? (int) $selectedPresetId : 0;
     $filterPresetModule = (string) ($filterPresetModule ?? 'tasks');
@@ -19,7 +21,7 @@
         'assignment_status' => (string) ($filters['assignment_status'] ?? 'all'),
         'importance' => $filters['importance'] ?? '',
         'link_type' => (string) ($filters['link_type'] ?? 'all'),
-        'owner_scope' => (string) ($filters['owner_scope'] ?? 'all'),
+        'owner_scope' => (string) ($filters['owner_scope'] ?? $defaultOwnerScope),
         'assigned_user_id' => $filters['assigned_user_id'] ?? '',
         'record_status' => (string) ($filters['record_status'] ?? 'active'),
         'due_start' => (string) ($filters['due_start'] ?? ''),
@@ -30,7 +32,7 @@
         $currentFilters['assignment_status'] !== 'all',
         $currentFilters['importance'] !== '',
         $currentFilters['link_type'] !== 'all',
-        $currentFilters['owner_scope'] !== 'all',
+        $currentFilters['owner_scope'] !== $defaultOwnerScope,
         $currentFilters['assigned_user_id'] !== '',
         $currentFilters['record_status'] !== 'active',
         $currentFilters['due_start'] !== '',
@@ -153,6 +155,7 @@
                                 <?php endforeach; ?>
                             </select>
                         </div>
+                        <?php if ($canViewAllTaskOwners): ?>
                         <div class="col-12 col-lg-2">
                             <label class="form-label small fw-bold text-muted">Assigned</label>
                             <select class="form-select" name="assigned_user_id">
@@ -165,20 +168,24 @@
                                 <?php endforeach; ?>
                             </select>
                         </div>
+                        <?php endif; ?>
+                        <?php if ($canViewAllTaskOwners): ?>
                         <div class="col-12 col-lg-2">
                             <label class="form-label small fw-bold text-muted">Owner Scope</label>
                             <select class="form-select" name="owner_scope">
                                 <?php foreach ($ownerScopes as $scope): ?>
-                                <option value="<?= e($scope) ?>" <?= (string) ($filters['owner_scope'] ?? 'all') === $scope ? 'selected' : '' ?>>
+                                <option value="<?= e($scope) ?>" <?= (string) ($filters['owner_scope'] ?? $defaultOwnerScope) === $scope ? 'selected' : '' ?>>
                                     <?= e(match ($scope) {
                                         'mine' => 'Mine',
-                                        'team' => 'Team',
                                         default => 'All',
                                     }) ?>
                                 </option>
                                 <?php endforeach; ?>
                             </select>
                         </div>
+                        <?php else: ?>
+                        <input type="hidden" name="owner_scope" value="mine" />
+                        <?php endif; ?>
                         <div class="col-12 col-lg-1">
                             <label class="form-label small fw-bold text-muted">Record</label>
                             <select class="form-select" name="record_status">
@@ -299,6 +306,7 @@
                         }
                         $taskStatus = (string) ($task['status'] ?? 'open');
                         $isClosed = $taskStatus === 'closed';
+                        $assignedName = (string) (($task['assigned_user_name'] ?? '') !== '' ? $task['assigned_user_name'] : 'Unassigned');
                     ?>
                     <li class="list-group-item task-quick-item<?= $isClosed ? ' is-complete' : '' ?>" data-task-id="<?= e((string) $taskId) ?>" data-title="<?= e(strtolower($taskTitle)) ?>" data-status="<?= e($taskStatus) ?>">
                         <div class="d-flex align-items-start gap-3">
@@ -313,6 +321,7 @@
                                 <a class="task-quick-title text-decoration-none<?= $isClosed ? ' text-muted text-decoration-line-through' : '' ?>" href="<?= url('/tasks/' . $taskId) ?>">
                                     <?= e($taskTitle) ?>
                                 </a>
+                                <div class="small text-muted mt-1">Owner: <?= e($assignedName) ?></div>
                             </div>
                         </div>
                     </li>

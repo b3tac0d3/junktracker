@@ -186,13 +186,31 @@
                 </div>
                 <div class="card-body">
                     <div class="row g-3">
-                        <div class="col-md-6">
+                        <div class="col-md-4">
                             <div class="text-muted small">Job Name</div>
                             <div class="fw-semibold"><?= e($job['name'] ?? '-') ?></div>
                         </div>
-                        <div class="col-md-6">
+                        <div class="col-md-4">
                             <div class="text-muted small">Job Owner</div>
                             <div class="fw-semibold"><?= e((string) ($job['owner_display_name'] ?? $clientName)) ?></div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="text-muted small">Linked Records</div>
+                            <div class="fw-semibold">
+                                <?php
+                                    $linkedItems = [];
+                                    if (!empty($job['owner_client_display_name'])) {
+                                        $linkedItems[] = 'Client: ' . (string) $job['owner_client_display_name'];
+                                    }
+                                    if (!empty($job['owner_estate_display_name'])) {
+                                        $linkedItems[] = 'Estate: ' . (string) $job['owner_estate_display_name'];
+                                    }
+                                    if (!empty($job['owner_company_display_name'])) {
+                                        $linkedItems[] = 'Company: ' . (string) $job['owner_company_display_name'];
+                                    }
+                                ?>
+                                <?= e(!empty($linkedItems) ? implode(' | ', $linkedItems) : '—') ?>
+                            </div>
                         </div>
                         <div class="col-md-6">
                             <div class="text-muted small">Address</div>

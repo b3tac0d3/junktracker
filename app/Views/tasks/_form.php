@@ -22,6 +22,16 @@
     }
 
     $assignedUserId = (string) old('assigned_user_id', isset($task['assigned_user_id']) ? (string) $task['assigned_user_id'] : '');
+    $assignedUserSearch = trim((string) old('assigned_user_search', $task['assigned_user_name'] ?? ''));
+    if ($assignedUserSearch === '' && $assignedUserId !== '') {
+        foreach ($users as $user) {
+            $candidateId = (string) ((int) ($user['id'] ?? 0));
+            if ($candidateId !== '' && $candidateId === $assignedUserId) {
+                $assignedUserSearch = (string) ($user['name'] ?? '');
+                break;
+            }
+        }
+    }
     $currentUserId = (int) (auth_user_id() ?? 0);
     $assignedToOther = $assignedUserId !== '' && (int) $assignedUserId !== $currentUserId;
     $linkType = (string) old('link_type', $task['link_type'] ?? 'general');
@@ -40,6 +50,7 @@
         <input type="hidden" name="entry_mode" value="<?= e($entryMode) ?>" />
     <?php endif; ?>
     <input id="task_link_lookup_url" type="hidden" value="<?= e(url('/tasks/lookup/links')) ?>" />
+    <input id="task_owner_lookup_url" type="hidden" value="<?= e(url('/tasks/lookup/users')) ?>" />
 
     <div class="row g-3">
         <div class="col-md-8">
@@ -68,22 +79,24 @@
             </select>
         </div>
 
-        <div class="col-md-4">
-            <label class="form-label" for="assigned_user_id">Assigned To</label>
-            <select class="form-select" id="assigned_user_id" name="assigned_user_id">
-                <option value="">Unassigned</option>
-                <?php foreach ($users as $user): ?>
-                    <?php $id = (string) ((int) ($user['id'] ?? 0)); ?>
-                    <option value="<?= e($id) ?>" <?= $assignedUserId === $id ? 'selected' : '' ?>>
-                        <?= e((string) ($user['name'] ?? ('User #' . $id))) ?>
-                    </option>
-                <?php endforeach; ?>
-            </select>
+        <div class="col-md-4 position-relative">
+            <label class="form-label" for="task_owner_search">Owner</label>
+            <input id="assigned_user_id" name="assigned_user_id" type="hidden" value="<?= e($assignedUserId) ?>" />
+            <input
+                class="form-control"
+                id="task_owner_search"
+                name="assigned_user_search"
+                type="text"
+                autocomplete="off"
+                value="<?= e($assignedUserSearch) ?>"
+                placeholder="Search users... (leave blank for global/unassigned)"
+            />
+            <div id="task_owner_suggestions" class="list-group position-absolute w-100 d-none" style="z-index: 1100;"></div>
             <div class="form-text">
                 <?php if ($assignedToOther): ?>
                     Assignment will be marked pending until that user accepts.
                 <?php else: ?>
-                    Assign to yourself for immediate acceptance.
+                    Leave blank for a global task or assign to yourself for immediate acceptance.
                 <?php endif; ?>
             </div>
         </div>

@@ -29,7 +29,30 @@
     }
     $ownerType = (string) old('job_owner_type', $job['resolved_owner_type'] ?? (isset($job['estate_id']) && !empty($job['estate_id']) ? 'estate' : 'client'));
     $ownerId = (string) old('job_owner_id', (string) ($job['resolved_owner_id'] ?? ''));
-    $ownerSearch = (string) old('job_owner_search', $job['owner_display_name'] ?? '');
+    $ownerClientId = (string) old(
+        'owner_client_id',
+        (string) ($job['owner_client_id'] ?? (($job['resolved_owner_type'] ?? '') === 'client' ? ($job['resolved_owner_id'] ?? '') : ''))
+    );
+    $ownerEstateId = (string) old(
+        'owner_estate_id',
+        (string) ($job['estate_id'] ?? (($job['resolved_owner_type'] ?? '') === 'estate' ? ($job['resolved_owner_id'] ?? '') : ''))
+    );
+    $ownerCompanyId = (string) old(
+        'owner_company_id',
+        (string) ($job['owner_company_id'] ?? (($job['resolved_owner_type'] ?? '') === 'company' ? ($job['resolved_owner_id'] ?? '') : ''))
+    );
+    $ownerClientSearch = (string) old(
+        'owner_client_search',
+        (string) ($job['owner_client_display_name'] ?? (($job['resolved_owner_type'] ?? '') === 'client' ? ($job['owner_display_name'] ?? '') : ''))
+    );
+    $ownerEstateSearch = (string) old(
+        'owner_estate_search',
+        (string) ($job['owner_estate_display_name'] ?? (($job['resolved_owner_type'] ?? '') === 'estate' ? ($job['owner_display_name'] ?? '') : ''))
+    );
+    $ownerCompanySearch = (string) old(
+        'owner_company_search',
+        (string) ($job['owner_company_display_name'] ?? (($job['resolved_owner_type'] ?? '') === 'company' ? ($job['owner_display_name'] ?? '') : ''))
+    );
     $contactClientId = (string) old('contact_client_id', (string) ($job['resolved_contact_client_id'] ?? ($job['client_id'] ?? '')));
     $contactSearch = (string) old('contact_search', $job['contact_display_name'] ?? '');
     $canQuickCreateClient = can_access('clients', 'create');
@@ -68,14 +91,27 @@
                                 <?php endforeach; ?>
                             </select>
                         </div>
-                        <div class="col-md-5 position-relative">
-                            <label class="form-label" for="job_owner_search">Job Owner</label>
-                            <input class="form-control" id="job_owner_search" name="job_owner_search" type="text" autocomplete="off" value="<?= e($ownerSearch) ?>" placeholder="Search clients, estates, companies..." required />
-                            <input type="hidden" id="job_owner_type" name="job_owner_type" value="<?= e($ownerType) ?>" />
-                            <input type="hidden" id="job_owner_id" name="job_owner_id" value="<?= e($ownerId) ?>" />
-                            <div id="jobOwnerResults" class="list-group position-absolute w-100 shadow-sm d-none" style="z-index: 1080; top: 100%;"></div>
-                            <div class="form-text">Search clients, estates, or companies.</div>
+                        <div class="col-md-4 position-relative">
+                            <label class="form-label" for="owner_client_search">Linked Client</label>
+                            <input class="form-control" id="owner_client_search" name="owner_client_search" type="text" autocomplete="off" value="<?= e($ownerClientSearch) ?>" placeholder="Search client..." />
+                            <input type="hidden" id="owner_client_id" name="owner_client_id" value="<?= e($ownerClientId) ?>" />
+                            <div id="jobOwnerClientResults" class="list-group position-absolute w-100 shadow-sm d-none" style="z-index: 1080; top: 100%;"></div>
                         </div>
+                        <div class="col-md-4 position-relative">
+                            <label class="form-label" for="owner_estate_search">Linked Estate</label>
+                            <input class="form-control" id="owner_estate_search" name="owner_estate_search" type="text" autocomplete="off" value="<?= e($ownerEstateSearch) ?>" placeholder="Search estate..." />
+                            <input type="hidden" id="owner_estate_id" name="owner_estate_id" value="<?= e($ownerEstateId) ?>" />
+                            <div id="jobOwnerEstateResults" class="list-group position-absolute w-100 shadow-sm d-none" style="z-index: 1080; top: 100%;"></div>
+                        </div>
+                        <div class="col-md-4 position-relative">
+                            <label class="form-label" for="owner_company_search">Linked Company</label>
+                            <input class="form-control" id="owner_company_search" name="owner_company_search" type="text" autocomplete="off" value="<?= e($ownerCompanySearch) ?>" placeholder="Search company..." />
+                            <input type="hidden" id="owner_company_id" name="owner_company_id" value="<?= e($ownerCompanyId) ?>" />
+                            <div id="jobOwnerCompanyResults" class="list-group position-absolute w-100 shadow-sm d-none" style="z-index: 1080; top: 100%;"></div>
+                            <div class="form-text">Link one or more owner records.</div>
+                        </div>
+                        <input type="hidden" id="job_owner_type" name="job_owner_type" value="<?= e($ownerType) ?>" />
+                        <input type="hidden" id="job_owner_id" name="job_owner_id" value="<?= e($ownerId) ?>" />
                         <div class="col-md-6 position-relative">
                             <label class="form-label" for="contact_search">Contact</label>
                             <input class="form-control" id="contact_search" name="contact_search" type="text" autocomplete="off" value="<?= e($contactSearch) ?>" placeholder="Search clients..." required />

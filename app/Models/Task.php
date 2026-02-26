@@ -559,6 +559,48 @@ final class Task
         return $stmt->fetchAll();
     }
 
+    public static function lookupUsers(string $term, int $limit = 10): array
+    {
+        $term = trim($term);
+        if ($term === '') {
+            return [];
+        }
+
+        $limit = max(1, min($limit, 25));
+        $sql = 'SELECT u.id,
+                       ' . self::userLabelSql('u') . ' AS label,
+                       u.email AS meta
+                FROM users u
+                WHERE 1=1';
+
+        if (Schema::hasColumn('users', 'business_id')) {
+            $sql .= ' AND u.business_id = :business_id';
+        }
+        if (Schema::hasColumn('users', 'deleted_at')) {
+            $sql .= ' AND u.deleted_at IS NULL';
+        }
+        if (Schema::hasColumn('users', 'is_active')) {
+            $sql .= ' AND COALESCE(u.is_active, 1) = 1';
+        }
+
+        $sql .= ' AND (
+                    CAST(u.id AS CHAR) LIKE :term
+                    OR u.first_name LIKE :term
+                    OR u.last_name LIKE :term
+                    OR u.email LIKE :term
+                )
+                ORDER BY label ASC
+                LIMIT ' . $limit;
+
+        $stmt = Database::connection()->prepare($sql);
+        $params = ['term' => '%' . $term . '%'];
+        if (Schema::hasColumn('users', 'business_id')) {
+            $params['business_id'] = self::currentBusinessId();
+        }
+        $stmt->execute($params);
+        return $stmt->fetchAll();
+    }
+
     public static function lookupLinks(string $type, string $term, int $limit = 10): array
     {
         self::ensureTable();

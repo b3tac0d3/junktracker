@@ -65,6 +65,20 @@ $canViewServiceSection = can_access('jobs', 'view')
     || can_access('prospects', 'view')
     || $canViewPhotoLibrary;
 
+$showOverviewMenu = can_access('dashboard', 'view')
+    || (can_access('notifications', 'view') && !$isGlobalAdminContext)
+    || (can_access('tasks', 'view') && !$isGlobalAdminContext);
+
+$showOperationsMenu = can_access('time_tracking', 'view') && !$isGlobalAdminContext;
+
+$showAdminMenu = !$isGlobalAdminContext && (
+    can_access('employees', 'view')
+    || can_access('reports', 'view')
+    || can_access('admin', 'view')
+);
+
+$showDevMenu = $showSiteAdminNav || auth_user_id() === 1;
+
 $requestPath = (string) (parse_url((string) ($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_PATH) ?? '');
 $quickAddJobId = 0;
 if (preg_match('#/jobs/(\d+)(?:/|$)#', $requestPath, $jobMatch)) {
@@ -214,29 +228,31 @@ if ($isGlobalAdminContext) {
             <nav class="sb-sidenav accordion sb-sidenav-dark" id="sidenavAccordion">
                 <div class="sb-sidenav-menu">
                     <div class="nav">
-                        <div class="sb-sidenav-menu-heading">Overview</div>
-                        <?php if (can_access('dashboard', 'view')): ?>
-                            <a class="nav-link" href="<?= url($isGlobalAdminContext ? '/site-admin' : '/') ?>">
-                                <div class="sb-nav-link-icon"><i class="fas fa-gauge-high"></i></div>
-                                <?= e($isGlobalAdminContext ? 'Global Dashboard' : 'Dashboard') ?>
-                            </a>
-                        <?php endif; ?>
+                        <?php if ($showOverviewMenu): ?>
+                            <div class="sb-sidenav-menu-heading">Overview</div>
+                            <?php if (can_access('dashboard', 'view')): ?>
+                                <a class="nav-link" href="<?= url($isGlobalAdminContext ? '/site-admin' : '/') ?>">
+                                    <div class="sb-nav-link-icon"><i class="fas fa-gauge-high"></i></div>
+                                    <?= e($isGlobalAdminContext ? 'Global Dashboard' : 'Dashboard') ?>
+                                </a>
+                            <?php endif; ?>
 
-                        <?php if (can_access('notifications', 'view') && !$isGlobalAdminContext): ?>
-                            <a class="nav-link" href="<?= url('/notifications') ?>">
-                                <div class="sb-nav-link-icon"><i class="fas fa-bell"></i></div>
-                                Notifications
-                                <span class="badge bg-danger ms-auto rounded-pill nav-notification-sidebar-badge <?= $notificationUnread > 0 ? '' : 'd-none' ?>">
-                                    <?= $notificationUnread > 99 ? '99+' : $notificationUnread ?>
-                                </span>
-                            </a>
-                        <?php endif; ?>
+                            <?php if (can_access('notifications', 'view') && !$isGlobalAdminContext): ?>
+                                <a class="nav-link" href="<?= url('/notifications') ?>">
+                                    <div class="sb-nav-link-icon"><i class="fas fa-bell"></i></div>
+                                    Notifications
+                                    <span class="badge bg-danger ms-auto rounded-pill nav-notification-sidebar-badge <?= $notificationUnread > 0 ? '' : 'd-none' ?>">
+                                        <?= $notificationUnread > 99 ? '99+' : $notificationUnread ?>
+                                    </span>
+                                </a>
+                            <?php endif; ?>
 
-                        <?php if (can_access('tasks', 'view') && !$isGlobalAdminContext): ?>
-                            <a class="nav-link" href="<?= url('/tasks') ?>">
-                                <div class="sb-nav-link-icon"><i class="fas fa-check-double"></i></div>
-                                Tasks
-                            </a>
+                            <?php if (can_access('tasks', 'view') && !$isGlobalAdminContext): ?>
+                                <a class="nav-link" href="<?= url('/tasks') ?>">
+                                    <div class="sb-nav-link-icon"><i class="fas fa-check-double"></i></div>
+                                    Tasks
+                                </a>
+                            <?php endif; ?>
                         <?php endif; ?>
 
                         <?php if ($canViewServiceSection && !$isGlobalAdminContext): ?>
@@ -310,7 +326,7 @@ if ($isGlobalAdminContext) {
                             <?php endif; ?>
                         <?php endif; ?>
 
-                        <?php if (can_access('time_tracking', 'view') && !$isGlobalAdminContext): ?>
+                        <?php if ($showOperationsMenu): ?>
                             <div class="sb-sidenav-menu-heading">Operations</div>
                             <a class="nav-link" href="<?= url('/time-tracking') ?>">
                                 <div class="sb-nav-link-icon"><i class="fas fa-clock"></i></div>
@@ -322,7 +338,7 @@ if ($isGlobalAdminContext) {
                             </a>
                         <?php endif; ?>
 
-                        <?php if (!$isGlobalAdminContext): ?>
+                        <?php if ($showAdminMenu): ?>
                             <div class="sb-sidenav-menu-heading">Admin</div>
                             <?php if (can_access('employees', 'view')): ?>
                                 <a class="nav-link" href="<?= url('/employees') ?>">
@@ -348,34 +364,36 @@ if ($isGlobalAdminContext) {
                             <?php endif; ?>
                         <?php endif; ?>
 
-                        <div class="sb-sidenav-menu-heading"><?= e($isGlobalAdminContext ? 'Site Admin' : 'Dev') ?></div>
-                        <?php if ($showSiteAdminNav): ?>
-                            <a class="nav-link collapsed" href="#" data-bs-toggle="collapse" data-bs-target="#collapseSiteAdminMenu" aria-expanded="false" aria-controls="collapseSiteAdminMenu">
-                                <div class="sb-nav-link-icon"><i class="fas fa-shield-alt"></i></div>
-                                Site Admin
-                                <?php if ($siteAdminSupportUnread > 0): ?>
-                                    <span class="badge bg-danger ms-auto me-2"><?= e((string) $siteAdminSupportUnread) ?></span>
-                                <?php endif; ?>
-                                <div class="sb-sidenav-collapse-arrow"><i class="fas fa-angle-down"></i></div>
-                            </a>
-                            <div class="collapse" id="collapseSiteAdminMenu" data-bs-parent="#sidenavAccordion">
-                                <nav class="sb-sidenav-menu-nested nav">
-                                    <a class="nav-link" href="<?= url('/site-admin') ?>">Businesses</a>
-                                    <a class="nav-link" href="<?= url('/site-admin/users') ?>">Global Users</a>
-                                    <a class="nav-link d-flex align-items-center" href="<?= url('/site-admin/support') ?>">
-                                        <span>Support Queue</span>
-                                        <?php if ($siteAdminSupportUnread > 0): ?>
-                                            <span class="ms-auto badge bg-danger"><?= e((string) $siteAdminSupportUnread) ?></span>
-                                        <?php endif; ?>
-                                    </a>
-                                </nav>
-                            </div>
-                        <?php endif; ?>
-                        <?php if (auth_user_id() === 1): ?>
-                            <a class="nav-link" href="<?= url('/dev') ?>">
-                                <div class="sb-nav-link-icon"><i class="fas fa-code"></i></div>
-                                Dev
-                            </a>
+                        <?php if ($showDevMenu): ?>
+                            <div class="sb-sidenav-menu-heading"><?= e($isGlobalAdminContext ? 'Site Admin' : 'Dev') ?></div>
+                            <?php if ($showSiteAdminNav): ?>
+                                <a class="nav-link collapsed" href="#" data-bs-toggle="collapse" data-bs-target="#collapseSiteAdminMenu" aria-expanded="false" aria-controls="collapseSiteAdminMenu">
+                                    <div class="sb-nav-link-icon"><i class="fas fa-shield-alt"></i></div>
+                                    Site Admin
+                                    <?php if ($siteAdminSupportUnread > 0): ?>
+                                        <span class="badge bg-danger ms-auto me-2"><?= e((string) $siteAdminSupportUnread) ?></span>
+                                    <?php endif; ?>
+                                    <div class="sb-sidenav-collapse-arrow"><i class="fas fa-angle-down"></i></div>
+                                </a>
+                                <div class="collapse" id="collapseSiteAdminMenu" data-bs-parent="#sidenavAccordion">
+                                    <nav class="sb-sidenav-menu-nested nav">
+                                        <a class="nav-link" href="<?= url('/site-admin') ?>">Businesses</a>
+                                        <a class="nav-link" href="<?= url('/site-admin/users') ?>">Global Users</a>
+                                        <a class="nav-link d-flex align-items-center" href="<?= url('/site-admin/support') ?>">
+                                            <span>Support Queue</span>
+                                            <?php if ($siteAdminSupportUnread > 0): ?>
+                                                <span class="ms-auto badge bg-danger"><?= e((string) $siteAdminSupportUnread) ?></span>
+                                            <?php endif; ?>
+                                        </a>
+                                    </nav>
+                                </div>
+                            <?php endif; ?>
+                            <?php if (auth_user_id() === 1): ?>
+                                <a class="nav-link" href="<?= url('/dev') ?>">
+                                    <div class="sb-nav-link-icon"><i class="fas fa-code"></i></div>
+                                    Dev
+                                </a>
+                            <?php endif; ?>
                         <?php endif; ?>
                     </div>
                 </div>

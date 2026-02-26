@@ -14,8 +14,12 @@ final class TasksController extends Controller
     {
         $this->authorize('view');
 
+        $currentUserId = auth_user_id() ?? 0;
+        $canViewAllOwners = $this->canViewAllTaskOwners();
+        $ownerScopeOptions = $canViewAllOwners ? ['mine', 'all'] : ['mine'];
+
         $moduleKey = 'tasks';
-        $userId = auth_user_id() ?? 0;
+        $userId = $currentUserId;
         $savedPresets = $userId > 0 ? UserFilterPreset::forUser($userId, $moduleKey) : [];
         $selectedPresetId = $this->toIntOrNull($_GET['preset_id'] ?? null);
         $presetFilters = [];
@@ -34,12 +38,12 @@ final class TasksController extends Controller
             'assignment_status' => (string) ($presetFilters['assignment_status'] ?? 'all'),
             'importance' => $this->toIntOrNull($presetFilters['importance'] ?? null),
             'link_type' => (string) ($presetFilters['link_type'] ?? 'all'),
-            'owner_scope' => (string) ($presetFilters['owner_scope'] ?? 'all'),
+            'owner_scope' => (string) ($presetFilters['owner_scope'] ?? 'mine'),
             'assigned_user_id' => $this->toIntOrNull($presetFilters['assigned_user_id'] ?? null),
             'record_status' => (string) ($presetFilters['record_status'] ?? 'active'),
             'due_start' => trim((string) ($presetFilters['due_start'] ?? '')),
             'due_end' => trim((string) ($presetFilters['due_end'] ?? '')),
-            'current_user_id' => auth_user_id() ?? 0,
+            'current_user_id' => $currentUserId,
         ];
 
         if (array_key_exists('q', $_GET)) {
@@ -85,11 +89,17 @@ final class TasksController extends Controller
         if (!in_array($filters['link_type'], array_merge(['all'], Task::LINK_TYPES), true)) {
             $filters['link_type'] = 'all';
         }
-        if (!in_array($filters['owner_scope'], ['all', 'mine', 'team'], true)) {
-            $filters['owner_scope'] = 'all';
+        if (!in_array($filters['owner_scope'], $ownerScopeOptions, true)) {
+            $filters['owner_scope'] = 'mine';
         }
         if (!in_array($filters['record_status'], ['active', 'deleted', 'all'], true)) {
             $filters['record_status'] = 'active';
+        }
+        if (!$canViewAllOwners) {
+            $filters['owner_scope'] = 'mine';
+            if ((int) ($filters['assigned_user_id'] ?? 0) > 0 && (int) ($filters['assigned_user_id'] ?? 0) !== $currentUserId) {
+                $filters['assigned_user_id'] = null;
+            }
         }
 
         $tasks = Task::filter($filters);
@@ -105,12 +115,14 @@ final class TasksController extends Controller
             'filters' => $filters,
             'tasks' => $tasks,
             'summary' => Task::summary($filters),
-            'users' => Task::users(),
+            'users' => $canViewAllOwners ? Task::users() : [],
             'statusOptions' => Task::STATUSES,
             'assignmentOptions' => Task::ASSIGNMENT_STATUSES,
             'linkTypes' => Task::LINK_TYPES,
             'linkTypeLabels' => $this->linkTypeLabels(),
-            'ownerScopes' => ['all', 'mine', 'team'],
+            'ownerScopes' => $ownerScopeOptions,
+            'defaultOwnerScope' => 'mine',
+            'canViewAllTaskOwners' => $canViewAllOwners,
             'savedPresets' => $savedPresets,
             'selectedPresetId' => $selectedPresetId,
             'filterPresetModule' => $moduleKey,
@@ -128,8 +140,8 @@ final class TasksController extends Controller
             'assignment_status' => 'all',
             'importance' => null,
             'link_type' => 'all',
-            'owner_scope' => 'all',
-            'assigned_user_id' => null,
+            'owner_scope' => 'mine',
+            'assigned_user_id' => auth_user_id() ?? null,
             'record_status' => 'active',
             'due_start' => '',
             'due_end' => '',
@@ -494,6 +506,16 @@ final class TasksController extends Controller
         echo json_encode(Task::lookupLinks($type, $term));
     }
 
+    public function userLookup(): void
+    {
+        $this->authorize('view');
+
+        $term = trim((string) ($_GET['q'] ?? ''));
+
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode(Task::lookupUsers($term));
+    }
+
     private function collectFormData(): array
     {
         $status = trim((string) ($_POST['status'] ?? 'open'));
@@ -561,6 +583,10 @@ final class TasksController extends Controller
                 $errors[] = 'Assigned user is invalid.';
             }
         }
+        $assignedUserSearch = trim((string) ($_POST['assigned_user_search'] ?? ''));
+        if ($assignedUserSearch !== '' && $data['assigned_user_id'] === null) {
+            $errors[] = 'Select an owner from suggestions or leave owner blank.';
+        }
 
         $linkSearch = trim((string) ($_POST['link_search'] ?? ''));
         if ($data['link_type'] !== 'general' && ($data['link_id'] === null || $data['link_id'] <= 0)) {
@@ -578,7 +604,8 @@ final class TasksController extends Controller
 
     private function formScripts(): string
     {
-        return '<script src="' . asset('js/task-link-lookup.js') . '"></script>';
+        return '<script src="' . asset('js/task-link-lookup.js') . '"></script>'
+            . '<script src="' . asset('js/task-owner-lookup.js') . '"></script>';
     }
 
     private function authorize(string $action): void
@@ -731,9 +758,15 @@ final class TasksController extends Controller
             'status' => $status,
             'is_completed' => $status === 'closed',
             'url' => url('/tasks/' . $id),
+            'assigned_user_name' => (string) (($task['assigned_user_name'] ?? '') !== '' ? $task['assigned_user_name'] : 'Unassigned'),
             'due_at' => $task['due_at'] ?? null,
             'due_at_label' => format_datetime($task['due_at'] ?? null),
         ];
+    }
+
+    private function canViewAllTaskOwners(): bool
+    {
+        return has_role(2);
     }
 
     private function renderNotFound(): void

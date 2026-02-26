@@ -159,6 +159,7 @@ $router->get('/expenses/new', [ExpensesController::class, 'create']);
 $router->post('/expenses/new', [ExpensesController::class, 'store']);
 $router->get('/tasks', [TasksController::class, 'index']);
 $router->get('/tasks/lookup/links', [TasksController::class, 'linkLookup']);
+$router->get('/tasks/lookup/users', [TasksController::class, 'userLookup']);
 $router->get('/tasks/new', [TasksController::class, 'create']);
 $router->get('/tasks/new/full', [TasksController::class, 'createFull']);
 $router->post('/tasks/new', [TasksController::class, 'store']);

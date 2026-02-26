@@ -226,6 +226,7 @@ final class TimeTrackingController extends Controller
             'historyStartDate' => $historyStartDate,
             'historyEndDate' => $historyEndDate,
             'openBasePath' => '/punch-clock',
+            'pageScripts' => '<script src="' . asset('js/time-open-punch-modal.js') . '"></script>',
         ]);
     }
 

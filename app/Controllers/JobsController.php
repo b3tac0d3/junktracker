@@ -148,17 +148,51 @@ final class JobsController extends Controller
             $status = 'pending';
         }
 
-        $ownerType = (string) ($_POST['job_owner_type'] ?? 'client');
+        $ownerClientSearch = trim((string) ($_POST['owner_client_search'] ?? ''));
+        $ownerEstateSearch = trim((string) ($_POST['owner_estate_search'] ?? ''));
+        $ownerCompanySearch = trim((string) ($_POST['owner_company_search'] ?? ''));
+
+        $ownerClientId = $this->toIntOrNull($_POST['owner_client_id'] ?? null);
+        $ownerEstateId = $this->toIntOrNull($_POST['owner_estate_id'] ?? null);
+        $ownerCompanyId = $this->toIntOrNull($_POST['owner_company_id'] ?? null);
+
+        $ownerClientSummary = ($ownerClientId !== null && $ownerClientId > 0)
+            ? Job::findOwnerSummary('client', $ownerClientId)
+            : null;
+        $ownerEstateSummary = ($ownerEstateId !== null && $ownerEstateId > 0)
+            ? Job::findOwnerSummary('estate', $ownerEstateId)
+            : null;
+        $ownerCompanySummary = ($ownerCompanyId !== null && $ownerCompanyId > 0)
+            ? Job::findOwnerSummary('company', $ownerCompanyId)
+            : null;
+
+        $ownerType = (string) ($_POST['job_owner_type'] ?? '');
         if (!in_array($ownerType, self::OWNER_TYPES, true)) {
-            $ownerType = 'client';
+            $ownerType = '';
         }
 
         $ownerId = $this->toIntOrNull($_POST['job_owner_id'] ?? null);
-        $contactClientId = $this->toIntOrNull($_POST['contact_client_id'] ?? null);
-
-        $ownerSummary = ($ownerId !== null && $ownerId > 0)
+        $ownerSummary = ($ownerType !== '' && $ownerId !== null && $ownerId > 0)
             ? Job::findOwnerSummary($ownerType, $ownerId)
             : null;
+
+        if (!$ownerSummary) {
+            if ($ownerClientSummary) {
+                $ownerType = 'client';
+                $ownerId = $ownerClientId;
+                $ownerSummary = $ownerClientSummary;
+            } elseif ($ownerEstateSummary) {
+                $ownerType = 'estate';
+                $ownerId = $ownerEstateId;
+                $ownerSummary = $ownerEstateSummary;
+            } elseif ($ownerCompanySummary) {
+                $ownerType = 'company';
+                $ownerId = $ownerCompanyId;
+                $ownerSummary = $ownerCompanySummary;
+            }
+        }
+
+        $contactClientId = $this->toIntOrNull($_POST['contact_client_id'] ?? null);
 
         if ($ownerSummary && $contactClientId === null) {
             if ($ownerType === 'client') {
@@ -172,13 +206,15 @@ final class JobsController extends Controller
             ? Job::findClientSummary($contactClientId)
             : null;
 
-        $estateId = $ownerType === 'estate' ? $ownerId : null;
+        $estateId = $ownerEstateSummary ? $ownerEstateId : null;
         $scheduledStartAt = $this->toDateTimeOrNull($_POST['scheduled_start_at'] ?? ($_POST['scheduled_date'] ?? null));
         $scheduledEndAt = $this->toDateTimeOrNull($_POST['scheduled_end_at'] ?? null);
 
         $data = [
             'client_id' => $contactClientId,
             'estate_id' => $estateId,
+            'owner_client_id' => $ownerClientSummary ? $ownerClientId : null,
+            'owner_company_id' => $ownerCompanySummary ? $ownerCompanyId : null,
             'job_owner_type' => $ownerType,
             'job_owner_id' => $ownerId,
             'contact_client_id' => $contactClientId,
@@ -208,8 +244,17 @@ final class JobsController extends Controller
         if ($data['name'] === '') {
             $errors[] = 'Job name is required.';
         }
+        if ($ownerClientSearch !== '' && !$ownerClientSummary) {
+            $errors[] = 'Select a valid linked client.';
+        }
+        if ($ownerEstateSearch !== '' && !$ownerEstateSummary) {
+            $errors[] = 'Select a valid linked estate.';
+        }
+        if ($ownerCompanySearch !== '' && !$ownerCompanySummary) {
+            $errors[] = 'Select a valid linked company.';
+        }
         if (!$ownerSummary) {
-            $errors[] = 'Select a valid job owner.';
+            $errors[] = 'Select at least one valid linked owner (client, estate, or company).';
         }
         if (!$contactSummary) {
             $errors[] = 'Select a valid contact.';
@@ -633,7 +678,11 @@ final class JobsController extends Controller
     public function ownerLookup(): void
     {
         $term = trim((string) ($_GET['q'] ?? ''));
-        $results = Job::searchOwners($term);
+        $ownerType = trim((string) ($_GET['type'] ?? ''));
+        if (!in_array($ownerType, self::OWNER_TYPES, true)) {
+            $ownerType = '';
+        }
+        $results = Job::searchOwners($term, 15, $ownerType !== '' ? $ownerType : null);
 
         header('Content-Type: application/json; charset=utf-8');
         echo json_encode($results);
@@ -807,9 +856,36 @@ final class JobsController extends Controller
             $status = 'pending';
         }
 
-        $ownerType = (string) ($_POST['job_owner_type'] ?? ($existing['resolved_owner_type'] ?? 'client'));
+        $ownerClientSearch = trim((string) ($_POST['owner_client_search'] ?? ''));
+        $ownerEstateSearch = trim((string) ($_POST['owner_estate_search'] ?? ''));
+        $ownerCompanySearch = trim((string) ($_POST['owner_company_search'] ?? ''));
+
+        $ownerClientId = $this->toIntOrNull($_POST['owner_client_id'] ?? ($existing['owner_client_id'] ?? null));
+        if ($ownerClientId === null && (string) ($existing['resolved_owner_type'] ?? '') === 'client' && isset($existing['resolved_owner_id']) && is_numeric((string) $existing['resolved_owner_id'])) {
+            $ownerClientId = (int) $existing['resolved_owner_id'];
+        }
+        $ownerEstateId = $this->toIntOrNull($_POST['owner_estate_id'] ?? ($existing['estate_id'] ?? null));
+        if ($ownerEstateId === null && (string) ($existing['resolved_owner_type'] ?? '') === 'estate' && isset($existing['resolved_owner_id']) && is_numeric((string) $existing['resolved_owner_id'])) {
+            $ownerEstateId = (int) $existing['resolved_owner_id'];
+        }
+        $ownerCompanyId = $this->toIntOrNull($_POST['owner_company_id'] ?? ($existing['owner_company_id'] ?? null));
+        if ($ownerCompanyId === null && (string) ($existing['resolved_owner_type'] ?? '') === 'company' && isset($existing['resolved_owner_id']) && is_numeric((string) $existing['resolved_owner_id'])) {
+            $ownerCompanyId = (int) $existing['resolved_owner_id'];
+        }
+
+        $ownerClientSummary = ($ownerClientId !== null && $ownerClientId > 0)
+            ? Job::findOwnerSummary('client', $ownerClientId)
+            : null;
+        $ownerEstateSummary = ($ownerEstateId !== null && $ownerEstateId > 0)
+            ? Job::findOwnerSummary('estate', $ownerEstateId)
+            : null;
+        $ownerCompanySummary = ($ownerCompanyId !== null && $ownerCompanyId > 0)
+            ? Job::findOwnerSummary('company', $ownerCompanyId)
+            : null;
+
+        $ownerType = (string) ($_POST['job_owner_type'] ?? ($existing['resolved_owner_type'] ?? ''));
         if (!in_array($ownerType, self::OWNER_TYPES, true)) {
-            $ownerType = (string) ($existing['resolved_owner_type'] ?? 'client');
+            $ownerType = '';
         }
 
         $ownerId = $this->toIntOrNull($_POST['job_owner_id'] ?? null);
@@ -822,9 +898,25 @@ final class JobsController extends Controller
             $contactClientId = (int) $existing['resolved_contact_client_id'];
         }
 
-        $ownerSummary = ($ownerId !== null && $ownerId > 0)
+        $ownerSummary = ($ownerType !== '' && $ownerId !== null && $ownerId > 0)
             ? Job::findOwnerSummary($ownerType, $ownerId)
             : null;
+
+        if (!$ownerSummary) {
+            if ($ownerClientSummary) {
+                $ownerType = 'client';
+                $ownerId = $ownerClientId;
+                $ownerSummary = $ownerClientSummary;
+            } elseif ($ownerEstateSummary) {
+                $ownerType = 'estate';
+                $ownerId = $ownerEstateId;
+                $ownerSummary = $ownerEstateSummary;
+            } elseif ($ownerCompanySummary) {
+                $ownerType = 'company';
+                $ownerId = $ownerCompanyId;
+                $ownerSummary = $ownerCompanySummary;
+            }
+        }
 
         if ($ownerSummary && $contactClientId === null) {
             if ($ownerType === 'client') {
@@ -838,13 +930,15 @@ final class JobsController extends Controller
             ? Job::findClientSummary($contactClientId)
             : null;
 
-        $estateId = $ownerType === 'estate' ? $ownerId : null;
+        $estateId = $ownerEstateSummary ? $ownerEstateId : null;
         $scheduledStartAt = $this->toDateTimeOrNull($_POST['scheduled_start_at'] ?? ($_POST['scheduled_date'] ?? null));
         $scheduledEndAt = $this->toDateTimeOrNull($_POST['scheduled_end_at'] ?? null);
 
         $data = [
             'client_id' => $contactClientId,
             'estate_id' => $estateId,
+            'owner_client_id' => $ownerClientSummary ? $ownerClientId : null,
+            'owner_company_id' => $ownerCompanySummary ? $ownerCompanyId : null,
             'job_owner_type' => $ownerType,
             'job_owner_id' => $ownerId,
             'contact_client_id' => $contactClientId,
@@ -874,8 +968,17 @@ final class JobsController extends Controller
         if ($data['name'] === '') {
             $errors[] = 'Job name is required.';
         }
+        if ($ownerClientSearch !== '' && !$ownerClientSummary) {
+            $errors[] = 'Select a valid linked client.';
+        }
+        if ($ownerEstateSearch !== '' && !$ownerEstateSummary) {
+            $errors[] = 'Select a valid linked estate.';
+        }
+        if ($ownerCompanySearch !== '' && !$ownerCompanySummary) {
+            $errors[] = 'Select a valid linked company.';
+        }
         if (!$ownerSummary) {
-            $errors[] = 'Select a valid job owner.';
+            $errors[] = 'Select at least one valid linked owner (client, estate, or company).';
         }
         if (!$contactSummary) {
             $errors[] = 'Select a valid contact.';
