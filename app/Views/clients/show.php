@@ -1,494 +1,180 @@
 <?php
-    $name = trim((string) (($client['first_name'] ?? '') . ' ' . ($client['last_name'] ?? '')));
-    $clientType = (string) ($client['client_type'] ?? 'client');
-    if (!in_array($clientType, ['client', 'realtor', 'other'], true)) {
-        $clientType = 'other';
-    }
-    $contacts = $contacts ?? [];
-    $tasks = $tasks ?? [];
-    $attachments = is_array($attachments ?? null) ? $attachments : [];
-    $linkedContact = is_array($linkedContact ?? null) ? $linkedContact : null;
-    $linkedContactId = (int) ($linkedContact['id'] ?? 0);
-    $workSummary = is_array($workSummary ?? null) ? $workSummary : [];
-    $completedJobs = is_array($completedJobs ?? null) ? $completedJobs : [];
-    $companies = is_array($companies ?? null) ? $companies : [];
-    $money = static fn (mixed $value): string => '$' . number_format((float) ($value ?? 0), 2);
-    $clientPath = '/clients/' . (string) ($client['id'] ?? '');
+$client = is_array($client ?? null) ? $client : [];
+$financial = is_array($financial ?? null) ? $financial : [];
+$jobStatusSummary = is_array($jobStatusSummary ?? null) ? $jobStatusSummary : [];
+$jobs = is_array($jobs ?? null) ? $jobs : [];
+
+$displayName = trim(((string) ($client['first_name'] ?? '')) . ' ' . ((string) ($client['last_name'] ?? '')));
+if ($displayName === '') {
+    $displayName = trim((string) ($client['company_name'] ?? ''));
+}
+if ($displayName === '') {
+    $displayName = 'Client #' . (string) ((int) ($client['id'] ?? 0));
+}
+
+$addressStreet = implode(', ', array_filter([
+    trim((string) ($client['address_line1'] ?? '')),
+    trim((string) ($client['address_line2'] ?? '')),
+], static fn (string $value): bool => $value !== ''));
+$addressRegion = implode(', ', array_filter([
+    trim((string) ($client['city'] ?? '')),
+    trim((string) ($client['state'] ?? '')),
+    trim((string) ($client['postal_code'] ?? '')),
+], static fn (string $value): bool => $value !== ''));
+if ($addressStreet === '' && $addressRegion === '') {
+    $addressStreet = '—';
+}
+
+$primaryPhone = trim((string) ($client['phone'] ?? ''));
+$secondaryPhone = trim((string) ($client['secondary_phone'] ?? ''));
+$primaryNote = trim((string) ($client['primary_note'] ?? ''));
+
+$canTextRaw = $client['can_text'] ?? null;
+$canTextLabel = $canTextRaw === null ? 'Not Set' : (((int) $canTextRaw) === 1 ? 'Yes' : 'No');
+$canTextClass = $canTextRaw === null ? 'text-flag-neutral' : ((((int) $canTextRaw) === 1) ? 'text-flag-yes' : 'text-flag-no');
+
+$secondaryCanTextRaw = $client['secondary_can_text'] ?? null;
+$secondaryCanTextLabel = $secondaryCanTextRaw === null ? 'Not Set' : (((int) $secondaryCanTextRaw) === 1 ? 'Yes' : 'No');
+$secondaryCanTextClass = $secondaryCanTextRaw === null ? 'text-flag-neutral' : ((((int) $secondaryCanTextRaw) === 1) ? 'text-flag-yes' : 'text-flag-no');
 ?>
-<div class="container-fluid px-4">
-    <div class="d-flex flex-wrap align-items-center justify-content-between mt-4 mb-3 gap-3">
-        <div>
-            <h1 class="mb-1">Client Details</h1>
-            <ol class="breadcrumb mb-0">
-                <li class="breadcrumb-item"><a href="<?= url('/') ?>">Dashboard</a></li>
-                <li class="breadcrumb-item"><a href="<?= url('/clients') ?>">Clients</a></li>
-                <li class="breadcrumb-item active">#<?= e((string) ($client['id'] ?? '')) ?></li>
-            </ol>
-        </div>
-        <div class="d-flex align-items-center gap-2">
-            <div class="dropdown">
-                <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-                    <i class="fas fa-bars me-1"></i>
-                    Actions
-                </button>
-                <ul class="dropdown-menu dropdown-menu-end">
-                    <li>
-                        <a class="dropdown-item" href="<?= url('/client-contacts/new?client_id=' . ($client['id'] ?? '')) ?>">
-                            <i class="fas fa-phone me-2"></i>
-                            Log Contact
-                        </a>
-                    </li>
-                    <?php if (can_access('contacts', 'create') || ($linkedContactId > 0 && can_access('contacts', 'view'))): ?>
-                        <?php if ($linkedContactId > 0): ?>
-                            <li>
-                                <a class="dropdown-item" href="<?= url('/network/' . $linkedContactId) ?>">
-                                    <i class="fas fa-address-card me-2"></i>
-                                    View Network Client
-                                </a>
-                            </li>
-                        <?php elseif (can_access('contacts', 'create')): ?>
-                            <li>
-                                <form method="post" action="<?= url('/clients/' . ($client['id'] ?? '') . '/save-contact') ?>">
-                                    <?= csrf_field() ?>
-                                    <button class="dropdown-item" type="submit">
-                                        <i class="fas fa-address-card me-2"></i>
-                                        Save as Network Client
-                                    </button>
-                                </form>
-                            </li>
-                        <?php endif; ?>
-                    <?php endif; ?>
-                    <li>
-                        <a class="dropdown-item" href="<?= url('/clients/' . ($client['id'] ?? '') . '/edit') ?>">
-                            <i class="fas fa-pen me-2"></i>
-                            Edit Client
-                        </a>
-                    </li>
-                    <?php if (empty($client['deleted_at']) && !empty($client['active'])): ?>
-                        <li><hr class="dropdown-divider"></li>
-                        <li>
-                            <button class="dropdown-item text-danger" type="button" data-bs-toggle="modal" data-bs-target="#deactivateClientModal">
-                                <i class="fas fa-user-slash me-2"></i>
-                                Deactivate
-                            </button>
-                        </li>
-                    <?php endif; ?>
-                </ul>
-            </div>
-            <?php if (!empty($client['deleted_at']) || empty($client['active'])): ?>
-                <span class="badge bg-secondary align-self-center">Inactive</span>
-            <?php endif; ?>
-            <a class="btn btn-outline-secondary" href="<?= url('/clients') ?>">
-                <i class="fas fa-arrow-left me-1"></i>
-                Back to Clients
-            </a>
-        </div>
+
+<div class="page-header d-flex flex-wrap align-items-end justify-content-between gap-2">
+    <div>
+        <h1>Client Details</h1>
+        <p class="muted"><?= e($displayName) ?></p>
     </div>
-
-    <?php if ($success = flash('success')): ?>
-        <div class="alert alert-success"><?= e($success) ?></div>
-    <?php endif; ?>
-
-    <div class="card mb-4">
-        <div class="card-header">
-            <i class="fas fa-user me-1"></i>
-            Profile
-        </div>
-        <div class="card-body">
-            <div class="row g-3">
-                <div class="col-md-6">
-                    <div class="text-muted small">Name</div>
-                    <div class="fw-semibold"><?= e($name !== '' ? $name : '—') ?></div>
-                </div>
-                <div class="col-md-6">
-                    <div class="text-muted small">Client ID</div>
-                    <div class="fw-semibold"><?= e((string) ($client['id'] ?? '')) ?></div>
-                </div>
-                <div class="col-md-3">
-                    <div class="text-muted small">Type</div>
-                    <div class="fw-semibold text-capitalize"><?= e($clientType) ?></div>
-                </div>
-                <div class="col-md-3">
-                    <div class="text-muted small">Status</div>
-                    <div class="fw-semibold">
-                        <?php if (empty($client['deleted_at']) && !empty($client['active'])): ?>
-                            <span class="badge bg-success">Active</span>
-                        <?php else: ?>
-                            <span class="badge bg-secondary">Inactive</span>
-                        <?php endif; ?>
-                    </div>
-                </div>
-                <div class="col-md-3">
-                    <div class="text-muted small">Can Text</div>
-                    <div class="fw-semibold"><?= !empty($client['can_text']) ? 'Yes' : 'No' ?></div>
-                </div>
-
-                <div class="col-md-4">
-                    <div class="text-muted small">Phone</div>
-                    <div class="fw-semibold"><?= e(format_phone($client['phone'] ?? null)) ?></div>
-                </div>
-                <div class="col-md-4">
-                    <div class="text-muted small">Email</div>
-                    <div class="fw-semibold"><?= e((string) (($client['email'] ?? '') !== '' ? $client['email'] : '—')) ?></div>
-                </div>
-                <div class="col-md-4">
-                    <div class="text-muted small">Company</div>
-                    <div class="fw-semibold"><?= e((string) (($client['company_names'] ?? '') !== '' ? $client['company_names'] : '—')) ?></div>
-                </div>
-
-                <div class="col-md-6">
-                    <div class="text-muted small">Address</div>
-                    <div class="fw-semibold">
-                        <?php
-                            $line1 = trim((string) ($client['address_1'] ?? ''));
-                            $line2 = trim((string) ($client['address_2'] ?? ''));
-                            $city = trim((string) ($client['city'] ?? ''));
-                            $state = trim((string) ($client['state'] ?? ''));
-                            $zip = trim((string) ($client['zip'] ?? ''));
-                            $cityStateZip = trim($city . ($city !== '' && $state !== '' ? ', ' : '') . $state . ($zip !== '' ? ' ' . $zip : ''));
-                        ?>
-                        <?php if ($line1 === '' && $line2 === '' && $cityStateZip === ''): ?>
-                            —
-                        <?php else: ?>
-                            <?= e($line1) ?>
-                            <?php if ($line2 !== ''): ?><br><?= e($line2) ?><?php endif; ?>
-                            <?php if ($cityStateZip !== ''): ?><br><?= e($cityStateZip) ?><?php endif; ?>
-                        <?php endif; ?>
-                    </div>
-                </div>
-                <div class="col-md-6">
-                    <div class="text-muted small">Notes</div>
-                    <div class="fw-semibold" style="white-space: pre-wrap;"><?= e((string) (($client['note'] ?? '') !== '' ? $client['note'] : '—')) ?></div>
-                </div>
-            </div>
-        </div>
+    <div>
+        <a class="btn btn-outline-secondary" href="<?= e(url('/clients')) ?>">Back to Clients</a>
     </div>
-
-    <div class="card mb-4">
-        <div class="card-header">
-            <i class="fas fa-chart-column me-1"></i>
-            Work Summary
-        </div>
-        <div class="card-body">
-            <div class="row g-3 mb-3">
-                <div class="col-6 col-md-2">
-                    <div class="text-muted small">Total Jobs</div>
-                    <div class="fw-semibold"><?= e((string) ((int) ($workSummary['total_jobs'] ?? 0))) ?></div>
-                </div>
-                <div class="col-6 col-md-2">
-                    <div class="text-muted small">Completed Jobs</div>
-                    <div class="fw-semibold"><?= e((string) ((int) ($workSummary['completed_jobs'] ?? 0))) ?></div>
-                </div>
-                <div class="col-6 col-md-2">
-                    <div class="text-muted small">Jobs Gross</div>
-                    <div class="fw-semibold text-success"><?= e($money($workSummary['jobs_gross_total'] ?? 0)) ?></div>
-                </div>
-                <div class="col-6 col-md-2">
-                    <div class="text-muted small">Sales Gross</div>
-                    <div class="fw-semibold text-success"><?= e($money($workSummary['sales_gross_total'] ?? 0)) ?></div>
-                    <div class="small text-muted"><?= e((string) ((int) ($workSummary['sales_count'] ?? 0))) ?> sales</div>
-                </div>
-                <div class="col-6 col-md-2">
-                    <div class="text-muted small">Combined Gross</div>
-                    <div class="fw-semibold text-success"><?= e($money($workSummary['combined_gross_total'] ?? 0)) ?></div>
-                </div>
-                <div class="col-6 col-md-2">
-                    <div class="text-muted small">Total Expenses</div>
-                    <div class="fw-semibold text-danger"><?= e($money($workSummary['expenses_total'] ?? 0)) ?></div>
-                </div>
-            </div>
-
-            <div class="table-responsive">
-                <table class="table table-striped table-hover align-middle mb-0">
-                    <thead>
-                        <tr>
-                            <th>Completed Job</th>
-                            <th>Location</th>
-                            <th>Completed</th>
-                            <th>Gross</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php if (empty($completedJobs)): ?>
-                            <tr>
-                                <td colspan="4" class="text-muted">No completed jobs for this client yet.</td>
-                            </tr>
-                        <?php else: ?>
-                            <?php foreach ($completedJobs as $job): ?>
-                                <?php
-                                    $jobName = trim((string) ($job['name'] ?? ''));
-                                    if ($jobName === '') {
-                                        $jobName = 'Job #' . (int) ($job['id'] ?? 0);
-                                    }
-                                    $city = trim((string) ($job['city'] ?? ''));
-                                    $state = trim((string) ($job['state'] ?? ''));
-                                    $location = trim($city . ($city !== '' && $state !== '' ? ', ' : '') . $state);
-                                    $completedAt = $job['end_date'] ?? ($job['paid_date'] ?? ($job['updated_at'] ?? null));
-                                ?>
-                                <tr>
-                                    <td>
-                                        <a class="text-decoration-none" href="<?= url('/jobs/' . (string) ($job['id'] ?? '')) ?>">
-                                            <?= e($jobName) ?>
-                                        </a>
-                                    </td>
-                                    <td><?= e($location !== '' ? $location : '—') ?></td>
-                                    <td><?= e(format_datetime($completedAt)) ?></td>
-                                    <td class="text-success"><?= e($money($job['gross_total'] ?? 0)) ?></td>
-                                </tr>
-                            <?php endforeach; ?>
-                        <?php endif; ?>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-
-    <div class="card mb-4">
-        <div class="card-header">
-            <i class="fas fa-building me-1"></i>
-            Linked Companies
-        </div>
-        <div class="card-body">
-            <div class="table-responsive">
-                <table class="table table-striped table-hover align-middle mb-0">
-                    <thead>
-                        <tr>
-                            <th>ID</th>
-                            <th>Name</th>
-                            <th>Phone</th>
-                            <th>Website</th>
-                            <th>Location</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php if (empty($companies)): ?>
-                            <tr>
-                                <td colspan="5" class="text-muted">No linked company.</td>
-                            </tr>
-                        <?php else: ?>
-                            <?php foreach ($companies as $company): ?>
-                                <tr>
-                                    <td><?= e((string) ($company['id'] ?? '')) ?></td>
-                                    <td>
-                                        <a class="text-decoration-none" href="<?= url('/companies/' . ($company['id'] ?? '')) ?>">
-                                            <?= e((string) ($company['name'] ?? '')) ?>
-                                        </a>
-                                    </td>
-                                    <td><?= e(format_phone($company['phone'] ?? null)) ?></td>
-                                    <td><?= e((string) (($company['web_address'] ?? '') !== '' ? $company['web_address'] : '—')) ?></td>
-                                    <td>
-                                        <?php
-                                            $city = trim((string) ($company['city'] ?? ''));
-                                            $state = trim((string) ($company['state'] ?? ''));
-                                            $location = trim($city . ($city !== '' && $state !== '' ? ', ' : '') . $state);
-                                        ?>
-                                        <?= e($location !== '' ? $location : '—') ?>
-                                    </td>
-                                </tr>
-                            <?php endforeach; ?>
-                        <?php endif; ?>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-
-    <div class="card mb-4">
-        <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2 mobile-two-col-buttons">
-            <div>
-                <i class="fas fa-address-book me-1"></i>
-                Client Contacts
-            </div>
-            <a class="btn btn-sm btn-primary" href="<?= url('/client-contacts/new?client_id=' . ($client['id'] ?? '')) ?>">
-                <i class="fas fa-plus me-1"></i>
-                Log Contact
-            </a>
-        </div>
-        <div class="card-body">
-            <div class="table-responsive">
-                <table class="table table-striped table-hover align-middle mb-0">
-                    <thead>
-                        <tr>
-                            <th>Date</th>
-                            <th>Method</th>
-                            <th>Direction</th>
-                            <th>Subject</th>
-                            <th>Notes</th>
-                            <th>Linked</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php if (empty($contacts)): ?>
-                            <tr>
-                                <td colspan="6" class="text-muted">No contact records for this client yet.</td>
-                            </tr>
-                        <?php else: ?>
-                            <?php foreach ($contacts as $contact): ?>
-                                <?php $contactUrl = url('/client-contacts/' . (string) ($contact['id'] ?? '')); ?>
-                                <tr>
-                                    <td>
-                                        <a class="text-decoration-none" href="<?= $contactUrl ?>">
-                                            <?= e(format_datetime($contact['contacted_at'] ?? null)) ?>
-                                        </a>
-                                    </td>
-                                    <td class="text-capitalize"><?= e(ucwords(str_replace('_', ' ', (string) ($contact['contact_method'] ?? '')))) ?></td>
-                                    <td class="text-capitalize"><?= e((string) ($contact['direction'] ?? '')) ?></td>
-                                    <td>
-                                        <a class="text-decoration-none" href="<?= $contactUrl ?>">
-                                            <?= e((string) (($contact['subject'] ?? '') !== '' ? $contact['subject'] : '—')) ?>
-                                        </a>
-                                    </td>
-                                    <td style="white-space: pre-wrap; max-width: 420px;">
-                                        <?= e((string) (($contact['notes'] ?? '') !== '' ? $contact['notes'] : '—')) ?>
-                                    </td>
-                                    <td>
-                                        <?php if (!empty($contact['link_url'])): ?>
-                                            <a class="text-decoration-none" href="<?= url((string) $contact['link_url']) ?>">
-                                                <?= e((string) ($contact['link_label'] ?? '—')) ?>
-                                            </a>
-                                        <?php else: ?>
-                                            <?= e((string) ($contact['link_label'] ?? '—')) ?>
-                                        <?php endif; ?>
-                                    </td>
-                                </tr>
-                            <?php endforeach; ?>
-                        <?php endif; ?>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-
-    <div class="card mb-4">
-        <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2 mobile-two-col-buttons">
-            <div>
-                <i class="fas fa-list-check me-1"></i>
-                Tasks
-            </div>
-            <a class="btn btn-sm btn-primary" href="<?= url('/tasks/new?link_type=client&link_id=' . ($client['id'] ?? '')) ?>">
-                <i class="fas fa-plus me-1"></i>
-                Add Task
-            </a>
-        </div>
-        <div class="card-body">
-            <div class="table-responsive">
-                <table class="table table-striped table-hover align-middle mb-0">
-                    <thead>
-                        <tr>
-                            <th>Done</th>
-                            <th>Task</th>
-                            <th>Status</th>
-                            <th>Due</th>
-                            <th>Completed</th>
-                            <th>Assigned</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php if (empty($tasks)): ?>
-                            <tr>
-                                <td colspan="6" class="text-muted">No tasks linked to this client.</td>
-                            </tr>
-                        <?php else: ?>
-                            <?php foreach ($tasks as $task): ?>
-                                <?php $isCompleted = (string) ($task['status'] ?? '') === 'closed'; ?>
-                                <tr>
-                                    <td>
-                                        <form method="post" action="<?= url('/tasks/' . (string) ($task['id'] ?? '') . '/toggle-complete') ?>">
-                                            <?= csrf_field() ?>
-                                            <input type="hidden" name="return_to" value="<?= e($clientPath) ?>" />
-                                            <input type="hidden" name="is_completed" value="0" />
-                                            <input
-                                                class="form-check-input"
-                                                type="checkbox"
-                                                name="is_completed"
-                                                value="1"
-                                                <?= $isCompleted ? 'checked' : '' ?>
-                                            />
-                                        </form>
-                                    </td>
-                                    <td>
-                                        <a class="text-decoration-none <?= $isCompleted ? 'text-muted text-decoration-line-through' : '' ?>" href="<?= url('/tasks/' . (string) ($task['id'] ?? '')) ?>">
-                                            <?= e((string) ($task['title'] ?? 'Task')) ?>
-                                        </a>
-                                    </td>
-                                    <td class="text-capitalize"><?= e(ucwords(str_replace('_', ' ', (string) ($task['status'] ?? 'open')))) ?></td>
-                                    <td><?= e(format_datetime($task['due_at'] ?? null)) ?></td>
-                                    <td><?= e(format_datetime($task['completed_at'] ?? null)) ?></td>
-                                    <td><?= e((string) (($task['assigned_user_name'] ?? '') !== '' ? $task['assigned_user_name'] : 'Unassigned')) ?></td>
-                                </tr>
-                            <?php endforeach; ?>
-                        <?php endif; ?>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-
-    <?php
-        $attachmentPanelTitle = 'Attachments';
-        $attachmentLinkType = 'client';
-        $attachmentLinkId = (int) ($client['id'] ?? 0);
-        $attachmentReturnTo = $clientPath;
-        require __DIR__ . '/../partials/attachments_panel.php';
-    ?>
-
-    <div class="card mb-4">
-        <div class="card-header">
-            <i class="fas fa-clipboard-list me-1"></i>
-            Activity Log
-        </div>
-        <div class="card-body">
-            <div class="row g-3">
-                <div class="col-md-6">
-                    <div class="text-muted small">Created At</div>
-                    <div class="fw-semibold"><?= e(format_datetime($client['created_at'] ?? null)) ?></div>
-                </div>
-                <div class="col-md-6">
-                    <div class="text-muted small">Created By</div>
-                    <div class="fw-semibold"><?= e((string) ($client['created_by_name'] ?? '—')) ?></div>
-                </div>
-                <div class="col-md-6">
-                    <div class="text-muted small">Updated At</div>
-                    <div class="fw-semibold"><?= e(format_datetime($client['updated_at'] ?? null)) ?></div>
-                </div>
-                <div class="col-md-6">
-                    <div class="text-muted small">Updated By</div>
-                    <div class="fw-semibold"><?= e((string) ($client['updated_by_name'] ?? '—')) ?></div>
-                </div>
-                <?php if (!empty($client['deleted_at'])): ?>
-                    <div class="col-md-6">
-                        <div class="text-muted small">Deleted At</div>
-                        <div class="fw-semibold"><?= e(format_datetime($client['deleted_at'] ?? null)) ?></div>
-                    </div>
-                    <div class="col-md-6">
-                        <div class="text-muted small">Deleted By</div>
-                        <div class="fw-semibold"><?= e((string) ($client['deleted_by_name'] ?? '—')) ?></div>
-                    </div>
-                <?php endif; ?>
-            </div>
-        </div>
-    </div>
-
-    <?php if (empty($client['deleted_at']) && !empty($client['active'])): ?>
-        <div class="modal fade" id="deactivateClientModal" tabindex="-1" aria-labelledby="deactivateClientModalLabel" aria-hidden="true">
-            <div class="modal-dialog">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h5 class="modal-title" id="deactivateClientModalLabel">Deactivate Client</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                    </div>
-                    <div class="modal-body">
-                        This will deactivate the client and hide them from active lists. Continue?
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-danger" data-bs-dismiss="modal">Cancel</button>
-                        <form method="post" action="<?= url('/clients/' . ($client['id'] ?? '') . '/deactivate') ?>">
-                            <?= csrf_field() ?>
-                            <button class="btn btn-danger" type="submit">Deactivate Client</button>
-                        </form>
-                    </div>
-                </div>
-            </div>
-        </div>
-    <?php endif; ?>
 </div>
+
+<section class="card index-card mb-3">
+    <div class="card-header index-card-header">
+        <strong><i class="fas fa-address-card me-2"></i>Client Details</strong>
+    </div>
+    <div class="card-body">
+        <div class="record-row-fields">
+            <div class="record-field">
+                <span class="record-label">Client ID</span>
+                <span class="record-value"><?= e((string) ((int) ($client['id'] ?? 0))) ?></span>
+            </div>
+            <div class="record-field">
+                <span class="record-label">Name</span>
+                <span class="record-value"><?= e($displayName) ?></span>
+            </div>
+            <div class="record-field">
+                <span class="record-label">Phone</span>
+                <span class="record-value">
+                    <?= e($primaryPhone !== '' ? $primaryPhone : '—') ?>
+                    <?php if ($primaryPhone !== ''): ?>
+                        <span class="text-flag <?= e($canTextClass) ?>">Text: <?= e($canTextLabel) ?></span>
+                    <?php endif; ?>
+                </span>
+            </div>
+            <div class="record-field">
+                <span class="record-label">Secondary Phone</span>
+                <span class="record-value">
+                    <?= e($secondaryPhone !== '' ? $secondaryPhone : '—') ?>
+                    <?php if ($secondaryPhone !== ''): ?>
+                        <span class="text-flag <?= e($secondaryCanTextClass) ?>">Text: <?= e($secondaryCanTextLabel) ?></span>
+                    <?php endif; ?>
+                </span>
+            </div>
+            <div class="record-field">
+                <span class="record-label">Email</span>
+                <span class="record-value"><?= e(trim((string) ($client['email'] ?? '')) ?: '—') ?></span>
+            </div>
+            <div class="record-field">
+                <span class="record-label">Full Address</span>
+                <span class="record-value record-value-stack">
+                    <span><?= e($addressStreet) ?></span>
+                    <?php if ($addressRegion !== ''): ?>
+                        <span><?= e($addressRegion) ?></span>
+                    <?php endif; ?>
+                </span>
+            </div>
+            <div class="record-field">
+                <span class="record-label">Primary Note</span>
+                <span class="record-value"><?= e($primaryNote !== '' ? $primaryNote : '—') ?></span>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="card index-card mb-3">
+    <div class="card-header index-card-header">
+        <strong><i class="fas fa-chart-line me-2"></i>Lifetime Financial Summary</strong>
+    </div>
+    <div class="card-body">
+        <div class="record-row-fields record-row-fields-3">
+            <div class="record-field">
+                <span class="record-label">Gross Income</span>
+                <span class="record-value">$<?= e(number_format((float) ($financial['gross_income'] ?? 0), 2)) ?></span>
+            </div>
+            <div class="record-field">
+                <span class="record-label">Net Income</span>
+                <span class="record-value">$<?= e(number_format((float) ($financial['net_income'] ?? 0), 2)) ?></span>
+            </div>
+            <div class="record-field">
+                <span class="record-label">Expenses</span>
+                <span class="record-value">$<?= e(number_format((float) ($financial['expenses'] ?? 0), 2)) ?></span>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="card index-card mb-3">
+    <div class="card-header index-card-header">
+        <strong><i class="fas fa-briefcase me-2"></i>Jobs</strong>
+    </div>
+    <div class="card-body">
+        <div class="record-row-fields record-row-fields-5 mb-3">
+            <div class="record-field">
+                <span class="record-label">Prospect</span>
+                <span class="record-value"><?= e((string) ((int) ($jobStatusSummary['prospect'] ?? 0))) ?></span>
+            </div>
+            <div class="record-field">
+                <span class="record-label">Pending</span>
+                <span class="record-value"><?= e((string) ((int) ($jobStatusSummary['pending'] ?? 0))) ?></span>
+            </div>
+            <div class="record-field">
+                <span class="record-label">Active</span>
+                <span class="record-value"><?= e((string) ((int) ($jobStatusSummary['active'] ?? 0))) ?></span>
+            </div>
+            <div class="record-field">
+                <span class="record-label">Complete</span>
+                <span class="record-value"><?= e((string) ((int) ($jobStatusSummary['complete'] ?? 0))) ?></span>
+            </div>
+            <div class="record-field">
+                <span class="record-label">Cancelled</span>
+                <span class="record-value"><?= e((string) ((int) ($jobStatusSummary['cancelled'] ?? 0))) ?></span>
+            </div>
+        </div>
+
+        <?php if ($jobs === []): ?>
+            <div class="record-empty">No jobs for this client yet.</div>
+        <?php else: ?>
+            <div class="simple-list-table">
+                <?php foreach ($jobs as $job): ?>
+                    <div class="simple-list-row">
+                        <div class="simple-list-title"><?= e(trim((string) ($job['title'] ?? '')) !== '' ? (string) $job['title'] : ('Job #' . (string) ((int) ($job['id'] ?? 0)))) ?></div>
+                        <div class="simple-list-meta">
+                            <span>ID #<?= e((string) ((int) ($job['id'] ?? 0))) ?></span>
+                            <span class="text-capitalize"><?= e((string) ($job['status'] ?? 'pending')) ?></span>
+                            <span><?= e(format_datetime((string) ($job['scheduled_start_at'] ?? null))) ?></span>
+                        </div>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+        <?php endif; ?>
+    </div>
+</section>
+
+<section class="card index-card">
+    <div class="card-header index-card-header">
+        <strong><i class="fas fa-phone-volume me-2"></i>Client Contact Log</strong>
+    </div>
+    <div class="card-body">
+        <div class="record-empty">Contact log module scaffolded. Entries will appear here once implemented.</div>
+    </div>
+</section>

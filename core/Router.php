@@ -6,100 +6,64 @@ namespace Core;
 
 final class Router
 {
-    private array $routes = [];
+    /** @var array<string, array<int, array{pattern:string, regex:string, handler:array{0:class-string,1:string}}>> */
+    private array $routes = [
+        'GET' => [],
+        'POST' => [],
+    ];
 
-    public function get(string $path, callable|array $handler): void
+    public function get(string $pattern, array $handler): void
     {
-        $this->addRoute('GET', $path, $handler);
+        $this->add('GET', $pattern, $handler);
     }
 
-    public function post(string $path, callable|array $handler): void
+    public function post(string $pattern, array $handler): void
     {
-        $this->addRoute('POST', $path, $handler);
+        $this->add('POST', $pattern, $handler);
     }
 
     public function dispatch(string $method, string $uri): void
     {
-        $path = parse_url($uri, PHP_URL_PATH) ?? '/';
-        $path = $this->stripBasePath($path);
-        $path = $this->normalize($path);
+        $method = strtoupper($method);
+        $path = parse_url($uri, PHP_URL_PATH) ?: '/';
+        $basePath = rtrim(dirname((string) ($_SERVER['SCRIPT_NAME'] ?? '')), '/');
+        if ($basePath !== '' && $basePath !== '/' && str_starts_with($path, $basePath)) {
+            $path = substr($path, strlen($basePath));
+            if ($path === '') {
+                $path = '/';
+            }
+        }
 
-        $handler = $this->routes[$method]['static'][$path] ?? null;
-        $params = [];
+        foreach ($this->routes[$method] ?? [] as $route) {
+            if (preg_match($route['regex'], $path, $matches) !== 1) {
+                continue;
+            }
 
-        if ($handler === null) {
-            foreach ($this->routes[$method]['dynamic'] ?? [] as $route) {
-                if (preg_match($route['regex'], $path, $matches)) {
-                    $handler = $route['handler'];
-                    $params = array_intersect_key($matches, array_flip($route['params']));
-                    break;
+            $params = [];
+            foreach ($matches as $key => $value) {
+                if (is_string($key)) {
+                    $params[$key] = $value;
                 }
             }
-        }
 
-        if ($handler === null) {
-            http_response_code(404);
-            if (class_exists('App\\Controllers\\ErrorController')) {
-                (new \App\Controllers\ErrorController())->notFound();
-                return;
-            }
-            echo '404 Not Found';
-            return;
-        }
-
-        if (is_array($handler)) {
-            [$class, $action] = $handler;
+            [$class, $action] = $route['handler'];
             $controller = new $class();
-            if (empty($params)) {
-                $controller->$action();
-            } else {
-                $controller->$action($params);
-            }
+            $controller->{$action}($params);
             return;
         }
 
-        if (empty($params)) {
-            call_user_func($handler);
-        } else {
-            call_user_func($handler, $params);
-        }
+        http_response_code(404);
+        View::renderFile('errors/404', ['pageTitle' => 'Not Found']);
     }
 
-    private function stripBasePath(string $path): string
+    private function add(string $method, string $pattern, array $handler): void
     {
-        $base = rtrim(dirname($_SERVER['SCRIPT_NAME']), '/');
-        if ($base !== '' && $base !== '/' && str_starts_with($path, $base)) {
-            $path = substr($path, strlen($base));
-        }
-
-        return $path === '' ? '/' : $path;
-    }
-
-    private function normalize(string $path): string
-    {
-        $normalized = '/' . trim($path, '/');
-        return $normalized === '//' ? '/' : $normalized;
-    }
-
-    private function addRoute(string $method, string $path, callable|array $handler): void
-    {
-        $normalized = $this->normalize($path);
-
-        if (str_contains($normalized, '{')) {
-            $params = [];
-            $regex = preg_replace_callback('/\{([a-zA-Z_][a-zA-Z0-9_]*)\}/', function ($matches) use (&$params) {
-                $params[] = $matches[1];
-                return '(?P<' . $matches[1] . '>[^/]+)';
-            }, $normalized);
-
-            $this->routes[$method]['dynamic'][] = [
-                'regex' => '#^' . $regex . '$#',
-                'params' => $params,
-                'handler' => $handler,
-            ];
-            return;
-        }
-
-        $this->routes[$method]['static'][$normalized] = $handler;
+        $regex = preg_replace('/\{([a-zA-Z_][a-zA-Z0-9_]*)\}/', '(?P<$1>[^/]+)', $pattern);
+        $regex = '#^' . $regex . '$#';
+        $this->routes[$method][] = [
+            'pattern' => $pattern,
+            'regex' => $regex,
+            'handler' => [$handler[0], $handler[1]],
+        ];
     }
 }

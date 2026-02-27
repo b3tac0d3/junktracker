@@ -6,8 +6,9 @@ namespace Core;
 
 abstract class Controller
 {
-    protected function render(string $view, array $data = [], string $layout = 'main'): void
+    protected function render(string $template, array $data = []): void
     {
-        View::render($view, $data, $layout);
+        $data['viewFile'] = 'app/Views/' . $template . '.php';
+        View::renderFile('layouts/main', $data);
     }
 }

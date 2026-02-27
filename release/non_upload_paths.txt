@@ -1,8 +1,0 @@
-# Paths listed here are copied into non-upload/ and excluded from upload/ builds.
-# Paths are relative to repo root.
-
-.gitignore
-.vscode/
-database/
-release/
-RELEASE_CHECKLIST.md

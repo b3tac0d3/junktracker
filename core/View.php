@@ -6,24 +6,16 @@ namespace Core;
 
 final class View
 {
-    public static function render(string $view, array $data = [], string $layout = 'main'): void
+    public static function renderFile(string $template, array $data = []): void
     {
-        $viewFile = VIEW_PATH . '/' . ltrim($view, '/') . '.php';
-        $layoutFile = VIEW_PATH . '/layouts/' . $layout . '.php';
-
-        if (!file_exists($viewFile)) {
-            throw new \RuntimeException("View not found: {$viewFile}");
-        }
-        if (!file_exists($layoutFile)) {
-            throw new \RuntimeException("Layout not found: {$layoutFile}");
+        $viewPath = base_path('app/Views/' . $template . '.php');
+        if (!is_file($viewPath)) {
+            http_response_code(500);
+            echo 'View not found: ' . htmlspecialchars($template, ENT_QUOTES, 'UTF-8');
+            return;
         }
 
         extract($data, EXTR_SKIP);
-
-        ob_start();
-        require $viewFile;
-        $content = ob_get_clean();
-
-        require $layoutFile;
+        require $viewPath;
     }
 }

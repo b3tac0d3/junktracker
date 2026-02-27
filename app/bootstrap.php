@@ -2,33 +2,30 @@
 
 declare(strict_types=1);
 
-define('BASE_PATH', dirname(__DIR__));
-define('APP_PATH', BASE_PATH . '/app');
-define('CORE_PATH', BASE_PATH . '/core');
-define('CONFIG_PATH', BASE_PATH . '/config');
-define('VIEW_PATH', APP_PATH . '/Views');
+require __DIR__ . '/helpers.php';
 
-require APP_PATH . '/helpers.php';
-
-$timezone = (string) config('app.timezone', 'UTC');
-if ($timezone === '' || date_default_timezone_set($timezone) === false) {
-    date_default_timezone_set('UTC');
+session_name((string) config('app.session_name', 'junktracker_session'));
+if (session_status() !== PHP_SESSION_ACTIVE) {
+    session_start();
 }
 
-spl_autoload_register(function (string $class): void {
+date_default_timezone_set((string) config('app.timezone', 'America/New_York'));
+
+spl_autoload_register(static function (string $class): void {
     $prefixes = [
-        'App\\' => APP_PATH . '/',
-        'Core\\' => CORE_PATH . '/',
+        'App\\' => base_path('app/'),
+        'Core\\' => base_path('core/'),
     ];
 
     foreach ($prefixes as $prefix => $baseDir) {
-        if (str_starts_with($class, $prefix)) {
-            $relative = substr($class, strlen($prefix));
-            $file = $baseDir . str_replace('\\', '/', $relative) . '.php';
-            if (file_exists($file)) {
-                require $file;
-            }
-            return;
+        if (!str_starts_with($class, $prefix)) {
+            continue;
+        }
+
+        $relativeClass = substr($class, strlen($prefix));
+        $file = $baseDir . str_replace('\\', '/', $relativeClass) . '.php';
+        if (is_file($file)) {
+            require $file;
         }
     }
 });

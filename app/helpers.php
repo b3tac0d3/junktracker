@@ -2,42 +2,57 @@
 
 declare(strict_types=1);
 
-function base_url(string $path = ''): string
-{
-    $base = rtrim(dirname($_SERVER['SCRIPT_NAME']), '/');
-    if ($base === '/') {
-        $base = '';
-    }
+/** @var array<string, mixed> $__appConfig */
+$__appConfig = [];
 
-    $path = '/' . ltrim($path, '/');
-    return $base . $path;
+function base_path(string $path = ''): string
+{
+    $root = dirname(__DIR__);
+    return $path === '' ? $root : $root . '/' . ltrim($path, '/');
 }
 
-function absolute_url(string $path = ''): string
+function config(string $key, mixed $default = null): mixed
 {
-    $configured = trim((string) config('app.url', ''));
-    if ($configured !== '') {
-        return rtrim($configured, '/') . '/' . ltrim($path, '/');
+    global $__appConfig;
+
+    if ($key === '') {
+        return $default;
     }
 
-    $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-    $host = (string) ($_SERVER['HTTP_HOST'] ?? 'localhost');
-    return $scheme . '://' . $host . base_url($path);
+    if ($__appConfig === []) {
+        $app = require base_path('config/app.php');
+        $database = require base_path('config/database.php');
+        $__appConfig = [
+            'app' => $app,
+            'database' => $database,
+        ];
+    }
+
+    $segments = explode('.', $key);
+    $value = $__appConfig;
+    foreach ($segments as $segment) {
+        if (!is_array($value) || !array_key_exists($segment, $value)) {
+            return $default;
+        }
+        $value = $value[$segment];
+    }
+
+    return $value;
 }
 
 function url(string $path = ''): string
 {
-    return base_url($path);
+    $base = rtrim(dirname((string) ($_SERVER['SCRIPT_NAME'] ?? '/')), '/');
+    if ($base === '/') {
+        $base = '';
+    }
+
+    return $base . '/' . ltrim($path, '/');
 }
 
 function asset(string $path = ''): string
 {
-    return base_url('assets/' . ltrim($path, '/'));
-}
-
-function e(string $value): string
-{
-    return htmlspecialchars($value, ENT_QUOTES, 'UTF-8');
+    return url('assets/' . ltrim($path, '/'));
 }
 
 function redirect(string $path): never
@@ -46,13 +61,18 @@ function redirect(string $path): never
     exit;
 }
 
+function e(string $value): string
+{
+    return htmlspecialchars($value, ENT_QUOTES, 'UTF-8');
+}
+
 function csrf_token(): string
 {
-    if (empty($_SESSION['csrf_token'])) {
+    if (!isset($_SESSION['csrf_token']) || !is_string($_SESSION['csrf_token']) || $_SESSION['csrf_token'] === '') {
         $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
     }
 
-    return $_SESSION['csrf_token'];
+    return (string) $_SESSION['csrf_token'];
 }
 
 function csrf_field(): string
@@ -62,111 +82,29 @@ function csrf_field(): string
 
 function verify_csrf(?string $token): bool
 {
-    if (empty($token) || empty($_SESSION['csrf_token'])) {
+    if ($token === null || !isset($_SESSION['csrf_token'])) {
         return false;
     }
 
-    return hash_equals($_SESSION['csrf_token'], $token);
-}
-
-function expects_json_response(): bool
-{
-    $requestedWith = strtolower(trim((string) ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '')));
-    if ($requestedWith === 'xmlhttprequest') {
-        return true;
-    }
-
-    $accept = strtolower(trim((string) ($_SERVER['HTTP_ACCEPT'] ?? '')));
-    if ($accept !== '' && str_contains($accept, 'application/json')) {
-        return true;
-    }
-
-    $ajaxFlag = strtolower(trim((string) ($_POST['ajax'] ?? $_GET['ajax'] ?? '')));
-    return in_array($ajaxFlag, ['1', 'true', 'yes'], true);
-}
-
-function json_response(array $payload, int $statusCode = 200): void
-{
-    http_response_code($statusCode);
-    header('Content-Type: application/json; charset=utf-8');
-    echo json_encode($payload);
-}
-
-function stream_csv_download(string $filename, array $headerRow, array $rows): never
-{
-    $safeName = trim($filename) !== '' ? trim($filename) : ('export-' . date('Ymd-His') . '.csv');
-    if (!str_ends_with(strtolower($safeName), '.csv')) {
-        $safeName .= '.csv';
-    }
-
-    header('Content-Type: text/csv; charset=utf-8');
-    header('Content-Disposition: attachment; filename="' . $safeName . '"');
-
-    $output = fopen('php://output', 'w');
-    if ($output !== false) {
-        fputcsv($output, $headerRow);
-        foreach ($rows as $row) {
-            fputcsv($output, $row);
-        }
-        fclose($output);
-    }
-
-    exit;
-}
-
-function app_key(): string
-{
-    return (string) config('app.key', '');
+    return hash_equals((string) $_SESSION['csrf_token'], $token);
 }
 
 function flash(string $key, ?string $value = null): ?string
 {
-    if (!isset($_SESSION)) {
-        return null;
-    }
-
     if ($value !== null) {
         $_SESSION['flash'][$key] = $value;
         return null;
     }
 
-    if (!empty($_SESSION['flash'][$key])) {
-        $message = $_SESSION['flash'][$key];
-        unset($_SESSION['flash'][$key]);
-        return $message;
-    }
+    $message = $_SESSION['flash'][$key] ?? null;
+    unset($_SESSION['flash'][$key]);
 
-    return null;
-}
-
-function flash_old(array $data): void
-{
-    if (!isset($_SESSION)) {
-        return;
-    }
-
-    $_SESSION['flash']['old'] = $data;
-}
-
-function old(string $key, mixed $default = ''): mixed
-{
-    if (!isset($_SESSION['flash']['old'])) {
-        return $default;
-    }
-
-    return $_SESSION['flash']['old'][$key] ?? $default;
-}
-
-function clear_old(): void
-{
-    if (isset($_SESSION['flash']['old'])) {
-        unset($_SESSION['flash']['old']);
-    }
+    return is_string($message) ? $message : null;
 }
 
 function auth_user(): ?array
 {
-    return $_SESSION['user'] ?? null;
+    return isset($_SESSION['user']) && is_array($_SESSION['user']) ? $_SESSION['user'] : null;
 }
 
 function auth_user_id(): ?int
@@ -176,799 +114,114 @@ function auth_user_id(): ?int
         return null;
     }
 
-    $id = isset($user['id']) ? (int) $user['id'] : 0;
+    $id = (int) ($user['id'] ?? 0);
     return $id > 0 ? $id : null;
 }
 
-function auth_user_role(): int
+function auth_role(): string
 {
     $user = auth_user();
     if (!$user) {
-        return 0;
+        return 'guest';
     }
 
-    return (int) ($user['role'] ?? 0);
+    return trim((string) ($user['role'] ?? 'general_user')) ?: 'general_user';
+}
+
+function is_site_admin(): bool
+{
+    return auth_role() === 'site_admin';
+}
+
+function workspace_role(): string
+{
+    $user = auth_user();
+    if (!$user) {
+        return 'guest';
+    }
+
+    if (is_site_admin()) {
+        $workspaceRole = trim((string) ($user['workspace_role'] ?? ''));
+        return $workspaceRole !== '' ? $workspaceRole : 'site_admin';
+    }
+
+    $workspaceRole = trim((string) ($user['workspace_role'] ?? $user['role'] ?? 'general_user'));
+    return $workspaceRole !== '' ? $workspaceRole : 'general_user';
 }
 
 function current_business_id(): int
 {
-    $fallback = (int) config('app.default_business_id', 1);
-    if ($fallback <= 0) {
-        $fallback = 1;
+    $active = (int) ($_SESSION['active_business_id'] ?? 0);
+    if ($active > 0) {
+        return $active;
     }
 
     $user = auth_user();
     if (!$user) {
-        return $fallback;
-    }
-
-    $role = (int) ($user['role'] ?? 0);
-    if ($role >= 4 || $role === 99) {
-        $activeBusinessId = (int) ($_SESSION['active_business_id'] ?? 0);
-        if ($activeBusinessId > 0) {
-            return $activeBusinessId;
-        }
-
-        // Site admins/dev without an active workspace are in global context.
         return 0;
     }
 
-    $businessId = isset($user['business_id']) ? (int) $user['business_id'] : 0;
-    return $businessId > 0 ? $businessId : $fallback;
+    if (is_site_admin()) {
+        return 0;
+    }
+
+    $businessId = (int) ($user['business_id'] ?? 0);
+    return $businessId > 0 ? $businessId : 0;
 }
 
-function set_active_business_id(int $businessId): void
+function require_auth(): void
 {
-    if (!isset($_SESSION)) {
-        return;
-    }
-
-    if ($businessId <= 0) {
-        unset($_SESSION['active_business_id']);
-        return;
-    }
-
-    $_SESSION['active_business_id'] = $businessId;
-}
-
-function is_site_admin_global_context(): bool
-{
-    $user = auth_user();
-    if (!$user) {
-        return false;
-    }
-
-    if (!is_global_role_value((int) ($user['role'] ?? 0))) {
-        return false;
-    }
-
-    return (int) ($_SESSION['active_business_id'] ?? 0) <= 0;
-}
-
-function request_ip_address(): ?string
-{
-    $candidates = [
-        (string) ($_SERVER['HTTP_CF_CONNECTING_IP'] ?? ''),
-        (string) ($_SERVER['HTTP_X_FORWARDED_FOR'] ?? ''),
-        (string) ($_SERVER['HTTP_X_REAL_IP'] ?? ''),
-        (string) ($_SERVER['REMOTE_ADDR'] ?? ''),
-    ];
-
-    foreach ($candidates as $candidate) {
-        if ($candidate === '') {
-            continue;
-        }
-
-        if (str_contains($candidate, ',')) {
-            $candidate = trim((string) explode(',', $candidate)[0]);
-        } else {
-            $candidate = trim($candidate);
-        }
-
-        if ($candidate !== '' && filter_var($candidate, FILTER_VALIDATE_IP)) {
-            return $candidate;
-        }
-    }
-
-    return null;
-}
-
-function request_user_agent(): ?string
-{
-    $value = trim((string) ($_SERVER['HTTP_USER_AGENT'] ?? ''));
-    if ($value === '') {
-        return null;
-    }
-
-    return substr($value, 0, 512);
-}
-
-function request_geo_payload(?array $source = null): array
-{
-    $input = is_array($source) ? $source : $_POST;
-
-    $latitude = normalize_geo_coordinate($input['geo_lat'] ?? null, -90.0, 90.0);
-    $longitude = normalize_geo_coordinate($input['geo_lng'] ?? null, -180.0, 180.0);
-    $accuracy = normalize_geo_accuracy($input['geo_accuracy'] ?? null);
-
-    $sourceLabel = trim((string) ($input['geo_source'] ?? ''));
-    if ($sourceLabel === '') {
-        $sourceLabel = null;
-    } else {
-        $sourceLabel = substr($sourceLabel, 0, 32);
-    }
-
-    $capturedAt = normalize_geo_captured_at($input['geo_captured_at'] ?? null);
-
-    return [
-        'lat' => $latitude,
-        'lng' => $longitude,
-        'accuracy' => $accuracy,
-        'source' => $sourceLabel,
-        'captured_at' => $capturedAt,
-    ];
-}
-
-function geo_capture_fields(string $source = 'browser'): string
-{
-    $safeSource = e(substr(trim($source) !== '' ? trim($source) : 'browser', 0, 32));
-
-    return implode("\n", [
-        '<input type="hidden" name="geo_lat" value="" />',
-        '<input type="hidden" name="geo_lng" value="" />',
-        '<input type="hidden" name="geo_accuracy" value="" />',
-        '<input type="hidden" name="geo_captured_at" value="" />',
-        '<input type="hidden" name="geo_source" value="' . $safeSource . '" />',
-    ]);
-}
-
-function normalize_geo_coordinate(mixed $value, float $min, float $max): ?float
-{
-    $raw = trim((string) ($value ?? ''));
-    if ($raw === '' || !is_numeric($raw)) {
-        return null;
-    }
-
-    $coordinate = (float) $raw;
-    if ($coordinate < $min || $coordinate > $max) {
-        return null;
-    }
-
-    return round($coordinate, 7);
-}
-
-function normalize_geo_accuracy(mixed $value): ?float
-{
-    $raw = trim((string) ($value ?? ''));
-    if ($raw === '' || !is_numeric($raw)) {
-        return null;
-    }
-
-    $accuracy = (float) $raw;
-    if ($accuracy < 0) {
-        return null;
-    }
-
-    return round($accuracy, 2);
-}
-
-function normalize_geo_captured_at(mixed $value): ?string
-{
-    $raw = trim((string) ($value ?? ''));
-    if ($raw === '') {
-        return null;
-    }
-
-    $timestamp = strtotime($raw);
-    if ($timestamp === false) {
-        return null;
-    }
-
-    return date('Y-m-d H:i:s', $timestamp);
-}
-
-function login_method_label(?string $method): string
-{
-    return match (trim((string) $method)) {
-        'two_factor' => 'Password + 2FA',
-        'remember_token' => 'Remember Token',
-        default => 'Password',
-    };
-}
-
-function log_user_action(string $actionKey, ?string $entityTable = null, ?int $entityId = null, ?string $summary = null, ?string $details = null): void
-{
-    $userId = auth_user_id();
-    if ($userId === null) {
-        return;
-    }
-
-    $normalizedActionKey = trim($actionKey);
-    if ($normalizedActionKey === '') {
-        $normalizedActionKey = 'event';
-    }
-
-    $summaryText = trim((string) ($summary ?? ''));
-    if ($summaryText === '') {
-        $summaryText = ucwords(str_replace('_', ' ', $normalizedActionKey));
-    }
-
-    $ip = request_ip_address();
-
-    try {
-        \App\Models\UserAction::create([
-            'user_id' => $userId,
-            'action_key' => $normalizedActionKey,
-            'entity_table' => $entityTable,
-            'entity_id' => $entityId,
-            'summary' => $summaryText,
-            'details' => $details,
-            'ip_address' => $ip,
-        ]);
-    } catch (\Throwable) {
-        // Logging should never break the user flow.
-    }
-}
-
-function record_user_login_event(array $user, string $loginMethod = 'password'): void
-{
-    $userId = (int) ($user['id'] ?? 0);
-    if ($userId <= 0) {
-        return;
-    }
-
-    $context = [
-        'login_method' => $loginMethod,
-        'ip_address' => request_ip_address(),
-        'user_agent' => request_user_agent(),
-    ];
-
-    $record = null;
-    try {
-        $record = \App\Models\UserLoginRecord::create($userId, $context);
-    } catch (\Throwable) {
-        $record = null;
-    }
-
-    if (auth_user_id() !== $userId) {
-        return;
-    }
-
-    $record = is_array($record) ? $record : $context;
-    $browser = trim((string) ($record['browser_name'] ?? ''));
-    $browserVersion = trim((string) ($record['browser_version'] ?? ''));
-    if ($browser !== '' && $browserVersion !== '') {
-        $browser .= ' ' . $browserVersion;
-    }
-    $osName = trim((string) ($record['os_name'] ?? ''));
-    $deviceType = trim((string) ($record['device_type'] ?? ''));
-    $methodLabel = login_method_label((string) ($record['login_method'] ?? $loginMethod));
-
-    $summary = 'Successful login via ' . $methodLabel;
-    if ($browser !== '' && $osName !== '') {
-        $summary .= ' (' . $browser . ' on ' . $osName . ')';
-    } elseif ($browser !== '') {
-        $summary .= ' (' . $browser . ')';
-    } elseif ($osName !== '') {
-        $summary .= ' (' . $osName . ')';
-    }
-
-    $details = [];
-    if ($deviceType !== '') {
-        $details[] = 'Device: ' . ucfirst($deviceType);
-    }
-
-    $ipAddress = trim((string) ($record['ip_address'] ?? $context['ip_address'] ?? ''));
-    if ($ipAddress !== '') {
-        $details[] = 'IP: ' . $ipAddress;
-    }
-
-    $userAgent = trim((string) ($record['user_agent'] ?? $context['user_agent'] ?? ''));
-    if ($userAgent !== '') {
-        $details[] = 'Agent: ' . substr($userAgent, 0, 255);
-    }
-
-    log_user_action(
-        'user_login',
-        'user_login_records',
-        isset($record['id']) ? (int) $record['id'] : null,
-        $summary,
-        !empty($details) ? implode(' | ', $details) : null
-    );
-}
-
-function is_authenticated(): bool
-{
-    return auth_user() !== null;
-}
-
-function setting(string $key, mixed $default = null): mixed
-{
-    $normalized = trim($key);
-    if ($normalized === '') {
-        return $default;
-    }
-
-    try {
-        if (class_exists(\App\Models\AppSetting::class) && \App\Models\AppSetting::isAvailable()) {
-            $value = \App\Models\AppSetting::get($normalized, null);
-            if ($value !== null && $value !== '') {
-                return $value;
-            }
-        }
-    } catch (\Throwable) {
-        // Fallback to provided default.
-    }
-
-    return $default;
-}
-
-function setting_bool(string $key, bool $default = false): bool
-{
-    $raw = setting($key, $default ? '1' : '0');
-    if (is_bool($raw)) {
-        return $raw;
-    }
-    if (is_numeric($raw)) {
-        return (int) $raw === 1;
-    }
-
-    $value = strtolower(trim((string) $raw));
-    return in_array($value, ['1', 'true', 'yes', 'on'], true);
-}
-
-function has_role(int $minimumRole): bool
-{
-    $user = auth_user();
-    if (!$user) {
-        return false;
-    }
-
-    return (int) ($user['role'] ?? 0) >= $minimumRole;
-}
-
-function is_punch_only_role(): bool
-{
-    $user = auth_user();
-    if (!$user) {
-        return false;
-    }
-
-    return (int) ($user['role'] ?? 0) === 0;
-}
-
-function require_role(int $minimumRole): void
-{
-    if (!is_authenticated()) {
+    if (auth_user() === null) {
+        flash('error', 'Please log in.');
         redirect('/login');
     }
+}
 
-    if (!has_role($minimumRole)) {
-        redirect('/401');
+function require_role(array $roles): void
+{
+    require_auth();
+    if (!in_array(auth_role(), $roles, true)) {
+        http_response_code(403);
+        \Core\View::renderFile('errors/403', ['pageTitle' => 'Forbidden']);
+        exit;
     }
 }
 
-function is_two_factor_enabled(): bool
+function business_context_required(): void
 {
-    $configEnabled = (bool) config('app.two_factor_enabled', true);
-    if (!$configEnabled) {
-        return false;
-    }
+    require_auth();
 
-    return setting_bool('security.two_factor_enabled', $configEnabled);
-}
-
-function can_access(string $module, string $action = 'view'): bool
-{
-    $user = auth_user();
-    if (!$user) {
-        return false;
-    }
-
-    $role = (int) ($user['role'] ?? 0);
-    if ($role >= 4 || $role === 99) {
-        return true;
-    }
-
-    try {
-        if (class_exists(\App\Models\RolePermission::class)) {
-            return \App\Models\RolePermission::allows($role, $module, $action);
-        }
-    } catch (\Throwable) {
-        // Fall through to secure deny behavior.
-    }
-
-    return false;
-}
-
-function require_permission(string $module, string $action = 'view'): void
-{
-    if (!is_authenticated()) {
-        redirect('/login');
-    }
-
-    if (!can_access($module, $action)) {
-        redirect('/401');
+    if (is_site_admin() && current_business_id() <= 0) {
+        flash('error', 'Pick a business workspace first.');
+        redirect('/site-admin/businesses');
     }
 }
 
-function lookup_options(string $groupKey, array $fallback = []): array
+function require_business_role(array $roles): void
 {
-    $normalized = trim($groupKey);
-    if ($normalized === '') {
-        return $fallback;
+    business_context_required();
+
+    if (is_site_admin()) {
+        return;
     }
 
-    try {
-        if (class_exists(\App\Models\LookupOption::class) && \App\Models\LookupOption::isAvailable()) {
-            \App\Models\LookupOption::seedDefaults();
-            $rows = \App\Models\LookupOption::options($normalized);
-            if (!empty($rows)) {
-                return $rows;
-            }
-        }
-    } catch (\Throwable) {
-        // Ignore and use fallback options.
+    if (!in_array(workspace_role(), $roles, true)) {
+        http_response_code(403);
+        \Core\View::renderFile('errors/403', ['pageTitle' => 'Forbidden']);
+        exit;
     }
-
-    return $fallback;
-}
-
-function role_label(?int $role): string
-{
-    return match ($role) {
-        0 => 'Punch Only',
-        1 => 'User',
-        2 => 'Manager',
-        3 => 'Admin',
-        4 => 'Site Admin',
-        99 => 'Dev',
-        default => 'Unknown',
-    };
-}
-
-function is_global_role_value(?int $role): bool
-{
-    $value = (int) ($role ?? 0);
-    return $value >= 4 || $value === 99;
-}
-
-function assignable_role_options_for_user(?int $actorRole = null): array
-{
-    $role = $actorRole !== null ? (int) $actorRole : auth_user_role();
-    $options = class_exists(\App\Models\RolePermission::class)
-        ? \App\Models\RolePermission::roleOptions()
-        : [
-            0 => 'Punch Only',
-            1 => 'User',
-            2 => 'Manager',
-            3 => 'Admin',
-            4 => 'Site Admin',
-            99 => 'Dev',
-        ];
-
-    if ($role === 99) {
-        return $options;
-    }
-
-    if ($role >= 4) {
-        unset($options[99]);
-        return $options;
-    }
-
-    if ($role >= 3) {
-        unset($options[4], $options[99]);
-        return $options;
-    }
-
-    if ($role >= 2) {
-        return array_intersect_key($options, array_flip([0, 1, 2]));
-    }
-
-    return array_intersect_key($options, array_flip([0, 1]));
-}
-
-function can_manage_role(?int $actorRole, ?int $targetRole): bool
-{
-    $actor = (int) ($actorRole ?? 0);
-    $target = (int) ($targetRole ?? 0);
-
-    if ($actor === 99) {
-        return true;
-    }
-
-    return $actor >= $target;
 }
 
 function format_datetime(?string $value): string
 {
-    if (empty($value)) {
+    if ($value === null || trim($value) === '') {
         return '—';
     }
 
     $timestamp = strtotime($value);
     if ($timestamp === false) {
-        return $value;
-    }
-
-    $format = (string) setting('display.datetime_format', 'm/d/Y g:i A');
-    $timezone = (string) setting('display.timezone', (string) config('app.timezone', 'America/New_York'));
-    try {
-        $dt = (new \DateTimeImmutable('@' . $timestamp))->setTimezone(new \DateTimeZone($timezone));
-        return $dt->format($format !== '' ? $format : 'm/d/Y g:i A');
-    } catch (\Throwable) {
-        return date($format !== '' ? $format : 'm/d/Y g:i A', $timestamp);
-    }
-}
-
-function format_datetime_local(?string $value): string
-{
-    if (empty($value)) {
-        return '';
-    }
-
-    $timestamp = strtotime($value);
-    if ($timestamp === false) {
-        return '';
-    }
-
-    $timezone = (string) setting('display.timezone', (string) config('app.timezone', 'America/New_York'));
-    try {
-        $dt = (new \DateTimeImmutable('@' . $timestamp))->setTimezone(new \DateTimeZone($timezone));
-        return $dt->format('Y-m-d\\TH:i');
-    } catch (\Throwable) {
-        return date('Y-m-d\\TH:i', $timestamp);
-    }
-}
-
-function format_date(?string $value): string
-{
-    if (empty($value)) {
         return '—';
     }
 
-    $timestamp = strtotime($value);
-    if ($timestamp === false) {
-        return $value;
-    }
-
-    $format = (string) setting('display.date_format', 'm/d/Y');
-    $timezone = (string) setting('display.timezone', (string) config('app.timezone', 'America/New_York'));
-    try {
-        $dt = (new \DateTimeImmutable('@' . $timestamp))->setTimezone(new \DateTimeZone($timezone));
-        return $dt->format($format !== '' ? $format : 'm/d/Y');
-    } catch (\Throwable) {
-        return date($format !== '' ? $format : 'm/d/Y', $timestamp);
-    }
-}
-
-function format_phone(?string $value): string
-{
-    if (empty($value)) {
-        return '—';
-    }
-
-    $digits = preg_replace('/\\D+/', '', $value);
-    if ($digits === null) {
-        return $value;
-    }
-
-    if (strlen($digits) === 10) {
-        return sprintf('(%s) %s-%s', substr($digits, 0, 3), substr($digits, 3, 3), substr($digits, 6));
-    }
-
-    if (strlen($digits) === 7) {
-        return sprintf('%s-%s', substr($digits, 0, 3), substr($digits, 3));
-    }
-
-    return $value;
-}
-
-function remember_login(array $user, bool $remember): void
-{
-    if (!$remember) {
-        clear_remember_cookie();
-        return;
-    }
-
-    $userId = (int) ($user['id'] ?? 0);
-    $passwordHash = (string) ($user['password_hash'] ?? '');
-    if ($userId <= 0 || $passwordHash === '') {
-        return;
-    }
-
-    $signature = hash_hmac('sha256', $userId . '|' . $passwordHash, app_key());
-    $payload = base64_encode($userId . ':' . $signature);
-
-    $secure = !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
-    setcookie('remember_token', $payload, [
-        'expires' => time() + 60 * 60 * 24 * 30,
-        'path' => '/',
-        'secure' => $secure,
-        'httponly' => true,
-        'samesite' => 'Lax',
-    ]);
-}
-
-function set_two_factor_trust_cookie(array $user, int $days = 30): void
-{
-    $userId = (int) ($user['id'] ?? 0);
-    $passwordHash = (string) ($user['password_hash'] ?? '');
-    if ($userId <= 0 || $passwordHash === '') {
-        return;
-    }
-
-    $expiresAt = time() + max(1, $days) * 86400;
-    $signature = hash_hmac('sha256', $userId . '|' . $passwordHash . '|' . $expiresAt, app_key());
-    $payload = base64_encode($userId . ':' . $expiresAt . ':' . $signature);
-
-    $secure = !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
-    setcookie('trusted_2fa', $payload, [
-        'expires' => $expiresAt,
-        'path' => '/',
-        'secure' => $secure,
-        'httponly' => true,
-        'samesite' => 'Lax',
-    ]);
-}
-
-function clear_two_factor_trust_cookie(): void
-{
-    $secure = !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
-    setcookie('trusted_2fa', '', [
-        'expires' => time() - 3600,
-        'path' => '/',
-        'secure' => $secure,
-        'httponly' => true,
-        'samesite' => 'Lax',
-    ]);
-}
-
-function has_valid_two_factor_trust_cookie(array $user): bool
-{
-    $payload = (string) ($_COOKIE['trusted_2fa'] ?? '');
-    if ($payload === '') {
-        return false;
-    }
-
-    $decoded = base64_decode($payload, true);
-    if ($decoded === false || substr_count($decoded, ':') !== 2) {
-        return false;
-    }
-
-    [$id, $expiresAt, $signature] = explode(':', $decoded, 3);
-    if (!ctype_digit($id) || !ctype_digit($expiresAt)) {
-        return false;
-    }
-
-    $userId = (int) ($user['id'] ?? 0);
-    $passwordHash = (string) ($user['password_hash'] ?? '');
-    if ($userId <= 0 || $passwordHash === '' || $userId !== (int) $id) {
-        return false;
-    }
-
-    if ((int) $expiresAt < time()) {
-        return false;
-    }
-
-    $expected = hash_hmac('sha256', $id . '|' . $passwordHash . '|' . $expiresAt, app_key());
-    return hash_equals($expected, $signature);
-}
-
-function clear_remember_cookie(): void
-{
-    $secure = !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
-    setcookie('remember_token', '', [
-        'expires' => time() - 3600,
-        'path' => '/',
-        'secure' => $secure,
-        'httponly' => true,
-        'samesite' => 'Lax',
-    ]);
-}
-
-function attempt_remember_login(): void
-{
-    if (is_authenticated() || empty($_COOKIE['remember_token'])) {
-        return;
-    }
-
-    $decoded = base64_decode($_COOKIE['remember_token'], true);
-    if ($decoded === false || !str_contains($decoded, ':')) {
-        clear_remember_cookie();
-        return;
-    }
-
-    [$id, $signature] = explode(':', $decoded, 2);
-    if (!ctype_digit($id)) {
-        clear_remember_cookie();
-        return;
-    }
-
-    $user = \App\Models\User::findByIdWithPassword((int) $id);
-    if (!$user || (int) ($user['is_active'] ?? 0) !== 1) {
-        clear_remember_cookie();
-        return;
-    }
-
-    if (is_two_factor_enabled() && !has_valid_two_factor_trust_cookie($user)) {
-        clear_remember_cookie();
-        return;
-    }
-
-    $expected = hash_hmac('sha256', $id . '|' . ($user['password_hash'] ?? ''), app_key());
-    if (!hash_equals($expected, $signature)) {
-        clear_remember_cookie();
-        return;
-    }
-
-    session_regenerate_id(true);
-    $_SESSION['user'] = [
-        'id' => (int) $user['id'],
-        'email' => $user['email'],
-        'first_name' => $user['first_name'] ?? '',
-        'last_name' => $user['last_name'] ?? '',
-        'role' => $user['role'] ?? null,
-        'business_id' => isset($user['business_id']) ? (int) $user['business_id'] : 1,
-    ];
-
-    $role = (int) ($user['role'] ?? 0);
-    if ($role >= 4 || $role === 99) {
-        set_active_business_id(0);
-    } else {
-        $businessId = isset($user['business_id']) ? (int) $user['business_id'] : 0;
-        set_active_business_id($businessId > 0 ? $businessId : ((int) config('app.default_business_id', 1)));
-    }
-
-    try {
-        \App\Models\User::clearFailedLogin((int) ($user['id'] ?? 0));
-        \App\Models\AuthLoginAttempt::record(
-            (string) ($user['email'] ?? ''),
-            (int) ($user['id'] ?? 0),
-            request_ip_address(),
-            'success',
-            'remember_token',
-            request_user_agent()
-        );
-    } catch (\Throwable) {
-        // Never block login recovery.
-    }
-
-    record_user_login_event($user, 'remember_token');
-}
-
-function config(string $key, mixed $default = null): mixed
-{
-    static $configs = [];
-
-    $segments = explode('.', $key);
-    $file = array_shift($segments);
-
-    if (!isset($configs[$file])) {
-        $path = CONFIG_PATH . '/' . $file . '.php';
-        $loaded = file_exists($path) ? require $path : [];
-        if (!is_array($loaded)) {
-            $loaded = [];
-        }
-
-        $localOverridePath = CONFIG_PATH . '/' . $file . '.local.php';
-        if (is_file($localOverridePath)) {
-            $overrides = require $localOverridePath;
-            if (is_array($overrides)) {
-                $loaded = array_replace_recursive($loaded, $overrides);
-            }
-        }
-
-        $configs[$file] = $loaded;
-    }
-
-    $value = $configs[$file] ?? [];
-    foreach ($segments as $segment) {
-        if (!is_array($value) || !array_key_exists($segment, $value)) {
-            return $default;
-        }
-        $value = $value[$segment];
-    }
-
-    return $value;
+    return date('m/d/Y g:i A', $timestamp);
 }

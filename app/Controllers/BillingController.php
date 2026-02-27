@@ -6,16 +6,16 @@ namespace App\Controllers;
 
 use Core\Controller;
 
-final class TasksController extends Controller
+final class BillingController extends Controller
 {
     public function index(): void
     {
         require_business_role(['general_user', 'admin']);
 
         $this->render('placeholders/module', [
-            'pageTitle' => 'Tasks',
-            'title' => 'Tasks',
-            'message' => 'Phase A scaffold: task module will be implemented in Phase C with owner autosuggest.',
+            'pageTitle' => 'Billing',
+            'title' => 'Billing',
+            'message' => 'Phase A scaffold: estimates/invoices/payments module will be implemented in Phase D.',
         ]);
     }
 }
