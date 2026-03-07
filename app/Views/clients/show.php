@@ -43,7 +43,8 @@ $secondaryCanTextClass = $secondaryCanTextRaw === null ? 'text-flag-neutral' : (
         <h1>Client Details</h1>
         <p class="muted"><?= e($displayName) ?></p>
     </div>
-    <div>
+    <div class="d-flex gap-2">
+        <a class="btn btn-primary" href="<?= e(url('/clients/' . (string) ((int) ($client['id'] ?? 0)) . '/edit')) ?>"><i class="fas fa-pen me-2"></i>Edit Client</a>
         <a class="btn btn-outline-secondary" href="<?= e(url('/clients')) ?>">Back to Clients</a>
     </div>
 </div>
@@ -156,14 +157,14 @@ $secondaryCanTextClass = $secondaryCanTextRaw === null ? 'text-flag-neutral' : (
         <?php else: ?>
             <div class="simple-list-table">
                 <?php foreach ($jobs as $job): ?>
-                    <div class="simple-list-row">
+                    <a class="simple-list-row simple-list-row-link" href="<?= e(url('/jobs/' . (string) ((int) ($job['id'] ?? 0)))) ?>">
                         <div class="simple-list-title"><?= e(trim((string) ($job['title'] ?? '')) !== '' ? (string) $job['title'] : ('Job #' . (string) ((int) ($job['id'] ?? 0)))) ?></div>
                         <div class="simple-list-meta">
                             <span>ID #<?= e((string) ((int) ($job['id'] ?? 0))) ?></span>
                             <span class="text-capitalize"><?= e((string) ($job['status'] ?? 'pending')) ?></span>
                             <span><?= e(format_datetime((string) ($job['scheduled_start_at'] ?? null))) ?></span>
                         </div>
-                    </div>
+                    </a>
                 <?php endforeach; ?>
             </div>
         <?php endif; ?>

@@ -7,6 +7,8 @@ $workspaceRole = workspace_role();
 $businessId = current_business_id();
 $isGlobalSiteAdminContext = is_site_admin() && $businessId <= 0;
 $canAccessBusinessAdmin = !$isGlobalSiteAdminContext && (is_site_admin() || $workspaceRole === 'admin');
+$canManageUsers = is_site_admin() || (!$isGlobalSiteAdminContext && $workspaceRole === 'admin');
+$globalSearchQuery = trim((string) ($_GET['global_q'] ?? ''));
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -39,16 +41,31 @@ $canAccessBusinessAdmin = !$isGlobalSiteAdminContext && (is_site_admin() || $wor
 
         <ul class="navbar-nav ms-auto me-3 me-lg-4 align-items-center">
             <li class="nav-item d-none d-md-block me-2">
-                <form class="form-inline">
+                <form class="form-inline" method="get" action="<?= e(url('/search')) ?>">
                     <div class="input-group">
-                        <input class="form-control" type="text" placeholder="Search everything..." aria-label="Search" />
-                        <button class="btn btn-primary" type="button"><i class="fas fa-search"></i></button>
+                        <input class="form-control" type="text" name="global_q" value="<?= e($globalSearchQuery) ?>" placeholder="Search everything..." aria-label="Search" autocomplete="off" />
+                        <button class="btn btn-primary" type="submit"><i class="fas fa-search"></i></button>
                     </div>
                 </form>
             </li>
             <?php if (is_site_admin()): ?>
                 <li class="nav-item">
                     <a class="nav-link" href="<?= e(url('/site-admin/businesses')) ?>" title="Site Admin"><i class="fas fa-building-shield fa-fw"></i></a>
+                </li>
+            <?php endif; ?>
+            <?php if (!$isGlobalSiteAdminContext): ?>
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle nav-quick-add-link" id="quickAddDropdown" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false" title="Quick Add">
+                        <i class="fas fa-circle-plus fa-fw"></i>
+                    </a>
+                    <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="quickAddDropdown">
+                        <li><a class="dropdown-item" href="<?= e(url('/jobs/create')) ?>"><i class="fas fa-briefcase me-2"></i>Add Job</a></li>
+                        <li><a class="dropdown-item" href="<?= e(url('/clients/create')) ?>"><i class="fas fa-users me-2"></i>Add Client</a></li>
+                        <li><a class="dropdown-item" href="<?= e(url('/tasks')) ?>"><i class="fas fa-list-check me-2"></i>Add Task</a></li>
+                        <li><a class="dropdown-item" href="<?= e(url('/sales/create')) ?>"><i class="fas fa-sack-dollar me-2"></i>Add Sale</a></li>
+                        <li><a class="dropdown-item" href="<?= e(url('/purchases/create')) ?>"><i class="fas fa-cart-arrow-down me-2"></i>Add Purchase</a></li>
+                        <li><a class="dropdown-item" href="<?= e(url('/expenses/create')) ?>"><i class="fas fa-receipt me-2"></i>Add Expense</a></li>
+                    </ul>
                 </li>
             <?php endif; ?>
             <li class="nav-item dropdown">
@@ -58,9 +75,14 @@ $canAccessBusinessAdmin = !$isGlobalSiteAdminContext && (is_site_admin() || $wor
                     <li><span class="dropdown-item-text small text-muted">Role: <?= e($workspaceRole) ?></span></li>
                     <?php if ($businessId > 0): ?><li><span class="dropdown-item-text small text-muted">Business #<?= e((string) $businessId) ?></span></li><?php endif; ?>
                     <li><hr class="dropdown-divider" /></li>
+                    <li><a class="dropdown-item" href="<?= e(url('/settings')) ?>">Settings</a></li>
+                    <?php if ($canManageUsers): ?>
+                        <li><a class="dropdown-item" href="<?= e(url('/admin/users')) ?>">Manage Users</a></li>
+                    <?php endif; ?>
                     <?php if (is_site_admin()): ?>
                         <li><a class="dropdown-item" href="<?= e(url('/site-admin/businesses')) ?>">Switch Workspace</a></li>
                     <?php endif; ?>
+                    <li><hr class="dropdown-divider" /></li>
                     <li>
                         <form method="post" action="<?= e(url('/logout')) ?>">
                             <?= csrf_field() ?>
@@ -87,9 +109,24 @@ $canAccessBusinessAdmin = !$isGlobalSiteAdminContext && (is_site_admin() || $wor
                             <div class="sb-sidenav-menu-heading">Core</div>
                             <a class="nav-link" href="<?= e(url('/clients')) ?>"><div class="sb-nav-link-icon"><i class="fas fa-users"></i></div>Clients</a>
                             <a class="nav-link" href="<?= e(url('/jobs')) ?>"><div class="sb-nav-link-icon"><i class="fas fa-briefcase"></i></div>Jobs</a>
+                            <a class="nav-link" href="<?= e(url('/sales')) ?>"><div class="sb-nav-link-icon"><i class="fas fa-sack-dollar"></i></div>Sales</a>
+                            <a class="nav-link" href="<?= e(url('/purchases')) ?>"><div class="sb-nav-link-icon"><i class="fas fa-cart-arrow-down"></i></div>Purchasing</a>
                             <a class="nav-link" href="<?= e(url('/tasks')) ?>"><div class="sb-nav-link-icon"><i class="fas fa-list-check"></i></div>Tasks</a>
-                            <a class="nav-link" href="<?= e(url('/time-tracking')) ?>"><div class="sb-nav-link-icon"><i class="fas fa-clock"></i></div>Time Tracking</a>
+                            <!-- <a class="nav-link" href="<?= e(url('/time-tracking')) ?>"><div class="sb-nav-link-icon"><i class="fas fa-clock"></i></div>Time Tracking</a>
+                            <a class="nav-link jt-nav-sublink" href="<?= e(url('/time-tracking/punch-board')) ?>"><div class="sb-nav-link-icon"><i class="fas fa-user-clock"></i></div>Punch Board</a> -->
                             <a class="nav-link" href="<?= e(url('/billing')) ?>"><div class="sb-nav-link-icon"><i class="fas fa-file-invoice-dollar"></i></div>Billing</a>
+                            <a class="nav-link" href="<?= e(url('/expenses')) ?>"><div class="sb-nav-link-icon"><i class="fas fa-receipt"></i></div>Expenses</a>
+                            <a class="nav-link collapsed" href="#" data-bs-toggle="collapse" data-bs-target="#collapseTimeTracking" aria-expanded="false" aria-controls="collapseCustomers">
+                                <div class="sb-nav-link-icon"><i class="fas fa-stopwatch"></i></div>
+                                Time Tracking
+                                <div class="sb-sidenav-collapse-arrow"><i class="fas fa-angle-down"></i></div>
+                            </a>
+                            <div class="collapse" id="collapseTimeTracking" aria-labelledby="headingOne" data-bs-parent="#sidenavAccordion">
+                                <nav class="sb-sidenav-menu-nested nav">
+                                    <a class="nav-link" href="<?= e(url('/time-tracking')) ?>"><div class="sb-nav-link-icon"><i class="fas fa-clock-rotate-left"></i></div>Time Log</a>
+                                    <a class="nav-link" href="<?= e(url('/time-tracking/punch-board')) ?>"><div class="sb-nav-link-icon"><i class="fas fa-user-clock"></i></div>Punch Board</a>
+                                </nav>
+                            </div>
                         <?php endif; ?>
 
                         <?php if ($canAccessBusinessAdmin): ?>

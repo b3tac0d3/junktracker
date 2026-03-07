@@ -25,5 +25,4 @@ ON DUPLICATE KEY UPDATE
 INSERT IGNORE INTO business_user_memberships (
     business_id, user_id, role, is_active, created_at, updated_at
 ) VALUES
-    (1, 1, 'admin', 1, NOW(), NOW()),
     (1, 2, 'admin', 1, NOW(), NOW());

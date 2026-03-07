@@ -28,6 +28,7 @@ Run in this order:
 4. `database/migrations/2026-02-27_v3_phase_b_jobs_status_prospect.sql`
 5. `database/migrations/2026-02-27_v3_phase_b_clients_profile_fields.sql`
 6. `database/migrations/2026-02-27_v3_phase_b_client_contact_flags.sql`
+7. `database/migrations/2026-02-27_v3_phase_b_client_phone_flags.sql`
 
 ## Local login (seed)
 
@@ -39,3 +40,8 @@ Run in this order:
 - Every business-owned table includes `business_id` and business-safe indexes.
 - Runtime schema mutation is removed; schema is migration-driven.
 - UI is intentionally minimal for clean Phase A iteration.
+
+## Future plan ideas
+
+- Subcontracted jobs tracking: support jobs fulfilled by third-party providers (details and workflow TBD).
+- Inventory lot purchasing: track purchases like estates, storage units, and mixed lots as resale inventory expenses (details and workflow TBD).
