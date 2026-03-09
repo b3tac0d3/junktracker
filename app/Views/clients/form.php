@@ -4,6 +4,7 @@ $errors = is_array($errors ?? null) ? $errors : [];
 $mode = (string) ($mode ?? 'create');
 $actionUrl = (string) ($actionUrl ?? url('/clients'));
 $hasClientType = (bool) ($hasClientType ?? false);
+$clientTypeOptions = is_array($clientTypeOptions ?? null) ? $clientTypeOptions : ['client', 'company', 'realtor', 'other'];
 
 $fieldError = static function (string $field) use ($errors): string {
     return isset($errors[$field]) ? (string) $errors[$field] : '';
@@ -52,10 +53,16 @@ $hasError = static function (string $field) use ($errors): bool {
                 <div class="col-12 col-lg-4">
                     <label class="form-label fw-semibold" for="client-type">Client Type</label>
                     <select id="client-type" name="client_type" class="form-select <?= $hasError('client_type') ? 'is-invalid' : '' ?>">
-                        <option value="client" <?= ((string) ($form['client_type'] ?? 'client')) === 'client' ? 'selected' : '' ?>>Client</option>
-                        <option value="company" <?= ((string) ($form['client_type'] ?? 'client')) === 'company' ? 'selected' : '' ?>>Company</option>
-                        <option value="realtor" <?= ((string) ($form['client_type'] ?? 'client')) === 'realtor' ? 'selected' : '' ?>>Realtor</option>
-                        <option value="other" <?= ((string) ($form['client_type'] ?? 'client')) === 'other' ? 'selected' : '' ?>>Other</option>
+                        <?php foreach ($clientTypeOptions as $optionRaw): ?>
+                            <?php
+                            $option = strtolower(trim((string) $optionRaw));
+                            if ($option === '') {
+                                continue;
+                            }
+                            $label = ucwords(str_replace('_', ' ', $option));
+                            ?>
+                            <option value="<?= e($option) ?>" <?= ((string) ($form['client_type'] ?? 'client')) === $option ? 'selected' : '' ?>><?= e($label) ?></option>
+                        <?php endforeach; ?>
                     </select>
                     <?php if ($hasError('client_type')): ?><div class="invalid-feedback d-block"><?= e($fieldError('client_type')) ?></div><?php endif; ?>
                 </div>

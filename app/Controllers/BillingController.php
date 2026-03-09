@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Models\Business;
+use App\Models\FormSelectValue;
 use App\Models\InvoiceItemType;
 use App\Models\Invoice;
 use Core\Controller;
@@ -17,7 +18,8 @@ final class BillingController extends Controller
 
         $search = trim((string) ($_GET['q'] ?? ''));
         $status = strtolower(trim((string) ($_GET['status'] ?? '')));
-        $allowedStatuses = ['draft', 'sent', 'approved', 'declined', 'unsent', 'partially_paid', 'paid_in_full', 'partial', 'paid', 'cancelled'];
+        $statusOptions = $this->billingFilterStatusOptions();
+        $allowedStatuses = array_values(array_filter(array_keys($statusOptions), static fn (string $key): bool => $key !== ''));
         if ($status !== '' && !in_array($status, $allowedStatuses, true)) {
             $status = '';
         }
@@ -40,6 +42,7 @@ final class BillingController extends Controller
             'pageTitle' => 'Billing',
             'search' => $search,
             'status' => $status,
+            'statusOptions' => $statusOptions,
             'invoices' => $invoices,
             'summary' => $summary,
             'pagination' => $pagination,
@@ -60,7 +63,9 @@ final class BillingController extends Controller
         if (in_array($requestedType, ['estimate', 'invoice'], true)) {
             $form['type'] = $requestedType;
             $documentType = $requestedType;
-            $form['status'] = $requestedType === 'estimate' ? 'draft' : 'unsent';
+            $form['status'] = $requestedType === 'estimate'
+                ? (string) (array_key_first($this->estimateStatusOptions()) ?? 'draft')
+                : (string) (array_key_first($this->invoiceStatusOptions()) ?? 'unsent');
         }
 
         $requestedClientId = (int) ($_GET['client_id'] ?? 0);
@@ -99,7 +104,7 @@ final class BillingController extends Controller
 
             $form = $this->formFromModel($sourceEstimate, Invoice::lineItems($businessId, $sourceEstimateId));
             $form['type'] = 'invoice';
-            $form['status'] = 'unsent';
+            $form['status'] = (string) (array_key_first($this->invoiceStatusOptions()) ?? 'unsent');
             $form['invoice_number'] = '';
             $documentType = 'invoice';
         }
@@ -114,6 +119,8 @@ final class BillingController extends Controller
             'jobOptions' => $jobOptions,
             'invoiceItemTypes' => InvoiceItemType::activeOptions($businessId),
             'documentType' => $documentType,
+            'estimateStatusOptions' => $this->estimateStatusOptions(),
+            'invoiceStatusOptions' => $this->invoiceStatusOptions(),
         ]);
     }
 
@@ -143,6 +150,8 @@ final class BillingController extends Controller
                 'jobOptions' => $jobOptions,
                 'invoiceItemTypes' => $invoiceItemTypes,
                 'documentType' => $form['type'],
+                'estimateStatusOptions' => $this->estimateStatusOptions(),
+                'invoiceStatusOptions' => $this->invoiceStatusOptions(),
             ]);
             return;
         }
@@ -190,6 +199,8 @@ final class BillingController extends Controller
             'invoiceItemTypes' => InvoiceItemType::activeOptions($businessId),
             'invoiceId' => $invoiceId,
             'documentType' => strtolower((string) ($invoice['type'] ?? 'invoice')) === 'estimate' ? 'estimate' : 'invoice',
+            'estimateStatusOptions' => $this->estimateStatusOptions(),
+            'invoiceStatusOptions' => $this->invoiceStatusOptions(),
         ]);
     }
 
@@ -234,6 +245,8 @@ final class BillingController extends Controller
                 'invoiceItemTypes' => $invoiceItemTypes,
                 'invoiceId' => $invoiceId,
                 'documentType' => $form['type'],
+                'estimateStatusOptions' => $this->estimateStatusOptions(),
+                'invoiceStatusOptions' => $this->invoiceStatusOptions(),
             ]);
             return;
         }
@@ -285,6 +298,9 @@ final class BillingController extends Controller
             'items' => $items,
             'payments' => $payments,
             'business' => $business,
+            'quickStatusOptions' => strtolower(trim((string) ($invoice['type'] ?? 'invoice'))) === 'estimate'
+                ? $this->estimateStatusOptions()
+                : $this->invoiceStatusOptions(),
         ]);
     }
 
@@ -367,8 +383,8 @@ final class BillingController extends Controller
 
         $status = strtolower(trim((string) ($_POST['status'] ?? '')));
         $allowedStatuses = $type === 'estimate'
-            ? ['draft', 'sent', 'approved', 'declined']
-            : ['unsent', 'sent', 'partially_paid', 'paid_in_full'];
+            ? array_keys($this->estimateStatusOptions())
+            : array_keys($this->invoiceStatusOptions());
         if (!in_array($status, $allowedStatuses, true)) {
             flash('error', 'Choose a valid status.');
             redirect('/billing/' . (string) $invoiceId . $backSuffix);
@@ -706,9 +722,10 @@ final class BillingController extends Controller
 
     private function defaultForm(): array
     {
+        $invoiceStatuses = array_keys($this->invoiceStatusOptions());
         return [
             'type' => 'invoice',
-            'status' => 'unsent',
+            'status' => (string) ($invoiceStatuses[0] ?? 'unsent'),
             'invoice_number' => '',
             'client_id' => '',
             'job_id' => '',
@@ -724,9 +741,42 @@ final class BillingController extends Controller
         ];
     }
 
+    /**
+     * @return array<string, string>
+     */
+    private function estimateStatusOptions(): array
+    {
+        $fallback = ['draft', 'sent', 'approved', 'declined'];
+        return $this->optionLabelMap($this->selectValueList('estimate_status', $fallback));
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function invoiceStatusOptions(): array
+    {
+        $fallback = ['unsent', 'sent', 'partially_paid', 'paid_in_full'];
+        return $this->optionLabelMap($this->selectValueList('invoice_status', $fallback));
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function billingFilterStatusOptions(): array
+    {
+        $options = ['' => 'All'];
+        foreach ($this->invoiceStatusOptions() as $value => $label) {
+            $options[$value] = $label;
+        }
+        foreach ($this->estimateStatusOptions() as $value => $label) {
+            $options[$value] = $label;
+        }
+        return $options;
+    }
+
     private function paymentTypeOptions(): array
     {
-        return [
+        $fallback = [
             'check' => 'Check',
             'cc' => 'CC',
             'cash' => 'Cash',
@@ -734,14 +784,18 @@ final class BillingController extends Controller
             'cashapp' => 'Cashapp',
             'other' => 'Other',
         ];
+
+        return $this->selectValueMap('payment_method', $fallback);
     }
 
     private function paymentCategoryOptions(): array
     {
-        return [
+        $fallback = [
             'deposit' => 'Deposit',
             'payment' => 'Payment',
         ];
+
+        return $this->selectValueMap('payment_type', $fallback);
     }
 
     private function defaultPaymentForm(int $invoiceId = 0): array
@@ -876,6 +930,72 @@ final class BillingController extends Controller
         return '';
     }
 
+    /**
+     * @param array<string, string> $fallback
+     * @return array<string, string>
+     */
+    private function selectValueMap(string $sectionKey, array $fallback): array
+    {
+        $businessId = current_business_id();
+        $options = FormSelectValue::optionsForSection($businessId, $sectionKey);
+        if ($options === []) {
+            return $fallback;
+        }
+
+        $map = [];
+        foreach ($options as $optionRaw) {
+            $value = strtolower(trim((string) $optionRaw));
+            if ($value === '') {
+                continue;
+            }
+            $map[$value] = ucwords(str_replace('_', ' ', $value));
+        }
+
+        return $map !== [] ? $map : $fallback;
+    }
+
+    /**
+     * @param array<int, string> $fallback
+     * @return array<int, string>
+     */
+    private function selectValueList(string $sectionKey, array $fallback): array
+    {
+        $businessId = current_business_id();
+        $options = FormSelectValue::optionsForSection($businessId, $sectionKey);
+        if ($options === []) {
+            return $fallback;
+        }
+
+        $normalized = [];
+        foreach ($options as $optionRaw) {
+            $value = strtolower(trim((string) $optionRaw));
+            if ($value === '' || in_array($value, $normalized, true)) {
+                continue;
+            }
+            $normalized[] = $value;
+        }
+
+        return $normalized !== [] ? $normalized : $fallback;
+    }
+
+    /**
+     * @param array<int, string> $values
+     * @return array<string, string>
+     */
+    private function optionLabelMap(array $values): array
+    {
+        $map = [];
+        foreach ($values as $valueRaw) {
+            $value = strtolower(trim((string) $valueRaw));
+            if ($value === '' || array_key_exists($value, $map)) {
+                continue;
+            }
+            $map[$value] = ucwords(str_replace('_', ' ', $value));
+        }
+
+        return $map;
+    }
+
     private function formFromModel(array $invoice, array $lineItems = []): array
     {
         $type = strtolower(trim((string) ($invoice['type'] ?? 'invoice')));
@@ -884,9 +1004,11 @@ final class BillingController extends Controller
         }
 
         $status = strtolower(trim((string) ($invoice['status'] ?? 'draft')));
+        $estimateStatuses = array_keys($this->estimateStatusOptions());
+        $invoiceStatuses = array_keys($this->invoiceStatusOptions());
         if ($type === 'estimate') {
-            if (!in_array($status, ['draft', 'sent', 'approved', 'declined'], true)) {
-                $status = 'draft';
+            if (!in_array($status, $estimateStatuses, true)) {
+                $status = (string) ($estimateStatuses[0] ?? 'draft');
             }
         } else {
             if ($status === 'draft') {
@@ -896,8 +1018,8 @@ final class BillingController extends Controller
             } elseif ($status === 'paid') {
                 $status = 'paid_in_full';
             }
-            if (!in_array($status, ['unsent', 'sent', 'partially_paid', 'paid_in_full'], true)) {
-                $status = 'unsent';
+            if (!in_array($status, $invoiceStatuses, true)) {
+                $status = (string) ($invoiceStatuses[0] ?? 'unsent');
             }
         }
 
@@ -973,7 +1095,9 @@ final class BillingController extends Controller
 
         return [
             'type' => $type,
-            'status' => strtolower(trim((string) ($input['status'] ?? ($type === 'estimate' ? 'draft' : 'unsent')))),
+            'status' => strtolower(trim((string) ($input['status'] ?? ($type === 'estimate'
+                ? ((string) (array_key_first($this->estimateStatusOptions()) ?? 'draft'))
+                : ((string) (array_key_first($this->invoiceStatusOptions()) ?? 'unsent')))))),
             'invoice_number' => trim((string) ($input['invoice_number'] ?? '')),
             'client_id' => trim((string) ($input['client_id'] ?? '')),
             'job_id' => trim((string) ($input['job_id'] ?? '')),
@@ -994,8 +1118,8 @@ final class BillingController extends Controller
         $errors = [];
         $allowedTypes = ['estimate', 'invoice'];
         $allowedStatusesByType = [
-            'estimate' => ['draft', 'sent', 'approved', 'declined'],
-            'invoice' => ['unsent', 'sent', 'partially_paid', 'paid_in_full'],
+            'estimate' => array_keys($this->estimateStatusOptions()),
+            'invoice' => array_keys($this->invoiceStatusOptions()),
         ];
         $clientIds = array_map(static fn (array $row): int => (int) ($row['id'] ?? 0), $clientOptions);
         $jobIds = array_map(static fn (array $row): int => (int) ($row['id'] ?? 0), $jobOptions);

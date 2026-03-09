@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Controllers;
 
+use App\Models\Client;
+use App\Models\FormSelectValue;
 use App\Models\Task;
 use Core\Controller;
 
@@ -15,12 +17,13 @@ final class TasksController extends Controller
 
         $search = trim((string) ($_GET['q'] ?? ''));
         $status = strtolower(trim((string) ($_GET['status'] ?? 'open')));
-        $allowedStatuses = ['open', 'in_progress', 'closed'];
+        $businessId = current_business_id();
+        $statusOptions = $this->taskStatusOptions($businessId);
+        $allowedStatuses = $statusOptions;
         if ($status !== '' && !in_array($status, $allowedStatuses, true)) {
             $status = 'open';
         }
 
-        $businessId = current_business_id();
         $perPage = pagination_per_page($_GET['per_page'] ?? null);
         $page = pagination_current_page($_GET['page'] ?? null);
         $totalRows = Task::indexCount($businessId, $search, $status);
@@ -38,6 +41,7 @@ final class TasksController extends Controller
             'pageTitle' => 'Tasks',
             'search' => $search,
             'status' => $status,
+            'statusOptions' => $statusOptions,
             'tasks' => $tasks,
             'summary' => $summary,
             'pagination' => $pagination,
@@ -49,13 +53,26 @@ final class TasksController extends Controller
         require_business_role(['general_user', 'admin']);
 
         $businessId = current_business_id();
+        $form = $this->defaultForm();
+        $requestedClientId = (int) ($_GET['client_id'] ?? 0);
+        if ($requestedClientId > 0) {
+            $client = Client::findForBusiness($businessId, $requestedClientId);
+            if ($client !== null) {
+                $clientName = Client::displayName($client);
+                $form['title'] = 'Client Follow-Up: ' . $clientName;
+                $form['link_type'] = 'client';
+                $form['link_id'] = (string) $requestedClientId;
+            }
+        }
+
         $this->render('tasks/form', [
             'pageTitle' => 'Add Task',
             'mode' => 'create',
             'actionUrl' => url('/tasks'),
-            'form' => $this->defaultForm(),
+            'form' => $form,
             'errors' => [],
             'userOptions' => Task::userOptions($businessId),
+            'statusOptions' => $this->taskStatusOptions($businessId),
         ]);
     }
 
@@ -79,6 +96,7 @@ final class TasksController extends Controller
                 'form' => $form,
                 'errors' => $errors,
                 'userOptions' => Task::userOptions($businessId),
+                'statusOptions' => $this->taskStatusOptions($businessId),
             ]);
             return;
         }
@@ -206,7 +224,7 @@ final class TasksController extends Controller
         }
 
         $targetStatus = strtolower(trim((string) ($_POST['status'] ?? '')));
-        $allowed = ['open', 'in_progress', 'closed'];
+        $allowed = $this->taskStatusOptions(current_business_id());
         if (!in_array($targetStatus, $allowed, true)) {
             $this->json(['ok' => false, 'error' => 'Invalid status.'], 422);
         }
@@ -312,6 +330,7 @@ final class TasksController extends Controller
             'form' => $this->formFromModel($task),
             'errors' => [],
             'userOptions' => Task::userOptions($businessId),
+            'statusOptions' => $this->taskStatusOptions($businessId),
             'taskId' => $taskId,
         ]);
     }
@@ -351,6 +370,7 @@ final class TasksController extends Controller
                 'form' => $form,
                 'errors' => $errors,
                 'userOptions' => $userOptions,
+                'statusOptions' => $this->taskStatusOptions($businessId),
                 'taskId' => $taskId,
             ]);
             return;
@@ -431,14 +451,19 @@ final class TasksController extends Controller
 
     private function defaultForm(): array
     {
+        $businessId = current_business_id();
+        $statusOptions = $this->taskStatusOptions($businessId);
+
         return [
             'title' => '',
             'body' => '',
-            'status' => 'open',
+            'status' => (string) ($statusOptions[0] ?? 'open'),
             'priority' => '3',
             'owner_user_id' => (string) (auth_user_id() ?? 0),
             'owner_user_name' => '',
             'due_at' => '',
+            'link_type' => '',
+            'link_id' => '',
         ];
     }
 
@@ -452,6 +477,8 @@ final class TasksController extends Controller
             'owner_user_id' => (string) ((int) ($task['owner_user_id'] ?? 0)),
             'owner_user_name' => trim((string) ($task['owner_name'] ?? '')),
             'due_at' => $this->toInputDatetime((string) ($task['due_at'] ?? '')),
+            'link_type' => trim((string) ($task['link_type'] ?? '')),
+            'link_id' => ((int) ($task['link_id'] ?? 0)) > 0 ? (string) ((int) ($task['link_id'] ?? 0)) : '',
         ];
     }
 
@@ -465,13 +492,15 @@ final class TasksController extends Controller
             'owner_user_id' => trim((string) ($input['owner_user_id'] ?? '')),
             'owner_user_name' => trim((string) ($input['owner_user_name'] ?? '')),
             'due_at' => trim((string) ($input['due_at'] ?? '')),
+            'link_type' => strtolower(trim((string) ($input['link_type'] ?? ''))),
+            'link_id' => trim((string) ($input['link_id'] ?? '')),
         ];
     }
 
     private function validateForm(array $form, array $userOptions): array
     {
         $errors = [];
-        $allowedStatuses = ['open', 'in_progress', 'closed'];
+        $allowedStatuses = $this->taskStatusOptions(current_business_id());
         $allowedUserIds = [];
         foreach ($userOptions as $row) {
             $allowedUserIds[] = (int) ($row['id'] ?? 0);
@@ -499,6 +528,10 @@ final class TasksController extends Controller
             $errors['due_at'] = 'Enter a valid due date/time.';
         }
 
+        if (trim((string) ($form['link_type'] ?? '')) !== '' && (int) ($form['link_id'] ?? 0) <= 0) {
+            $errors['title'] = 'Linked record is invalid. Please reload and try again.';
+        }
+
         return $errors;
     }
 
@@ -512,8 +545,8 @@ final class TasksController extends Controller
             'owner_user_id' => (int) $form['owner_user_id'],
             'assigned_user_id' => null,
             'due_at' => $this->toDatabaseDatetime($form['due_at']),
-            'link_type' => '',
-            'link_id' => null,
+            'link_type' => trim((string) ($form['link_type'] ?? '')),
+            'link_id' => ((int) ($form['link_id'] ?? 0)) > 0 ? (int) $form['link_id'] : null,
         ];
     }
 
@@ -546,5 +579,30 @@ final class TasksController extends Controller
         header('Content-Type: application/json; charset=utf-8');
         echo json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         exit;
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function taskStatusOptions(int $businessId): array
+    {
+        $options = FormSelectValue::optionsForSection($businessId, 'task_status');
+        $normalized = [];
+        foreach ($options as $rawOption) {
+            $option = strtolower(trim((string) $rawOption));
+            if ($option === '') {
+                continue;
+            }
+            if (in_array($option, $normalized, true)) {
+                continue;
+            }
+            $normalized[] = $option;
+        }
+
+        if ($normalized !== []) {
+            return $normalized;
+        }
+
+        return ['open', 'in_progress', 'closed'];
     }
 }

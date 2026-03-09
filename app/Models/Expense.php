@@ -13,7 +13,16 @@ final class Expense
      */
     public static function categoryOptions(int $businessId): array
     {
-        $defaults = ['Fuel', 'Disposal', 'Materials', 'Labor', 'Payroll', 'Supplies', 'Rent', 'Utilities', 'Other'];
+        $defaults = FormSelectValue::defaultOptions('expense_category');
+        if ($defaults === []) {
+            $defaults = ['Fuel', 'Disposal', 'Materials', 'Labor', 'Payroll', 'Supplies', 'Rent', 'Utilities', 'Other'];
+        }
+
+        $configured = FormSelectValue::optionsForSection($businessId, 'expense_category');
+        if ($configured !== []) {
+            return $configured;
+        }
+
         if (!SchemaInspector::hasTable('expenses')) {
             return $defaults;
         }

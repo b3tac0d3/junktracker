@@ -5,33 +5,38 @@ $invoices = is_array($invoices ?? null) ? $invoices : [];
 $summary = is_array($summary ?? null) ? $summary : [];
 $pagination = is_array($pagination ?? null) ? $pagination : pagination_meta(1, 25, count($invoices), count($invoices));
 $perPage = (int) ($pagination['per_page'] ?? 25);
-$statusOptions = [
-    '' => 'All',
-    'unsent' => 'Unsent',
-    'draft' => 'Draft',
-    'sent' => 'Sent',
-    'partially_paid' => 'Partially Paid',
-    'paid_in_full' => 'Paid in Full',
-    'approved' => 'Approved',
-    'declined' => 'Declined',
-    'partial' => 'Partial',
-    'paid' => 'Paid',
-    'cancelled' => 'Cancelled',
-];
+$statusOptions = is_array($statusOptions ?? null) ? $statusOptions : [];
+if (!array_key_exists('', $statusOptions)) {
+    $statusOptions = ['' => 'All'] + $statusOptions;
+}
 
-$statusLabel = static function (?string $value): string {
+$statusLabelMap = [];
+foreach ($statusOptions as $value => $label) {
+    $key = strtolower(trim((string) $value));
+    if ($key === '') {
+        continue;
+    }
+    $statusLabelMap[$key] = (string) $label;
+}
+
+if (!isset($statusLabelMap['partial']) && isset($statusLabelMap['partially_paid'])) {
+    $statusLabelMap['partial'] = $statusLabelMap['partially_paid'];
+}
+if (!isset($statusLabelMap['paid']) && isset($statusLabelMap['paid_in_full'])) {
+    $statusLabelMap['paid'] = $statusLabelMap['paid_in_full'];
+}
+
+$statusLabel = static function (?string $value) use ($statusLabelMap): string {
     $normalized = strtolower(trim((string) $value));
-    return match ($normalized) {
-        'unsent' => 'Unsent',
-        'sent' => 'Sent',
-        'partially_paid', 'partial' => 'Partially Paid',
-        'paid_in_full', 'paid' => 'Paid in Full',
-        'draft' => 'Draft',
-        'approved' => 'Approved',
-        'declined' => 'Declined',
-        'cancelled' => 'Cancelled',
-        default => $normalized === '' ? '—' : ucwords(str_replace('_', ' ', $normalized)),
-    };
+    if ($normalized === '') {
+        return '—';
+    }
+
+    if (isset($statusLabelMap[$normalized])) {
+        return $statusLabelMap[$normalized];
+    }
+
+    return ucwords(str_replace('_', ' ', $normalized));
 };
 ?>
 

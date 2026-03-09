@@ -6,8 +6,10 @@ namespace App\Controllers;
 
 use App\Models\Client;
 use App\Models\Expense;
+use App\Models\FormSelectValue;
 use App\Models\Invoice;
 use App\Models\Job;
+use App\Models\Task;
 use App\Models\TimeEntry;
 use Core\Controller;
 
@@ -19,12 +21,13 @@ final class JobsController extends Controller
 
         $search = trim((string) ($_GET['q'] ?? ''));
         $status = strtolower(trim((string) ($_GET['status'] ?? 'dispatch')));
-        $allowedStatuses = ['dispatch', 'prospect', 'pending', 'active', 'complete', 'cancelled'];
+        $businessId = current_business_id();
+        $statusOptions = $this->jobStatusOptions($businessId);
+        $allowedStatuses = array_merge(['dispatch'], $statusOptions);
         if ($status !== '' && !in_array($status, $allowedStatuses, true)) {
             $status = 'dispatch';
         }
 
-        $businessId = current_business_id();
         $perPage = pagination_per_page($_GET['per_page'] ?? null);
         $page = pagination_current_page($_GET['page'] ?? null);
         $totalRows = Job::indexCount($businessId, $search, $status);
@@ -41,6 +44,7 @@ final class JobsController extends Controller
             'pageTitle' => 'Jobs',
             'search' => $search,
             'status' => $status,
+            'statusOptions' => $statusOptions,
             'jobs' => $jobs,
             'pagination' => $pagination,
         ]);
@@ -51,13 +55,33 @@ final class JobsController extends Controller
         require_business_role(['general_user', 'admin']);
 
         $businessId = current_business_id();
+        $form = $this->defaultForm();
+        $statusOptions = $this->jobStatusOptions($businessId);
+        if (!in_array((string) ($form['status'] ?? ''), $statusOptions, true)) {
+            $form['status'] = (string) ($statusOptions[0] ?? 'pending');
+        }
+        $requestedClientId = (int) ($_GET['client_id'] ?? 0);
+        if ($requestedClientId > 0) {
+            $client = Client::findForBusiness($businessId, $requestedClientId);
+            if ($client !== null) {
+                $form['client_id'] = (string) $requestedClientId;
+                $form['address_line1'] = trim((string) ($client['address_line1'] ?? ''));
+                $form['address_line2'] = trim((string) ($client['address_line2'] ?? ''));
+                $form['city'] = trim((string) ($client['city'] ?? ''));
+                $form['state'] = trim((string) ($client['state'] ?? ''));
+                $form['postal_code'] = trim((string) ($client['postal_code'] ?? ''));
+            }
+        }
+
         $this->render('jobs/form', [
             'pageTitle' => 'Add Job',
             'mode' => 'create',
             'actionUrl' => url('/jobs'),
-            'form' => $this->defaultForm(),
+            'form' => $form,
             'errors' => [],
+            'statusOptions' => $statusOptions,
             'clientOptions' => Job::clientOptions($businessId),
+            'clientTypeOptions' => FormSelectValue::optionsForSection($businessId, 'client_type'),
         ]);
     }
 
@@ -123,7 +147,13 @@ final class JobsController extends Controller
         if ($firstName === '' && $lastName === '' && $companyName === '') {
             $errors['first_name'] = 'Enter a first/last name or a company name.';
         }
-        if (!in_array($clientType, ['client', 'company', 'realtor', 'other'], true)) {
+        $allowedClientTypes = FormSelectValue::optionsForSection($businessId, 'client_type');
+        $allowedClientTypes = array_map(static fn (string $value): string => strtolower(trim($value)), $allowedClientTypes);
+        $allowedClientTypes = array_values(array_unique(array_filter($allowedClientTypes, static fn (string $value): bool => $value !== '')));
+        if ($allowedClientTypes === []) {
+            $allowedClientTypes = ['client', 'company', 'realtor', 'other'];
+        }
+        if (!in_array($clientType, $allowedClientTypes, true)) {
             $errors['client_type'] = 'Choose a valid client type.';
         }
         if ($errors !== []) {
@@ -146,15 +176,27 @@ final class JobsController extends Controller
             'secondary_can_text' => 0,
         ];
 
+        $duplicate = Client::findPotentialDuplicate($businessId, $payload);
+        if ($duplicate !== null) {
+            $this->json([
+                'ok' => true,
+                'duplicate' => true,
+                'message' => 'Possible duplicate detected. Existing client selected.',
+                'client' => [
+                    'id' => (int) ($duplicate['id'] ?? 0),
+                    'name' => Client::displayName($duplicate),
+                    'address_line1' => (string) ($duplicate['address_line1'] ?? ''),
+                    'address_line2' => (string) ($duplicate['address_line2'] ?? ''),
+                    'city' => (string) ($duplicate['city'] ?? ''),
+                    'state' => (string) ($duplicate['state'] ?? ''),
+                    'postal_code' => (string) ($duplicate['postal_code'] ?? ''),
+                ],
+            ]);
+        }
+
         $clientId = Client::create($businessId, $payload, auth_user_id() ?? 0);
         $client = Client::findForBusiness($businessId, $clientId);
-        $displayName = trim(((string) ($client['first_name'] ?? '')) . ' ' . ((string) ($client['last_name'] ?? '')));
-        if ($displayName === '') {
-            $displayName = trim((string) ($client['company_name'] ?? ''));
-        }
-        if ($displayName === '') {
-            $displayName = 'Client #' . (string) $clientId;
-        }
+        $displayName = is_array($client) ? Client::displayName($client) : ('Client #' . (string) $clientId);
 
         $this->json([
             'ok' => true,
@@ -182,6 +224,7 @@ final class JobsController extends Controller
         $businessId = current_business_id();
         $form = $this->formFromPost($_POST);
         $errors = $this->validateForm($form, $businessId);
+        $statusOptions = $this->jobStatusOptions($businessId);
         if ($errors !== []) {
             $this->render('jobs/form', [
                 'pageTitle' => 'Add Job',
@@ -189,12 +232,16 @@ final class JobsController extends Controller
                 'actionUrl' => url('/jobs'),
                 'form' => $form,
                 'errors' => $errors,
+                'statusOptions' => $statusOptions,
                 'clientOptions' => Job::clientOptions($businessId),
+                'clientTypeOptions' => FormSelectValue::optionsForSection($businessId, 'client_type'),
             ]);
             return;
         }
 
-        $jobId = Job::create($businessId, $this->payloadForSave($form), auth_user_id() ?? 0);
+        $actorUserId = auth_user_id() ?? 0;
+        $jobId = Job::create($businessId, $this->payloadForSave($form), $actorUserId);
+        $this->maybeCreateFollowUpTask($businessId, $jobId, $form, $actorUserId);
         flash('success', 'Job created.');
         redirect('/jobs/' . (string) $jobId);
     }
@@ -224,7 +271,9 @@ final class JobsController extends Controller
             'actionUrl' => url('/jobs/' . (string) $jobId . '/update'),
             'form' => $this->formFromModel($job),
             'errors' => [],
+            'statusOptions' => $this->jobStatusOptions($businessId),
             'clientOptions' => Job::clientOptions($businessId),
+            'clientTypeOptions' => FormSelectValue::optionsForSection($businessId, 'client_type'),
             'jobId' => $jobId,
         ]);
     }
@@ -255,6 +304,7 @@ final class JobsController extends Controller
 
         $form = $this->formFromPost($_POST);
         $errors = $this->validateForm($form, $businessId);
+        $statusOptions = $this->jobStatusOptions($businessId);
         if ($errors !== []) {
             $this->render('jobs/form', [
                 'pageTitle' => 'Edit Job',
@@ -262,7 +312,9 @@ final class JobsController extends Controller
                 'actionUrl' => url('/jobs/' . (string) $jobId . '/update'),
                 'form' => $form,
                 'errors' => $errors,
+                'statusOptions' => $statusOptions,
                 'clientOptions' => Job::clientOptions($businessId),
+                'clientTypeOptions' => FormSelectValue::optionsForSection($businessId, 'client_type'),
                 'jobId' => $jobId,
             ]);
             return;
@@ -1062,6 +1114,9 @@ final class JobsController extends Controller
             'state' => '',
             'postal_code' => '',
             'notes' => '',
+            'create_follow_up_task' => '',
+            'follow_up_title' => '',
+            'follow_up_due_date' => '',
         ];
     }
 
@@ -1102,6 +1157,9 @@ final class JobsController extends Controller
             'state' => trim((string) ($job['state'] ?? '')),
             'postal_code' => trim((string) ($job['postal_code'] ?? '')),
             'notes' => trim((string) ($job['notes'] ?? '')),
+            'create_follow_up_task' => '',
+            'follow_up_title' => '',
+            'follow_up_due_date' => '',
         ];
     }
 
@@ -1121,6 +1179,9 @@ final class JobsController extends Controller
             'state' => trim((string) ($input['state'] ?? '')),
             'postal_code' => trim((string) ($input['postal_code'] ?? '')),
             'notes' => trim((string) ($input['notes'] ?? '')),
+            'create_follow_up_task' => isset($input['create_follow_up_task']) ? '1' : '',
+            'follow_up_title' => trim((string) ($input['follow_up_title'] ?? '')),
+            'follow_up_due_date' => trim((string) ($input['follow_up_due_date'] ?? '')),
         ];
     }
 
@@ -1177,7 +1238,7 @@ final class JobsController extends Controller
     private function validateForm(array $form, int $businessId): array
     {
         $errors = [];
-        $allowedStatuses = ['prospect', 'pending', 'active', 'complete', 'cancelled'];
+        $allowedStatuses = $this->jobStatusOptions($businessId);
 
         if ($form['title'] === '') {
             $errors['title'] = 'Job name is required.';
@@ -1207,6 +1268,14 @@ final class JobsController extends Controller
         $actualEnd = $this->asTimestamp($form['actual_end_at']);
         if ($actualStart !== null && $actualEnd !== null && $actualEnd < $actualStart) {
             $errors['actual_end_at'] = 'Actual end must be after actual start.';
+        }
+
+        if (
+            $form['create_follow_up_task'] === '1'
+            && $form['follow_up_due_date'] !== ''
+            && $this->asDate($form['follow_up_due_date']) === null
+        ) {
+            $errors['follow_up_due_date'] = 'Follow-up due date is invalid.';
         }
 
         return $errors;
@@ -1278,6 +1347,31 @@ final class JobsController extends Controller
         return $errors;
     }
 
+    /**
+     * @return array<int, string>
+     */
+    private function jobStatusOptions(int $businessId): array
+    {
+        $options = FormSelectValue::optionsForSection($businessId, 'job_status');
+        $normalized = [];
+        foreach ($options as $rawOption) {
+            $option = strtolower(trim((string) $rawOption));
+            if ($option === '') {
+                continue;
+            }
+            if (in_array($option, $normalized, true)) {
+                continue;
+            }
+            $normalized[] = $option;
+        }
+
+        if ($normalized !== []) {
+            return $normalized;
+        }
+
+        return ['prospect', 'pending', 'active', 'complete', 'cancelled'];
+    }
+
     private function validateAdjustmentForm(array $form): array
     {
         $errors = [];
@@ -1334,6 +1428,39 @@ final class JobsController extends Controller
     {
         $timestamp = $this->asTimestamp($value);
         return $timestamp === null ? '' : date('Y-m-d\TH:i', $timestamp);
+    }
+
+    private function maybeCreateFollowUpTask(int $businessId, int $jobId, array $form, int $actorUserId): void
+    {
+        if ($jobId <= 0 || $actorUserId <= 0 || $form['create_follow_up_task'] !== '1') {
+            return;
+        }
+
+        $taskTitle = trim((string) $form['follow_up_title']);
+        if ($taskTitle === '') {
+            $taskTitle = 'Job Follow-Up: ' . $form['title'];
+        }
+
+        $dueAt = null;
+        if (trim((string) $form['follow_up_due_date']) !== '') {
+            $dueAt = $this->toDatabaseDatetime($form['follow_up_due_date'] . ' 09:00');
+        } elseif (trim((string) $form['scheduled_start_at']) !== '') {
+            $dueAt = $this->toDatabaseDatetime($form['scheduled_start_at']);
+        }
+
+        $body = trim((string) ($form['notes'] ?? ''));
+
+        Task::create($businessId, [
+            'title' => $taskTitle,
+            'body' => $body,
+            'status' => 'open',
+            'owner_user_id' => $actorUserId,
+            'assigned_user_id' => null,
+            'due_at' => $dueAt,
+            'priority' => 3,
+            'link_type' => 'job',
+            'link_id' => $jobId,
+        ], $actorUserId);
     }
 
     private function json(array $payload, int $status = 200): never

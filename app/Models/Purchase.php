@@ -11,9 +11,27 @@ final class Purchase
     /**
      * @return array<int, string>
      */
-    public static function statusOptions(): array
+    public static function statusOptions(int $businessId = 0): array
     {
-        return ['prospect', 'pending', 'active', 'complete', 'cancelled'];
+        $fallback = ['prospect', 'pending', 'active', 'complete', 'cancelled'];
+        if ($businessId <= 0) {
+            return $fallback;
+        }
+
+        $configured = FormSelectValue::optionsForSection($businessId, 'purchase_status');
+        $normalized = [];
+        foreach ($configured as $rawOption) {
+            $option = strtolower(trim((string) $rawOption));
+            if ($option === '') {
+                continue;
+            }
+            if (in_array($option, $normalized, true)) {
+                continue;
+            }
+            $normalized[] = $option;
+        }
+
+        return $normalized !== [] ? $normalized : $fallback;
     }
 
     public static function indexList(int $businessId, string $search = '', string $status = '', int $limit = 25, int $offset = 0): array
@@ -30,7 +48,7 @@ final class Purchase
             'p.deleted_at IS NULL',
         ];
 
-        if ($status !== '' && in_array($status, self::statusOptions(), true)) {
+        if ($status !== '' && in_array($status, self::statusOptions($businessId), true)) {
             $where[] = 'p.status = :status';
         }
 
@@ -66,7 +84,7 @@ final class Purchase
         $queryLike = '%' . $query . '%';
 
         $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
-        if ($status !== '' && in_array($status, self::statusOptions(), true)) {
+        if ($status !== '' && in_array($status, self::statusOptions($businessId), true)) {
             $stmt->bindValue(':status', $status);
         }
         $stmt->bindValue(':query', $query);
@@ -97,7 +115,7 @@ final class Purchase
             'p.deleted_at IS NULL',
         ];
 
-        if ($status !== '' && in_array($status, self::statusOptions(), true)) {
+        if ($status !== '' && in_array($status, self::statusOptions($businessId), true)) {
             $where[] = 'p.status = :status';
         }
 
@@ -121,7 +139,7 @@ final class Purchase
         $queryLike = '%' . $query . '%';
 
         $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
-        if ($status !== '' && in_array($status, self::statusOptions(), true)) {
+        if ($status !== '' && in_array($status, self::statusOptions($businessId), true)) {
             $stmt->bindValue(':status', $status);
         }
         $stmt->bindValue(':query', $query);
@@ -137,13 +155,19 @@ final class Purchase
 
     public static function statusSummary(int $businessId): array
     {
-        $summary = [
-            'prospect' => 0,
-            'pending' => 0,
-            'active' => 0,
-            'complete' => 0,
-            'cancelled' => 0,
-        ];
+        $summary = [];
+        foreach (self::statusOptions($businessId) as $statusOption) {
+            $summary[$statusOption] = 0;
+        }
+        if ($summary === []) {
+            $summary = [
+                'prospect' => 0,
+                'pending' => 0,
+                'active' => 0,
+                'complete' => 0,
+                'cancelled' => 0,
+            ];
+        }
 
         if (!SchemaInspector::hasTable('purchases')) {
             return $summary;

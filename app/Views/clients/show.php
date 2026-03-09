@@ -49,6 +49,12 @@ $secondaryCanTextClass = $secondaryCanTextRaw === null ? 'text-flag-neutral' : (
     </div>
 </div>
 
+<div class="d-flex flex-wrap gap-2 mb-3">
+    <a class="btn btn-primary" href="<?= e(url('/jobs/create') . '?client_id=' . (string) ((int) ($client['id'] ?? 0))) ?>"><i class="fas fa-briefcase me-2"></i>Quick Add Job</a>
+    <a class="btn btn-primary" href="<?= e(url('/purchases/create') . '?client_id=' . (string) ((int) ($client['id'] ?? 0))) ?>"><i class="fas fa-cart-arrow-down me-2"></i>Quick Add Purchase</a>
+    <a class="btn btn-primary" href="<?= e(url('/tasks/create') . '?client_id=' . (string) ((int) ($client['id'] ?? 0))) ?>"><i class="fas fa-list-check me-2"></i>Quick Add Task</a>
+</div>
+
 <section class="card index-card mb-3">
     <div class="card-header index-card-header">
         <strong><i class="fas fa-address-card me-2"></i>Client Details</strong>

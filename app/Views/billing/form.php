@@ -11,18 +11,38 @@ if (!in_array($documentType, ['estimate', 'invoice'], true)) {
     $documentType = 'invoice';
 }
 
-$estimateStatusOptions = [
-    'draft' => 'Draft',
-    'sent' => 'Sent',
-    'approved' => 'Approved',
-    'declined' => 'Declined',
-];
-$invoiceStatusOptions = [
-    'unsent' => 'Unsent',
-    'sent' => 'Sent',
-    'partially_paid' => 'Partially Paid',
-    'paid_in_full' => 'Paid in Full',
-];
+$estimateStatusOptions = is_array($estimateStatusOptions ?? null) ? $estimateStatusOptions : [];
+if ($estimateStatusOptions === []) {
+    $estimateStatusOptions = [
+        'draft' => 'Draft',
+        'sent' => 'Sent',
+        'approved' => 'Approved',
+        'declined' => 'Declined',
+    ];
+}
+$invoiceStatusOptions = is_array($invoiceStatusOptions ?? null) ? $invoiceStatusOptions : [];
+if ($invoiceStatusOptions === []) {
+    $invoiceStatusOptions = [
+        'unsent' => 'Unsent',
+        'sent' => 'Sent',
+        'partially_paid' => 'Partially Paid',
+        'paid_in_full' => 'Paid in Full',
+    ];
+}
+
+$normalizeStatusMap = static function (array $options): array {
+    $normalized = [];
+    foreach ($options as $value => $label) {
+        $key = strtolower(trim((string) $value));
+        if ($key === '' || array_key_exists($key, $normalized)) {
+            continue;
+        }
+        $normalized[$key] = (string) $label;
+    }
+    return $normalized;
+};
+$estimateStatusOptions = $normalizeStatusMap($estimateStatusOptions);
+$invoiceStatusOptions = $normalizeStatusMap($invoiceStatusOptions);
 $statusOptions = $documentType === 'estimate' ? $estimateStatusOptions : $invoiceStatusOptions;
 $selectedStatus = strtolower(trim((string) ($form['status'] ?? ($documentType === 'estimate' ? 'draft' : 'unsent'))));
 if ($documentType === 'invoice') {

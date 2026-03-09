@@ -219,6 +219,115 @@ final class Client
         return is_array($row) ? $row : null;
     }
 
+    public static function displayName(array $client): string
+    {
+        $name = trim(((string) ($client['first_name'] ?? '')) . ' ' . ((string) ($client['last_name'] ?? '')));
+        if ($name !== '') {
+            return $name;
+        }
+
+        $company = trim((string) ($client['company_name'] ?? ''));
+        if ($company !== '') {
+            return $company;
+        }
+
+        return 'Client #' . (string) ((int) ($client['id'] ?? 0));
+    }
+
+    public static function findPotentialDuplicate(int $businessId, array $candidate): ?array
+    {
+        if (!self::hasTable('clients')) {
+            return null;
+        }
+
+        $firstName = self::normalizeIdentity((string) ($candidate['first_name'] ?? ''));
+        $lastName = self::normalizeIdentity((string) ($candidate['last_name'] ?? ''));
+        $companyName = self::normalizeIdentity((string) ($candidate['company_name'] ?? ''));
+        $phoneDigits = self::normalizePhone((string) ($candidate['phone'] ?? ''));
+
+        $or = [];
+        $params = [];
+
+        if ($firstName !== '' && $lastName !== '') {
+            $or[] = '(LOWER(TRIM(COALESCE(c.first_name, \'\'))) = :dup_first_name AND LOWER(TRIM(COALESCE(c.last_name, \'\'))) = :dup_last_name)';
+            $params['dup_first_name'] = $firstName;
+            $params['dup_last_name'] = $lastName;
+        }
+
+        if ($companyName !== '' && self::hasColumn('clients', 'company_name')) {
+            $or[] = "LOWER(TRIM(COALESCE(c.company_name, ''))) = :dup_company_name";
+            $params['dup_company_name'] = $companyName;
+        }
+
+        if ($phoneDigits !== '' && self::hasColumn('clients', 'phone')) {
+            $phoneExpr = "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(c.phone, ''), '-', ''), '(', ''), ')', ''), ' ', ''), '.', ''), '+', '')";
+            $or[] = $phoneExpr . ' = :dup_phone';
+            $params['dup_phone'] = $phoneDigits;
+        }
+
+        if ($or === []) {
+            return null;
+        }
+
+        $businessWhere = self::hasColumn('clients', 'business_id') ? 'c.business_id = :business_id' : '1 = 1';
+        $deletedWhere = self::hasColumn('clients', 'deleted_at') ? 'c.deleted_at IS NULL' : '1 = 1';
+
+        $sql = 'SELECT c.id
+                FROM clients c
+                WHERE ' . $businessWhere . '
+                  AND ' . $deletedWhere . '
+                  AND (' . implode(' OR ', $or) . ')
+                ORDER BY c.id DESC
+                LIMIT 25';
+
+        $stmt = Database::connection()->prepare($sql);
+        if (self::hasColumn('clients', 'business_id')) {
+            $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
+        }
+        foreach ($params as $key => $value) {
+            $stmt->bindValue(':' . $key, $value);
+        }
+        $stmt->execute();
+
+        $rows = $stmt->fetchAll();
+        if (!is_array($rows) || $rows === []) {
+            return null;
+        }
+
+        foreach ($rows as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $id = (int) ($row['id'] ?? 0);
+            if ($id <= 0) {
+                continue;
+            }
+            $existing = self::findForBusiness($businessId, $id);
+            if ($existing === null) {
+                continue;
+            }
+
+            $existingFirst = self::normalizeIdentity((string) ($existing['first_name'] ?? ''));
+            $existingLast = self::normalizeIdentity((string) ($existing['last_name'] ?? ''));
+            $existingCompany = self::normalizeIdentity((string) ($existing['company_name'] ?? ''));
+            $existingPhone = self::normalizePhone((string) ($existing['phone'] ?? ''));
+
+            $nameMatch = ($firstName !== '' && $lastName !== '' && $existingFirst === $firstName && $existingLast === $lastName);
+            $companyMatch = ($companyName !== '' && $existingCompany !== '' && $existingCompany === $companyName);
+            $phoneMatch = ($phoneDigits !== '' && $existingPhone !== '' && $existingPhone === $phoneDigits);
+
+            if (($nameMatch || $companyMatch) && ($phoneDigits === '' || $phoneMatch)) {
+                return $existing;
+            }
+
+            if (!$nameMatch && !$companyMatch && $phoneMatch) {
+                return $existing;
+            }
+        }
+
+        return null;
+    }
+
     public static function financialSummary(int $businessId, int $clientId): array
     {
         $gross = 0.0;
@@ -661,5 +770,20 @@ final class Client
         }
 
         return null;
+    }
+
+    private static function normalizeIdentity(string $value): string
+    {
+        $value = strtolower(trim($value));
+        if ($value === '') {
+            return '';
+        }
+
+        return preg_replace('/\s+/', ' ', $value) ?? '';
+    }
+
+    private static function normalizePhone(string $value): string
+    {
+        return preg_replace('/\D+/', '', $value) ?? '';
     }
 }

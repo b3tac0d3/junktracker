@@ -30,11 +30,11 @@
                 <div class="muted">Reusable invoicable items with defaults</div>
             </div>
         </a>
-        <div class="list-item">
+        <a class="list-item text-decoration-none" href="<?= e(url('/admin/form-select-values')) ?>">
             <div>
                 <div class="title">Form Select Values</div>
                 <div class="muted">Centralize list values used in forms.</div>
             </div>
-        </div>
+        </a>
     </div>
 </div>

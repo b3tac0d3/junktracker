@@ -120,19 +120,34 @@ $paymentCreateUrl = url('/billing/payments/create') . '?invoice_id=' . (string) 
 if ($paymentCreateJobId > 0) {
     $paymentCreateUrl .= '&job_id=' . (string) $paymentCreateJobId;
 }
-$quickStatusOptions = $docType === 'estimate'
-    ? [
-        'draft' => 'Draft',
-        'sent' => 'Sent',
-        'approved' => 'Approved',
-        'declined' => 'Declined',
-    ]
-    : [
-        'unsent' => 'Unsent',
-        'sent' => 'Sent',
-        'partially_paid' => 'Partially Paid',
-        'paid_in_full' => 'Paid in Full',
-    ];
+$quickStatusOptions = is_array($quickStatusOptions ?? null) ? $quickStatusOptions : [];
+if ($quickStatusOptions === []) {
+    $quickStatusOptions = $docType === 'estimate'
+        ? [
+            'draft' => 'Draft',
+            'sent' => 'Sent',
+            'approved' => 'Approved',
+            'declined' => 'Declined',
+        ]
+        : [
+            'unsent' => 'Unsent',
+            'sent' => 'Sent',
+            'partially_paid' => 'Partially Paid',
+            'paid_in_full' => 'Paid in Full',
+        ];
+}
+
+$normalizedQuickStatusOptions = [];
+foreach ($quickStatusOptions as $statusValue => $statusLabel) {
+    $key = strtolower(trim((string) $statusValue));
+    if ($key === '' || array_key_exists($key, $normalizedQuickStatusOptions)) {
+        continue;
+    }
+    $normalizedQuickStatusOptions[$key] = (string) $statusLabel;
+}
+if ($normalizedQuickStatusOptions !== []) {
+    $quickStatusOptions = $normalizedQuickStatusOptions;
+}
 $currentStatus = strtolower(trim((string) ($invoice['status'] ?? '')));
 ?>
 

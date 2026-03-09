@@ -2,14 +2,28 @@
 $form = is_array($form ?? null) ? $form : [];
 $errors = is_array($errors ?? null) ? $errors : [];
 $userOptions = is_array($userOptions ?? null) ? $userOptions : [];
+$statusOptionsRaw = is_array($statusOptions ?? null) ? $statusOptions : ['open', 'in_progress', 'closed'];
 $mode = (string) ($mode ?? 'create');
 $actionUrl = (string) ($actionUrl ?? url('/tasks'));
 
-$statusOptions = [
-    'open' => 'Open',
-    'in_progress' => 'In Progress',
-    'closed' => 'Closed',
-];
+$statusOptions = [];
+foreach ($statusOptionsRaw as $statusOptionRaw) {
+    $statusOption = strtolower(trim((string) $statusOptionRaw));
+    if ($statusOption === '') {
+        continue;
+    }
+    if (array_key_exists($statusOption, $statusOptions)) {
+        continue;
+    }
+    $statusOptions[$statusOption] = ucwords(str_replace('_', ' ', $statusOption));
+}
+if ($statusOptions === []) {
+    $statusOptions = [
+        'open' => 'Open',
+        'in_progress' => 'In Progress',
+        'closed' => 'Closed',
+    ];
+}
 
 $fieldError = static function (string $field) use ($errors): string {
     return isset($errors[$field]) ? (string) $errors[$field] : '';
@@ -62,6 +76,8 @@ if ($ownerNameValue === '') {
     <div class="card-body">
         <form method="post" action="<?= e($actionUrl) ?>" class="row g-3">
             <?= csrf_field() ?>
+            <input type="hidden" name="link_type" value="<?= e((string) ($form['link_type'] ?? '')) ?>">
+            <input type="hidden" name="link_id" value="<?= e((string) ($form['link_id'] ?? '')) ?>">
 
             <div class="col-12 col-lg-7">
                 <label class="form-label fw-semibold" for="task-title">Task Title</label>

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Models\Client;
+use App\Models\FormSelectValue;
 use App\Models\Sale;
 use Core\Controller;
 
@@ -29,7 +30,10 @@ final class SalesController extends Controller
 
         $sales = Sale::indexList($businessId, $search, $type, $perPage, $offset);
         $summary = Sale::summary($businessId);
-        $typeOptions = Sale::typeOptions($businessId);
+        $typeOptions = FormSelectValue::optionsForSection($businessId, 'sale_type');
+        if ($typeOptions === []) {
+            $typeOptions = Sale::typeOptions($businessId);
+        }
         $pagination = pagination_meta($page, $perPage, $totalRows, count($sales));
 
         $this->render('sales/index', [
@@ -53,7 +57,7 @@ final class SalesController extends Controller
             'actionUrl' => url('/sales'),
             'form' => $this->defaultForm(),
             'errors' => [],
-            'typeOptions' => Sale::baseTypeOptions(),
+            'typeOptions' => $this->saleTypeOptions(current_business_id()),
         ]);
     }
 
@@ -103,7 +107,7 @@ final class SalesController extends Controller
                 'actionUrl' => url('/sales'),
                 'form' => $form,
                 'errors' => $errors,
-                'typeOptions' => Sale::baseTypeOptions(),
+                'typeOptions' => $this->saleTypeOptions($businessId),
             ]);
             return;
         }
@@ -161,7 +165,7 @@ final class SalesController extends Controller
             'actionUrl' => url('/sales/' . (string) $saleId . '/update'),
             'form' => $this->formFromModel($sale),
             'errors' => [],
-            'typeOptions' => Sale::baseTypeOptions(),
+            'typeOptions' => $this->saleTypeOptions(current_business_id()),
         ]);
     }
 
@@ -198,7 +202,7 @@ final class SalesController extends Controller
                 'actionUrl' => url('/sales/' . (string) $saleId . '/update'),
                 'form' => $form,
                 'errors' => $errors,
-                'typeOptions' => Sale::baseTypeOptions(),
+                'typeOptions' => $this->saleTypeOptions($businessId),
             ]);
             return;
         }
@@ -309,7 +313,8 @@ final class SalesController extends Controller
             $errors['net_amount'] = 'Net must be a valid amount.';
         }
 
-        if (!in_array($form['sale_type'], Sale::baseTypeOptions(), true)) {
+        $typeOptions = $this->saleTypeOptions($businessId);
+        if (!in_array($form['sale_type'], $typeOptions, true)) {
             $errors['sale_type'] = 'Choose a valid type.';
         }
 
@@ -366,6 +371,23 @@ final class SalesController extends Controller
 
         $timestamp = strtotime($value);
         return $timestamp === false ? null : date('Y-m-d H:i:s', $timestamp);
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function saleTypeOptions(int $businessId): array
+    {
+        $options = FormSelectValue::optionsForSection($businessId, 'sale_type');
+        if ($options !== []) {
+            $normalized = array_map(static fn (string $value): string => strtolower(trim($value)), $options);
+            $normalized = array_values(array_unique(array_filter($normalized, static fn (string $value): bool => $value !== '')));
+            if ($normalized !== []) {
+                return $normalized;
+            }
+        }
+
+        return Sale::typeOptions($businessId);
     }
 
     private function json(array $payload, int $status = 200): never

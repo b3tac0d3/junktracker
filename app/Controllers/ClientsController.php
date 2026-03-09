@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Models\Client;
+use App\Models\FormSelectValue;
 use App\Models\SchemaInspector;
 use Core\Controller;
 
@@ -40,6 +41,7 @@ final class ClientsController extends Controller
     {
         require_business_role(['general_user', 'admin']);
 
+        $businessId = current_business_id();
         $this->render('clients/form', [
             'pageTitle' => 'Add Client',
             'mode' => 'create',
@@ -47,6 +49,7 @@ final class ClientsController extends Controller
             'form' => $this->defaultForm(),
             'errors' => [],
             'hasClientType' => SchemaInspector::hasColumn('clients', 'client_type'),
+            'clientTypeOptions' => FormSelectValue::optionsForSection($businessId, 'client_type'),
         ]);
     }
 
@@ -59,8 +62,9 @@ final class ClientsController extends Controller
             redirect('/clients/create');
         }
 
+        $businessId = current_business_id();
         $form = $this->formFromPost($_POST);
-        $errors = $this->validateForm($form);
+        $errors = $this->validateForm($form, $businessId);
         if ($errors !== []) {
             $this->render('clients/form', [
                 'pageTitle' => 'Add Client',
@@ -69,11 +73,12 @@ final class ClientsController extends Controller
                 'form' => $form,
                 'errors' => $errors,
                 'hasClientType' => SchemaInspector::hasColumn('clients', 'client_type'),
+                'clientTypeOptions' => FormSelectValue::optionsForSection($businessId, 'client_type'),
             ]);
             return;
         }
 
-        $clientId = Client::create(current_business_id(), $this->payloadForSave($form, true), auth_user_id() ?? 0);
+        $clientId = Client::create($businessId, $this->payloadForSave($form, true), auth_user_id() ?? 0);
         flash('success', 'Client created.');
         redirect('/clients/' . (string) $clientId);
     }
@@ -104,6 +109,7 @@ final class ClientsController extends Controller
             'form' => $this->formFromModel($client),
             'errors' => [],
             'hasClientType' => SchemaInspector::hasColumn('clients', 'client_type'),
+            'clientTypeOptions' => FormSelectValue::optionsForSection($businessId, 'client_type'),
             'clientId' => $clientId,
         ]);
     }
@@ -133,7 +139,7 @@ final class ClientsController extends Controller
         }
 
         $form = $this->formFromPost($_POST);
-        $errors = $this->validateForm($form);
+        $errors = $this->validateForm($form, $businessId);
         if ($errors !== []) {
             $this->render('clients/form', [
                 'pageTitle' => 'Edit Client',
@@ -142,6 +148,7 @@ final class ClientsController extends Controller
                 'form' => $form,
                 'errors' => $errors,
                 'hasClientType' => SchemaInspector::hasColumn('clients', 'client_type'),
+                'clientTypeOptions' => FormSelectValue::optionsForSection($businessId, 'client_type'),
                 'clientId' => $clientId,
             ]);
             return;
@@ -255,7 +262,7 @@ final class ClientsController extends Controller
         ];
     }
 
-    private function validateForm(array $form): array
+    private function validateForm(array $form, int $businessId): array
     {
         $errors = [];
 
@@ -263,7 +270,12 @@ final class ClientsController extends Controller
             $errors['first_name'] = 'Enter a first/last name or a company name.';
         }
 
-        $allowedTypes = ['client', 'realtor', 'other', 'company'];
+        $allowedTypes = FormSelectValue::optionsForSection($businessId, 'client_type');
+        $allowedTypes = array_map(static fn (string $value): string => strtolower(trim($value)), $allowedTypes);
+        $allowedTypes = array_values(array_unique(array_filter($allowedTypes, static fn (string $value): bool => $value !== '')));
+        if ($allowedTypes === []) {
+            $allowedTypes = ['client', 'realtor', 'other', 'company'];
+        }
         if (!in_array($form['client_type'], $allowedTypes, true) && SchemaInspector::hasColumn('clients', 'client_type')) {
             $errors['client_type'] = 'Choose a valid client type.';
         }

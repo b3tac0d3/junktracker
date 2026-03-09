@@ -4,15 +4,21 @@ $status = strtolower(trim((string) ($status ?? 'dispatch')));
 $jobs = is_array($jobs ?? null) ? $jobs : [];
 $pagination = is_array($pagination ?? null) ? $pagination : pagination_meta(1, 25, count($jobs), count($jobs));
 $perPage = (int) ($pagination['per_page'] ?? 25);
+$statusOptionsRaw = is_array($statusOptions ?? null) ? $statusOptions : ['prospect', 'pending', 'active', 'complete', 'cancelled'];
 $statusOptions = [
     'dispatch' => 'Dispatch (Pending + Active)',
     '' => 'All',
-    'prospect' => 'Prospect',
-    'pending' => 'Pending',
-    'active' => 'Active',
-    'complete' => 'Complete',
-    'cancelled' => 'Cancelled',
 ];
+foreach ($statusOptionsRaw as $statusOptionRaw) {
+    $statusOption = strtolower(trim((string) $statusOptionRaw));
+    if ($statusOption === '') {
+        continue;
+    }
+    if (array_key_exists($statusOption, $statusOptions)) {
+        continue;
+    }
+    $statusOptions[$statusOption] = ucwords(str_replace('_', ' ', $statusOption));
+}
 ?>
 
 <div class="page-header d-flex flex-wrap align-items-end justify-content-between gap-2">

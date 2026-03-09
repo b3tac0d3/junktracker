@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Models\Client;
+use App\Models\FormSelectValue;
 use App\Models\Purchase;
 use App\Models\Task;
 use Core\Controller;
@@ -17,11 +18,12 @@ final class PurchasesController extends Controller
 
         $search = trim((string) ($_GET['q'] ?? ''));
         $status = strtolower(trim((string) ($_GET['status'] ?? '')));
-        if ($status !== '' && !in_array($status, Purchase::statusOptions(), true)) {
+        $businessId = current_business_id();
+        $statusOptions = $this->purchaseStatusOptions($businessId);
+        if ($status !== '' && !in_array($status, $statusOptions, true)) {
             $status = '';
         }
 
-        $businessId = current_business_id();
         $perPage = pagination_per_page($_GET['per_page'] ?? null);
         $page = pagination_current_page($_GET['page'] ?? null);
         $totalRows = Purchase::indexCount($businessId, $search, $status);
@@ -39,7 +41,7 @@ final class PurchasesController extends Controller
             'pageTitle' => 'Purchasing',
             'search' => $search,
             'status' => $status,
-            'statusOptions' => Purchase::statusOptions(),
+            'statusOptions' => $statusOptions,
             'purchases' => $purchases,
             'summary' => $summary,
             'pagination' => $pagination,
@@ -50,13 +52,25 @@ final class PurchasesController extends Controller
     {
         require_business_role(['general_user', 'admin']);
 
+        $businessId = current_business_id();
+        $form = $this->defaultForm();
+        $requestedClientId = (int) ($_GET['client_id'] ?? 0);
+        if ($requestedClientId > 0) {
+            $client = Client::findForBusiness($businessId, $requestedClientId);
+            if ($client !== null) {
+                $form['client_id'] = (string) $requestedClientId;
+                $form['client_name'] = Client::displayName($client);
+            }
+        }
+
         $this->render('purchases/form', [
             'pageTitle' => 'Add Purchase Order',
             'mode' => 'create',
             'actionUrl' => url('/purchases'),
-            'form' => $this->defaultForm(),
+            'form' => $form,
             'errors' => [],
-            'statusOptions' => Purchase::statusOptions(),
+            'statusOptions' => $this->purchaseStatusOptions($businessId),
+            'clientTypeOptions' => $this->clientTypeOptions($businessId),
             'searchUrl' => url('/purchases/client-search'),
         ]);
     }
@@ -89,6 +103,85 @@ final class PurchasesController extends Controller
         ]);
     }
 
+    public function quickCreateClient(): void
+    {
+        require_business_role(['general_user', 'admin']);
+
+        if (!verify_csrf($_POST['csrf_token'] ?? null)) {
+            $this->json(['ok' => false, 'error' => 'Session expired. Please reload and try again.'], 422);
+        }
+
+        $businessId = current_business_id();
+        $firstName = trim((string) ($_POST['first_name'] ?? ''));
+        $lastName = trim((string) ($_POST['last_name'] ?? ''));
+        $companyName = trim((string) ($_POST['company_name'] ?? ''));
+        $clientType = strtolower(trim((string) ($_POST['client_type'] ?? '')));
+        $allowedClientTypes = $this->clientTypeOptions($businessId);
+        if ($clientType === '') {
+            $clientType = ($firstName === '' && $lastName === '' && $companyName !== '') ? 'company' : 'client';
+            if (!in_array($clientType, $allowedClientTypes, true)) {
+                $clientType = (string) ($allowedClientTypes[0] ?? 'client');
+            }
+        }
+        if ($firstName === '' && $lastName === '' && $companyName !== '') {
+            if (in_array('company', $allowedClientTypes, true)) {
+                $clientType = 'company';
+            }
+        }
+
+        $payload = [
+            'first_name' => $firstName,
+            'last_name' => $lastName,
+            'company_name' => $companyName,
+            'client_type' => $clientType,
+            'phone' => trim((string) ($_POST['phone'] ?? '')),
+            'address_line1' => trim((string) ($_POST['address_line1'] ?? '')),
+            'city' => trim((string) ($_POST['city'] ?? '')),
+            'state' => trim((string) ($_POST['state'] ?? '')),
+            'postal_code' => trim((string) ($_POST['postal_code'] ?? '')),
+            'primary_note' => trim((string) ($_POST['primary_note'] ?? '')),
+            'status' => 'active',
+            'can_text' => 0,
+            'secondary_can_text' => 0,
+        ];
+
+        $errors = [];
+        if ($firstName === '' && $lastName === '' && $companyName === '') {
+            $errors['first_name'] = 'Enter a first/last name or a company name.';
+        }
+        if (!in_array($clientType, $allowedClientTypes, true)) {
+            $errors['client_type'] = 'Choose a valid client type.';
+        }
+        if ($errors !== []) {
+            $this->json(['ok' => false, 'errors' => $errors], 422);
+        }
+
+        $duplicate = Client::findPotentialDuplicate($businessId, $payload);
+        if ($duplicate !== null) {
+            $this->json([
+                'ok' => true,
+                'duplicate' => true,
+                'message' => 'Possible duplicate detected. Existing client selected.',
+                'client' => [
+                    'id' => (int) ($duplicate['id'] ?? 0),
+                    'name' => Client::displayName($duplicate),
+                ],
+            ]);
+        }
+
+        $clientId = Client::create($businessId, $payload, auth_user_id() ?? 0);
+        $client = Client::findForBusiness($businessId, $clientId);
+        $displayName = is_array($client) ? Client::displayName($client) : ('Client #' . (string) $clientId);
+
+        $this->json([
+            'ok' => true,
+            'client' => [
+                'id' => $clientId,
+                'name' => $displayName,
+            ],
+        ], 201);
+    }
+
     public function store(): void
     {
         require_business_role(['general_user', 'admin']);
@@ -108,7 +201,8 @@ final class PurchasesController extends Controller
                 'actionUrl' => url('/purchases'),
                 'form' => $form,
                 'errors' => $errors,
-                'statusOptions' => Purchase::statusOptions(),
+                'statusOptions' => $this->purchaseStatusOptions($businessId),
+                'clientTypeOptions' => $this->clientTypeOptions($businessId),
                 'searchUrl' => url('/purchases/client-search'),
             ]);
             return;
@@ -173,7 +267,8 @@ final class PurchasesController extends Controller
             'actionUrl' => url('/purchases/' . (string) $purchaseId . '/update'),
             'form' => $this->formFromModel($purchase),
             'errors' => [],
-            'statusOptions' => Purchase::statusOptions(),
+            'statusOptions' => $this->purchaseStatusOptions(current_business_id()),
+            'clientTypeOptions' => $this->clientTypeOptions(current_business_id()),
             'searchUrl' => url('/purchases/client-search'),
             'purchaseId' => $purchaseId,
         ]);
@@ -212,7 +307,8 @@ final class PurchasesController extends Controller
                 'actionUrl' => url('/purchases/' . (string) $purchaseId . '/update'),
                 'form' => $form,
                 'errors' => $errors,
-                'statusOptions' => Purchase::statusOptions(),
+                'statusOptions' => $this->purchaseStatusOptions($businessId),
+                'clientTypeOptions' => $this->clientTypeOptions($businessId),
                 'searchUrl' => url('/purchases/client-search'),
                 'purchaseId' => $purchaseId,
             ]);
@@ -325,12 +421,13 @@ final class PurchasesController extends Controller
     private function validateForm(array $form, int $businessId): array
     {
         $errors = [];
+        $statusOptions = $this->purchaseStatusOptions($businessId);
 
         if ($form['title'] === '') {
             $errors['title'] = 'Title is required.';
         }
 
-        if (!in_array($form['status'], Purchase::statusOptions(), true)) {
+        if (!in_array($form['status'], $statusOptions, true)) {
             $errors['status'] = 'Choose a valid status.';
         }
 
@@ -437,5 +534,38 @@ final class PurchasesController extends Controller
         header('Content-Type: application/json; charset=utf-8');
         echo json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         exit;
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function clientTypeOptions(int $businessId): array
+    {
+        $options = FormSelectValue::optionsForSection($businessId, 'client_type');
+        if ($options === []) {
+            return ['client', 'company', 'realtor', 'other'];
+        }
+
+        $normalized = [];
+        foreach ($options as $optionRaw) {
+            $option = strtolower(trim((string) $optionRaw));
+            if ($option === '') {
+                continue;
+            }
+            if (in_array($option, $normalized, true)) {
+                continue;
+            }
+            $normalized[] = $option;
+        }
+
+        return $normalized !== [] ? $normalized : ['client', 'company', 'realtor', 'other'];
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function purchaseStatusOptions(int $businessId): array
+    {
+        return Purchase::statusOptions($businessId);
     }
 }

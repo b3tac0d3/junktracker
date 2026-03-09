@@ -6,6 +6,7 @@ use App\Controllers\AuthController;
 use App\Controllers\AdminController;
 use App\Controllers\AdminBusinessDetailsController;
 use App\Controllers\AdminEmployeesController;
+use App\Controllers\AdminFormSelectValuesController;
 use App\Controllers\AdminInvoiceItemTypesController;
 use App\Controllers\AdminUsersController;
 use App\Controllers\BillingController;
@@ -129,6 +130,7 @@ $router->get('/purchases', [PurchasesController::class, 'index']);
 $router->get('/purchases/create', [PurchasesController::class, 'create']);
 $router->post('/purchases', [PurchasesController::class, 'store']);
 $router->get('/purchases/client-search', [PurchasesController::class, 'clientSearch']);
+$router->post('/purchases/quick-create-client', [PurchasesController::class, 'quickCreateClient']);
 $router->get('/purchases/{id}/edit', [PurchasesController::class, 'edit']);
 $router->post('/purchases/{id}/update', [PurchasesController::class, 'update']);
 $router->post('/purchases/{id}/delete', [PurchasesController::class, 'delete']);
@@ -152,5 +154,10 @@ $router->post('/admin/invoice-item-types', [AdminInvoiceItemTypesController::cla
 $router->get('/admin/invoice-item-types/{id}/edit', [AdminInvoiceItemTypesController::class, 'edit']);
 $router->post('/admin/invoice-item-types/{id}/update', [AdminInvoiceItemTypesController::class, 'update']);
 $router->post('/admin/invoice-item-types/{id}/delete', [AdminInvoiceItemTypesController::class, 'delete']);
+$router->get('/admin/form-select-values', [AdminFormSelectValuesController::class, 'index']);
+$router->get('/admin/form-select-values/{formKey}', [AdminFormSelectValuesController::class, 'show']);
+$router->post('/admin/form-select-values/quick-create', [AdminFormSelectValuesController::class, 'quickCreate']);
+$router->post('/admin/form-select-values/{id}/quick-update', [AdminFormSelectValuesController::class, 'quickUpdate']);
+$router->post('/admin/form-select-values/{id}/quick-delete', [AdminFormSelectValuesController::class, 'quickDelete']);
 
 return $router;

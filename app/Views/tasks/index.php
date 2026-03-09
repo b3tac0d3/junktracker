@@ -6,13 +6,18 @@ $summary = is_array($summary ?? null) ? $summary : [];
 $pagination = is_array($pagination ?? null) ? $pagination : pagination_meta(1, 25, count($tasks), count($tasks));
 $perPage = (int) ($pagination['per_page'] ?? 25);
 $currentUserId = (int) (auth_user_id() ?? 0);
-
-$statusOptions = [
-    '' => 'All',
-    'open' => 'Open',
-    'in_progress' => 'In Progress',
-    'closed' => 'Closed',
-];
+$statusOptionsRaw = is_array($statusOptions ?? null) ? $statusOptions : ['open', 'in_progress', 'closed'];
+$statusOptions = ['' => 'All'];
+foreach ($statusOptionsRaw as $statusOptionRaw) {
+    $statusOption = strtolower(trim((string) $statusOptionRaw));
+    if ($statusOption === '') {
+        continue;
+    }
+    if (array_key_exists($statusOption, $statusOptions)) {
+        continue;
+    }
+    $statusOptions[$statusOption] = ucwords(str_replace('_', ' ', $statusOption));
+}
 ?>
 
 <div class="page-header d-flex flex-wrap align-items-end justify-content-between gap-2">

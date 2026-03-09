@@ -2,16 +2,31 @@
 $form = is_array($form ?? null) ? $form : [];
 $errors = is_array($errors ?? null) ? $errors : [];
 $clientOptions = is_array($clientOptions ?? null) ? $clientOptions : [];
+$clientTypeOptions = is_array($clientTypeOptions ?? null) ? $clientTypeOptions : ['client', 'company', 'realtor', 'other'];
+$statusOptionsRaw = is_array($statusOptions ?? null) ? $statusOptions : ['prospect', 'pending', 'active', 'complete', 'cancelled'];
 $mode = (string) ($mode ?? 'create');
 $actionUrl = (string) ($actionUrl ?? url('/jobs'));
 
-$statusOptions = [
-    'prospect' => 'Prospect',
-    'pending' => 'Pending',
-    'active' => 'Active',
-    'complete' => 'Complete',
-    'cancelled' => 'Cancelled',
-];
+$statusOptions = [];
+foreach ($statusOptionsRaw as $statusOptionRaw) {
+    $statusOption = strtolower(trim((string) $statusOptionRaw));
+    if ($statusOption === '') {
+        continue;
+    }
+    if (array_key_exists($statusOption, $statusOptions)) {
+        continue;
+    }
+    $statusOptions[$statusOption] = ucwords(str_replace('_', ' ', $statusOption));
+}
+if ($statusOptions === []) {
+    $statusOptions = [
+        'prospect' => 'Prospect',
+        'pending' => 'Pending',
+        'active' => 'Active',
+        'complete' => 'Complete',
+        'cancelled' => 'Cancelled',
+    ];
+}
 
 $fieldError = static function (string $field) use ($errors): string {
     return isset($errors[$field]) ? (string) $errors[$field] : '';
@@ -148,6 +163,33 @@ foreach ($clientOptions as $clientOption) {
                 <textarea id="job-notes" name="notes" class="form-control" rows="4"><?= e((string) ($form['notes'] ?? '')) ?></textarea>
             </div>
 
+            <?php if ($mode !== 'edit'): ?>
+                <div class="col-12">
+                    <div class="card index-card border">
+                        <div class="card-header index-card-header py-2">
+                            <strong><i class="fas fa-list-check me-2"></i>Follow-Up Task</strong>
+                        </div>
+                        <div class="card-body row g-3 align-items-end">
+                            <div class="col-12">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="create-follow-up-task" name="create_follow_up_task" value="1" <?= ((string) ($form['create_follow_up_task'] ?? '')) === '1' ? 'checked' : '' ?> />
+                                    <label class="form-check-label" for="create-follow-up-task">Create follow-up task when saving</label>
+                                </div>
+                            </div>
+                            <div class="col-12 col-lg-8 follow-up-task-fields">
+                                <label class="form-label fw-semibold" for="follow-up-title">Task Title (Optional)</label>
+                                <input id="follow-up-title" name="follow_up_title" class="form-control" value="<?= e((string) ($form['follow_up_title'] ?? '')) ?>" placeholder="Default: Job Follow-Up" />
+                            </div>
+                            <div class="col-12 col-lg-4 follow-up-task-fields">
+                                <label class="form-label fw-semibold" for="follow-up-due-date">Task Due Date (Optional)</label>
+                                <input id="follow-up-due-date" type="date" name="follow_up_due_date" class="form-control <?= $hasError('follow_up_due_date') ? 'is-invalid' : '' ?>" value="<?= e((string) ($form['follow_up_due_date'] ?? '')) ?>" />
+                                <?php if ($hasError('follow_up_due_date')): ?><div class="invalid-feedback d-block"><?= e($fieldError('follow_up_due_date')) ?></div><?php endif; ?>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            <?php endif; ?>
+
             <div class="col-12 d-flex gap-2">
                 <button class="btn btn-primary" type="submit"><?= e($mode === 'edit' ? 'Save Changes' : 'Create Job') ?></button>
                 <a class="btn btn-outline-secondary" href="<?= e($mode === 'edit' && isset($jobId) ? url('/jobs/' . (string) ((int) $jobId)) : url('/jobs')) ?>">Cancel</a>
@@ -181,10 +223,16 @@ foreach ($clientOptions as $clientOption) {
                     <div class="col-12 col-lg-4">
                         <label class="form-label fw-semibold" for="quick-client-type">Client Type</label>
                         <select id="quick-client-type" name="client_type" class="form-select">
-                            <option value="client">Client</option>
-                            <option value="company">Company</option>
-                            <option value="realtor">Realtor</option>
-                            <option value="other">Other</option>
+                            <?php foreach ($clientTypeOptions as $optionRaw): ?>
+                                <?php
+                                $option = strtolower(trim((string) $optionRaw));
+                                if ($option === '') {
+                                    continue;
+                                }
+                                $label = ucwords(str_replace('_', ' ', $option));
+                                ?>
+                                <option value="<?= e($option) ?>"><?= e($label) ?></option>
+                            <?php endforeach; ?>
                         </select>
                     </div>
                     <div class="col-12 col-lg-4">
@@ -238,6 +286,28 @@ window.addEventListener('DOMContentLoaded', () => {
     const quickClientForm = document.getElementById('quick-client-form');
     const quickClientError = document.getElementById('quick-client-error');
     const jobForm = document.querySelector('form[action="<?= e($actionUrl) ?>"]');
+    const followUpToggle = document.getElementById('create-follow-up-task');
+    const followUpFields = Array.from(document.querySelectorAll('.follow-up-task-fields'));
+
+    const syncFollowUpState = () => {
+        if (!followUpToggle) {
+            return;
+        }
+
+        const enabled = followUpToggle.checked;
+        followUpFields.forEach((container) => {
+            container.classList.toggle('opacity-50', !enabled);
+            container.querySelectorAll('input, select, textarea').forEach((input) => {
+                input.disabled = !enabled;
+            });
+        });
+    };
+
+    if (followUpToggle) {
+        followUpToggle.addEventListener('change', syncFollowUpState);
+        syncFollowUpState();
+    }
+
     if (!searchInput || !hiddenClientId || !suggestions || !quickClientModalEl || !saveQuickClientBtn || !quickClientForm || !quickClientError || !jobForm) {
         return;
     }

@@ -4,6 +4,7 @@ $errors = is_array($errors ?? null) ? $errors : [];
 $mode = (string) ($mode ?? 'create');
 $actionUrl = (string) ($actionUrl ?? url('/purchases'));
 $statusOptions = is_array($statusOptions ?? null) ? $statusOptions : [];
+$clientTypeOptions = is_array($clientTypeOptions ?? null) ? $clientTypeOptions : ['client', 'company', 'realtor', 'other'];
 $searchUrl = (string) ($searchUrl ?? url('/purchases/client-search'));
 
 $fieldError = static function (string $field) use ($errors): string {
@@ -72,6 +73,7 @@ $statusLabel = static function (string $value): string {
                         placeholder="Search client by name, phone, city..."
                         autocomplete="off"
                         data-search-url="<?= e($searchUrl) ?>"
+                        data-create-url="<?= e(url('/purchases/quick-create-client')) ?>"
                     />
                     <div id="purchase-client-suggestions" class="client-suggestions d-none" role="listbox" aria-label="Client suggestions"></div>
                 </div>
@@ -146,12 +148,88 @@ $statusLabel = static function (string $value): string {
     </div>
 </section>
 
+<div class="modal fade" id="quickClientModalPurchase" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add Client</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="quick-client-error-purchase" class="alert alert-danger d-none mb-3"></div>
+                <form id="quick-client-form-purchase" class="row g-3">
+                    <div class="col-12 col-lg-4">
+                        <label class="form-label fw-semibold" for="quick-client-first-name-purchase">First Name</label>
+                        <input id="quick-client-first-name-purchase" name="first_name" class="form-control" maxlength="90" />
+                    </div>
+                    <div class="col-12 col-lg-4">
+                        <label class="form-label fw-semibold" for="quick-client-last-name-purchase">Last Name</label>
+                        <input id="quick-client-last-name-purchase" name="last_name" class="form-control" maxlength="90" />
+                    </div>
+                    <div class="col-12 col-lg-4">
+                        <label class="form-label fw-semibold" for="quick-client-company-name-purchase">Company Name</label>
+                        <input id="quick-client-company-name-purchase" name="company_name" class="form-control" maxlength="150" />
+                    </div>
+                    <div class="col-12 col-lg-4">
+                        <label class="form-label fw-semibold" for="quick-client-type-purchase">Client Type</label>
+                        <select id="quick-client-type-purchase" name="client_type" class="form-select">
+                            <?php foreach ($clientTypeOptions as $optionRaw): ?>
+                                <?php
+                                $option = strtolower(trim((string) $optionRaw));
+                                if ($option === '') {
+                                    continue;
+                                }
+                                $label = ucwords(str_replace('_', ' ', $option));
+                                ?>
+                                <option value="<?= e($option) ?>"><?= e($label) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="col-12 col-lg-4">
+                        <label class="form-label fw-semibold" for="quick-client-phone-purchase">Phone</label>
+                        <input id="quick-client-phone-purchase" name="phone" class="form-control" maxlength="40" />
+                    </div>
+                    <div class="col-12 col-lg-8">
+                        <label class="form-label fw-semibold" for="quick-client-address-1-purchase">Address Line 1</label>
+                        <input id="quick-client-address-1-purchase" name="address_line1" class="form-control" maxlength="190" />
+                    </div>
+                    <div class="col-12 col-lg-4">
+                        <label class="form-label fw-semibold" for="quick-client-city-purchase">City</label>
+                        <input id="quick-client-city-purchase" name="city" class="form-control" maxlength="120" />
+                    </div>
+                    <div class="col-6 col-lg-4">
+                        <label class="form-label fw-semibold" for="quick-client-state-purchase">State</label>
+                        <input id="quick-client-state-purchase" name="state" class="form-control" maxlength="60" />
+                    </div>
+                    <div class="col-6 col-lg-4">
+                        <label class="form-label fw-semibold" for="quick-client-postal-purchase">Postal Code</label>
+                        <input id="quick-client-postal-purchase" name="postal_code" class="form-control" maxlength="30" />
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label fw-semibold" for="quick-client-note-purchase">Primary Note</label>
+                        <textarea id="quick-client-note-purchase" name="primary_note" class="form-control" rows="2"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="quick-client-save-purchase">Save Client</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
 window.addEventListener('DOMContentLoaded', () => {
     const searchInput = document.getElementById('purchase-client-search');
     const hiddenClientId = document.getElementById('purchase-client-id');
     const hiddenClientName = document.getElementById('purchase-client-name');
     const suggestions = document.getElementById('purchase-client-suggestions');
+    const quickClientModalEl = document.getElementById('quickClientModalPurchase');
+    const saveQuickClientBtn = document.getElementById('quick-client-save-purchase');
+    const quickClientForm = document.getElementById('quick-client-form-purchase');
+    const quickClientError = document.getElementById('quick-client-error-purchase');
+    const purchaseForm = document.querySelector('form[action="<?= e($actionUrl) ?>"]');
     const followUpToggle = document.getElementById('create-follow-up-task');
     const followUpFields = Array.from(document.querySelectorAll('.follow-up-task-fields'));
 
@@ -174,11 +252,15 @@ window.addEventListener('DOMContentLoaded', () => {
         syncFollowUpState();
     }
 
-    if (!searchInput || !hiddenClientId || !hiddenClientName || !suggestions) {
+    if (!searchInput || !hiddenClientId || !hiddenClientName || !suggestions || !quickClientModalEl || !saveQuickClientBtn || !quickClientForm || !quickClientError || !purchaseForm) {
         return;
     }
 
     const searchUrl = searchInput.dataset.searchUrl || '';
+    const createUrl = searchInput.dataset.createUrl || '';
+    const csrfInput = purchaseForm.querySelector('input[name="csrf_token"]');
+    const csrfToken = csrfInput ? csrfInput.value : '';
+    const modal = bootstrap.Modal.getOrCreateInstance(quickClientModalEl);
     let debounce = null;
 
     const hideSuggestions = () => {
@@ -192,45 +274,72 @@ window.addEventListener('DOMContentLoaded', () => {
         searchInput.value = name || '';
     };
 
-    const renderSuggestions = (items) => {
-        suggestions.innerHTML = '';
+    const openQuickClientModal = (queryText) => {
+        const q = String(queryText || '').trim();
+        const firstNameInput = document.getElementById('quick-client-first-name-purchase');
+        const lastNameInput = document.getElementById('quick-client-last-name-purchase');
+        const companyNameInput = document.getElementById('quick-client-company-name-purchase');
 
-        if (!Array.isArray(items) || items.length === 0) {
-            const empty = document.createElement('div');
-            empty.className = 'client-suggestion-item';
-            empty.textContent = 'No clients found';
-            empty.setAttribute('aria-disabled', 'true');
-            suggestions.appendChild(empty);
-            suggestions.classList.remove('d-none');
-            return;
+        if (q !== '') {
+            const parts = q.split(/\s+/);
+            if (firstNameInput) {
+                firstNameInput.value = parts[0] || '';
+            }
+            if (lastNameInput && parts.length > 1) {
+                lastNameInput.value = parts.slice(1).join(' ');
+            }
+            if (companyNameInput && parts.length <= 1) {
+                companyNameInput.value = q;
+            }
         }
 
-        items.forEach((item) => {
-            const id = Number(item && item.id ? item.id : 0);
-            const name = String(item && item.name ? item.name : '').trim();
-            if (!id || name === '') {
-                return;
-            }
+        quickClientError.classList.add('d-none');
+        quickClientError.textContent = '';
+        modal.show();
+        hideSuggestions();
+    };
 
-            const phone = String(item && item.phone ? item.phone : '').trim();
-            const city = String(item && item.city ? item.city : '').trim();
-            const meta = [phone, city].filter(Boolean).join(' · ');
+    const renderSuggestions = (items, queryText) => {
+        suggestions.innerHTML = '';
 
-            const row = document.createElement('button');
-            row.type = 'button';
-            row.className = 'client-suggestion-item';
-            row.dataset.clientId = String(id);
-            row.dataset.clientName = name;
-            row.innerHTML = '<span class="client-suggestion-name"></span><span class="client-suggestion-meta"></span>';
-            row.querySelector('.client-suggestion-name').textContent = name;
-            row.querySelector('.client-suggestion-meta').textContent = meta;
-            row.addEventListener('click', () => {
-                setSelected(id, name);
-                hideSuggestions();
+        const addNewRow = () => {
+            const addBtn = document.createElement('button');
+            addBtn.type = 'button';
+            addBtn.className = 'client-suggestion-item client-suggestion-add';
+            addBtn.textContent = 'Add new client';
+            addBtn.addEventListener('click', () => openQuickClientModal(queryText));
+            suggestions.appendChild(addBtn);
+        };
+
+        if (Array.isArray(items) && items.length > 0) {
+            items.forEach((item) => {
+                const id = Number(item && item.id ? item.id : 0);
+                const name = String(item && item.name ? item.name : '').trim();
+                if (!id || name === '') {
+                    return;
+                }
+
+                const phone = String(item && item.phone ? item.phone : '').trim();
+                const city = String(item && item.city ? item.city : '').trim();
+                const meta = [phone, city].filter(Boolean).join(' · ');
+
+                const row = document.createElement('button');
+                row.type = 'button';
+                row.className = 'client-suggestion-item';
+                row.dataset.clientId = String(id);
+                row.dataset.clientName = name;
+                row.innerHTML = '<span class="client-suggestion-name"></span><span class="client-suggestion-meta"></span>';
+                row.querySelector('.client-suggestion-name').textContent = name;
+                row.querySelector('.client-suggestion-meta').textContent = meta;
+                row.addEventListener('click', () => {
+                    setSelected(id, name);
+                    hideSuggestions();
+                });
+                suggestions.appendChild(row);
             });
-            suggestions.appendChild(row);
-        });
+        }
 
+        addNewRow();
         suggestions.classList.remove('d-none');
     };
 
@@ -248,7 +357,7 @@ window.addEventListener('DOMContentLoaded', () => {
         })
             .then((response) => response.ok ? response.json() : Promise.reject(new Error('Request failed')))
             .then((payload) => {
-                renderSuggestions(Array.isArray(payload && payload.results) ? payload.results : []);
+                renderSuggestions(Array.isArray(payload && payload.results) ? payload.results : [], query);
             })
             .catch(() => {
                 hideSuggestions();
@@ -276,6 +385,50 @@ window.addEventListener('DOMContentLoaded', () => {
     document.addEventListener('click', (event) => {
         if (!suggestions.contains(event.target) && event.target !== searchInput) {
             hideSuggestions();
+        }
+    });
+
+    saveQuickClientBtn.addEventListener('click', async () => {
+        if (createUrl === '') {
+            return;
+        }
+
+        quickClientError.classList.add('d-none');
+        quickClientError.textContent = '';
+        saveQuickClientBtn.disabled = true;
+
+        try {
+            const data = new FormData(quickClientForm);
+            data.set('csrf_token', csrfToken);
+            const response = await fetch(createUrl, {
+                method: 'POST',
+                body: data,
+                credentials: 'same-origin',
+            });
+
+            const payload = await response.json();
+            if (!response.ok || !payload.ok) {
+                const errorMessage = payload.error || (payload.errors && Object.values(payload.errors).join(' ')) || 'Unable to save client.';
+                quickClientError.textContent = errorMessage;
+                quickClientError.classList.remove('d-none');
+                saveQuickClientBtn.disabled = false;
+                return;
+            }
+
+            const client = payload.client || {};
+            const clientId = Number(client.id || 0);
+            if (clientId > 0) {
+                setSelected(clientId, (client.name || ('Client #' + clientId)).toString());
+            }
+
+            quickClientForm.reset();
+            modal.hide();
+        } catch (error) {
+            quickClientError.textContent = 'Unable to save client. Please try again.';
+            quickClientError.classList.remove('d-none');
+            console.error(error);
+        } finally {
+            saveQuickClientBtn.disabled = false;
         }
     });
 });
