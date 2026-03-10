@@ -187,6 +187,7 @@ final class TimeEntry
 
         $joinSql = '';
         $employeeNameSql = "'—'";
+        $hourlyRateSql = '0';
         if (SchemaInspector::hasTable('employees') && SchemaInspector::hasColumn('employee_time_entries', 'employee_id')) {
             $employeeNameParts = ['e.first_name', 'e.last_name'];
             if (SchemaInspector::hasColumn('employees', 'suffix')) {
@@ -196,6 +197,7 @@ final class TimeEntry
             $employeeNameSql = $employeeBaseNameSql;
             $joinDeleted = SchemaInspector::hasColumn('employees', 'deleted_at') ? 'AND e.deleted_at IS NULL' : '';
             $joinSql .= " LEFT JOIN employees e ON e.id = t.employee_id {$joinDeleted}";
+            $hourlyRateSql = SchemaInspector::hasColumn('employees', 'hourly_rate') ? 'COALESCE(e.hourly_rate, 0)' : '0';
 
             if (SchemaInspector::hasTable('users')) {
                 $joinSql .= ' LEFT JOIN users u ON u.id = e.user_id AND u.deleted_at IS NULL';
@@ -274,6 +276,7 @@ final class TimeEntry
 
         $joinSql = '';
         $employeeNameSql = "'—'";
+        $hourlyRateSql = '0';
         if (SchemaInspector::hasTable('employees') && SchemaInspector::hasColumn('employee_time_entries', 'employee_id')) {
             $employeeNameParts = ['e.first_name', 'e.last_name'];
             if (SchemaInspector::hasColumn('employees', 'suffix')) {
@@ -283,6 +286,7 @@ final class TimeEntry
             $employeeNameSql = $employeeBaseNameSql;
             $joinDeleted = SchemaInspector::hasColumn('employees', 'deleted_at') ? 'AND e.deleted_at IS NULL' : '';
             $joinSql .= " LEFT JOIN employees e ON e.id = t.employee_id {$joinDeleted}";
+            $hourlyRateSql = SchemaInspector::hasColumn('employees', 'hourly_rate') ? 'COALESCE(e.hourly_rate, 0)' : '0';
 
             if (SchemaInspector::hasTable('users')) {
                 $joinSql .= ' LEFT JOIN users u ON u.id = e.user_id AND u.deleted_at IS NULL';

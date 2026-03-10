@@ -44,15 +44,35 @@ $secondaryCanTextClass = $secondaryCanTextRaw === null ? 'text-flag-neutral' : (
         <p class="muted"><?= e($displayName) ?></p>
     </div>
     <div class="d-flex gap-2">
-        <a class="btn btn-primary" href="<?= e(url('/clients/' . (string) ((int) ($client['id'] ?? 0)) . '/edit')) ?>"><i class="fas fa-pen me-2"></i>Edit Client</a>
+        <div class="dropdown">
+            <button class="btn btn-primary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                <i class="fas fa-ellipsis-h me-2"></i>Actions
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end">
+                <li>
+                    <a class="dropdown-item" href="<?= e(url('/clients/' . (string) ((int) ($client['id'] ?? 0)) . '/edit')) ?>">
+                        <i class="fas fa-pen me-2"></i>Edit Client
+                    </a>
+                </li>
+                <li>
+                    <a class="dropdown-item" href="<?= e(url('/jobs/create') . '?client_id=' . (string) ((int) ($client['id'] ?? 0))) ?>">
+                        <i class="fas fa-briefcase me-2"></i>Quick Add Job
+                    </a>
+                </li>
+                <li>
+                    <a class="dropdown-item" href="<?= e(url('/purchases/create') . '?client_id=' . (string) ((int) ($client['id'] ?? 0))) ?>">
+                        <i class="fas fa-cart-arrow-down me-2"></i>Quick Add Purchase
+                    </a>
+                </li>
+                <li>
+                    <a class="dropdown-item" href="<?= e(url('/tasks/create') . '?client_id=' . (string) ((int) ($client['id'] ?? 0))) ?>">
+                        <i class="fas fa-list-check me-2"></i>Quick Add Task
+                    </a>
+                </li>
+            </ul>
+        </div>
         <a class="btn btn-outline-secondary" href="<?= e(url('/clients')) ?>">Back to Clients</a>
     </div>
-</div>
-
-<div class="d-flex flex-wrap gap-2 mb-3">
-    <a class="btn btn-primary" href="<?= e(url('/jobs/create') . '?client_id=' . (string) ((int) ($client['id'] ?? 0))) ?>"><i class="fas fa-briefcase me-2"></i>Quick Add Job</a>
-    <a class="btn btn-primary" href="<?= e(url('/purchases/create') . '?client_id=' . (string) ((int) ($client['id'] ?? 0))) ?>"><i class="fas fa-cart-arrow-down me-2"></i>Quick Add Purchase</a>
-    <a class="btn btn-primary" href="<?= e(url('/tasks/create') . '?client_id=' . (string) ((int) ($client['id'] ?? 0))) ?>"><i class="fas fa-list-check me-2"></i>Quick Add Task</a>
 </div>
 
 <section class="card index-card mb-3">
