@@ -11,10 +11,10 @@ if (is_file($localOverride)) {
 
 return [
     'driver' => 'mysql',
-    'host' => '127.0.0.1',
+    'host' => 'localhost',
     'port' => 3306,
-    'database' => 'junk_tracker',
-    'username' => 'root',
-    'password' => 'root',
+    'database' => 'jimmys11_junktracker',
+    'username' => 'jimmys11_junktracker_admin',
+    'password' => 'X5.x~FT([IuZD;lknasdf02asA',
     'charset' => 'utf8mb4',
 ];
