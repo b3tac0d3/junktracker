@@ -225,3 +225,132 @@ function format_datetime(?string $value): string
 
     return date('m/d/Y g:i A', $timestamp);
 }
+
+/**
+ * @return array<int, int>
+ */
+function pagination_per_page_options(): array
+{
+    return [25, 50, 100, 200];
+}
+
+function pagination_per_page(mixed $value, int $default = 25): int
+{
+    $perPage = (int) $value;
+    $options = pagination_per_page_options();
+    if (in_array($perPage, $options, true)) {
+        return $perPage;
+    }
+
+    return in_array($default, $options, true) ? $default : $options[0];
+}
+
+function pagination_current_page(mixed $value): int
+{
+    $page = (int) $value;
+    return $page > 0 ? $page : 1;
+}
+
+function pagination_total_pages(int $totalRows, int $perPage): int
+{
+    $safePerPage = max(1, $perPage);
+    return max(1, (int) ceil(max(0, $totalRows) / $safePerPage));
+}
+
+function pagination_offset(int $page, int $perPage): int
+{
+    return max(0, (max(1, $page) - 1) * max(1, $perPage));
+}
+
+/**
+ * @return array<int, int>
+ */
+function pagination_visible_pages(int $currentPage, int $totalPages, int $window = 5): array
+{
+    $currentPage = max(1, $currentPage);
+    $totalPages = max(1, $totalPages);
+    $window = max(3, $window);
+
+    if ($totalPages <= $window) {
+        return range(1, $totalPages);
+    }
+
+    $half = (int) floor($window / 2);
+    $start = max(1, $currentPage - $half);
+    $end = min($totalPages, $start + $window - 1);
+
+    if ($end - $start + 1 < $window) {
+        $start = max(1, $end - $window + 1);
+    }
+
+    return range($start, $end);
+}
+
+/**
+ * @return array<string, string>
+ */
+function current_query_params(array $remove = []): array
+{
+    $params = is_array($_GET ?? null) ? $_GET : [];
+    $clean = [];
+
+    foreach ($params as $key => $value) {
+        if (!is_string($key)) {
+            continue;
+        }
+
+        if (in_array($key, $remove, true)) {
+            continue;
+        }
+
+        if (is_array($value)) {
+            continue;
+        }
+
+        $clean[$key] = (string) $value;
+    }
+
+    return $clean;
+}
+
+function query_with(array $overrides = [], array $remove = []): string
+{
+    $params = current_query_params($remove);
+
+    foreach ($overrides as $key => $value) {
+        if (!is_string($key)) {
+            continue;
+        }
+
+        if ($value === null || $value === '') {
+            unset($params[$key]);
+            continue;
+        }
+
+        $params[$key] = (string) $value;
+    }
+
+    $query = http_build_query($params);
+    return $query === '' ? '' : ('?' . $query);
+}
+
+/**
+ * @return array<string, int>
+ */
+function pagination_meta(int $page, int $perPage, int $totalRows, int $currentCount): array
+{
+    $totalPages = pagination_total_pages($totalRows, $perPage);
+    $page = min(max(1, $page), $totalPages);
+    $offset = pagination_offset($page, $perPage);
+    $from = $totalRows === 0 ? 0 : ($offset + 1);
+    $to = min($offset + max(0, $currentCount), $totalRows);
+
+    return [
+        'page' => $page,
+        'per_page' => $perPage,
+        'total_rows' => max(0, $totalRows),
+        'total_pages' => $totalPages,
+        'from' => $from,
+        'to' => $to,
+    ];
+}

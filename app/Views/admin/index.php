@@ -1,23 +1,40 @@
 <div class="page-header">
     <h1>Business Admin</h1>
-    <p class="muted">Scaffold for business-level administration.</p>
+    <p class="muted">Your business setup</p>
 </div>
 
 <div class="card">
     <h2>Planned Admin Modules</h2>
     <div class="list">
-        <div class="list-item">
+        <a class="list-item text-decoration-none" href="<?= e(url('/admin/users')) ?>">
             <div>
                 <div class="title">Users</div>
-                <div class="muted">Add and manage business users.</div>
+                <div class="muted">Internal users</div>
             </div>
-        </div>
-        <div class="list-item">
+        </a>
+        <a class="list-item text-decoration-none" href="<?= e(url('/admin/employees')) ?>">
+            <div>
+                <div class="title">Employees</div>
+                <div class="muted">Employee profiles and user links for punch access</div>
+            </div>
+        </a>
+        <a class="list-item text-decoration-none" href="<?= e(url('/admin/business-details')) ?>">
+            <div>
+                <div class="title">Business Details</div>
+                <div class="muted">Business profile</div>
+            </div>
+        </a>
+        <a class="list-item text-decoration-none" href="<?= e(url('/admin/invoice-item-types')) ?>">
+            <div>
+                <div class="title">Invoice Item Types</div>
+                <div class="muted">Reusable invoicable items with defaults</div>
+            </div>
+        </a>
+        <a class="list-item text-decoration-none" href="<?= e(url('/admin/form-select-values')) ?>">
             <div>
                 <div class="title">Form Select Values</div>
                 <div class="muted">Centralize list values used in forms.</div>
             </div>
-        </div>
+        </a>
     </div>
 </div>
-

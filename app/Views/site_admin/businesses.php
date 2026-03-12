@@ -1,3 +1,8 @@
+<?php
+$businesses = is_array($businesses ?? null) ? $businesses : [];
+$pagination = is_array($pagination ?? null) ? $pagination : pagination_meta(1, 25, count($businesses), count($businesses));
+?>
+
 <div class="page-header">
     <h1>Site Admin: Workspaces</h1>
     <p class="muted">Choose a business workspace to enter.</p>
@@ -5,6 +10,10 @@
 
 <div class="card">
     <h2>Businesses</h2>
+    <?php
+    $basePath = '/site-admin/businesses';
+    require base_path('app/Views/components/index_pagination.php');
+    ?>
     <div class="list">
         <?php foreach (($businesses ?? []) as $business): ?>
             <?php $businessId = (int) ($business['id'] ?? 0); ?>

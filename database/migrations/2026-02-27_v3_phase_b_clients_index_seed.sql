@@ -243,7 +243,7 @@ SET @sql := IF(
     @has_client_type > 0,
     'SELECT 1',
     "ALTER TABLE clients
-     ADD COLUMN client_type ENUM('realtor','client','other') NOT NULL DEFAULT 'client' AFTER phone,
+     ADD COLUMN client_type ENUM('realtor','client','company','other') NOT NULL DEFAULT 'client' AFTER phone,
      ADD KEY idx_clients_business_type (business_id, client_type)"
 );
 PREPARE stmt FROM @sql;
@@ -274,13 +274,13 @@ INSERT INTO clients (
     (1002, 1, 'Jazzy', 'Fae', NULL, '401-555-1010', 'client', '99 Maple Ave', 'Cranston', 'RI', '02910', 'Evening availability only.', 'active', NOW(), NOW()),
     (1003, 1, 'Steven', 'Parker', NULL, '401-555-1011', 'client', '12 Ferry Rd', 'Bristol', 'RI', '02809', 'Has gate code for side entry.', 'active', NOW(), NOW()),
     (1004, 1, 'Sarah', 'Wheaton', NULL, '401-555-1012', 'realtor', '5 Harbor View Dr', 'Newport', 'RI', '02840', 'Referral partner for estate cleanouts.', 'active', NOW(), NOW()),
-    (1005, 1, NULL, NULL, 'McGovern FPS', '401-555-1013', 'other', '1 Industrial Pkwy', 'West Warwick', 'RI', '02893', 'Commercial account.', 'active', NOW(), NOW()),
+    (1005, 1, NULL, NULL, 'McGovern FPS', '401-555-1013', 'company', '1 Industrial Pkwy', 'West Warwick', 'RI', '02893', 'Commercial account.', 'active', NOW(), NOW()),
     (2001, 2, 'Logan', 'Goins', NULL, '617-555-2001', 'client', '18 River St', 'Boston', 'MA', '02118', 'Needs COI before service date.', 'active', NOW(), NOW()),
     (2002, 2, 'Julia', 'Nash', NULL, '617-555-2002', 'realtor', '42 Garden Ln', 'Brookline', 'MA', '02445', 'Coordinates move-out schedules.', 'active', NOW(), NOW()),
-    (2003, 2, NULL, NULL, 'Metro Property Group', '617-555-2003', 'other', '88 Beacon St', 'Boston', 'MA', '02108', 'Monthly hauling contract.', 'active', NOW(), NOW()),
+    (2003, 2, NULL, NULL, 'Metro Property Group', '617-555-2003', 'company', '88 Beacon St', 'Boston', 'MA', '02108', 'Monthly hauling contract.', 'active', NOW(), NOW()),
     (3001, 3, 'Caleb', 'Morris', NULL, '203-555-3001', 'client', '7 Elm Terrace', 'Mystic', 'CT', '06355', 'Wants photo updates during job.', 'active', NOW(), NOW()),
     (3002, 3, 'Nina', 'Drake', NULL, '203-555-3002', 'realtor', '24 Willow Ct', 'Groton', 'CT', '06340', 'Often books same-week jobs.', 'active', NOW(), NOW()),
-    (3003, 3, NULL, NULL, 'Coastal Estate Services', '203-555-3003', 'other', '300 Main St', 'New London', 'CT', '06320', 'Estate coordination partner.', 'active', NOW(), NOW())
+    (3003, 3, NULL, NULL, 'Coastal Estate Services', '203-555-3003', 'company', '300 Main St', 'New London', 'CT', '06320', 'Estate coordination partner.', 'active', NOW(), NOW())
 ON DUPLICATE KEY UPDATE
     first_name = VALUES(first_name),
     last_name = VALUES(last_name),

@@ -1,6 +1,8 @@
 <?php
 $search = trim((string) ($search ?? ''));
 $clients = is_array($clients ?? null) ? $clients : [];
+$pagination = is_array($pagination ?? null) ? $pagination : pagination_meta(1, 25, count($clients), count($clients));
+$perPage = (int) ($pagination['per_page'] ?? 25);
 
 $clientDisplayName = static function (array $row): string {
     $full = trim(((string) ($row['first_name'] ?? '')) . ' ' . ((string) ($row['last_name'] ?? '')));
@@ -22,6 +24,9 @@ $clientDisplayName = static function (array $row): string {
         <h1>Clients</h1>
         <p class="muted">Client directory</p>
     </div>
+    <div>
+        <a class="btn btn-primary" href="<?= e(url('/clients/create')) ?>"><i class="fas fa-plus me-2"></i>Add Client</a>
+    </div>
 </div>
 
 <section class="card index-card mb-3">
@@ -30,6 +35,8 @@ $clientDisplayName = static function (array $row): string {
     </div>
     <div class="card-body">
         <form method="get" action="<?= e(url('/clients')) ?>" class="row g-3 align-items-end">
+            <input type="hidden" name="page" value="1">
+            <input type="hidden" name="per_page" value="<?= e((string) $perPage) ?>">
             <div class="col-12 col-lg-9">
                 <label class="form-label fw-semibold" for="clients-search">Search</label>
                 <input
@@ -52,9 +59,13 @@ $clientDisplayName = static function (array $row): string {
 <section class="card index-card">
     <div class="card-header index-card-header d-flex align-items-center justify-content-between">
         <strong><i class="fas fa-users me-2"></i>Client List</strong>
-        <span class="small muted"><?= e((string) count($clients)) ?> record(s)</span>
+        <span class="small muted"><?= e((string) ((int) ($pagination['total_rows'] ?? count($clients)))) ?> record(s)</span>
     </div>
     <div class="card-body p-2 p-lg-3">
+        <?php
+        $basePath = '/clients';
+        require base_path('app/Views/components/index_pagination.php');
+        ?>
         <?php if ($clients === []): ?>
             <div class="record-empty">No clients found for the current filter.</div>
         <?php else: ?>

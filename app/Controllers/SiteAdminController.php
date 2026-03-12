@@ -14,9 +14,21 @@ final class SiteAdminController extends Controller
     {
         require_role(['site_admin']);
 
+        $perPage = pagination_per_page($_GET['per_page'] ?? null);
+        $page = pagination_current_page($_GET['page'] ?? null);
+        $totalRows = Business::activeCount();
+        $totalPages = pagination_total_pages($totalRows, $perPage);
+        if ($page > $totalPages) {
+            $page = $totalPages;
+        }
+        $offset = pagination_offset($page, $perPage);
+        $businesses = Business::allActive($perPage, $offset);
+        $pagination = pagination_meta($page, $perPage, $totalRows, count($businesses));
+
         $this->render('site_admin/businesses', [
             'pageTitle' => 'Select Business Workspace',
-            'businesses' => Business::allActive(),
+            'businesses' => $businesses,
+            'pagination' => $pagination,
         ]);
     }
 

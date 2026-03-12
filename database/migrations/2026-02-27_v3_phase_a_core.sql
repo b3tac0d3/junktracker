@@ -286,6 +286,7 @@ CREATE TABLE IF NOT EXISTS payments (
     invoice_id BIGINT UNSIGNED NOT NULL,
     amount DECIMAL(12,2) NOT NULL,
     paid_at DATETIME NOT NULL,
+    payment_type VARCHAR(20) NOT NULL DEFAULT 'payment',
     method VARCHAR(60) NULL,
     note VARCHAR(255) NULL,
     created_by BIGINT UNSIGNED NULL,

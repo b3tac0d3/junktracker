@@ -14,7 +14,7 @@ final class Client
     /** @var array<string, bool> */
     private static array $tableCache = [];
 
-    public static function indexList(int $businessId, string $search = '', int $limit = 250): array
+    public static function indexList(int $businessId, string $search = '', int $limit = 25, int $offset = 0): array
     {
         $pdo = Database::connection();
         $query = trim($search);
@@ -45,7 +45,8 @@ final class Client
                     COALESCE(NULLIF(c.last_name, ''), {$companySql}, c.first_name, '') ASC,
                     COALESCE(NULLIF(c.first_name, ''), '') ASC,
                     c.id DESC
-                LIMIT :row_limit";
+                LIMIT :row_limit
+                OFFSET :row_offset";
 
         $stmt = $pdo->prepare($sql);
         $queryLike = '%' . $query . '%';
@@ -57,6 +58,104 @@ final class Client
         $stmt->bindValue(':query_like_2', $queryLike);
         $stmt->bindValue(':query_like_3', $queryLike);
         $stmt->bindValue(':row_limit', max(1, min($limit, 1000)), \PDO::PARAM_INT);
+        $stmt->bindValue(':row_offset', max(0, $offset), \PDO::PARAM_INT);
+        $stmt->execute();
+
+        $rows = $stmt->fetchAll();
+        return is_array($rows) ? $rows : [];
+    }
+
+    public static function indexCount(int $businessId, string $search = ''): int
+    {
+        $pdo = Database::connection();
+        $query = trim($search);
+
+        $companySql = self::hasColumn('clients', 'company_name') ? 'c.company_name' : 'NULL';
+        $phoneSql = self::hasColumn('clients', 'phone') ? 'c.phone' : 'NULL';
+        $citySql = self::hasColumn('clients', 'city') ? 'c.city' : 'NULL';
+        $businessWhere = self::hasColumn('clients', 'business_id') ? 'c.business_id = :business_id' : '1 = 1';
+        $deletedWhere = self::hasColumn('clients', 'deleted_at') ? 'c.deleted_at IS NULL' : '1 = 1';
+
+        $sql = "SELECT COUNT(*)
+                FROM clients c
+                WHERE {$businessWhere}
+                  AND {$deletedWhere}
+                  AND (
+                    :query = ''
+                    OR CONCAT_WS(' ', COALESCE(c.first_name, ''), COALESCE(c.last_name, ''), COALESCE({$companySql}, '')) LIKE :query_like_1
+                    OR COALESCE({$phoneSql}, '') LIKE :query_like_2
+                    OR COALESCE({$citySql}, '') LIKE :query_like_3
+                  )";
+
+        $stmt = $pdo->prepare($sql);
+        $queryLike = '%' . $query . '%';
+        if (self::hasColumn('clients', 'business_id')) {
+            $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
+        }
+        $stmt->bindValue(':query', $query);
+        $stmt->bindValue(':query_like_1', $queryLike);
+        $stmt->bindValue(':query_like_2', $queryLike);
+        $stmt->bindValue(':query_like_3', $queryLike);
+        $stmt->execute();
+
+        return (int) $stmt->fetchColumn();
+    }
+
+    public static function searchOptions(int $businessId, string $query, int $limit = 8): array
+    {
+        $pdo = Database::connection();
+        $needle = trim($query);
+        if ($needle === '') {
+            return [];
+        }
+
+        $companySql = self::hasColumn('clients', 'company_name') ? 'c.company_name' : 'NULL';
+        $phoneSql = self::hasColumn('clients', 'phone') ? 'c.phone' : 'NULL';
+        $citySql = self::hasColumn('clients', 'city') ? 'c.city' : 'NULL';
+        $addressLine1Sql = self::hasColumn('clients', 'address_line1') ? 'c.address_line1' : 'NULL';
+        $addressLine2Sql = self::hasColumn('clients', 'address_line2') ? 'c.address_line2' : 'NULL';
+        $stateSql = self::hasColumn('clients', 'state') ? 'c.state' : 'NULL';
+        $postalCodeSql = self::hasColumn('clients', 'postal_code') ? 'c.postal_code' : 'NULL';
+        $statusSql = self::hasColumn('clients', 'status') ? 'c.status' : "'active'";
+        $businessWhere = self::hasColumn('clients', 'business_id') ? 'c.business_id = :business_id' : '1 = 1';
+        $deletedWhere = self::hasColumn('clients', 'deleted_at') ? 'c.deleted_at IS NULL' : '1 = 1';
+
+        $sql = "SELECT
+                    c.id,
+                    COALESCE(NULLIF(TRIM(CONCAT_WS(' ', c.first_name, c.last_name)), ''), NULLIF({$companySql}, ''), CONCAT('Client #', c.id)) AS name,
+                    COALESCE({$phoneSql}, '') AS phone,
+                    COALESCE({$companySql}, '') AS company_name,
+                    COALESCE({$citySql}, '') AS city,
+                    COALESCE({$addressLine1Sql}, '') AS address_line1,
+                    COALESCE({$addressLine2Sql}, '') AS address_line2,
+                    COALESCE({$stateSql}, '') AS state,
+                    COALESCE({$postalCodeSql}, '') AS postal_code,
+                    COALESCE({$statusSql}, 'active') AS status
+                FROM clients c
+                WHERE {$businessWhere}
+                  AND {$deletedWhere}
+                  AND (
+                    CONCAT_WS(' ', COALESCE(c.first_name, ''), COALESCE(c.last_name, ''), COALESCE({$companySql}, '')) LIKE :query_like_1
+                    OR COALESCE({$phoneSql}, '') LIKE :query_like_2
+                    OR COALESCE({$citySql}, '') LIKE :query_like_3
+                    OR CAST(c.id AS CHAR) LIKE :query_like_4
+                  )
+                ORDER BY
+                    COALESCE(NULLIF(c.last_name, ''), {$companySql}, c.first_name, '') ASC,
+                    COALESCE(NULLIF(c.first_name, ''), '') ASC,
+                    c.id DESC
+                LIMIT :row_limit";
+
+        $stmt = $pdo->prepare($sql);
+        $queryLike = '%' . $needle . '%';
+        if (self::hasColumn('clients', 'business_id')) {
+            $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
+        }
+        $stmt->bindValue(':query_like_1', $queryLike);
+        $stmt->bindValue(':query_like_2', $queryLike);
+        $stmt->bindValue(':query_like_3', $queryLike);
+        $stmt->bindValue(':query_like_4', $queryLike);
+        $stmt->bindValue(':row_limit', max(1, min($limit, 50)), \PDO::PARAM_INT);
         $stmt->execute();
 
         $rows = $stmt->fetchAll();
@@ -68,17 +167,12 @@ final class Client
         $companySql = self::hasColumn('clients', 'company_name') ? 'c.company_name' : 'NULL';
         $phoneSql = self::hasColumn('clients', 'phone') ? 'c.phone' : 'NULL';
         $emailSql = self::hasColumn('clients', 'email') ? 'c.email' : 'NULL';
-        $secondaryPhoneSql = self::hasColumn('clients', 'secondary_phone')
-            ? 'c.secondary_phone'
-            : (self::hasColumn('clients', 'phone_secondary')
-                ? 'c.phone_secondary'
-                : (self::hasColumn('clients', 'alt_phone') ? 'c.alt_phone' : 'NULL'));
-        $canTextSql = self::hasColumn('clients', 'can_text') ? 'c.can_text' : 'NULL';
-        $secondaryCanTextSql = self::hasColumn('clients', 'secondary_can_text')
-            ? 'c.secondary_can_text'
-            : (self::hasColumn('clients', 'can_text_secondary')
-                ? 'c.can_text_secondary'
-                : (self::hasColumn('clients', 'secondary_phone_can_text') ? 'c.secondary_phone_can_text' : 'NULL'));
+        $secondaryPhoneColumn = self::secondaryPhoneColumn();
+        $secondaryPhoneSql = $secondaryPhoneColumn !== null ? 'c.' . $secondaryPhoneColumn : 'NULL';
+        $canTextColumn = self::primaryCanTextColumn();
+        $canTextSql = $canTextColumn !== null ? 'c.' . $canTextColumn : 'NULL';
+        $secondaryCanTextColumn = self::secondaryCanTextColumn();
+        $secondaryCanTextSql = $secondaryCanTextColumn !== null ? 'c.' . $secondaryCanTextColumn : 'NULL';
         $primaryNoteSql = self::hasColumn('clients', 'primary_note')
             ? 'c.primary_note'
             : (self::hasColumn('clients', 'notes')
@@ -125,10 +219,122 @@ final class Client
         return is_array($row) ? $row : null;
     }
 
+    public static function displayName(array $client): string
+    {
+        $name = trim(((string) ($client['first_name'] ?? '')) . ' ' . ((string) ($client['last_name'] ?? '')));
+        if ($name !== '') {
+            return $name;
+        }
+
+        $company = trim((string) ($client['company_name'] ?? ''));
+        if ($company !== '') {
+            return $company;
+        }
+
+        return 'Client #' . (string) ((int) ($client['id'] ?? 0));
+    }
+
+    public static function findPotentialDuplicate(int $businessId, array $candidate): ?array
+    {
+        if (!self::hasTable('clients')) {
+            return null;
+        }
+
+        $firstName = self::normalizeIdentity((string) ($candidate['first_name'] ?? ''));
+        $lastName = self::normalizeIdentity((string) ($candidate['last_name'] ?? ''));
+        $companyName = self::normalizeIdentity((string) ($candidate['company_name'] ?? ''));
+        $phoneDigits = self::normalizePhone((string) ($candidate['phone'] ?? ''));
+
+        $or = [];
+        $params = [];
+
+        if ($firstName !== '' && $lastName !== '') {
+            $or[] = '(LOWER(TRIM(COALESCE(c.first_name, \'\'))) = :dup_first_name AND LOWER(TRIM(COALESCE(c.last_name, \'\'))) = :dup_last_name)';
+            $params['dup_first_name'] = $firstName;
+            $params['dup_last_name'] = $lastName;
+        }
+
+        if ($companyName !== '' && self::hasColumn('clients', 'company_name')) {
+            $or[] = "LOWER(TRIM(COALESCE(c.company_name, ''))) = :dup_company_name";
+            $params['dup_company_name'] = $companyName;
+        }
+
+        if ($phoneDigits !== '' && self::hasColumn('clients', 'phone')) {
+            $phoneExpr = "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(c.phone, ''), '-', ''), '(', ''), ')', ''), ' ', ''), '.', ''), '+', '')";
+            $or[] = $phoneExpr . ' = :dup_phone';
+            $params['dup_phone'] = $phoneDigits;
+        }
+
+        if ($or === []) {
+            return null;
+        }
+
+        $businessWhere = self::hasColumn('clients', 'business_id') ? 'c.business_id = :business_id' : '1 = 1';
+        $deletedWhere = self::hasColumn('clients', 'deleted_at') ? 'c.deleted_at IS NULL' : '1 = 1';
+
+        $sql = 'SELECT c.id
+                FROM clients c
+                WHERE ' . $businessWhere . '
+                  AND ' . $deletedWhere . '
+                  AND (' . implode(' OR ', $or) . ')
+                ORDER BY c.id DESC
+                LIMIT 25';
+
+        $stmt = Database::connection()->prepare($sql);
+        if (self::hasColumn('clients', 'business_id')) {
+            $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
+        }
+        foreach ($params as $key => $value) {
+            $stmt->bindValue(':' . $key, $value);
+        }
+        $stmt->execute();
+
+        $rows = $stmt->fetchAll();
+        if (!is_array($rows) || $rows === []) {
+            return null;
+        }
+
+        foreach ($rows as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $id = (int) ($row['id'] ?? 0);
+            if ($id <= 0) {
+                continue;
+            }
+            $existing = self::findForBusiness($businessId, $id);
+            if ($existing === null) {
+                continue;
+            }
+
+            $existingFirst = self::normalizeIdentity((string) ($existing['first_name'] ?? ''));
+            $existingLast = self::normalizeIdentity((string) ($existing['last_name'] ?? ''));
+            $existingCompany = self::normalizeIdentity((string) ($existing['company_name'] ?? ''));
+            $existingPhone = self::normalizePhone((string) ($existing['phone'] ?? ''));
+
+            $nameMatch = ($firstName !== '' && $lastName !== '' && $existingFirst === $firstName && $existingLast === $lastName);
+            $companyMatch = ($companyName !== '' && $existingCompany !== '' && $existingCompany === $companyName);
+            $phoneMatch = ($phoneDigits !== '' && $existingPhone !== '' && $existingPhone === $phoneDigits);
+
+            if (($nameMatch || $companyMatch) && ($phoneDigits === '' || $phoneMatch)) {
+                return $existing;
+            }
+
+            if (!$nameMatch && !$companyMatch && $phoneMatch) {
+                return $existing;
+            }
+        }
+
+        return null;
+    }
+
     public static function financialSummary(int $businessId, int $clientId): array
     {
         $gross = 0.0;
         $expenses = 0.0;
+        $salesGross = 0.0;
+        $salesNet = 0.0;
+        $purchaseSpend = 0.0;
 
         if (self::hasTable('invoices')) {
             $invoiceTotalExpr = self::hasColumn('invoices', 'total')
@@ -159,7 +365,8 @@ final class Client
 
         if (self::hasTable('expenses') && self::hasColumn('expenses', 'amount')) {
             $deletedCondition = self::hasColumn('expenses', 'deleted_at') ? 'e.deleted_at IS NULL' : '1=1';
-            $businessCondition = self::hasColumn('expenses', 'business_id') ? 'e.business_id = :business_id' : '1=1';
+            $hasExpenseBusinessId = self::hasColumn('expenses', 'business_id');
+            $businessCondition = $hasExpenseBusinessId ? 'e.business_id = :expenses_business_id' : '1=1';
 
             if (self::hasColumn('expenses', 'client_id')) {
                 $sql = 'SELECT COALESCE(SUM(e.amount), 0)
@@ -170,13 +377,14 @@ final class Client
 
                 $stmt = Database::connection()->prepare($sql);
                 $params = ['client_id' => $clientId];
-                if (self::hasColumn('expenses', 'business_id')) {
-                    $params['business_id'] = $businessId;
+                if ($hasExpenseBusinessId) {
+                    $params['expenses_business_id'] = $businessId;
                 }
                 $stmt->execute($params);
                 $expenses = (float) $stmt->fetchColumn();
             } elseif (self::hasColumn('expenses', 'job_id') && self::hasTable('jobs')) {
-                $jobBusinessCondition = self::hasColumn('jobs', 'business_id') ? 'j.business_id = :business_id' : '1=1';
+                $hasJobBusinessId = self::hasColumn('jobs', 'business_id');
+                $jobBusinessCondition = $hasJobBusinessId ? 'j.business_id = :jobs_business_id' : '1=1';
                 $jobDeletedCondition = self::hasColumn('jobs', 'deleted_at') ? 'j.deleted_at IS NULL' : '1=1';
 
                 $sql = 'SELECT COALESCE(SUM(e.amount), 0)
@@ -190,13 +398,23 @@ final class Client
 
                 $stmt = Database::connection()->prepare($sql);
                 $params = ['client_id' => $clientId];
-                if (self::hasColumn('expenses', 'business_id') || self::hasColumn('jobs', 'business_id')) {
-                    $params['business_id'] = $businessId;
+                if ($hasExpenseBusinessId) {
+                    $params['expenses_business_id'] = $businessId;
+                }
+                if ($hasJobBusinessId) {
+                    $params['jobs_business_id'] = $businessId;
                 }
                 $stmt->execute($params);
                 $expenses = (float) $stmt->fetchColumn();
             }
         }
+
+        $salesTotals = Sale::salesTotalsByClient($businessId, $clientId);
+        $salesGross = (float) ($salesTotals['gross'] ?? 0);
+        $salesNet = (float) ($salesTotals['net'] ?? 0);
+
+        $purchaseTotals = Purchase::totalsByClient($businessId, $clientId);
+        $purchaseSpend = (float) ($purchaseTotals['total_purchase_price'] ?? 0);
 
         $net = $gross - $expenses;
 
@@ -204,6 +422,9 @@ final class Client
             'gross_income' => $gross,
             'expenses' => $expenses,
             'net_income' => $net,
+            'sales_gross' => $salesGross,
+            'sales_net' => $salesNet,
+            'purchase_spend' => $purchaseSpend,
         ];
     }
 
@@ -301,6 +522,200 @@ final class Client
         return is_array($rows) ? $rows : [];
     }
 
+    public static function salesHistory(int $businessId, int $clientId, int $limit = 50): array
+    {
+        return Sale::salesByClient($businessId, $clientId, $limit);
+    }
+
+    public static function purchaseHistory(int $businessId, int $clientId, int $limit = 50): array
+    {
+        return Purchase::listByClient($businessId, $clientId, $limit);
+    }
+
+    public static function create(int $businessId, array $data, int $actorUserId): int
+    {
+        $columns = ['business_id', 'first_name', 'last_name'];
+        $values = [':business_id', ':first_name', ':last_name'];
+        $params = [
+            'business_id' => $businessId,
+            'first_name' => trim((string) ($data['first_name'] ?? '')),
+            'last_name' => trim((string) ($data['last_name'] ?? '')),
+        ];
+
+        $optional = [
+            'company_name',
+            'email',
+            'phone',
+            'address_line1',
+            'address_line2',
+            'city',
+            'state',
+            'postal_code',
+            'client_type',
+            'status',
+            'primary_note',
+            'notes',
+        ];
+
+        foreach ($optional as $column) {
+            if (!array_key_exists($column, $data)) {
+                continue;
+            }
+            if (!self::hasColumn('clients', $column)) {
+                continue;
+            }
+
+            $columns[] = $column;
+            $values[] = ':' . $column;
+
+            $value = $data[$column] ?? null;
+            if (in_array($column, ['can_text', 'secondary_can_text'], true)) {
+                $params[$column] = ((int) $value) === 1 ? 1 : 0;
+            } else {
+                $params[$column] = is_string($value) ? trim($value) : $value;
+            }
+        }
+
+        if (array_key_exists('secondary_phone', $data)) {
+            $secondaryPhoneColumn = self::secondaryPhoneColumn();
+            if ($secondaryPhoneColumn !== null) {
+                $columns[] = $secondaryPhoneColumn;
+                $values[] = ':secondary_phone_value';
+                $params['secondary_phone_value'] = trim((string) ($data['secondary_phone'] ?? ''));
+            }
+        }
+
+        if (array_key_exists('can_text', $data)) {
+            $canTextColumn = self::primaryCanTextColumn();
+            if ($canTextColumn !== null) {
+                $columns[] = $canTextColumn;
+                $values[] = ':can_text_value';
+                $params['can_text_value'] = ((int) ($data['can_text'] ?? 0)) === 1 ? 1 : 0;
+            }
+        }
+
+        if (array_key_exists('secondary_can_text', $data)) {
+            $secondaryCanTextColumn = self::secondaryCanTextColumn();
+            if ($secondaryCanTextColumn !== null) {
+                $columns[] = $secondaryCanTextColumn;
+                $values[] = ':secondary_can_text_value';
+                $params['secondary_can_text_value'] = ((int) ($data['secondary_can_text'] ?? 0)) === 1 ? 1 : 0;
+            }
+        }
+
+        if (self::hasColumn('clients', 'created_by')) {
+            $columns[] = 'created_by';
+            $values[] = ':created_by';
+            $params['created_by'] = $actorUserId;
+        }
+        if (self::hasColumn('clients', 'updated_by')) {
+            $columns[] = 'updated_by';
+            $values[] = ':updated_by';
+            $params['updated_by'] = $actorUserId;
+        }
+        if (self::hasColumn('clients', 'created_at')) {
+            $columns[] = 'created_at';
+            $values[] = 'NOW()';
+        }
+        if (self::hasColumn('clients', 'updated_at')) {
+            $columns[] = 'updated_at';
+            $values[] = 'NOW()';
+        }
+
+        $sql = 'INSERT INTO clients (' . implode(', ', $columns) . ') VALUES (' . implode(', ', $values) . ')';
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute($params);
+
+        return (int) Database::connection()->lastInsertId();
+    }
+
+    public static function update(int $businessId, int $clientId, array $data, int $actorUserId): bool
+    {
+        $sets = [
+            'first_name = :first_name',
+            'last_name = :last_name',
+        ];
+        $params = [
+            'first_name' => trim((string) ($data['first_name'] ?? '')),
+            'last_name' => trim((string) ($data['last_name'] ?? '')),
+            'business_id' => $businessId,
+            'client_id' => $clientId,
+        ];
+
+        $optional = [
+            'company_name',
+            'email',
+            'phone',
+            'address_line1',
+            'address_line2',
+            'city',
+            'state',
+            'postal_code',
+            'client_type',
+            'status',
+            'primary_note',
+            'notes',
+        ];
+
+        foreach ($optional as $column) {
+            if (!array_key_exists($column, $data)) {
+                continue;
+            }
+            if (!self::hasColumn('clients', $column)) {
+                continue;
+            }
+
+            $sets[] = $column . ' = :' . $column;
+            $value = $data[$column] ?? null;
+            if (in_array($column, ['can_text', 'secondary_can_text'], true)) {
+                $params[$column] = ((int) $value) === 1 ? 1 : 0;
+            } else {
+                $params[$column] = is_string($value) ? trim($value) : $value;
+            }
+        }
+
+        if (array_key_exists('secondary_phone', $data)) {
+            $secondaryPhoneColumn = self::secondaryPhoneColumn();
+            if ($secondaryPhoneColumn !== null) {
+                $sets[] = $secondaryPhoneColumn . ' = :secondary_phone_value';
+                $params['secondary_phone_value'] = trim((string) ($data['secondary_phone'] ?? ''));
+            }
+        }
+
+        if (array_key_exists('can_text', $data)) {
+            $canTextColumn = self::primaryCanTextColumn();
+            if ($canTextColumn !== null) {
+                $sets[] = $canTextColumn . ' = :can_text_value';
+                $params['can_text_value'] = ((int) ($data['can_text'] ?? 0)) === 1 ? 1 : 0;
+            }
+        }
+
+        if (array_key_exists('secondary_can_text', $data)) {
+            $secondaryCanTextColumn = self::secondaryCanTextColumn();
+            if ($secondaryCanTextColumn !== null) {
+                $sets[] = $secondaryCanTextColumn . ' = :secondary_can_text_value';
+                $params['secondary_can_text_value'] = ((int) ($data['secondary_can_text'] ?? 0)) === 1 ? 1 : 0;
+            }
+        }
+
+        if (self::hasColumn('clients', 'updated_by')) {
+            $sets[] = 'updated_by = :updated_by';
+            $params['updated_by'] = $actorUserId;
+        }
+        if (self::hasColumn('clients', 'updated_at')) {
+            $sets[] = 'updated_at = NOW()';
+        }
+
+        $deletedWhere = self::hasColumn('clients', 'deleted_at') ? ' AND deleted_at IS NULL' : '';
+        $sql = 'UPDATE clients
+                SET ' . implode(', ', $sets) . '
+                WHERE id = :client_id
+                  AND business_id = :business_id' . $deletedWhere;
+
+        $stmt = Database::connection()->prepare($sql);
+        return $stmt->execute($params);
+    }
+
     private static function hasTable(string $table): bool
     {
         $cacheKey = strtolower($table);
@@ -345,5 +760,53 @@ final class Client
         self::$columnCache[$cacheKey] = $exists;
 
         return $exists;
+    }
+
+    private static function secondaryPhoneColumn(): ?string
+    {
+        foreach (['secondary_phone', 'phone_secondary', 'alt_phone'] as $column) {
+            if (self::hasColumn('clients', $column)) {
+                return $column;
+            }
+        }
+
+        return null;
+    }
+
+    private static function primaryCanTextColumn(): ?string
+    {
+        foreach (['can_text', 'can_text_primary', 'phone_can_text'] as $column) {
+            if (self::hasColumn('clients', $column)) {
+                return $column;
+            }
+        }
+
+        return null;
+    }
+
+    private static function secondaryCanTextColumn(): ?string
+    {
+        foreach (['secondary_can_text', 'can_text_secondary', 'secondary_phone_can_text'] as $column) {
+            if (self::hasColumn('clients', $column)) {
+                return $column;
+            }
+        }
+
+        return null;
+    }
+
+    private static function normalizeIdentity(string $value): string
+    {
+        $value = strtolower(trim($value));
+        if ($value === '') {
+            return '';
+        }
+
+        return preg_replace('/\s+/', ' ', $value) ?? '';
+    }
+
+    private static function normalizePhone(string $value): string
+    {
+        return preg_replace('/\D+/', '', $value) ?? '';
     }
 }
