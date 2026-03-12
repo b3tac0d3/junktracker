@@ -181,6 +181,8 @@ final class ClientsController extends Controller
         $financial = Client::financialSummary($businessId, $clientId);
         $jobStatusSummary = Client::jobsByStatus($businessId, $clientId);
         $jobs = Client::jobHistory($businessId, $clientId, 50);
+        $sales = Client::salesHistory($businessId, $clientId, 50);
+        $purchases = Client::purchaseHistory($businessId, $clientId, 50);
 
         $this->render('clients/show', [
             'pageTitle' => 'Client',
@@ -188,6 +190,8 @@ final class ClientsController extends Controller
             'financial' => $financial,
             'jobStatusSummary' => $jobStatusSummary,
             'jobs' => $jobs,
+            'sales' => $sales,
+            'purchases' => $purchases,
         ]);
     }
 

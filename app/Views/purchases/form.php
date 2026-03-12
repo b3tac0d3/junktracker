@@ -92,7 +92,7 @@ $statusLabel = static function (string $value): string {
                 <?php if ($hasError('contact_date')): ?><div class="invalid-feedback d-block"><?= e($fieldError('contact_date')) ?></div><?php endif; ?>
             </div>
 
-            <div class="col-12 col-lg-6">
+            <div class="col-12 col-lg-3">
                 <label class="form-label fw-semibold" for="purchase-purchase-date">Purchase Date</label>
                 <input
                     id="purchase-purchase-date"
@@ -102,6 +102,21 @@ $statusLabel = static function (string $value): string {
                     value="<?= e((string) ($form['purchase_date'] ?? '')) ?>"
                 />
                 <?php if ($hasError('purchase_date')): ?><div class="invalid-feedback d-block"><?= e($fieldError('purchase_date')) ?></div><?php endif; ?>
+            </div>
+
+            <div class="col-12 col-lg-3">
+                <label class="form-label fw-semibold" for="purchase-price">Purchase Price</label>
+                <input
+                    id="purchase-price"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    name="purchase_price"
+                    class="form-control <?= $hasError('purchase_price') ? 'is-invalid' : '' ?>"
+                    value="<?= e((string) ($form['purchase_price'] ?? '')) ?>"
+                    placeholder="0.00"
+                />
+                <?php if ($hasError('purchase_price')): ?><div class="invalid-feedback d-block"><?= e($fieldError('purchase_price')) ?></div><?php endif; ?>
             </div>
 
             <div class="col-12">

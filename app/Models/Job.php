@@ -267,6 +267,8 @@ final class Job
         $payments = 0.0;
         $laborCost = 0.0;
         $adjustments = 0.0;
+        $salesGross = 0.0;
+        $salesNet = 0.0;
 
         if (SchemaInspector::hasTable('invoices') && SchemaInspector::hasColumn('invoices', 'job_id')) {
             $totalExpr = SchemaInspector::hasColumn('invoices', 'total')
@@ -346,21 +348,35 @@ final class Job
         }
 
         $invoiceGross = $gross;
+        $salesTotals = Sale::salesTotalsByJob($businessId, $jobId);
+        $salesGross = (float) ($salesTotals['gross'] ?? 0);
+        $salesNet = (float) ($salesTotals['net'] ?? 0);
+
         $laborCost = self::laborCostByJob($businessId, $jobId);
         $adjustments = self::adjustmentTotalByJob($businessId, $jobId);
-        $grossAfterLabor = $invoiceGross - $laborCost;
-        $grossAfterAdjustments = $grossAfterLabor + $adjustments;
-        $netAfterAdjustments = $grossAfterAdjustments - $expenses;
+        $jobOnlyGross = $invoiceGross;
+        $grossWithSales = $jobOnlyGross + $salesGross;
+        $operatingGross = $grossWithSales - $laborCost + $adjustments;
+        $jobOnlyNet = ($jobOnlyGross - $laborCost + $adjustments) - $expenses;
+        $totalNet = $jobOnlyNet + $salesNet;
 
         return [
             'raw_gross' => $invoiceGross,
-            'gross' => $grossAfterAdjustments,
+            'invoice_gross' => $invoiceGross,
+            'job_gross' => $jobOnlyGross,
+            'sales_gross' => $salesGross,
+            'sales_net' => $salesNet,
+            'operating_gross' => $operatingGross,
+            'job_net' => $jobOnlyNet,
+            'total_gross' => $grossWithSales,
+            'total_net' => $totalNet,
+            'gross' => $grossWithSales,
             'payments' => $payments,
             'expenses' => $expenses,
             'labor' => $laborCost,
             'labor_cost' => $laborCost,
             'adjustments' => $adjustments,
-            'net' => $netAfterAdjustments,
+            'net' => $totalNet,
             'balance' => $invoiceGross - $payments,
         ];
     }

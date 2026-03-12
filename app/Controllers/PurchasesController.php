@@ -7,6 +7,7 @@ namespace App\Controllers;
 use App\Models\Client;
 use App\Models\FormSelectValue;
 use App\Models\Purchase;
+use App\Models\Sale;
 use App\Models\Task;
 use Core\Controller;
 
@@ -235,11 +236,18 @@ final class PurchasesController extends Controller
         }
 
         $tasks = Purchase::tasksByPurchase(current_business_id(), $purchaseId);
+        $linkedSales = Sale::salesByPurchase(current_business_id(), $purchaseId, 200);
+        $salesTotals = Sale::salesTotalsByPurchase(current_business_id(), $purchaseId);
+        $purchasePrice = (float) ($purchase['purchase_price'] ?? 0);
+        $purchaseProfit = (float) ($salesTotals['net'] ?? 0) - $purchasePrice;
 
         $this->render('purchases/show', [
             'pageTitle' => 'Purchase Details',
             'purchase' => $purchase,
             'tasks' => $tasks,
+            'linkedSales' => $linkedSales,
+            'salesTotals' => $salesTotals,
+            'purchaseProfit' => $purchaseProfit,
         ]);
     }
 
@@ -364,6 +372,7 @@ final class PurchasesController extends Controller
             'client_name' => '',
             'contact_date' => date('Y-m-d'),
             'purchase_date' => '',
+            'purchase_price' => '',
             'notes' => '',
             'create_follow_up_task' => '',
             'follow_up_title' => '',
@@ -383,6 +392,7 @@ final class PurchasesController extends Controller
             'client_name' => trim((string) ($input['client_name'] ?? '')),
             'contact_date' => trim((string) ($input['contact_date'] ?? '')),
             'purchase_date' => trim((string) ($input['purchase_date'] ?? '')),
+            'purchase_price' => trim((string) ($input['purchase_price'] ?? '')),
             'notes' => trim((string) ($input['notes'] ?? '')),
             'create_follow_up_task' => isset($input['create_follow_up_task']) ? '1' : '',
             'follow_up_title' => trim((string) ($input['follow_up_title'] ?? '')),
@@ -411,6 +421,7 @@ final class PurchasesController extends Controller
             'client_name' => trim((string) ($purchase['client_name'] ?? '')),
             'contact_date' => $contactDate,
             'purchase_date' => $purchaseDate,
+            'purchase_price' => number_format((float) ($purchase['purchase_price'] ?? 0), 2, '.', ''),
             'notes' => trim((string) ($purchase['notes'] ?? '')),
             'create_follow_up_task' => '',
             'follow_up_title' => '',
@@ -446,6 +457,12 @@ final class PurchasesController extends Controller
             $errors['purchase_date'] = 'Purchase date is invalid.';
         }
 
+        if (trim($form['purchase_price']) !== '' && !is_numeric($form['purchase_price'])) {
+            $errors['purchase_price'] = 'Purchase price must be a valid amount.';
+        } elseif ((float) ($form['purchase_price'] !== '' ? $form['purchase_price'] : '0') < 0) {
+            $errors['purchase_price'] = 'Purchase price must be zero or greater.';
+        }
+
         if ($form['create_follow_up_task'] === '1' && $form['follow_up_due_date'] !== '' && $this->asDate($form['follow_up_due_date']) === null) {
             $errors['follow_up_due_date'] = 'Follow-up due date is invalid.';
         }
@@ -461,6 +478,7 @@ final class PurchasesController extends Controller
             'client_id' => (int) $form['client_id'],
             'contact_date' => $this->toDatabaseDate($form['contact_date']),
             'purchase_date' => $this->toDatabaseDate($form['purchase_date']),
+            'purchase_price' => trim((string) $form['purchase_price']) === '' ? 0.0 : round((float) $form['purchase_price'], 2),
             'notes' => $form['notes'],
         ];
     }

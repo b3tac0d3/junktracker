@@ -332,6 +332,9 @@ final class Client
     {
         $gross = 0.0;
         $expenses = 0.0;
+        $salesGross = 0.0;
+        $salesNet = 0.0;
+        $purchaseSpend = 0.0;
 
         if (self::hasTable('invoices')) {
             $invoiceTotalExpr = self::hasColumn('invoices', 'total')
@@ -406,12 +409,22 @@ final class Client
             }
         }
 
+        $salesTotals = Sale::salesTotalsByClient($businessId, $clientId);
+        $salesGross = (float) ($salesTotals['gross'] ?? 0);
+        $salesNet = (float) ($salesTotals['net'] ?? 0);
+
+        $purchaseTotals = Purchase::totalsByClient($businessId, $clientId);
+        $purchaseSpend = (float) ($purchaseTotals['total_purchase_price'] ?? 0);
+
         $net = $gross - $expenses;
 
         return [
             'gross_income' => $gross,
             'expenses' => $expenses,
             'net_income' => $net,
+            'sales_gross' => $salesGross,
+            'sales_net' => $salesNet,
+            'purchase_spend' => $purchaseSpend,
         ];
     }
 
@@ -507,6 +520,16 @@ final class Client
 
         $rows = $stmt->fetchAll();
         return is_array($rows) ? $rows : [];
+    }
+
+    public static function salesHistory(int $businessId, int $clientId, int $limit = 50): array
+    {
+        return Sale::salesByClient($businessId, $clientId, $limit);
+    }
+
+    public static function purchaseHistory(int $businessId, int $clientId, int $limit = 50): array
+    {
+        return Purchase::listByClient($businessId, $clientId, $limit);
     }
 
     public static function create(int $businessId, array $data, int $actorUserId): int

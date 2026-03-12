@@ -42,7 +42,7 @@ $formatSaleDate = static function (?string $value): string {
         <strong><i class="fas fa-sack-dollar me-2"></i>Sale Details</strong>
     </div>
     <div class="card-body">
-        <div class="record-row-fields record-row-fields-5">
+        <div class="record-row-fields record-row-fields-4">
             <div class="record-field">
                 <span class="record-label">Sale ID</span>
                 <span class="record-value"><?= e((string) $saleId) ?></span>
@@ -63,10 +63,28 @@ $formatSaleDate = static function (?string $value): string {
                 <span class="record-label">Net</span>
                 <span class="record-value">$<?= e(number_format((float) ($sale['net_amount'] ?? 0), 2)) ?></span>
             </div>
+        </div>
+        <div class="record-row-fields record-row-fields-3 mt-3">
             <div class="record-field record-field-full">
                 <span class="record-label">Client</span>
                 <?php if (((int) ($sale['client_id'] ?? 0)) > 0): ?>
                     <span class="record-value"><a class="link-gray-dark fw-semibold text-decoration-none" href="<?= e(url('/clients/' . (string) ((int) ($sale['client_id'] ?? 0)))) ?>"><?= e(trim((string) ($sale['client_name'] ?? '')) ?: ('Client #' . (string) ((int) ($sale['client_id'] ?? 0)))) ?></a></span>
+                <?php else: ?>
+                    <span class="record-value">—</span>
+                <?php endif; ?>
+            </div>
+            <div class="record-field">
+                <span class="record-label">Linked Job</span>
+                <?php if (((int) ($sale['job_id'] ?? 0)) > 0): ?>
+                    <span class="record-value"><a class="link-gray-dark fw-semibold text-decoration-none" href="<?= e(url('/jobs/' . (string) ((int) ($sale['job_id'] ?? 0)))) ?>"><?= e(trim((string) ($sale['job_title'] ?? '')) ?: ('Job #' . (string) ((int) ($sale['job_id'] ?? 0)))) ?></a></span>
+                <?php else: ?>
+                    <span class="record-value">—</span>
+                <?php endif; ?>
+            </div>
+            <div class="record-field">
+                <span class="record-label">Linked Purchase</span>
+                <?php if (((int) ($sale['purchase_id'] ?? 0)) > 0): ?>
+                    <span class="record-value"><a class="link-gray-dark fw-semibold text-decoration-none" href="<?= e(url('/purchases/' . (string) ((int) ($sale['purchase_id'] ?? 0)))) ?>"><?= e(trim((string) ($sale['purchase_title'] ?? '')) ?: ('Purchase #' . (string) ((int) ($sale['purchase_id'] ?? 0)))) ?></a></span>
                 <?php else: ?>
                     <span class="record-value">—</span>
                 <?php endif; ?>

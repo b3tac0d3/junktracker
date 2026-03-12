@@ -8,6 +8,7 @@ $lists = is_array($summary['lists'] ?? null) ? $summary['lists'] : [];
 
 $dispatchJobs = is_array($lists['dispatch_jobs'] ?? null) ? $lists['dispatch_jobs'] : [];
 $prospects = is_array($lists['prospects'] ?? null) ? $lists['prospects'] : [];
+$purchaseProspects = is_array($lists['purchase_prospects'] ?? null) ? $lists['purchase_prospects'] : [];
 $myTasksDue = is_array($lists['my_tasks_due'] ?? null) ? $lists['my_tasks_due'] : [];
 $recentSales = is_array($lists['recent_sales'] ?? null) ? $lists['recent_sales'] : [];
 $selfEmployee = is_array($selfEmployee ?? null) ? $selfEmployee : null;
@@ -25,6 +26,18 @@ $formatDate = static function (?string $value): string {
         return '—';
     }
     return date('m/d/Y g:i A', $stamp);
+};
+
+$formatDateOnly = static function (?string $value): string {
+    $raw = trim((string) ($value ?? ''));
+    if ($raw === '') {
+        return '—';
+    }
+    $stamp = strtotime($raw);
+    if ($stamp === false) {
+        return '—';
+    }
+    return date('m/d/Y', $stamp);
 };
 
 $employeeDisplayName = static function (array $row): string {
@@ -62,7 +75,7 @@ $employeeDisplayName = static function (array $row): string {
         <small>Due Today <?= e((string) ((int) ($tasks['mine_due_today'] ?? 0))) ?> · Overdue <?= e((string) ((int) ($tasks['mine_overdue'] ?? 0))) ?></small>
     </a>
     <a class="kpi-card kpi-card-link" href="<?= e(url('/jobs?status=prospect')) ?>">
-        <span>Prospects</span>
+        <span>Job Prospects</span>
         <strong><?= e((string) ((int) ($jobs['prospect'] ?? 0))) ?></strong>
         <small>Prospect pipeline</small>
     </a>
@@ -182,8 +195,8 @@ $employeeDisplayName = static function (array $row): string {
 
     <section class="card index-card">
         <div class="card-header index-card-header d-flex align-items-center justify-content-between">
-            <strong><i class="fas fa-bullseye me-2"></i>Prospects</strong>
-            <a class="small text-decoration-none fw-semibold" href="<?= e(url('/jobs?status=prospect')) ?>">Open Prospects</a>
+            <strong><i class="fas fa-bullseye me-2"></i>Job Prospects</strong>
+            <a class="small text-decoration-none fw-semibold" href="<?= e(url('/jobs?status=prospect')) ?>">Open Job Prospects</a>
         </div>
         <div class="card-body">
             <?php if ($prospects === []): ?>
@@ -200,6 +213,38 @@ $employeeDisplayName = static function (array $row): string {
                         <a class="simple-list-row simple-list-row-link" href="<?= e(url('/jobs/' . (string) $jobId)) ?>">
                             <span class="simple-list-title"><?= e($title) ?></span>
                             <span class="simple-list-meta"><?= e($client) ?> · <?= e($scheduled) ?></span>
+                        </a>
+                    <?php endforeach; ?>
+                </div>
+            <?php endif; ?>
+        </div>
+    </section>
+
+    <section class="card index-card">
+        <div class="card-header index-card-header d-flex align-items-center justify-content-between">
+            <strong><i class="fas fa-cart-shopping me-2"></i>Purchase Prospects</strong>
+            <a class="small text-decoration-none fw-semibold" href="<?= e(url('/purchases')) ?>">Open Purchases</a>
+        </div>
+        <div class="card-body">
+            <?php if ($purchaseProspects === []): ?>
+                <div class="record-empty">No purchase prospects in queue.</div>
+            <?php else: ?>
+                <div class="simple-list-table">
+                    <?php foreach ($purchaseProspects as $purchase): ?>
+                        <?php
+                        $purchaseId = (int) ($purchase['id'] ?? 0);
+                        $title = trim((string) ($purchase['title'] ?? '')) ?: ('Purchase #' . (string) $purchaseId);
+                        $client = trim((string) ($purchase['client_name'] ?? '')) ?: '—';
+                        $status = trim((string) ($purchase['status'] ?? ''));
+                        $statusLabel = $status !== '' ? ucfirst(str_replace('_', ' ', $status)) : 'Open';
+                        $when = $formatDateOnly((string) ($purchase['purchase_date'] ?? ''));
+                        if ($when === '—') {
+                            $when = $formatDateOnly((string) ($purchase['contact_date'] ?? ''));
+                        }
+                        ?>
+                        <a class="simple-list-row simple-list-row-link" href="<?= e(url('/purchases/' . (string) $purchaseId)) ?>">
+                            <span class="simple-list-title"><?= e($title) ?></span>
+                            <span class="simple-list-meta"><?= e($client) ?> · <?= e($statusLabel) ?> · <?= e($when) ?></span>
                         </a>
                     <?php endforeach; ?>
                 </div>

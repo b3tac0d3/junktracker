@@ -6,6 +6,8 @@ namespace App\Controllers;
 
 use App\Models\Client;
 use App\Models\FormSelectValue;
+use App\Models\Job;
+use App\Models\Purchase;
 use App\Models\Sale;
 use Core\Controller;
 
@@ -79,6 +81,73 @@ final class SalesController extends Controller
                 'name' => (string) ($item['name'] ?? ''),
                 'phone' => (string) ($item['phone'] ?? ''),
                 'city' => (string) ($item['city'] ?? ''),
+            ];
+        }
+
+        $this->json([
+            'ok' => true,
+            'results' => $results,
+        ]);
+    }
+
+    public function jobSearch(): void
+    {
+        require_business_role(['general_user', 'admin']);
+
+        $businessId = current_business_id();
+        $query = trim((string) ($_GET['q'] ?? ''));
+        $items = Sale::jobSearchOptions($businessId, $query, 8);
+
+        $results = [];
+        foreach ($items as $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+
+            $id = (int) ($item['id'] ?? 0);
+            $title = trim((string) ($item['title'] ?? ''));
+            if ($id <= 0 || $title === '') {
+                continue;
+            }
+
+            $results[] = [
+                'id' => $id,
+                'title' => $title,
+                'city' => trim((string) ($item['city'] ?? '')),
+            ];
+        }
+
+        $this->json([
+            'ok' => true,
+            'results' => $results,
+        ]);
+    }
+
+    public function purchaseSearch(): void
+    {
+        require_business_role(['general_user', 'admin']);
+
+        $businessId = current_business_id();
+        $query = trim((string) ($_GET['q'] ?? ''));
+        $items = Sale::purchaseSearchOptions($businessId, $query, 8);
+
+        $results = [];
+        foreach ($items as $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+
+            $id = (int) ($item['id'] ?? 0);
+            $title = trim((string) ($item['title'] ?? ''));
+            if ($id <= 0 || $title === '') {
+                continue;
+            }
+
+            $results[] = [
+                'id' => $id,
+                'title' => $title,
+                'status' => trim((string) ($item['status'] ?? '')),
+                'client_name' => trim((string) ($item['client_name'] ?? '')),
             ];
         }
 
@@ -256,6 +325,10 @@ final class SalesController extends Controller
             'sale_date' => date('Y-m-d'),
             'client_id' => '',
             'client_name' => '',
+            'job_id' => '',
+            'job_title' => '',
+            'purchase_id' => '',
+            'purchase_title' => '',
             'notes' => '',
         ];
     }
@@ -264,6 +337,10 @@ final class SalesController extends Controller
     {
         $clientIdRaw = trim((string) ($input['client_id'] ?? ''));
         $clientId = ((int) $clientIdRaw) > 0 ? (string) ((int) $clientIdRaw) : '';
+        $jobIdRaw = trim((string) ($input['job_id'] ?? ''));
+        $jobId = ((int) $jobIdRaw) > 0 ? (string) ((int) $jobIdRaw) : '';
+        $purchaseIdRaw = trim((string) ($input['purchase_id'] ?? ''));
+        $purchaseId = ((int) $purchaseIdRaw) > 0 ? (string) ((int) $purchaseIdRaw) : '';
 
         return [
             'name' => trim((string) ($input['name'] ?? '')),
@@ -273,6 +350,10 @@ final class SalesController extends Controller
             'sale_date' => trim((string) ($input['sale_date'] ?? '')),
             'client_id' => $clientId,
             'client_name' => trim((string) ($input['client_name'] ?? '')),
+            'job_id' => $jobId,
+            'job_title' => trim((string) ($input['job_title'] ?? '')),
+            'purchase_id' => $purchaseId,
+            'purchase_title' => trim((string) ($input['purchase_title'] ?? '')),
             'notes' => trim((string) ($input['notes'] ?? '')),
         ];
     }
@@ -293,6 +374,10 @@ final class SalesController extends Controller
             'sale_date' => $saleDate,
             'client_id' => ((int) ($sale['client_id'] ?? 0)) > 0 ? (string) ((int) ($sale['client_id'] ?? 0)) : '',
             'client_name' => trim((string) ($sale['client_name'] ?? '')),
+            'job_id' => ((int) ($sale['job_id'] ?? 0)) > 0 ? (string) ((int) ($sale['job_id'] ?? 0)) : '',
+            'job_title' => trim((string) ($sale['job_title'] ?? '')),
+            'purchase_id' => ((int) ($sale['purchase_id'] ?? 0)) > 0 ? (string) ((int) ($sale['purchase_id'] ?? 0)) : '',
+            'purchase_title' => trim((string) ($sale['purchase_title'] ?? '')),
             'notes' => trim((string) ($sale['notes'] ?? '')),
         ];
     }
@@ -334,6 +419,25 @@ final class SalesController extends Controller
             $errors['client_id'] = 'Selected client was not found.';
         }
 
+        $jobId = (int) $form['job_id'];
+        if ($form['job_id'] !== '' && $jobId <= 0) {
+            $errors['job_id'] = 'Select a valid job from suggestions or leave blank.';
+        } elseif ($jobId > 0 && Job::findForBusiness($businessId, $jobId) === null) {
+            $errors['job_id'] = 'Selected job was not found.';
+        }
+
+        $purchaseId = (int) $form['purchase_id'];
+        if ($form['purchase_id'] !== '' && $purchaseId <= 0) {
+            $errors['purchase_id'] = 'Select a valid purchase from suggestions or leave blank.';
+        } elseif ($purchaseId > 0 && Purchase::findForBusiness($businessId, $purchaseId) === null) {
+            $errors['purchase_id'] = 'Selected purchase was not found.';
+        }
+
+        if ($jobId > 0 && $purchaseId > 0) {
+            $errors['job_id'] = 'Link this sale to either a job or a purchase, not both.';
+            $errors['purchase_id'] = 'Link this sale to either a purchase or a job, not both.';
+        }
+
         return $errors;
     }
 
@@ -346,6 +450,8 @@ final class SalesController extends Controller
             'sale_type' => $form['sale_type'],
             'sale_date' => $this->toDatabaseDatetime($form['sale_date']),
             'client_id' => ($form['client_id'] === '') ? null : (int) $form['client_id'],
+            'job_id' => ($form['job_id'] === '') ? null : (int) $form['job_id'],
+            'purchase_id' => ($form['purchase_id'] === '') ? null : (int) $form['purchase_id'],
             'notes' => $form['notes'],
         ];
     }

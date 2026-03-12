@@ -114,6 +114,43 @@ $hasError = static function (string $field) use ($errors): bool {
                 <?php if ($hasError('client_id')): ?><div class="invalid-feedback d-block"><?= e($fieldError('client_id')) ?></div><?php endif; ?>
             </div>
 
+            <div class="col-12 col-lg-6">
+                <label class="form-label fw-semibold" for="sale-job-search">Link to Job (Optional)</label>
+                <div class="position-relative client-autosuggest-wrap">
+                    <input type="hidden" id="sale-job-id" name="job_id" value="<?= e((string) ($form['job_id'] ?? '')) ?>" />
+                    <input type="hidden" id="sale-job-title" name="job_title" value="<?= e((string) ($form['job_title'] ?? '')) ?>" />
+                    <input
+                        id="sale-job-search"
+                        class="form-control <?= $hasError('job_id') ? 'is-invalid' : '' ?>"
+                        value="<?= e((string) ($form['job_title'] ?? '')) ?>"
+                        placeholder="Search job by title, id, city..."
+                        autocomplete="off"
+                        data-search-url="<?= e(url('/sales/job-search')) ?>"
+                    />
+                    <div id="sale-job-suggestions" class="client-suggestions d-none" role="listbox" aria-label="Job suggestions"></div>
+                </div>
+                <?php if ($hasError('job_id')): ?><div class="invalid-feedback d-block"><?= e($fieldError('job_id')) ?></div><?php endif; ?>
+            </div>
+
+            <div class="col-12 col-lg-6">
+                <label class="form-label fw-semibold" for="sale-purchase-search">Link to Purchase (Optional)</label>
+                <div class="position-relative client-autosuggest-wrap">
+                    <input type="hidden" id="sale-purchase-id" name="purchase_id" value="<?= e((string) ($form['purchase_id'] ?? '')) ?>" />
+                    <input type="hidden" id="sale-purchase-title" name="purchase_title" value="<?= e((string) ($form['purchase_title'] ?? '')) ?>" />
+                    <input
+                        id="sale-purchase-search"
+                        class="form-control <?= $hasError('purchase_id') ? 'is-invalid' : '' ?>"
+                        value="<?= e((string) ($form['purchase_title'] ?? '')) ?>"
+                        placeholder="Search purchase by title, id, status..."
+                        autocomplete="off"
+                        data-search-url="<?= e(url('/sales/purchase-search')) ?>"
+                    />
+                    <div id="sale-purchase-suggestions" class="client-suggestions d-none" role="listbox" aria-label="Purchase suggestions"></div>
+                </div>
+                <div class="form-text">You can link a sale to either a job or a purchase.</div>
+                <?php if ($hasError('purchase_id')): ?><div class="invalid-feedback d-block"><?= e($fieldError('purchase_id')) ?></div><?php endif; ?>
+            </div>
+
             <div class="col-12">
                 <label class="form-label fw-semibold" for="sale-notes">Note</label>
                 <textarea
@@ -171,112 +208,197 @@ window.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    const searchInput = document.getElementById('sale-client-search');
-    const hiddenClientId = document.getElementById('sale-client-id');
-    const hiddenClientName = document.getElementById('sale-client-name');
-    const suggestions = document.getElementById('sale-client-suggestions');
-    if (!searchInput || !hiddenClientId || !hiddenClientName || !suggestions) {
-        return;
-    }
-
-    const searchUrl = searchInput.dataset.searchUrl || '';
-    let debounce = null;
-
-    const hideSuggestions = () => {
-        suggestions.innerHTML = '';
-        suggestions.classList.add('d-none');
-    };
-
-    const setSelected = (id, name) => {
-        hiddenClientId.value = id > 0 ? String(id) : '';
-        hiddenClientName.value = name || '';
-        searchInput.value = name || '';
-    };
-
-    const renderSuggestions = (items) => {
-        suggestions.innerHTML = '';
-
-        if (!Array.isArray(items) || items.length === 0) {
-            const empty = document.createElement('div');
-            empty.className = 'client-suggestion-item';
-            empty.textContent = 'No clients found';
-            empty.setAttribute('aria-disabled', 'true');
-            suggestions.appendChild(empty);
-            suggestions.classList.remove('d-none');
-            return;
+    const initSuggest = ({
+        input,
+        hiddenId,
+        hiddenLabel,
+        suggestions,
+        searchUrl,
+        emptyMessage,
+        metaFromItem,
+        labelFromItem,
+        onSelected,
+    }) => {
+        if (!input || !hiddenId || !hiddenLabel || !suggestions || !searchUrl) {
+            return { clear: () => {}, containsTarget: () => false, hide: () => {} };
         }
 
-        items.forEach((item) => {
-            const id = Number(item && item.id ? item.id : 0);
-            const name = String(item && item.name ? item.name : '').trim();
-            if (!id || name === '') {
+        let debounce = null;
+
+        const hide = () => {
+            suggestions.innerHTML = '';
+            suggestions.classList.add('d-none');
+        };
+
+        const clear = () => {
+            hiddenId.value = '';
+            hiddenLabel.value = '';
+            input.value = '';
+            hide();
+        };
+
+        const containsTarget = (target) => suggestions.contains(target) || target === input;
+
+        const render = (items) => {
+            suggestions.innerHTML = '';
+
+            if (!Array.isArray(items) || items.length === 0) {
+                const empty = document.createElement('div');
+                empty.className = 'client-suggestion-item';
+                empty.innerHTML = '<span class="client-suggestion-name"></span><span class="client-suggestion-meta"></span>';
+                empty.querySelector('.client-suggestion-name').textContent = emptyMessage;
+                empty.querySelector('.client-suggestion-meta').textContent = '';
+                empty.setAttribute('aria-disabled', 'true');
+                suggestions.appendChild(empty);
+                suggestions.classList.remove('d-none');
                 return;
             }
 
-            const phone = String(item && item.phone ? item.phone : '').trim();
-            const city = String(item && item.city ? item.city : '').trim();
-            const meta = [phone, city].filter(Boolean).join(' · ');
+            items.forEach((item) => {
+                const id = Number(item && item.id ? item.id : 0);
+                const label = String(labelFromItem(item) || '').trim();
+                if (!id || label === '') {
+                    return;
+                }
 
-            const row = document.createElement('button');
-            row.type = 'button';
-            row.className = 'client-suggestion-item';
-            row.dataset.clientId = String(id);
-            row.dataset.clientName = name;
-            row.innerHTML = '<span class="client-suggestion-name"></span><span class="client-suggestion-meta"></span>';
-            row.querySelector('.client-suggestion-name').textContent = name;
-            row.querySelector('.client-suggestion-meta').textContent = meta;
-            row.addEventListener('click', () => {
-                setSelected(id, name);
-                hideSuggestions();
+                const row = document.createElement('button');
+                row.type = 'button';
+                row.className = 'client-suggestion-item';
+                row.innerHTML = '<span class="client-suggestion-name"></span><span class="client-suggestion-meta"></span>';
+                row.querySelector('.client-suggestion-name').textContent = label;
+                row.querySelector('.client-suggestion-meta').textContent = String(metaFromItem(item) || '').trim();
+                row.addEventListener('click', () => {
+                    hiddenId.value = String(id);
+                    hiddenLabel.value = label;
+                    input.value = label;
+                    hide();
+                    if (typeof onSelected === 'function') {
+                        onSelected(id, label, item);
+                    }
+                });
+                suggestions.appendChild(row);
             });
-            suggestions.appendChild(row);
+
+            if (suggestions.children.length > 0) {
+                suggestions.classList.remove('d-none');
+            } else {
+                hide();
+            }
+        };
+
+        const fetchResults = (query) => {
+            if (query.length < 2) {
+                hide();
+                return;
+            }
+
+            fetch(searchUrl + '?q=' + encodeURIComponent(query), {
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'application/json',
+                }
+            })
+                .then((response) => response.ok ? response.json() : Promise.reject(new Error('Request failed')))
+                .then((payload) => {
+                    render(Array.isArray(payload && payload.results) ? payload.results : []);
+                })
+                .catch(() => hide());
+        };
+
+        input.addEventListener('input', () => {
+            const query = String(input.value || '').trim();
+            hiddenId.value = '';
+            hiddenLabel.value = query;
+            if (debounce) {
+                clearTimeout(debounce);
+            }
+            debounce = setTimeout(() => fetchResults(query), 160);
         });
 
-        suggestions.classList.remove('d-none');
-    };
-
-    const fetchSuggestions = (query) => {
-        if (!searchUrl || query.length < 2) {
-            hideSuggestions();
-            return;
-        }
-
-        fetch(searchUrl + '?q=' + encodeURIComponent(query), {
-            headers: {
-                'X-Requested-With': 'XMLHttpRequest',
-                'Accept': 'application/json',
+        input.addEventListener('focus', () => {
+            const query = String(input.value || '').trim();
+            if (query.length >= 2) {
+                fetchResults(query);
             }
-        })
-            .then((response) => response.ok ? response.json() : Promise.reject(new Error('Request failed')))
-            .then((payload) => {
-                renderSuggestions(Array.isArray(payload && payload.results) ? payload.results : []);
-            })
-            .catch(() => {
-                hideSuggestions();
-            });
+        });
+
+        return { clear, containsTarget, hide };
     };
 
-    searchInput.addEventListener('input', () => {
-        const query = String(searchInput.value || '').trim();
-        hiddenClientId.value = '';
-        hiddenClientName.value = query;
-
-        if (debounce) {
-            clearTimeout(debounce);
-        }
-        debounce = setTimeout(() => fetchSuggestions(query), 180);
+    const clientField = initSuggest({
+        input: document.getElementById('sale-client-search'),
+        hiddenId: document.getElementById('sale-client-id'),
+        hiddenLabel: document.getElementById('sale-client-name'),
+        suggestions: document.getElementById('sale-client-suggestions'),
+        searchUrl: String((document.getElementById('sale-client-search') || {}).dataset?.searchUrl || ''),
+        emptyMessage: 'No clients found',
+        labelFromItem: (item) => String(item && item.name ? item.name : ''),
+        metaFromItem: (item) => {
+            const phone = String(item && item.phone ? item.phone : '').trim();
+            const city = String(item && item.city ? item.city : '').trim();
+            return [phone, city].filter(Boolean).join(' · ');
+        },
     });
 
-    searchInput.addEventListener('focus', () => {
-        const query = String(searchInput.value || '').trim();
-        if (query.length >= 2) {
-            fetchSuggestions(query);
-        }
+    const purchaseField = initSuggest({
+        input: document.getElementById('sale-purchase-search'),
+        hiddenId: document.getElementById('sale-purchase-id'),
+        hiddenLabel: document.getElementById('sale-purchase-title'),
+        suggestions: document.getElementById('sale-purchase-suggestions'),
+        searchUrl: String((document.getElementById('sale-purchase-search') || {}).dataset?.searchUrl || ''),
+        emptyMessage: 'No purchases found',
+        labelFromItem: (item) => String(item && item.title ? item.title : ''),
+        metaFromItem: (item) => {
+            const status = String(item && item.status ? item.status : '').trim();
+            const client = String(item && item.client_name ? item.client_name : '').trim();
+            return [status, client].filter(Boolean).join(' · ');
+        },
     });
+
+    const jobField = initSuggest({
+        input: document.getElementById('sale-job-search'),
+        hiddenId: document.getElementById('sale-job-id'),
+        hiddenLabel: document.getElementById('sale-job-title'),
+        suggestions: document.getElementById('sale-job-suggestions'),
+        searchUrl: String((document.getElementById('sale-job-search') || {}).dataset?.searchUrl || ''),
+        emptyMessage: 'No jobs found',
+        labelFromItem: (item) => String(item && item.title ? item.title : ''),
+        metaFromItem: (item) => String(item && item.city ? item.city : ''),
+        onSelected: () => purchaseField.clear(),
+    });
+
+    const jobInput = document.getElementById('sale-job-search');
+    if (jobInput) {
+        jobInput.addEventListener('input', () => {
+            const jobId = document.getElementById('sale-job-id');
+            const query = String(jobInput.value || '').trim();
+            if (jobId && jobId.value === '' && query !== '') {
+                purchaseField.clear();
+            }
+        });
+    }
+
+    const purchaseInput = document.getElementById('sale-purchase-search');
+    if (purchaseInput) {
+        purchaseInput.addEventListener('input', () => {
+            const purchaseId = document.getElementById('sale-purchase-id');
+            const query = String(purchaseInput.value || '').trim();
+            if (purchaseId && purchaseId.value === '' && query !== '') {
+                jobField.clear();
+            }
+        });
+    }
 
     document.addEventListener('click', (event) => {
-        if (!suggestions.contains(event.target) && event.target !== searchInput) {
-            hideSuggestions();
+        const target = event.target;
+        if (!clientField.containsTarget(target)) {
+            clientField.hide();
+        }
+        if (!jobField.containsTarget(target)) {
+            jobField.hide();
+        }
+        if (!purchaseField.containsTarget(target)) {
+            purchaseField.hide();
         }
     });
 });

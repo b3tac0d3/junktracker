@@ -17,6 +17,7 @@ final class DashboardSummary
             'lists' => [
                 'dispatch_jobs' => self::dispatchJobs($businessId),
                 'prospects' => self::prospectJobs($businessId),
+                'purchase_prospects' => self::purchaseProspects($businessId),
                 'my_tasks_due' => self::myTasksDue($businessId, $ownerUserId),
                 'recent_sales' => self::recentSales($businessId),
             ],
@@ -304,6 +305,62 @@ final class DashboardSummary
             $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
         }
         $stmt->bindValue(':owner_user_id', $ownerUserId, \PDO::PARAM_INT);
+        $stmt->bindValue(':row_limit', max(1, min($limit, 20)), \PDO::PARAM_INT);
+        $stmt->execute();
+
+        $rows = $stmt->fetchAll();
+        return is_array($rows) ? $rows : [];
+    }
+
+    private static function purchaseProspects(int $businessId, int $limit = 5): array
+    {
+        if (!SchemaInspector::hasTable('purchases')) {
+            return [];
+        }
+
+        $titleSql = SchemaInspector::hasColumn('purchases', 'title') ? 'p.title' : "CONCAT('Purchase #', p.id)";
+        $statusSql = SchemaInspector::hasColumn('purchases', 'status') ? 'p.status' : "''";
+        $purchaseDateSql = SchemaInspector::hasColumn('purchases', 'purchase_date') ? 'p.purchase_date' : 'NULL';
+        $contactDateSql = SchemaInspector::hasColumn('purchases', 'contact_date') ? 'p.contact_date' : 'NULL';
+
+        $joinSql = '';
+        $clientNameSql = "'—'";
+        if (SchemaInspector::hasTable('clients') && SchemaInspector::hasColumn('purchases', 'client_id')) {
+            $joinSql = 'LEFT JOIN clients c ON c.id = p.client_id';
+            if (SchemaInspector::hasColumn('clients', 'business_id') && SchemaInspector::hasColumn('purchases', 'business_id')) {
+                $joinSql .= ' AND c.business_id = p.business_id';
+            }
+            if (SchemaInspector::hasColumn('clients', 'deleted_at')) {
+                $joinSql .= ' AND c.deleted_at IS NULL';
+            }
+            $clientNameSql = "COALESCE(NULLIF(TRIM(CONCAT_WS(' ', c.first_name, c.last_name)), ''), NULLIF(c.company_name, ''), CONCAT('Client #', c.id))";
+        }
+
+        $where = [
+            SchemaInspector::hasColumn('purchases', 'business_id') ? 'p.business_id = :business_id' : '1=1',
+            SchemaInspector::hasColumn('purchases', 'deleted_at') ? 'p.deleted_at IS NULL' : '1=1',
+        ];
+        if (SchemaInspector::hasColumn('purchases', 'status')) {
+            $where[] = "LOWER(COALESCE({$statusSql}, '')) NOT IN ('complete','cancelled')";
+        }
+
+        $sql = "SELECT
+                    p.id,
+                    {$titleSql} AS title,
+                    LOWER(COALESCE({$statusSql}, '')) AS status,
+                    {$purchaseDateSql} AS purchase_date,
+                    {$contactDateSql} AS contact_date,
+                    {$clientNameSql} AS client_name
+                FROM purchases p
+                {$joinSql}
+                WHERE " . implode(' AND ', $where) . "
+                ORDER BY p.id DESC
+                LIMIT :row_limit";
+
+        $stmt = Database::connection()->prepare($sql);
+        if (SchemaInspector::hasColumn('purchases', 'business_id')) {
+            $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
+        }
         $stmt->bindValue(':row_limit', max(1, min($limit, 20)), \PDO::PARAM_INT);
         $stmt->execute();
 

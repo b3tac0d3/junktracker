@@ -3,6 +3,8 @@ $client = is_array($client ?? null) ? $client : [];
 $financial = is_array($financial ?? null) ? $financial : [];
 $jobStatusSummary = is_array($jobStatusSummary ?? null) ? $jobStatusSummary : [];
 $jobs = is_array($jobs ?? null) ? $jobs : [];
+$sales = is_array($sales ?? null) ? $sales : [];
+$purchases = is_array($purchases ?? null) ? $purchases : [];
 
 $displayName = trim(((string) ($client['first_name'] ?? '')) . ' ' . ((string) ($client['last_name'] ?? '')));
 if ($displayName === '') {
@@ -133,7 +135,7 @@ $secondaryCanTextClass = $secondaryCanTextRaw === null ? 'text-flag-neutral' : (
         <strong><i class="fas fa-chart-line me-2"></i>Lifetime Financial Summary</strong>
     </div>
     <div class="card-body">
-        <div class="record-row-fields record-row-fields-3">
+        <div class="record-row-fields record-row-fields-3 mb-3">
             <div class="record-field">
                 <span class="record-label">Gross Income</span>
                 <span class="record-value">$<?= e(number_format((float) ($financial['gross_income'] ?? 0), 2)) ?></span>
@@ -145,6 +147,20 @@ $secondaryCanTextClass = $secondaryCanTextRaw === null ? 'text-flag-neutral' : (
             <div class="record-field">
                 <span class="record-label">Expenses</span>
                 <span class="record-value">$<?= e(number_format((float) ($financial['expenses'] ?? 0), 2)) ?></span>
+            </div>
+        </div>
+        <div class="record-row-fields record-row-fields-3">
+            <div class="record-field">
+                <span class="record-label">Sales Gross</span>
+                <span class="record-value">$<?= e(number_format((float) ($financial['sales_gross'] ?? 0), 2)) ?></span>
+            </div>
+            <div class="record-field">
+                <span class="record-label">Sales Net</span>
+                <span class="record-value">$<?= e(number_format((float) ($financial['sales_net'] ?? 0), 2)) ?></span>
+            </div>
+            <div class="record-field">
+                <span class="record-label">Purchase Spend</span>
+                <span class="record-value">$<?= e(number_format((float) ($financial['purchase_spend'] ?? 0), 2)) ?></span>
             </div>
         </div>
     </div>
@@ -189,6 +205,92 @@ $secondaryCanTextClass = $secondaryCanTextRaw === null ? 'text-flag-neutral' : (
                             <span>ID #<?= e((string) ((int) ($job['id'] ?? 0))) ?></span>
                             <span class="text-capitalize"><?= e((string) ($job['status'] ?? 'pending')) ?></span>
                             <span><?= e(format_datetime((string) ($job['scheduled_start_at'] ?? null))) ?></span>
+                        </div>
+                    </a>
+                <?php endforeach; ?>
+            </div>
+        <?php endif; ?>
+    </div>
+</section>
+
+<section class="card index-card mb-3">
+    <div class="card-header index-card-header">
+        <strong><i class="fas fa-sack-dollar me-2"></i>Sales</strong>
+    </div>
+    <div class="card-body">
+        <?php if ($sales === []): ?>
+            <div class="record-empty">No sales linked to this client yet.</div>
+        <?php else: ?>
+            <div class="simple-list-table">
+                <?php foreach ($sales as $sale): ?>
+                    <?php
+                    if (!is_array($sale)) {
+                        continue;
+                    }
+                    $saleId = (int) ($sale['id'] ?? 0);
+                    if ($saleId <= 0) {
+                        continue;
+                    }
+                    $saleName = trim((string) ($sale['name'] ?? ''));
+                    if ($saleName === '') {
+                        $saleName = 'Sale #' . (string) $saleId;
+                    }
+                    $saleType = trim((string) ($sale['sale_type'] ?? ''));
+                    $saleTypeLabel = $saleType === '' ? 'Sale' : ucwords(str_replace('_', ' ', strtolower($saleType)));
+                    $saleDate = format_date((string) ($sale['sale_date'] ?? null));
+                    ?>
+                    <a class="simple-list-row simple-list-row-link" href="<?= e(url('/sales/' . (string) $saleId)) ?>">
+                        <div class="simple-list-title"><?= e($saleName) ?></div>
+                        <div class="simple-list-meta">
+                            <span><?= e($saleTypeLabel) ?></span>
+                            <span><?= e($saleDate) ?></span>
+                            <span>Gross $<?= e(number_format((float) ($sale['gross_amount'] ?? 0), 2)) ?></span>
+                            <span>Net $<?= e(number_format((float) ($sale['net_amount'] ?? 0), 2)) ?></span>
+                            <?php if (((int) ($sale['job_id'] ?? 0)) > 0): ?>
+                                <span>Job: <?= e(trim((string) ($sale['job_title'] ?? '')) ?: ('Job #' . (string) ((int) ($sale['job_id'] ?? 0)))) ?></span>
+                            <?php elseif (((int) ($sale['purchase_id'] ?? 0)) > 0): ?>
+                                <span>Purchase: <?= e(trim((string) ($sale['purchase_title'] ?? '')) ?: ('Purchase #' . (string) ((int) ($sale['purchase_id'] ?? 0)))) ?></span>
+                            <?php endif; ?>
+                        </div>
+                    </a>
+                <?php endforeach; ?>
+            </div>
+        <?php endif; ?>
+    </div>
+</section>
+
+<section class="card index-card mb-3">
+    <div class="card-header index-card-header">
+        <strong><i class="fas fa-cart-arrow-down me-2"></i>Purchases</strong>
+    </div>
+    <div class="card-body">
+        <?php if ($purchases === []): ?>
+            <div class="record-empty">No purchases linked to this client yet.</div>
+        <?php else: ?>
+            <div class="simple-list-table">
+                <?php foreach ($purchases as $purchase): ?>
+                    <?php
+                    if (!is_array($purchase)) {
+                        continue;
+                    }
+                    $purchaseId = (int) ($purchase['id'] ?? 0);
+                    if ($purchaseId <= 0) {
+                        continue;
+                    }
+                    $purchaseTitle = trim((string) ($purchase['title'] ?? ''));
+                    if ($purchaseTitle === '') {
+                        $purchaseTitle = 'Purchase #' . (string) $purchaseId;
+                    }
+                    $purchaseStatus = trim((string) ($purchase['status'] ?? ''));
+                    $purchaseStatusLabel = $purchaseStatus === '' ? '—' : ucwords(str_replace('_', ' ', strtolower($purchaseStatus)));
+                    $purchaseDate = format_date((string) ($purchase['purchase_date'] ?? ($purchase['contact_date'] ?? null)));
+                    ?>
+                    <a class="simple-list-row simple-list-row-link" href="<?= e(url('/purchases/' . (string) $purchaseId)) ?>">
+                        <div class="simple-list-title"><?= e($purchaseTitle) ?></div>
+                        <div class="simple-list-meta">
+                            <span><?= e($purchaseStatusLabel) ?></span>
+                            <span><?= e($purchaseDate) ?></span>
+                            <span>Price $<?= e(number_format((float) ($purchase['purchase_price'] ?? 0), 2)) ?></span>
                         </div>
                     </a>
                 <?php endforeach; ?>

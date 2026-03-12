@@ -61,6 +61,8 @@ final class Purchase
             OR CAST(p.id AS CHAR) LIKE :query_like_5
         )';
 
+        $purchasePriceSql = SchemaInspector::hasColumn('purchases', 'purchase_price') ? 'p.purchase_price' : '0';
+
         $sql = 'SELECT
                     p.id,
                     p.client_id,
@@ -68,6 +70,7 @@ final class Purchase
                     p.status,
                     p.contact_date,
                     p.purchase_date,
+                    ' . $purchasePriceSql . ' AS purchase_price,
                     p.notes,
                     p.created_at,
                     COALESCE(NULLIF(TRIM(CONCAT_WS(" ", c.first_name, c.last_name)), ""), NULLIF(c.company_name, ""), CONCAT("Client #", c.id)) AS client_name
@@ -207,6 +210,8 @@ final class Purchase
             return null;
         }
 
+        $purchasePriceSql = SchemaInspector::hasColumn('purchases', 'purchase_price') ? 'p.purchase_price' : '0';
+
         $sql = 'SELECT
                     p.id,
                     p.business_id,
@@ -215,6 +220,7 @@ final class Purchase
                     p.status,
                     p.contact_date,
                     p.purchase_date,
+                    ' . $purchasePriceSql . ' AS purchase_price,
                     p.notes,
                     p.created_by,
                     p.updated_by,
@@ -247,34 +253,9 @@ final class Purchase
             throw new \RuntimeException('Purchases table is missing.');
         }
 
-        $sql = 'INSERT INTO purchases (
-                    business_id,
-                    client_id,
-                    title,
-                    status,
-                    contact_date,
-                    purchase_date,
-                    notes,
-                    created_by,
-                    updated_by,
-                    created_at,
-                    updated_at
-                ) VALUES (
-                    :business_id,
-                    :client_id,
-                    :title,
-                    :status,
-                    :contact_date,
-                    :purchase_date,
-                    :notes,
-                    :created_by,
-                    :updated_by,
-                    NOW(),
-                    NOW()
-                )';
-
-        $stmt = Database::connection()->prepare($sql);
-        $stmt->execute([
+        $columns = ['business_id', 'client_id', 'title', 'status', 'contact_date', 'purchase_date', 'notes'];
+        $placeholders = [':business_id', ':client_id', ':title', ':status', ':contact_date', ':purchase_date', ':notes'];
+        $params = [
             'business_id' => $businessId,
             'client_id' => (int) ($payload['client_id'] ?? 0),
             'title' => trim((string) ($payload['title'] ?? '')),
@@ -282,9 +263,37 @@ final class Purchase
             'contact_date' => $payload['contact_date'] ?? null,
             'purchase_date' => $payload['purchase_date'] ?? null,
             'notes' => trim((string) ($payload['notes'] ?? '')),
-            'created_by' => $actorUserId > 0 ? $actorUserId : null,
-            'updated_by' => $actorUserId > 0 ? $actorUserId : null,
-        ]);
+        ];
+
+        if (SchemaInspector::hasColumn('purchases', 'purchase_price')) {
+            $columns[] = 'purchase_price';
+            $placeholders[] = ':purchase_price';
+            $params['purchase_price'] = round((float) ($payload['purchase_price'] ?? 0), 2);
+        }
+        if (SchemaInspector::hasColumn('purchases', 'created_by')) {
+            $columns[] = 'created_by';
+            $placeholders[] = ':created_by';
+            $params['created_by'] = $actorUserId > 0 ? $actorUserId : null;
+        }
+        if (SchemaInspector::hasColumn('purchases', 'updated_by')) {
+            $columns[] = 'updated_by';
+            $placeholders[] = ':updated_by';
+            $params['updated_by'] = $actorUserId > 0 ? $actorUserId : null;
+        }
+        if (SchemaInspector::hasColumn('purchases', 'created_at')) {
+            $columns[] = 'created_at';
+            $placeholders[] = 'NOW()';
+        }
+        if (SchemaInspector::hasColumn('purchases', 'updated_at')) {
+            $columns[] = 'updated_at';
+            $placeholders[] = 'NOW()';
+        }
+
+        $sql = 'INSERT INTO purchases (' . implode(', ', $columns) . ')
+                VALUES (' . implode(', ', $placeholders) . ')';
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute($params);
 
         return (int) Database::connection()->lastInsertId();
     }
@@ -295,22 +304,16 @@ final class Purchase
             return false;
         }
 
-        $sql = 'UPDATE purchases
-                SET client_id = :client_id,
-                    title = :title,
-                    status = :status,
-                    contact_date = :contact_date,
-                    purchase_date = :purchase_date,
-                    notes = :notes,
-                    updated_by = :updated_by,
-                    updated_at = NOW()
-                WHERE id = :purchase_id
-                  AND business_id = :business_id
-                  AND deleted_at IS NULL
-                LIMIT 1';
+        $assignments = [
+            'client_id = :client_id',
+            'title = :title',
+            'status = :status',
+            'contact_date = :contact_date',
+            'purchase_date = :purchase_date',
+            'notes = :notes',
+        ];
 
-        $stmt = Database::connection()->prepare($sql);
-        $stmt->execute([
+        $params = [
             'business_id' => $businessId,
             'purchase_id' => $purchaseId,
             'client_id' => (int) ($payload['client_id'] ?? 0),
@@ -319,8 +322,29 @@ final class Purchase
             'contact_date' => $payload['contact_date'] ?? null,
             'purchase_date' => $payload['purchase_date'] ?? null,
             'notes' => trim((string) ($payload['notes'] ?? '')),
-            'updated_by' => $actorUserId > 0 ? $actorUserId : null,
-        ]);
+        ];
+
+        if (SchemaInspector::hasColumn('purchases', 'purchase_price')) {
+            $assignments[] = 'purchase_price = :purchase_price';
+            $params['purchase_price'] = round((float) ($payload['purchase_price'] ?? 0), 2);
+        }
+        if (SchemaInspector::hasColumn('purchases', 'updated_by')) {
+            $assignments[] = 'updated_by = :updated_by';
+            $params['updated_by'] = $actorUserId > 0 ? $actorUserId : null;
+        }
+        if (SchemaInspector::hasColumn('purchases', 'updated_at')) {
+            $assignments[] = 'updated_at = NOW()';
+        }
+
+        $sql = 'UPDATE purchases
+                SET ' . implode(', ', $assignments) . '
+                WHERE id = :purchase_id
+                  AND business_id = :business_id
+                  AND deleted_at IS NULL
+                LIMIT 1';
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute($params);
 
         return $stmt->rowCount() > 0;
     }
@@ -379,6 +403,69 @@ final class Purchase
         $stmt->bindValue(':link_type', 'purchase');
         $stmt->bindValue(':link_id', $purchaseId, \PDO::PARAM_INT);
         $stmt->bindValue(':row_limit', max(1, min($limit, 100)), \PDO::PARAM_INT);
+        $stmt->execute();
+
+        $rows = $stmt->fetchAll();
+        return is_array($rows) ? $rows : [];
+    }
+
+    public static function totalsByClient(int $businessId, int $clientId): array
+    {
+        if (!SchemaInspector::hasTable('purchases') || $clientId <= 0) {
+            return ['count' => 0, 'total_purchase_price' => 0.0];
+        }
+
+        $purchasePriceSql = SchemaInspector::hasColumn('purchases', 'purchase_price')
+            ? 'COALESCE(p.purchase_price, 0)'
+            : '0';
+
+        $sql = 'SELECT
+                    COUNT(*) AS row_count,
+                    COALESCE(SUM(' . $purchasePriceSql . '), 0) AS purchase_total
+                FROM purchases p
+                WHERE p.business_id = :business_id
+                  AND p.client_id = :client_id
+                  AND p.deleted_at IS NULL';
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute([
+            'business_id' => $businessId,
+            'client_id' => $clientId,
+        ]);
+        $row = $stmt->fetch();
+
+        return [
+            'count' => (int) ($row['row_count'] ?? 0),
+            'total_purchase_price' => (float) ($row['purchase_total'] ?? 0),
+        ];
+    }
+
+    public static function listByClient(int $businessId, int $clientId, int $limit = 200): array
+    {
+        if (!SchemaInspector::hasTable('purchases') || $clientId <= 0) {
+            return [];
+        }
+
+        $purchasePriceSql = SchemaInspector::hasColumn('purchases', 'purchase_price') ? 'p.purchase_price' : '0';
+
+        $sql = 'SELECT
+                    p.id,
+                    p.title,
+                    p.status,
+                    p.contact_date,
+                    p.purchase_date,
+                    ' . $purchasePriceSql . ' AS purchase_price
+                FROM purchases p
+                WHERE p.business_id = :business_id
+                  AND p.client_id = :client_id
+                  AND p.deleted_at IS NULL
+                ORDER BY p.id DESC
+                LIMIT :row_limit';
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
+        $stmt->bindValue(':client_id', $clientId, \PDO::PARAM_INT);
+        $stmt->bindValue(':row_limit', max(1, min($limit, 1000)), \PDO::PARAM_INT);
         $stmt->execute();
 
         $rows = $stmt->fetchAll();

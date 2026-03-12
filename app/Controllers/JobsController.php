@@ -9,6 +9,7 @@ use App\Models\Expense;
 use App\Models\FormSelectValue;
 use App\Models\Invoice;
 use App\Models\Job;
+use App\Models\Sale;
 use App\Models\Task;
 use App\Models\TimeEntry;
 use Core\Controller;
@@ -352,6 +353,7 @@ final class JobsController extends Controller
         $estimates = Invoice::listByJobAndType($businessId, $jobId, 'estimate');
         $invoices = Invoice::listByJobAndType($businessId, $jobId, 'invoice');
         $payments = Invoice::paymentsByJob($businessId, $jobId);
+        $sales = Sale::salesByJob($businessId, $jobId, 200);
         $assignedEmployees = Job::assignedEmployees($businessId, $jobId);
 
         foreach ($assignedEmployees as $index => $employee) {
@@ -380,6 +382,7 @@ final class JobsController extends Controller
                 'estimates' => $estimates,
                 'invoices' => $invoices,
                 'payments' => $payments,
+                'sales' => $sales,
             ],
         ]);
     }

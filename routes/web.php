@@ -121,6 +121,8 @@ $router->get('/sales', [SalesController::class, 'index']);
 $router->get('/sales/create', [SalesController::class, 'create']);
 $router->post('/sales', [SalesController::class, 'store']);
 $router->get('/sales/client-search', [SalesController::class, 'clientSearch']);
+$router->get('/sales/job-search', [SalesController::class, 'jobSearch']);
+$router->get('/sales/purchase-search', [SalesController::class, 'purchaseSearch']);
 $router->get('/sales/{id}/edit', [SalesController::class, 'edit']);
 $router->post('/sales/{id}/update', [SalesController::class, 'update']);
 $router->post('/sales/{id}/delete', [SalesController::class, 'delete']);

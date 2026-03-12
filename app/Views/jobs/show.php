@@ -29,6 +29,7 @@ $invoiceCreateUrl = url('/billing/create') . '?type=invoice&job_id=' . (string) 
 $estimateDocs = is_array($documents['estimates'] ?? null) ? $documents['estimates'] : [];
 $invoiceDocs = is_array($documents['invoices'] ?? null) ? $documents['invoices'] : [];
 $paymentDocs = is_array($documents['payments'] ?? null) ? $documents['payments'] : [];
+$saleDocs = is_array($documents['sales'] ?? null) ? $documents['sales'] : [];
 $defaultInvoiceId = (int) ($invoiceDocs[0]['id'] ?? 0);
 $paymentCreateUrl = url('/billing/payments/create') . '?job_id=' . (string) $jobId;
 if ($defaultInvoiceId > 0) {
@@ -180,23 +181,27 @@ $formatDuration = static function (int $minutes): string {
     <div class="card-body">
         <div class="record-row-fields record-row-fields-4 record-row-fields-mobile-2">
             <div class="record-field">
-                <span class="record-label">Gross</span>
-                <span class="record-value">$<?= e(number_format((float) ($financial['gross'] ?? 0), 2)) ?></span>
+                <span class="record-label">Job Gross</span>
+                <span class="record-value">$<?= e(number_format((float) ($financial['job_gross'] ?? ($financial['invoice_gross'] ?? ($financial['raw_gross'] ?? 0))), 2)) ?></span>
+            </div>
+            <div class="record-field">
+                <span class="record-label">Sales Gross</span>
+                <span class="record-value">$<?= e(number_format((float) ($financial['sales_gross'] ?? 0), 2)) ?></span>
+            </div>
+            <div class="record-field">
+                <span class="record-label">Total Gross (Job + Sales)</span>
+                <span class="record-value">$<?= e(number_format((float) ($financial['total_gross'] ?? ($financial['gross'] ?? 0)), 2)) ?></span>
             </div>
             <div class="record-field">
                 <span class="record-label">Payments</span>
                 <span class="record-value">$<?= e(number_format((float) ($financial['payments'] ?? 0), 2)) ?></span>
             </div>
+        </div>
+        <div class="record-row-fields record-row-fields-4 record-row-fields-mobile-2 mt-3">
             <div class="record-field">
                 <span class="record-label">Labor</span>
                 <span class="record-value">$<?= e(number_format((float) ($financial['labor_cost'] ?? ($financial['labor'] ?? 0)), 2)) ?></span>
             </div>
-            <div class="record-field">
-                <span class="record-label">Balance</span>
-                <span class="record-value">$<?= e(number_format((float) ($financial['balance'] ?? 0), 2)) ?></span>
-            </div>
-        </div>
-        <div class="record-row-fields record-row-fields-4 record-row-fields-mobile-2 mt-3">
             <div class="record-field">
                 <span class="record-label">Expenses</span>
                 <span class="record-value">$<?= e(number_format((float) ($financial['expenses'] ?? 0), 2)) ?></span>
@@ -206,12 +211,22 @@ $formatDuration = static function (int $minutes): string {
                 <span class="record-value">$<?= e(number_format((float) ($financial['adjustments'] ?? 0), 2)) ?></span>
             </div>
             <div class="record-field">
-                <span class="record-label">Net</span>
-                <span class="record-value">$<?= e(number_format((float) ($financial['net'] ?? 0), 2)) ?></span>
+                <span class="record-label">Sales Net</span>
+                <span class="record-value">$<?= e(number_format((float) ($financial['sales_net'] ?? 0), 2)) ?></span>
+            </div>
+        </div>
+        <div class="record-row-fields record-row-fields-3 mt-3">
+            <div class="record-field">
+                <span class="record-label">Job Net (Without Sales)</span>
+                <span class="record-value">$<?= e(number_format((float) ($financial['job_net'] ?? 0), 2)) ?></span>
             </div>
             <div class="record-field">
-                <span class="record-label">Invoice Gross</span>
-                <span class="record-value">$<?= e(number_format((float) ($financial['raw_gross'] ?? 0), 2)) ?></span>
+                <span class="record-label">Total Net</span>
+                <span class="record-value">$<?= e(number_format((float) ($financial['total_net'] ?? ($financial['net'] ?? 0)), 2)) ?></span>
+            </div>
+            <div class="record-field">
+                <span class="record-label">Balance</span>
+                <span class="record-value">$<?= e(number_format((float) ($financial['balance'] ?? 0), 2)) ?></span>
             </div>
         </div>
         <hr class="my-4">
@@ -293,6 +308,36 @@ $formatDuration = static function (int $minutes): string {
                 'total_value' => (float) ($payment['amount'] ?? 0),
                 'created_at' => (string) ($payment['created_at'] ?? ''),
                 'url' => url('/billing/payments/' . (string) $paymentId) . '?job_id=' . (string) $jobId . '&invoice_id=' . (string) ((int) ($payment['invoice_id'] ?? 0)),
+            ];
+        }
+        foreach ($saleDocs as $sale) {
+            if (!is_array($sale)) {
+                continue;
+            }
+            $saleId = (int) ($sale['id'] ?? 0);
+            if ($saleId <= 0) {
+                continue;
+            }
+            $saleName = trim((string) ($sale['name'] ?? ''));
+            if ($saleName === '') {
+                $saleName = 'Sale #' . (string) $saleId;
+            }
+            $saleType = trim((string) ($sale['sale_type'] ?? ''));
+            if ($saleType === '') {
+                $saleType = 'Sale';
+            } else {
+                $saleType = ucwords(str_replace('_', ' ', strtolower($saleType)));
+            }
+            $transactions[] = [
+                'type' => 'Sale',
+                'id' => $saleId,
+                'number' => $saleName,
+                'status' => $saleType . ' · Net ' . $formatMoney((float) ($sale['net_amount'] ?? 0)),
+                'date' => $formatDocDate((string) ($sale['sale_date'] ?? '')),
+                'total_label' => 'Gross',
+                'total_value' => (float) ($sale['gross_amount'] ?? 0),
+                'created_at' => (string) ($sale['created_at'] ?? ''),
+                'url' => url('/sales/' . (string) $saleId),
             ];
         }
         usort($transactions, static function (array $a, array $b): int {
