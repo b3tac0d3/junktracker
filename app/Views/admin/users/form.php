@@ -40,7 +40,16 @@ $effectiveActive = (int) ($targetUser['effective_active'] ?? $targetUser['is_act
         <h1><?= e($pageHeading) ?></h1>
         <p class="muted"><?= e($targetName) ?></p>
     </div>
-    <div>
+    <div class="d-flex flex-wrap gap-2">
+        <?php if (!$isCreate && $canToggleActive): ?>
+            <form method="post" action="<?= e(url('/admin/users/' . (string) ((int) ($targetUser['id'] ?? 0)) . '/toggle-active')) ?>" onsubmit="return confirm('Are you sure?');">
+                <?= csrf_field() ?>
+                <input type="hidden" name="set_active" value="<?= $effectiveActive ? '0' : '1' ?>">
+                <button class="btn <?= $effectiveActive ? 'btn-outline-danger' : 'btn-success' ?>" type="submit">
+                    <?= e($effectiveActive ? 'Deactivate User' : 'Reactivate User') ?>
+                </button>
+            </form>
+        <?php endif; ?>
         <a class="btn btn-outline-secondary" href="<?= e(url('/admin/users')) ?>">Back to Users</a>
     </div>
 </div>
@@ -124,24 +133,3 @@ $effectiveActive = (int) ($targetUser['effective_active'] ?? $targetUser['is_act
         </form>
     </div>
 </section>
-
-<?php if (!$isCreate): ?>
-    <section class="card index-card">
-        <div class="card-header index-card-header">
-            <strong><i class="fas fa-user-slash me-2"></i>Activation</strong>
-        </div>
-        <div class="card-body d-flex flex-wrap align-items-center gap-2">
-            <?php if ($canToggleActive): ?>
-                <form method="post" action="<?= e(url('/admin/users/' . (string) ((int) ($targetUser['id'] ?? 0)) . '/toggle-active')) ?>" onsubmit="return confirm('Are you sure?');">
-                    <?= csrf_field() ?>
-                    <input type="hidden" name="set_active" value="<?= $effectiveActive ? '0' : '1' ?>">
-                    <button class="btn <?= $effectiveActive ? 'btn-outline-danger' : 'btn-success' ?>" type="submit">
-                        <?= e($effectiveActive ? 'Deactivate User' : 'Reactivate User') ?>
-                    </button>
-                </form>
-            <?php else: ?>
-                <div class="small text-muted">You cannot deactivate your own account.</div>
-            <?php endif; ?>
-        </div>
-    </section>
-<?php endif; ?>

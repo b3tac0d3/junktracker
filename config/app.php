@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 return [
     'name' => 'JunkTracker',
-    'version' => '3.1',
+    'version' => '3.1.1',
     'env' => 'local',
     'url' => 'http://localhost/junktracker',
     'timezone' => 'America/New_York',
