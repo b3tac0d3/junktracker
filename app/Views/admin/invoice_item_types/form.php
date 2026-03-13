@@ -49,12 +49,6 @@ $hasError = static function (string $field) use ($errors): bool {
             </div>
 
             <div class="col-12 col-lg-3">
-                <label class="form-label fw-semibold" for="item-type-sort-order">Sort Order</label>
-                <input id="item-type-sort-order" name="sort_order" type="number" min="0" step="1" class="form-control <?= $hasError('sort_order') ? 'is-invalid' : '' ?>" value="<?= e((string) ($form['sort_order'] ?? '100')) ?>" <?= !$tableAvailable ? 'disabled' : '' ?> />
-                <?php if ($hasError('sort_order')): ?><div class="invalid-feedback d-block"><?= e($fieldError('sort_order')) ?></div><?php endif; ?>
-            </div>
-
-            <div class="col-12 col-lg-3">
                 <label class="form-label fw-semibold" for="item-type-taxable">Taxable By Default</label>
                 <select id="item-type-taxable" name="default_taxable" class="form-select" <?= !$tableAvailable ? 'disabled' : '' ?>>
                     <option value="1" <?= ((string) ($form['default_taxable'] ?? '1')) === '1' ? 'selected' : '' ?>>Yes</option>

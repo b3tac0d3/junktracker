@@ -16,6 +16,7 @@ final class BusinessMembership
              INNER JOIN businesses b ON b.id = m.business_id
              WHERE m.user_id = :user_id
                AND m.deleted_at IS NULL
+               AND COALESCE(m.is_active, 1) = 1
                AND b.deleted_at IS NULL
                AND COALESCE(b.is_active, 1) = 1
              ORDER BY m.id ASC
@@ -83,6 +84,37 @@ final class BusinessMembership
 
     public static function assignAdmin(int $businessId, int $userId, int $actorUserId): void
     {
+        self::assignRole($businessId, $userId, 'admin', $actorUserId);
+    }
+
+    public static function assignRole(int $businessId, int $userId, string $role, int $actorUserId): void
+    {
+        $normalizedRole = strtolower(trim($role));
+        if (!in_array($normalizedRole, ['general_user', 'admin', 'punch_only'], true)) {
+            $normalizedRole = 'general_user';
+        }
+
+        $existing = self::findMembership($businessId, $userId);
+        if ($existing !== null) {
+            $stmt = Database::connection()->prepare(
+                'UPDATE business_user_memberships
+                 SET role = :role,
+                     is_active = 1,
+                     deleted_at = NULL,
+                     deleted_by = NULL,
+                     updated_by = :updated_by,
+                     updated_at = NOW()
+                 WHERE id = :membership_id
+                 LIMIT 1'
+            );
+            $stmt->execute([
+                'role' => $normalizedRole,
+                'updated_by' => $actorUserId > 0 ? $actorUserId : null,
+                'membership_id' => (int) ($existing['id'] ?? 0),
+            ]);
+            return;
+        }
+
         $stmt = Database::connection()->prepare(
             'INSERT INTO business_user_memberships (
                 business_id, user_id, role, is_active, created_by, updated_by, created_at, updated_at
@@ -94,9 +126,94 @@ final class BusinessMembership
         $stmt->execute([
             'business_id' => $businessId,
             'user_id' => $userId,
-            'role' => 'admin',
-            'created_by' => $actorUserId,
-            'updated_by' => $actorUserId,
+            'role' => $normalizedRole,
+            'created_by' => $actorUserId > 0 ? $actorUserId : null,
+            'updated_by' => $actorUserId > 0 ? $actorUserId : null,
         ]);
+    }
+
+    public static function setRoleForBusiness(int $businessId, int $userId, string $role, int $actorUserId): bool
+    {
+        $normalizedRole = strtolower(trim($role));
+        if (!in_array($normalizedRole, ['general_user', 'admin', 'punch_only'], true)) {
+            $normalizedRole = 'general_user';
+        }
+
+        $stmt = Database::connection()->prepare(
+            'UPDATE business_user_memberships
+             SET role = :role,
+                 updated_by = :updated_by,
+                 updated_at = NOW()
+             WHERE business_id = :business_id
+               AND user_id = :user_id
+               AND deleted_at IS NULL
+             LIMIT 1'
+        );
+        $stmt->execute([
+            'role' => $normalizedRole,
+            'updated_by' => $actorUserId > 0 ? $actorUserId : null,
+            'business_id' => $businessId,
+            'user_id' => $userId,
+        ]);
+
+        return $stmt->rowCount() > 0;
+    }
+
+    public static function setActiveForBusiness(int $businessId, int $userId, bool $isActive, int $actorUserId): bool
+    {
+        $stmt = Database::connection()->prepare(
+            'UPDATE business_user_memberships
+             SET is_active = :is_active,
+                 updated_by = :updated_by,
+                 updated_at = NOW()
+             WHERE business_id = :business_id
+               AND user_id = :user_id
+               AND deleted_at IS NULL
+             LIMIT 1'
+        );
+
+        $stmt->execute([
+            'is_active' => $isActive ? 1 : 0,
+            'updated_by' => $actorUserId > 0 ? $actorUserId : null,
+            'business_id' => $businessId,
+            'user_id' => $userId,
+        ]);
+
+        return $stmt->rowCount() > 0;
+    }
+
+    public static function findForBusiness(int $businessId, int $userId): ?array
+    {
+        $stmt = Database::connection()->prepare(
+            'SELECT id, business_id, user_id, role, is_active, deleted_at
+             FROM business_user_memberships
+             WHERE business_id = :business_id
+               AND user_id = :user_id
+             LIMIT 1'
+        );
+        $stmt->execute([
+            'business_id' => $businessId,
+            'user_id' => $userId,
+        ]);
+
+        $row = $stmt->fetch();
+        return is_array($row) ? $row : null;
+    }
+
+    private static function findMembership(int $businessId, int $userId): ?array
+    {
+        $stmt = Database::connection()->prepare(
+            'SELECT id
+             FROM business_user_memberships
+             WHERE business_id = :business_id
+               AND user_id = :user_id
+             LIMIT 1'
+        );
+        $stmt->execute([
+            'business_id' => $businessId,
+            'user_id' => $userId,
+        ]);
+        $row = $stmt->fetch();
+        return is_array($row) ? $row : null;
     }
 }

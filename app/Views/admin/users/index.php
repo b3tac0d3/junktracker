@@ -1,5 +1,9 @@
 <?php
 $search = trim((string) ($search ?? ''));
+$status = trim((string) ($status ?? 'active'));
+if (!in_array($status, ['active', 'inactive', 'all'], true)) {
+    $status = 'active';
+}
 $users = is_array($users ?? null) ? $users : [];
 $pagination = is_array($pagination ?? null) ? $pagination : pagination_meta(1, 25, count($users), count($users));
 $perPage = (int) ($pagination['per_page'] ?? 25);
@@ -20,7 +24,10 @@ $displayName = static function (array $row): string {
         <h1>Users</h1>
         <p class="muted"><?= e($isSiteAdminGlobal ? 'Global user management' : 'Business user management') ?></p>
     </div>
-    <div>
+    <div class="d-flex gap-2">
+        <a class="btn btn-primary" href="<?= e(url('/admin/users/create')) ?>">
+            <i class="fas fa-plus me-2"></i><?= e($isSiteAdminGlobal ? 'Add Site Admin' : 'Add User') ?>
+        </a>
         <a class="btn btn-outline-secondary" href="<?= e(url('/admin')) ?>">Back to Admin</a>
     </div>
 </div>
@@ -33,9 +40,17 @@ $displayName = static function (array $row): string {
         <form method="get" action="<?= e(url('/admin/users')) ?>" class="row g-3 align-items-end">
             <input type="hidden" name="page" value="1">
             <input type="hidden" name="per_page" value="<?= e((string) $perPage) ?>">
-            <div class="col-12 col-lg-9">
+            <div class="col-12 col-lg-7">
                 <label class="form-label fw-semibold" for="users-search">Search</label>
                 <input id="users-search" class="form-control" name="q" value="<?= e($search) ?>" placeholder="Search by name, email, or id..." autocomplete="off" />
+            </div>
+            <div class="col-12 col-lg-2">
+                <label class="form-label fw-semibold" for="users-status">Status</label>
+                <select id="users-status" class="form-select" name="status">
+                    <option value="active" <?= $status === 'active' ? 'selected' : '' ?>>Active</option>
+                    <option value="inactive" <?= $status === 'inactive' ? 'selected' : '' ?>>Inactive</option>
+                    <option value="all" <?= $status === 'all' ? 'selected' : '' ?>>All</option>
+                </select>
             </div>
             <div class="col-12 col-lg-3 d-grid d-lg-flex gap-2">
                 <button class="btn btn-primary flex-fill" type="submit">Apply</button>
@@ -64,13 +79,16 @@ $displayName = static function (array $row): string {
                     $userId = (int) ($row['id'] ?? 0);
                     $globalRole = trim((string) ($row['role'] ?? 'general_user'));
                     $workspaceRole = trim((string) ($row['workspace_role'] ?? ''));
+                    $isUserActive = (int) ($row['is_active'] ?? 1) === 1;
+                    $isMembershipActive = (int) ($row['membership_active'] ?? 1) === 1;
+                    $effectiveActive = $isSiteAdminGlobal ? $isUserActive : ($isUserActive && $isMembershipActive);
                     ?>
                     <article class="record-row-simple">
                         <a class="record-row-link" href="<?= e(url('/admin/users/' . (string) $userId . '/edit')) ?>">
                             <div class="record-row-main">
                                 <h3 class="record-title-simple"><?= e($displayName($row)) ?></h3>
                             </div>
-                            <div class="record-row-fields record-row-fields-4">
+                            <div class="record-row-fields record-row-fields-5">
                                 <div class="record-field">
                                     <span class="record-label">User ID</span>
                                     <span class="record-value"><?= e((string) $userId) ?></span>
@@ -87,6 +105,14 @@ $displayName = static function (array $row): string {
                                     <span class="record-label"><?= e($isSiteAdminGlobal ? 'Scope' : 'Workspace Role') ?></span>
                                     <span class="record-value text-capitalize">
                                         <?= e($isSiteAdminGlobal ? 'Global' : (str_replace('_', ' ', ($workspaceRole !== '' ? $workspaceRole : '—')))) ?>
+                                    </span>
+                                </div>
+                                <div class="record-field">
+                                    <span class="record-label">Status</span>
+                                    <span class="record-value">
+                                        <span class="badge <?= $effectiveActive ? 'text-bg-success' : 'text-bg-secondary' ?>">
+                                            <?= e($effectiveActive ? 'Active' : 'Inactive') ?>
+                                        </span>
                                     </span>
                                 </div>
                             </div>

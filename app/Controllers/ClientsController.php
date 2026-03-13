@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Models\Client;
+use App\Models\ClientContact;
 use App\Models\FormSelectValue;
 use App\Models\SchemaInspector;
 use Core\Controller;
@@ -183,6 +184,7 @@ final class ClientsController extends Controller
         $jobs = Client::jobHistory($businessId, $clientId, 50);
         $sales = Client::salesHistory($businessId, $clientId, 50);
         $purchases = Client::purchaseHistory($businessId, $clientId, 50);
+        $contacts = ClientContact::forClient($businessId, $clientId, 50);
 
         $this->render('clients/show', [
             'pageTitle' => 'Client',
@@ -192,7 +194,100 @@ final class ClientsController extends Controller
             'jobs' => $jobs,
             'sales' => $sales,
             'purchases' => $purchases,
+            'contacts' => $contacts,
         ]);
+    }
+
+    public function createContact(array $params): void
+    {
+        require_business_role(['general_user', 'admin']);
+
+        $clientId = (int) ($params['id'] ?? 0);
+        if ($clientId <= 0) {
+            http_response_code(404);
+            $this->render('errors/404', ['pageTitle' => 'Not Found']);
+            return;
+        }
+
+        $businessId = current_business_id();
+        $client = Client::findForBusiness($businessId, $clientId);
+        if ($client === null) {
+            http_response_code(404);
+            $this->render('errors/404', ['pageTitle' => 'Not Found']);
+            return;
+        }
+
+        if (!ClientContact::isAvailable()) {
+            flash('error', 'Contact log table is missing. Run the latest migration.');
+            redirect('/clients/' . (string) $clientId);
+        }
+
+        $this->render('clients/contact_form', [
+            'pageTitle' => 'Add Contact',
+            'client' => $client,
+            'clientId' => $clientId,
+            'actionUrl' => url('/clients/' . (string) $clientId . '/contacts'),
+            'form' => $this->defaultContactForm(),
+            'errors' => [],
+        ]);
+    }
+
+    public function storeContact(array $params): void
+    {
+        require_business_role(['general_user', 'admin']);
+
+        $clientId = (int) ($params['id'] ?? 0);
+        if ($clientId <= 0) {
+            http_response_code(404);
+            $this->render('errors/404', ['pageTitle' => 'Not Found']);
+            return;
+        }
+
+        if (!verify_csrf($_POST['csrf_token'] ?? null)) {
+            flash('error', 'Session expired. Please try again.');
+            redirect('/clients/' . (string) $clientId . '/contacts/create');
+        }
+
+        $businessId = current_business_id();
+        $client = Client::findForBusiness($businessId, $clientId);
+        if ($client === null) {
+            http_response_code(404);
+            $this->render('errors/404', ['pageTitle' => 'Not Found']);
+            return;
+        }
+
+        if (!ClientContact::isAvailable()) {
+            flash('error', 'Contact log table is missing. Run the latest migration.');
+            redirect('/clients/' . (string) $clientId);
+        }
+
+        $form = $this->contactFormFromPost($_POST);
+        $errors = $this->validateContactForm($form);
+        if ($errors !== []) {
+            $this->render('clients/contact_form', [
+                'pageTitle' => 'Add Contact',
+                'client' => $client,
+                'clientId' => $clientId,
+                'actionUrl' => url('/clients/' . (string) $clientId . '/contacts'),
+                'form' => $form,
+                'errors' => $errors,
+            ]);
+            return;
+        }
+
+        ClientContact::create(
+            $businessId,
+            $clientId,
+            [
+                'contacted_at' => $this->toDatabaseDateTime($form['contacted_at']) ?? date('Y-m-d H:i:s'),
+                'contact_type' => $form['contact_type'],
+                'note' => $form['note'],
+            ],
+            auth_user_id() ?? 0
+        );
+
+        flash('success', 'Contact added.');
+        redirect('/clients/' . (string) $clientId);
     }
 
     private function defaultForm(): array
@@ -312,5 +407,53 @@ final class ClientsController extends Controller
         }
 
         return $payload;
+    }
+
+    private function defaultContactForm(): array
+    {
+        return [
+            'contacted_at' => date('Y-m-d\\TH:i'),
+            'contact_type' => 'call',
+            'note' => '',
+        ];
+    }
+
+    private function contactFormFromPost(array $input): array
+    {
+        return [
+            'contacted_at' => trim((string) ($input['contacted_at'] ?? '')),
+            'contact_type' => strtolower(trim((string) ($input['contact_type'] ?? ''))),
+            'note' => trim((string) ($input['note'] ?? '')),
+        ];
+    }
+
+    private function validateContactForm(array $form): array
+    {
+        $errors = [];
+        $allowedTypes = ['call', 'text', 'email', 'in_person', 'other'];
+
+        if (($this->toDatabaseDateTime($form['contacted_at']) ?? null) === null) {
+            $errors['contacted_at'] = 'Contact date/time is invalid.';
+        }
+        if (!in_array($form['contact_type'], $allowedTypes, true)) {
+            $errors['contact_type'] = 'Choose a valid contact type.';
+        }
+
+        return $errors;
+    }
+
+    private function toDatabaseDateTime(string $value): ?string
+    {
+        $raw = trim($value);
+        if ($raw === '') {
+            return null;
+        }
+
+        $timestamp = strtotime($raw);
+        if ($timestamp === false) {
+            return null;
+        }
+
+        return date('Y-m-d H:i:s', $timestamp);
     }
 }

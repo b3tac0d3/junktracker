@@ -16,8 +16,9 @@ $dueLabel = $docType === 'estimate' ? 'Expire Date' : 'Due Date';
 
 $docNumber = trim((string) ($invoice['invoice_number'] ?? ''));
 if ($docNumber === '') {
-    $docNumber = strtoupper($docType) . '-' . (string) $recordId;
+    $docNumber = (string) $recordId;
 }
+$docHeaderNumber = $docNumber . ' (#' . (string) $recordId . ')';
 
 $clientName = trim((string) ($invoice['client_name'] ?? ''));
 if ($clientName === '') {
@@ -178,7 +179,7 @@ $currentStatus = strtolower(trim((string) ($invoice['status'] ?? '')));
 <div class="page-header d-flex flex-wrap align-items-end justify-content-between gap-2">
     <div>
         <h1><?= e($docTitle) ?></h1>
-        <p class="muted"><?= e($docNumber) ?></p>
+        <p class="muted"><?= e($docHeaderNumber) ?></p>
     </div>
     <div class="d-flex gap-2">
         <div class="dropdown">
@@ -188,7 +189,13 @@ $currentStatus = strtolower(trim((string) ($invoice['status'] ?? '')));
             <ul class="dropdown-menu dropdown-menu-end">
                 <li><button type="button" class="dropdown-item" onclick="window.print()"><i class="fas fa-print me-2"></i>Print</button></li>
                 <?php if ($docType === 'estimate'): ?>
-                    <li><a class="dropdown-item" href="<?= e(url('/billing/create') . '?type=invoice&from_estimate_id=' . (string) $recordId) ?>"><i class="fas fa-file-invoice me-2"></i>Convert to Invoice</a></li>
+                    <?php
+                    $convertToInvoiceUrl = url('/billing/create') . '?type=invoice&from_estimate_id=' . (string) $recordId;
+                    if ($fromJob && $jobBackId > 0) {
+                        $convertToInvoiceUrl .= '&from=job&job_id=' . (string) $jobBackId;
+                    }
+                    ?>
+                    <li><a class="dropdown-item" href="<?= e($convertToInvoiceUrl) ?>"><i class="fas fa-file-invoice me-2"></i>Convert to Invoice</a></li>
                 <?php endif; ?>
                 <?php if ($docType === 'invoice'): ?>
                     <li><a class="dropdown-item" href="<?= e($paymentCreateUrl) ?>"><i class="fas fa-money-check-dollar me-2"></i>Add Payment</a></li>
@@ -213,7 +220,7 @@ $currentStatus = strtolower(trim((string) ($invoice['status'] ?? '')));
         <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
             <div>
                 <h4 class="mb-1"><?= e($docTitle) ?></h4>
-                <div class="text-muted"><?= e($docNumber) ?></div>
+                <div class="text-muted"><?= e($docHeaderNumber) ?></div>
             </div>
             <div class="text-end">
                 <form method="post" action="<?= e($quickStatusUrl) ?>" class="d-flex flex-wrap align-items-center justify-content-end gap-2 mb-1">

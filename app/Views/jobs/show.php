@@ -24,8 +24,8 @@ if ($addressStreet === '' && $addressRegion === '') {
 $title = trim((string) ($job['title'] ?? '')) !== '' ? (string) $job['title'] : ('Job #' . (string) ((int) ($job['id'] ?? 0)));
 $jobId = (int) ($job['id'] ?? 0);
 $clientId = (int) ($job['client_id'] ?? 0);
-$estimateCreateUrl = url('/billing/create') . '?type=estimate&job_id=' . (string) $jobId . '&client_id=' . (string) $clientId;
-$invoiceCreateUrl = url('/billing/create') . '?type=invoice&job_id=' . (string) $jobId . '&client_id=' . (string) $clientId;
+$estimateCreateUrl = url('/billing/create') . '?type=estimate&from=job&job_id=' . (string) $jobId . '&client_id=' . (string) $clientId;
+$invoiceCreateUrl = url('/billing/create') . '?type=invoice&from=job&job_id=' . (string) $jobId . '&client_id=' . (string) $clientId;
 $estimateDocs = is_array($documents['estimates'] ?? null) ? $documents['estimates'] : [];
 $invoiceDocs = is_array($documents['invoices'] ?? null) ? $documents['invoices'] : [];
 $paymentDocs = is_array($documents['payments'] ?? null) ? $documents['payments'] : [];

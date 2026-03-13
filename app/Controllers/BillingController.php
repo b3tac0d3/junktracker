@@ -66,6 +66,10 @@ final class BillingController extends Controller
             $form['status'] = $requestedType === 'estimate'
                 ? (string) (array_key_first($this->estimateStatusOptions()) ?? 'draft')
                 : (string) (array_key_first($this->invoiceStatusOptions()) ?? 'unsent');
+            if ($requestedType === 'estimate') {
+                $form['issue_date'] = date('Y-m-d');
+                $form['due_date'] = date('Y-m-d', strtotime('+30 days'));
+            }
         }
 
         $requestedClientId = (int) ($_GET['client_id'] ?? 0);
@@ -166,7 +170,7 @@ final class BillingController extends Controller
             }
         }
         flash('success', ucfirst($form['type']) . ' created.');
-        redirect('/billing/' . (string) $invoiceId);
+        redirect('/billing/' . (string) $invoiceId . $this->billingBackSuffix($_POST));
     }
 
     public function edit(array $params): void
@@ -215,9 +219,10 @@ final class BillingController extends Controller
             return;
         }
 
+        $backSuffix = $this->billingBackSuffix($_POST);
         if (!verify_csrf($_POST['csrf_token'] ?? null)) {
             flash('error', 'Session expired. Please try again.');
-            redirect('/billing/' . (string) $invoiceId . '/edit');
+            redirect('/billing/' . (string) $invoiceId . '/edit' . $backSuffix);
         }
 
         $businessId = current_business_id();
@@ -266,7 +271,7 @@ final class BillingController extends Controller
             }
         }
         flash('success', ucfirst($form['type']) . ' updated.');
-        redirect('/billing/' . (string) $invoiceId);
+        redirect('/billing/' . (string) $invoiceId . $backSuffix);
     }
 
     public function show(array $params): void

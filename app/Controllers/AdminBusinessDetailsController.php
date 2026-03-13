@@ -96,6 +96,8 @@ final class AdminBusinessDetailsController extends Controller
             'mailing_city' => $form['mailing_city'],
             'mailing_state' => $form['mailing_state'],
             'mailing_postal_code' => $form['mailing_postal_code'],
+            'estimate_number_start' => $form['estimate_number_start'],
+            'invoice_number_start' => $form['invoice_number_start'],
         ], (int) (auth_user_id() ?? 0));
 
         flash('success', 'Business details updated.');
@@ -122,6 +124,8 @@ final class AdminBusinessDetailsController extends Controller
             'mailing_city' => trim((string) ($business['mailing_city'] ?? '')),
             'mailing_state' => trim((string) ($business['mailing_state'] ?? '')),
             'mailing_postal_code' => trim((string) ($business['mailing_postal_code'] ?? '')),
+            'estimate_number_start' => trim((string) ($business['estimate_number_start'] ?? '')),
+            'invoice_number_start' => trim((string) ($business['invoice_number_start'] ?? '')),
         ];
     }
 
@@ -145,6 +149,8 @@ final class AdminBusinessDetailsController extends Controller
             'mailing_city' => trim((string) ($input['mailing_city'] ?? '')),
             'mailing_state' => trim((string) ($input['mailing_state'] ?? '')),
             'mailing_postal_code' => trim((string) ($input['mailing_postal_code'] ?? '')),
+            'estimate_number_start' => trim((string) ($input['estimate_number_start'] ?? '')),
+            'invoice_number_start' => trim((string) ($input['invoice_number_start'] ?? '')),
         ];
     }
 
@@ -171,6 +177,14 @@ final class AdminBusinessDetailsController extends Controller
 
         if ($form['mailing_same_as_physical'] !== '1' && $form['mailing_address_line1'] === '') {
             $errors['mailing_address_line1'] = 'Mailing address line 1 is required when mailing address differs.';
+        }
+
+        if ($form['estimate_number_start'] !== '' && !preg_match('/^[A-Za-z0-9\\-]+$/', $form['estimate_number_start'])) {
+            $errors['estimate_number_start'] = 'Estimate start number can only include letters, numbers, and dashes.';
+        }
+
+        if ($form['invoice_number_start'] !== '' && !preg_match('/^[A-Za-z0-9\\-]+$/', $form['invoice_number_start'])) {
+            $errors['invoice_number_start'] = 'Invoice start number can only include letters, numbers, and dashes.';
         }
 
         return $errors;

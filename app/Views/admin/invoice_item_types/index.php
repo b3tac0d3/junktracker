@@ -75,28 +75,24 @@ $tableAvailable = (bool) ($tableAvailable ?? true);
                         <div class="record-row-main">
                             <h3 class="record-title-simple"><?= e(trim((string) ($type['name'] ?? '')) ?: ('Type #' . (string) $id)) ?></h3>
                         </div>
-                        <div class="record-row-fields record-row-fields-5">
-                            <div class="record-field">
-                                <span class="record-label">Default Rate</span>
-                                <span class="record-value">$<?= e(number_format((float) ($type['default_unit_price'] ?? 0), 2)) ?></span>
-                            </div>
-                            <div class="record-field">
+                            <div class="record-row-fields record-row-fields-4">
+                                <div class="record-field">
+                                    <span class="record-label">Default Rate</span>
+                                    <span class="record-value">$<?= e(number_format((float) ($type['default_unit_price'] ?? 0), 2)) ?></span>
+                                </div>
+                                <div class="record-field">
                                 <span class="record-label">Taxable</span>
                                 <span class="record-value"><?= ((int) ($type['default_taxable'] ?? 0)) === 1 ? 'Yes' : 'No' ?></span>
                             </div>
-                            <div class="record-field record-field-full">
-                                <span class="record-label">Default Note</span>
-                                <span class="record-value"><?= e(trim((string) ($type['default_note'] ?? '')) ?: '—') ?></span>
+                                <div class="record-field record-field-full">
+                                    <span class="record-label">Default Note</span>
+                                    <span class="record-value"><?= e(trim((string) ($type['default_note'] ?? '')) ?: '—') ?></span>
+                                </div>
+                                <div class="record-field">
+                                    <span class="record-label">Status</span>
+                                    <span class="record-value"><?= ((int) ($type['is_active'] ?? 1)) === 1 ? 'Active' : 'Inactive' ?></span>
+                                </div>
                             </div>
-                            <div class="record-field">
-                                <span class="record-label">Sort</span>
-                                <span class="record-value"><?= e((string) ((int) ($type['sort_order'] ?? 100))) ?></span>
-                            </div>
-                            <div class="record-field">
-                                <span class="record-label">Status</span>
-                                <span class="record-value"><?= ((int) ($type['is_active'] ?? 1)) === 1 ? 'Active' : 'Inactive' ?></span>
-                            </div>
-                        </div>
                         <div class="d-flex gap-2 mt-2">
                             <a class="btn btn-outline-secondary btn-sm" href="<?= e(url('/admin/invoice-item-types/' . (string) $id . '/edit')) ?>">Edit</a>
                             <form method="post" action="<?= e(url('/admin/invoice-item-types/' . (string) $id . '/delete')) ?>" onsubmit="return confirm('Remove this invoice item type?');">

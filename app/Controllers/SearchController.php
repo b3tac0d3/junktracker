@@ -54,9 +54,9 @@ final class SearchController extends Controller
         if ($query !== '') {
             if ($isGlobalSiteAdminContext) {
                 $results['businesses'] = $this->searchBusinesses($query, 12);
-                $results['site_admin_users'] = User::indexListGlobal($query, 12, 0);
+                $results['site_admin_users'] = User::indexListGlobal($query, 'all', 12, 0);
                 $totals['businesses'] = count($results['businesses']);
-                $totals['site_admin_users'] = User::indexCountGlobal($query);
+                $totals['site_admin_users'] = User::indexCountGlobal($query, 'all');
             } else {
                 $businessId = current_business_id();
                 $limit = 8;

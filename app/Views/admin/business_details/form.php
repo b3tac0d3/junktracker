@@ -61,6 +61,24 @@ $hasError = static function (string $field) use ($errors): bool {
 
             <div class="col-12 mt-1">
                 <hr class="my-1" />
+                <h3 class="h5 mb-2">Financial Document Numbering</h3>
+            </div>
+
+            <div class="col-12 col-lg-6">
+                <label class="form-label fw-semibold" for="business-estimate-number-start">Estimate Start Number</label>
+                <input id="business-estimate-number-start" name="estimate_number_start" class="form-control <?= $hasError('estimate_number_start') ? 'is-invalid' : '' ?>" value="<?= e((string) ($form['estimate_number_start'] ?? '')) ?>" maxlength="30" placeholder="Example: 752" />
+                <?php if ($hasError('estimate_number_start')): ?><div class="invalid-feedback d-block"><?= e($fieldError('estimate_number_start')) ?></div><?php endif; ?>
+                <div class="form-text">If set to <code>752</code>, generated estimates will be <code>7521</code>, <code>7522</code>, and so on.</div>
+            </div>
+            <div class="col-12 col-lg-6">
+                <label class="form-label fw-semibold" for="business-invoice-number-start">Invoice Start Number</label>
+                <input id="business-invoice-number-start" name="invoice_number_start" class="form-control <?= $hasError('invoice_number_start') ? 'is-invalid' : '' ?>" value="<?= e((string) ($form['invoice_number_start'] ?? '')) ?>" maxlength="30" placeholder="Example: 900" />
+                <?php if ($hasError('invoice_number_start')): ?><div class="invalid-feedback d-block"><?= e($fieldError('invoice_number_start')) ?></div><?php endif; ?>
+                <div class="form-text">Uses a separate sequence from estimates.</div>
+            </div>
+
+            <div class="col-12 mt-1">
+                <hr class="my-1" />
                 <h3 class="h5 mb-2">Physical Address</h3>
             </div>
 

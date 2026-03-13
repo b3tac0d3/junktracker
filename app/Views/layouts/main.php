@@ -2,7 +2,7 @@
 $pageTitle = isset($pageTitle) ? (string) $pageTitle : 'JunkTracker';
 $publicPage = (bool) ($publicPage ?? false);
 $user = auth_user();
-$appVersion = (string) config('app.version', '3.0.1 (beta)');
+$appVersion = (string) config('app.version', '3.1');
 $workspaceRole = workspace_role();
 $businessId = current_business_id();
 $isGlobalSiteAdminContext = is_site_admin() && $businessId <= 0;
@@ -55,7 +55,7 @@ $globalSearchQuery = trim((string) ($_GET['global_q'] ?? ''));
             <?php endif; ?>
             <?php if (!$isGlobalSiteAdminContext): ?>
                 <li class="nav-item dropdown">
-                    <a class="nav-link dropdown-toggle nav-quick-add-link" id="quickAddDropdown" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false" title="Quick Add">
+                    <a class="nav-link dropdown-toggle nav-quick-add-link" id="quickAddDropdown" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false" title="Add">
                         <i class="fas fa-circle-plus fa-fw"></i>
                     </a>
                     <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="quickAddDropdown">
@@ -76,7 +76,7 @@ $globalSearchQuery = trim((string) ($_GET['global_q'] ?? ''));
                     <?php if ($businessId > 0): ?><li><span class="dropdown-item-text small text-muted">Business #<?= e((string) $businessId) ?></span></li><?php endif; ?>
                     <li><hr class="dropdown-divider" /></li>
                     <li><a class="dropdown-item" href="<?= e(url('/settings')) ?>">Settings</a></li>
-                    <?php if ($canManageUsers): ?>
+                    <?php if ($canManageUsers && !$isGlobalSiteAdminContext): ?>
                         <li><a class="dropdown-item" href="<?= e(url('/admin/users')) ?>">Manage Users</a></li>
                     <?php endif; ?>
                     <?php if (is_site_admin()): ?>
@@ -104,6 +104,12 @@ $globalSearchQuery = trim((string) ($_GET['global_q'] ?? ''));
                             <div class="sb-nav-link-icon"><i class="fas fa-gauge-high"></i></div>
                             <?= e($isGlobalSiteAdminContext ? 'Site Admin Dashboard' : 'Dashboard') ?>
                         </a>
+                        <?php if ($isGlobalSiteAdminContext && $canManageUsers): ?>
+                            <a class="nav-link" href="<?= e(url('/admin/users')) ?>">
+                                <div class="sb-nav-link-icon"><i class="fas fa-users-gear"></i></div>
+                                Manage Users
+                            </a>
+                        <?php endif; ?>
 
                         <?php if (!$isGlobalSiteAdminContext): ?>
                             <div class="sb-sidenav-menu-heading">Core</div>

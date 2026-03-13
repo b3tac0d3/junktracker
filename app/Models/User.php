@@ -8,6 +8,30 @@ use Core\Database;
 
 final class User
 {
+    public static function create(array $payload, int $actorUserId): int
+    {
+        $stmt = Database::connection()->prepare(
+            'INSERT INTO users (
+                email, password_hash, first_name, last_name, role, is_active, created_by, updated_by, created_at, updated_at
+             ) VALUES (
+                :email, :password_hash, :first_name, :last_name, :role, :is_active, :created_by, :updated_by, NOW(), NOW()
+             )'
+        );
+
+        $stmt->execute([
+            'email' => trim(strtolower((string) ($payload['email'] ?? ''))),
+            'password_hash' => (string) ($payload['password_hash'] ?? ''),
+            'first_name' => trim((string) ($payload['first_name'] ?? '')),
+            'last_name' => trim((string) ($payload['last_name'] ?? '')),
+            'role' => trim((string) ($payload['role'] ?? 'general_user')),
+            'is_active' => (int) ($payload['is_active'] ?? 1) === 0 ? 0 : 1,
+            'created_by' => $actorUserId > 0 ? $actorUserId : null,
+            'updated_by' => $actorUserId > 0 ? $actorUserId : null,
+        ]);
+
+        return (int) Database::connection()->lastInsertId();
+    }
+
     public static function findByEmail(string $email): ?array
     {
         $sql = 'SELECT id, email, password_hash, first_name, last_name, role
@@ -99,18 +123,27 @@ final class User
         $stmt->execute($params);
     }
 
-    public static function indexCountForBusiness(int $businessId, string $search = ''): int
+    public static function indexCountForBusiness(int $businessId, string $search = '', string $status = 'active'): int
     {
         $query = trim($search);
+        $status = strtolower(trim($status));
+        if (!in_array($status, ['active', 'inactive', 'all'], true)) {
+            $status = 'active';
+        }
+
+        $activeWhere = match ($status) {
+            'inactive' => '(COALESCE(m.is_active, 1) = 0 OR COALESCE(u.is_active, 1) = 0)',
+            'all' => '1=1',
+            default => '(COALESCE(m.is_active, 1) = 1 AND COALESCE(u.is_active, 1) = 1)',
+        };
         $sql = 'SELECT COUNT(*)
                 FROM business_user_memberships m
                 INNER JOIN users u ON u.id = m.user_id
                 WHERE m.business_id = :business_id
                   AND m.deleted_at IS NULL
-                  AND COALESCE(m.is_active, 1) = 1
                   AND u.deleted_at IS NULL
-                  AND COALESCE(u.is_active, 1) = 1
                   AND u.role <> \'site_admin\'
+                  AND ' . $activeWhere . '
                   AND (
                     :query = \'\'
                     OR COALESCE(u.first_name, \'\') LIKE :query_like_1
@@ -132,24 +165,35 @@ final class User
         return (int) $stmt->fetchColumn();
     }
 
-    public static function indexListForBusiness(int $businessId, string $search = '', int $limit = 25, int $offset = 0): array
+    public static function indexListForBusiness(int $businessId, string $search = '', string $status = 'active', int $limit = 25, int $offset = 0): array
     {
         $query = trim($search);
+        $status = strtolower(trim($status));
+        if (!in_array($status, ['active', 'inactive', 'all'], true)) {
+            $status = 'active';
+        }
+
+        $activeWhere = match ($status) {
+            'inactive' => '(COALESCE(m.is_active, 1) = 0 OR COALESCE(u.is_active, 1) = 0)',
+            'all' => '1=1',
+            default => '(COALESCE(m.is_active, 1) = 1 AND COALESCE(u.is_active, 1) = 1)',
+        };
         $sql = 'SELECT
                     u.id,
                     u.email,
                     u.first_name,
                     u.last_name,
                     u.role,
-                    m.role AS workspace_role
+                    m.role AS workspace_role,
+                    COALESCE(u.is_active, 1) AS is_active,
+                    COALESCE(m.is_active, 1) AS membership_active
                 FROM business_user_memberships m
                 INNER JOIN users u ON u.id = m.user_id
                 WHERE m.business_id = :business_id
                   AND m.deleted_at IS NULL
-                  AND COALESCE(m.is_active, 1) = 1
                   AND u.deleted_at IS NULL
-                  AND COALESCE(u.is_active, 1) = 1
                   AND u.role <> \'site_admin\'
+                  AND ' . $activeWhere . '
                   AND (
                     :query = \'\'
                     OR COALESCE(u.first_name, \'\') LIKE :query_like_1
@@ -180,14 +224,24 @@ final class User
         return is_array($rows) ? $rows : [];
     }
 
-    public static function indexCountGlobal(string $search = ''): int
+    public static function indexCountGlobal(string $search = '', string $status = 'active'): int
     {
         $query = trim($search);
+        $status = strtolower(trim($status));
+        if (!in_array($status, ['active', 'inactive', 'all'], true)) {
+            $status = 'active';
+        }
+
+        $activeWhere = match ($status) {
+            'inactive' => 'COALESCE(u.is_active, 1) = 0',
+            'all' => '1=1',
+            default => 'COALESCE(u.is_active, 1) = 1',
+        };
         $sql = 'SELECT COUNT(*)
                 FROM users u
                 WHERE u.deleted_at IS NULL
-                  AND COALESCE(u.is_active, 1) = 1
                   AND u.role = \'site_admin\'
+                  AND ' . $activeWhere . '
                   AND NOT EXISTS (
                     SELECT 1
                     FROM business_user_memberships m
@@ -215,19 +269,30 @@ final class User
         return (int) $stmt->fetchColumn();
     }
 
-    public static function indexListGlobal(string $search = '', int $limit = 25, int $offset = 0): array
+    public static function indexListGlobal(string $search = '', string $status = 'active', int $limit = 25, int $offset = 0): array
     {
         $query = trim($search);
+        $status = strtolower(trim($status));
+        if (!in_array($status, ['active', 'inactive', 'all'], true)) {
+            $status = 'active';
+        }
+
+        $activeWhere = match ($status) {
+            'inactive' => 'COALESCE(u.is_active, 1) = 0',
+            'all' => '1=1',
+            default => 'COALESCE(u.is_active, 1) = 1',
+        };
         $sql = "SELECT
                     u.id,
                     u.email,
                     u.first_name,
                     u.last_name,
-                    u.role
+                    u.role,
+                    COALESCE(u.is_active, 1) AS is_active
                 FROM users u
                 WHERE u.deleted_at IS NULL
-                  AND COALESCE(u.is_active, 1) = 1
                   AND u.role = 'site_admin'
+                  AND {$activeWhere}
                   AND NOT EXISTS (
                     SELECT 1
                     FROM business_user_memberships m
@@ -262,6 +327,27 @@ final class User
 
         $rows = $stmt->fetchAll();
         return is_array($rows) ? $rows : [];
+    }
+
+    public static function setActiveState(int $userId, bool $isActive, int $actorUserId): bool
+    {
+        $stmt = Database::connection()->prepare(
+            'UPDATE users
+             SET is_active = :is_active,
+                 updated_by = :updated_by,
+                 updated_at = NOW()
+             WHERE id = :id
+               AND deleted_at IS NULL
+             LIMIT 1'
+        );
+
+        $stmt->execute([
+            'is_active' => $isActive ? 1 : 0,
+            'updated_by' => $actorUserId > 0 ? $actorUserId : null,
+            'id' => $userId,
+        ]);
+
+        return $stmt->rowCount() > 0;
     }
 
     public static function displayName(array $user): string

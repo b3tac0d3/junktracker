@@ -5,6 +5,7 @@ $jobStatusSummary = is_array($jobStatusSummary ?? null) ? $jobStatusSummary : []
 $jobs = is_array($jobs ?? null) ? $jobs : [];
 $sales = is_array($sales ?? null) ? $sales : [];
 $purchases = is_array($purchases ?? null) ? $purchases : [];
+$contacts = is_array($contacts ?? null) ? $contacts : [];
 
 $displayName = trim(((string) ($client['first_name'] ?? '')) . ' ' . ((string) ($client['last_name'] ?? '')));
 if ($displayName === '') {
@@ -58,17 +59,22 @@ $secondaryCanTextClass = $secondaryCanTextRaw === null ? 'text-flag-neutral' : (
                 </li>
                 <li>
                     <a class="dropdown-item" href="<?= e(url('/jobs/create') . '?client_id=' . (string) ((int) ($client['id'] ?? 0))) ?>">
-                        <i class="fas fa-briefcase me-2"></i>Quick Add Job
+                        <i class="fas fa-briefcase me-2"></i>Add Job
                     </a>
                 </li>
                 <li>
                     <a class="dropdown-item" href="<?= e(url('/purchases/create') . '?client_id=' . (string) ((int) ($client['id'] ?? 0))) ?>">
-                        <i class="fas fa-cart-arrow-down me-2"></i>Quick Add Purchase
+                        <i class="fas fa-cart-arrow-down me-2"></i>Add Purchase
                     </a>
                 </li>
                 <li>
                     <a class="dropdown-item" href="<?= e(url('/tasks/create') . '?client_id=' . (string) ((int) ($client['id'] ?? 0))) ?>">
-                        <i class="fas fa-list-check me-2"></i>Quick Add Task
+                        <i class="fas fa-list-check me-2"></i>Add Task
+                    </a>
+                </li>
+                <li>
+                    <a class="dropdown-item" href="<?= e(url('/clients/' . (string) ((int) ($client['id'] ?? 0)) . '/contacts/create')) ?>">
+                        <i class="fas fa-phone-volume me-2"></i>Add Contact
                     </a>
                 </li>
             </ul>
@@ -304,6 +310,35 @@ $secondaryCanTextClass = $secondaryCanTextRaw === null ? 'text-flag-neutral' : (
         <strong><i class="fas fa-phone-volume me-2"></i>Client Contact Log</strong>
     </div>
     <div class="card-body">
-        <div class="record-empty">Contact log module scaffolded. Entries will appear here once implemented.</div>
+        <?php if ($contacts === []): ?>
+            <div class="record-empty">No contact records yet.</div>
+        <?php else: ?>
+            <div class="simple-list-table">
+                <?php foreach ($contacts as $contact): ?>
+                    <?php
+                    if (!is_array($contact)) {
+                        continue;
+                    }
+                    $contactType = trim((string) ($contact['contact_type'] ?? ''));
+                    $contactTypeLabel = $contactType === '' ? 'Contact' : ucwords(str_replace('_', ' ', strtolower($contactType)));
+                    $contactedAt = format_datetime((string) ($contact['contacted_at'] ?? null));
+                    $contactBy = trim((string) ($contact['created_by_name'] ?? ''));
+                    $contactNote = trim((string) ($contact['note'] ?? ''));
+                    ?>
+                    <div class="simple-list-row">
+                        <div class="simple-list-title"><?= e($contactTypeLabel) ?></div>
+                        <div class="simple-list-meta">
+                            <span><?= e($contactedAt) ?></span>
+                            <?php if ($contactBy !== ''): ?>
+                                <span>By <?= e($contactBy) ?></span>
+                            <?php endif; ?>
+                        </div>
+                        <?php if ($contactNote !== ''): ?>
+                            <div class="mt-1 muted"><?= e($contactNote) ?></div>
+                        <?php endif; ?>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+        <?php endif; ?>
     </div>
 </section>

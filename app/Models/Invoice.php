@@ -1036,6 +1036,10 @@ final class Invoice
         $defaultStatus = $type === 'estimate' ? 'draft' : 'unsent';
         $status = strtolower(trim((string) ($data['status'] ?? $defaultStatus)));
         $status = self::normalizeStatusForStorage($type, $status);
+        $invoiceNumber = trim((string) ($data['invoice_number'] ?? ''));
+        if ($invoiceNumber === '') {
+            $invoiceNumber = self::nextBusinessDocumentNumber($businessId, $type);
+        }
 
         $stmt = Database::connection()->prepare($sql);
         $stmt->execute([
@@ -1044,7 +1048,7 @@ final class Invoice
             'job_id' => (isset($data['job_id']) && (int) $data['job_id'] > 0) ? (int) $data['job_id'] : null,
             'type' => $type,
             'status' => $status,
-            'invoice_number' => trim((string) ($data['invoice_number'] ?? '')),
+            'invoice_number' => $invoiceNumber,
             'issue_date' => $data['issue_date'] ?? null,
             'due_date' => $data['due_date'] ?? null,
             'subtotal' => (float) ($data['subtotal'] ?? 0),
@@ -1091,6 +1095,10 @@ final class Invoice
         $defaultStatus = $type === 'estimate' ? 'draft' : 'unsent';
         $status = strtolower(trim((string) ($data['status'] ?? $defaultStatus)));
         $status = self::normalizeStatusForStorage($type, $status);
+        $invoiceNumber = trim((string) ($data['invoice_number'] ?? ''));
+        if ($invoiceNumber === '') {
+            $invoiceNumber = self::existingInvoiceNumber($businessId, $invoiceId);
+        }
 
         $stmt = Database::connection()->prepare($sql);
         return $stmt->execute([
@@ -1098,7 +1106,7 @@ final class Invoice
             'job_id' => (isset($data['job_id']) && (int) $data['job_id'] > 0) ? (int) $data['job_id'] : null,
             'type' => $type,
             'status' => $status,
-            'invoice_number' => trim((string) ($data['invoice_number'] ?? '')),
+            'invoice_number' => $invoiceNumber,
             'issue_date' => $data['issue_date'] ?? null,
             'due_date' => $data['due_date'] ?? null,
             'subtotal' => (float) ($data['subtotal'] ?? 0),
@@ -1251,6 +1259,121 @@ final class Invoice
 
         $stmt->execute($params);
         return $stmt->rowCount() > 0;
+    }
+
+    private static function existingInvoiceNumber(int $businessId, int $invoiceId): string
+    {
+        if (
+            $invoiceId <= 0
+            || !SchemaInspector::hasTable('invoices')
+            || !SchemaInspector::hasColumn('invoices', 'invoice_number')
+        ) {
+            return '';
+        }
+
+        $where = ['id = :invoice_id'];
+        if (SchemaInspector::hasColumn('invoices', 'business_id')) {
+            $where[] = 'business_id = :business_id';
+        }
+        if (SchemaInspector::hasColumn('invoices', 'deleted_at')) {
+            $where[] = 'deleted_at IS NULL';
+        }
+
+        $sql = 'SELECT COALESCE(NULLIF(TRIM(invoice_number), \'\'), \'\')
+                FROM invoices
+                WHERE ' . implode(' AND ', $where) . '
+                LIMIT 1';
+
+        $stmt = Database::connection()->prepare($sql);
+        $params = ['invoice_id' => $invoiceId];
+        if (SchemaInspector::hasColumn('invoices', 'business_id')) {
+            $params['business_id'] = $businessId;
+        }
+        $stmt->execute($params);
+        $value = $stmt->fetchColumn();
+        return is_string($value) ? trim($value) : '';
+    }
+
+    private static function nextBusinessDocumentNumber(int $businessId, string $type): string
+    {
+        if (
+            !SchemaInspector::hasTable('invoices')
+            || !SchemaInspector::hasColumn('invoices', 'invoice_number')
+            || !SchemaInspector::hasTable('businesses')
+        ) {
+            return '';
+        }
+
+        $type = strtolower(trim($type));
+        if (!in_array($type, ['estimate', 'invoice'], true)) {
+            $type = 'invoice';
+        }
+
+        $seedColumn = $type === 'estimate' ? 'estimate_number_start' : 'invoice_number_start';
+        if (!SchemaInspector::hasColumn('businesses', $seedColumn)) {
+            return '';
+        }
+
+        $seedStmt = Database::connection()->prepare(
+            'SELECT COALESCE(NULLIF(TRIM(' . $seedColumn . '), \'\'), \'\')
+             FROM businesses
+             WHERE id = :business_id
+               AND deleted_at IS NULL
+             LIMIT 1'
+        );
+        $seedStmt->execute(['business_id' => $businessId]);
+        $seed = trim((string) ($seedStmt->fetchColumn() ?: ''));
+        if ($seed === '') {
+            return '';
+        }
+
+        $where = ['i.invoice_number IS NOT NULL', "TRIM(i.invoice_number) <> ''", 'i.invoice_number LIKE :seed_like'];
+        if (SchemaInspector::hasColumn('invoices', 'business_id')) {
+            $where[] = 'i.business_id = :business_id';
+        }
+        if (SchemaInspector::hasColumn('invoices', 'type')) {
+            $where[] = "LOWER(COALESCE(NULLIF(TRIM(i.type), ''), 'invoice')) = :doc_type";
+        }
+        if (SchemaInspector::hasColumn('invoices', 'deleted_at')) {
+            $where[] = 'i.deleted_at IS NULL';
+        }
+
+        $sql = 'SELECT i.invoice_number
+                FROM invoices i
+                WHERE ' . implode(' AND ', $where);
+        $stmt = Database::connection()->prepare($sql);
+        $params = ['seed_like' => $seed . '%'];
+        if (SchemaInspector::hasColumn('invoices', 'business_id')) {
+            $params['business_id'] = $businessId;
+        }
+        if (SchemaInspector::hasColumn('invoices', 'type')) {
+            $params['doc_type'] = $type;
+        }
+        $stmt->execute($params);
+
+        $maxSuffix = 0;
+        $rows = $stmt->fetchAll();
+        if (is_array($rows)) {
+            foreach ($rows as $row) {
+                if (!is_array($row)) {
+                    continue;
+                }
+                $number = trim((string) ($row['invoice_number'] ?? ''));
+                if ($number === '' || !str_starts_with($number, $seed)) {
+                    continue;
+                }
+                $suffix = substr($number, strlen($seed));
+                if ($suffix === '') {
+                    $maxSuffix = max($maxSuffix, 0);
+                    continue;
+                }
+                if (ctype_digit($suffix)) {
+                    $maxSuffix = max($maxSuffix, (int) $suffix);
+                }
+            }
+        }
+
+        return $seed . (string) ($maxSuffix + 1);
     }
 
     private static function normalizeStatusForStorage(string $type, string $status): string

@@ -114,6 +114,19 @@ foreach ($invoiceItemTypes as $typeRow) {
 $itemTypeNames = array_keys($itemTypeDefaults);
 natcasesort($itemTypeNames);
 $itemTypeNames = array_values($itemTypeNames);
+
+$from = strtolower(trim((string) ($_GET['from'] ?? ($_POST['from'] ?? ''))));
+$jobBackId = (int) ($_GET['job_id'] ?? ($_POST['job_id'] ?? $jobId));
+$fromJob = $from === 'job' && $jobBackId > 0;
+$headerBackUrl = $fromJob
+    ? url('/jobs/' . (string) $jobBackId)
+    : url('/billing');
+$headerBackLabel = $fromJob ? 'Back to Job' : 'Back to Billing';
+$cancelUrl = $fromJob
+    ? url('/jobs/' . (string) $jobBackId)
+    : ($mode === 'edit' && isset($invoiceId)
+        ? url('/billing/' . (string) ((int) $invoiceId))
+        : url('/billing'));
 ?>
 
 <div class="page-header d-flex flex-wrap align-items-end justify-content-between gap-2">
@@ -122,7 +135,7 @@ $itemTypeNames = array_values($itemTypeNames);
         <p class="muted"><?= e($documentType === 'estimate' ? 'Estimate form' : 'Invoice form') ?></p>
     </div>
     <div>
-        <a class="btn btn-outline-secondary" href="<?= e(url('/billing')) ?>">Back to Billing</a>
+        <a class="btn btn-outline-secondary" href="<?= e($headerBackUrl) ?>"><?= e($headerBackLabel) ?></a>
     </div>
 </div>
 
@@ -131,6 +144,9 @@ $itemTypeNames = array_values($itemTypeNames);
     <input type="hidden" name="type" value="<?= e($documentType) ?>">
     <input type="hidden" name="client_id" value="<?= e((string) $clientId) ?>">
     <input type="hidden" name="job_id" value="<?= e((string) $jobId) ?>">
+    <?php if ($fromJob): ?>
+        <input type="hidden" name="from" value="job">
+    <?php endif; ?>
     <section class="card index-card index-card-overflow-visible mb-3">
         <div class="card-header index-card-header">
             <strong><i class="fas fa-file-lines me-2"></i><?= e($documentType === 'estimate' ? 'Estimate Details' : 'Invoice Details') ?></strong>
@@ -282,7 +298,7 @@ $itemTypeNames = array_values($itemTypeNames);
 
     <div class="d-flex gap-2">
         <button class="btn btn-primary" type="submit" <?= ($clientId <= 0 || $jobId <= 0) ? 'disabled' : '' ?>><?= e($mode === 'edit' ? 'Save Changes' : 'Create ' . ucfirst($documentType)) ?></button>
-        <a class="btn btn-outline-secondary" href="<?= e($mode === 'edit' && isset($invoiceId) ? url('/billing/' . (string) ((int) $invoiceId)) : url('/billing')) ?>">Cancel</a>
+        <a class="btn btn-outline-secondary" href="<?= e($cancelUrl) ?>">Cancel</a>
     </div>
 </form>
 

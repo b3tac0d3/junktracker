@@ -201,7 +201,6 @@ final class AdminInvoiceItemTypesController extends Controller
             'default_unit_price' => '0.00',
             'default_taxable' => '1',
             'default_note' => '',
-            'sort_order' => '100',
             'is_active' => '1',
         ];
     }
@@ -213,7 +212,6 @@ final class AdminInvoiceItemTypesController extends Controller
             'default_unit_price' => number_format((float) ($type['default_unit_price'] ?? 0), 2, '.', ''),
             'default_taxable' => ((int) ($type['default_taxable'] ?? 0)) === 1 ? '1' : '0',
             'default_note' => trim((string) ($type['default_note'] ?? '')),
-            'sort_order' => (string) ((int) ($type['sort_order'] ?? 100)),
             'is_active' => ((int) ($type['is_active'] ?? 1)) === 1 ? '1' : '0',
         ];
     }
@@ -225,7 +223,6 @@ final class AdminInvoiceItemTypesController extends Controller
             'default_unit_price' => trim((string) ($input['default_unit_price'] ?? '0')),
             'default_taxable' => ((string) ($input['default_taxable'] ?? '0')) === '1' ? '1' : '0',
             'default_note' => trim((string) ($input['default_note'] ?? '')),
-            'sort_order' => trim((string) ($input['sort_order'] ?? '100')),
             'is_active' => ((string) ($input['is_active'] ?? '1')) === '1' ? '1' : '0',
         ];
     }
@@ -244,10 +241,6 @@ final class AdminInvoiceItemTypesController extends Controller
             $errors['default_unit_price'] = 'Default price must be zero or greater.';
         }
 
-        if (!is_numeric($form['sort_order']) || (int) $form['sort_order'] < 0) {
-            $errors['sort_order'] = 'Sort order must be zero or greater.';
-        }
-
         return $errors;
     }
 
@@ -258,7 +251,6 @@ final class AdminInvoiceItemTypesController extends Controller
             'default_unit_price' => round((float) $form['default_unit_price'], 2),
             'default_taxable' => $form['default_taxable'] === '1' ? 1 : 0,
             'default_note' => $form['default_note'],
-            'sort_order' => max(0, (int) $form['sort_order']),
             'is_active' => $form['is_active'] === '1' ? 1 : 0,
         ];
     }

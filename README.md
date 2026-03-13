@@ -30,6 +30,11 @@ Run in this order:
 6. `database/migrations/2026-02-27_v3_phase_b_client_contact_flags.sql`
 7. `database/migrations/2026-02-27_v3_phase_b_client_phone_flags.sql`
 
+Live release rule:
+
+- Release bundles should include only **new/current migrations** needed for that release.
+- Do not re-copy older migrations that were already shipped in previous live releases.
+
 ## Local login (seed)
 
 - Site admin: `siteadmin@junktracker.local` / `ChangeMe123!`

@@ -38,17 +38,16 @@ final class InvoiceItemType
 
         $where[] = "(:query = '' OR name LIKE :query_like_1 OR COALESCE(default_note, '') LIKE :query_like_2 OR CAST(id AS CHAR) LIKE :query_like_3)";
 
-        $sql = 'SELECT
+                $sql = 'SELECT
                     id,
                     name,
                     default_unit_price,
                     default_taxable,
                     default_note,
-                    is_active,
-                    sort_order
+                    is_active
                 FROM invoice_item_types
                 WHERE ' . implode(' AND ', $where) . '
-                ORDER BY sort_order ASC, name ASC, id ASC
+                ORDER BY name ASC, id ASC
                 LIMIT :row_limit
                 OFFSET :row_offset';
 
@@ -115,12 +114,12 @@ final class InvoiceItemType
         }
 
         $stmt = Database::connection()->prepare(
-            'SELECT id, name, default_unit_price, default_taxable, default_note, sort_order
+            'SELECT id, name, default_unit_price, default_taxable, default_note
              FROM invoice_item_types
              WHERE business_id = :business_id
                AND deleted_at IS NULL
                AND is_active = 1
-             ORDER BY sort_order ASC, name ASC, id ASC'
+             ORDER BY name ASC, id ASC'
         );
         $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
         $stmt->execute();
@@ -136,7 +135,7 @@ final class InvoiceItemType
         }
 
         $stmt = Database::connection()->prepare(
-            'SELECT id, name, default_unit_price, default_taxable, default_note, sort_order, is_active
+            'SELECT id, name, default_unit_price, default_taxable, default_note, is_active
              FROM invoice_item_types
              WHERE business_id = :business_id
                AND id = :id
@@ -192,7 +191,6 @@ final class InvoiceItemType
                 default_unit_price,
                 default_taxable,
                 default_note,
-                sort_order,
                 is_active,
                 created_by,
                 updated_by,
@@ -204,7 +202,6 @@ final class InvoiceItemType
                 :default_unit_price,
                 :default_taxable,
                 :default_note,
-                :sort_order,
                 :is_active,
                 :created_by,
                 :updated_by,
@@ -219,7 +216,6 @@ final class InvoiceItemType
             'default_unit_price' => (float) ($payload['default_unit_price'] ?? 0),
             'default_taxable' => !empty($payload['default_taxable']) ? 1 : 0,
             'default_note' => trim((string) ($payload['default_note'] ?? '')),
-            'sort_order' => (int) ($payload['sort_order'] ?? 100),
             'is_active' => !empty($payload['is_active']) ? 1 : 0,
             'created_by' => $actorUserId > 0 ? $actorUserId : null,
             'updated_by' => $actorUserId > 0 ? $actorUserId : null,
@@ -236,7 +232,6 @@ final class InvoiceItemType
                  default_unit_price = :default_unit_price,
                  default_taxable = :default_taxable,
                  default_note = :default_note,
-                 sort_order = :sort_order,
                  is_active = :is_active,
                  updated_by = :updated_by,
                  updated_at = NOW()
@@ -251,7 +246,6 @@ final class InvoiceItemType
             'default_unit_price' => (float) ($payload['default_unit_price'] ?? 0),
             'default_taxable' => !empty($payload['default_taxable']) ? 1 : 0,
             'default_note' => trim((string) ($payload['default_note'] ?? '')),
-            'sort_order' => (int) ($payload['sort_order'] ?? 100),
             'is_active' => !empty($payload['is_active']) ? 1 : 0,
             'updated_by' => $actorUserId > 0 ? $actorUserId : null,
             'business_id' => $businessId,
