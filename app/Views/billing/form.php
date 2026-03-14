@@ -29,6 +29,24 @@ if ($invoiceStatusOptions === []) {
         'paid_in_full' => 'Paid in Full',
     ];
 }
+$paymentCategoryOptions = is_array($paymentCategoryOptions ?? null) ? $paymentCategoryOptions : [];
+if ($paymentCategoryOptions === []) {
+    $paymentCategoryOptions = [
+        'deposit' => 'Deposit',
+        'payment' => 'Payment',
+    ];
+}
+$paymentTypeOptions = is_array($paymentTypeOptions ?? null) ? $paymentTypeOptions : [];
+if ($paymentTypeOptions === []) {
+    $paymentTypeOptions = [
+        'check' => 'Check',
+        'cc' => 'CC',
+        'cash' => 'Cash',
+        'venmo' => 'Venmo',
+        'cashapp' => 'Cashapp',
+        'other' => 'Other',
+    ];
+}
 
 $normalizeStatusMap = static function (array $options): array {
     $normalized = [];
@@ -43,6 +61,8 @@ $normalizeStatusMap = static function (array $options): array {
 };
 $estimateStatusOptions = $normalizeStatusMap($estimateStatusOptions);
 $invoiceStatusOptions = $normalizeStatusMap($invoiceStatusOptions);
+$paymentCategoryOptions = $normalizeStatusMap($paymentCategoryOptions);
+$paymentTypeOptions = $normalizeStatusMap($paymentTypeOptions);
 $statusOptions = $documentType === 'estimate' ? $estimateStatusOptions : $invoiceStatusOptions;
 $selectedStatus = strtolower(trim((string) ($form['status'] ?? ($documentType === 'estimate' ? 'draft' : 'unsent'))));
 if ($documentType === 'invoice') {
@@ -85,6 +105,18 @@ foreach ($jobOptions as $job) {
 
 $dateLabel = $documentType === 'estimate' ? 'Estimate Date' : 'Invoice Date';
 $dueLabel = $documentType === 'estimate' ? 'Expire Date' : 'Due Date';
+$inlinePaymentDate = trim((string) ($form['payment_paid_date'] ?? date('Y-m-d')));
+$inlinePaymentCategory = strtolower(trim((string) ($form['payment_type'] ?? 'payment')));
+$inlinePaymentMethod = strtolower(trim((string) ($form['payment_method'] ?? 'cash')));
+$inlinePaymentReference = trim((string) ($form['payment_reference_number'] ?? ''));
+$inlinePaymentAmount = trim((string) ($form['payment_amount'] ?? ''));
+$inlinePaymentNote = trim((string) ($form['payment_note'] ?? ''));
+if (!array_key_exists($inlinePaymentCategory, $paymentCategoryOptions)) {
+    $inlinePaymentCategory = (string) (array_key_first($paymentCategoryOptions) ?? 'payment');
+}
+if (!array_key_exists($inlinePaymentMethod, $paymentTypeOptions)) {
+    $inlinePaymentMethod = (string) (array_key_first($paymentTypeOptions) ?? 'cash');
+}
 $items = is_array($form['items'] ?? null) ? $form['items'] : [];
 if ($items === []) {
     $items = [[
@@ -295,6 +327,57 @@ $cancelUrl = $fromJob
             </div>
         </div>
     </section>
+
+    <?php if ($documentType === 'invoice'): ?>
+        <section class="card index-card mb-3">
+            <div class="card-header index-card-header">
+                <strong><i class="fas fa-money-check-dollar me-2"></i>Optional Payment / Deposit</strong>
+            </div>
+            <div class="card-body">
+                <p class="small muted mb-3">If this invoice already has money received, add it here and it will post as a payment when you save.</p>
+                <div class="row g-3">
+                    <div class="col-12 col-lg-3">
+                        <label class="form-label fw-semibold" for="inline-payment-date">Date</label>
+                        <input id="inline-payment-date" type="date" name="payment_paid_date" class="form-control <?= $hasError('payment_paid_date') ? 'is-invalid' : '' ?>" value="<?= e($inlinePaymentDate) ?>" />
+                        <?php if ($hasError('payment_paid_date')): ?><div class="invalid-feedback d-block"><?= e($fieldError('payment_paid_date')) ?></div><?php endif; ?>
+                    </div>
+                    <div class="col-12 col-lg-3">
+                        <label class="form-label fw-semibold" for="inline-payment-category">Type</label>
+                        <select id="inline-payment-category" name="payment_type" class="form-select <?= $hasError('payment_type') ? 'is-invalid' : '' ?>">
+                            <?php foreach ($paymentCategoryOptions as $value => $label): ?>
+                                <option value="<?= e((string) $value) ?>" <?= $inlinePaymentCategory === (string) $value ? 'selected' : '' ?>><?= e((string) $label) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                        <?php if ($hasError('payment_type')): ?><div class="invalid-feedback d-block"><?= e($fieldError('payment_type')) ?></div><?php endif; ?>
+                    </div>
+                    <div class="col-12 col-lg-3">
+                        <label class="form-label fw-semibold" for="inline-payment-method">Method</label>
+                        <select id="inline-payment-method" name="payment_method" class="form-select <?= $hasError('payment_method') ? 'is-invalid' : '' ?>">
+                            <?php foreach ($paymentTypeOptions as $value => $label): ?>
+                                <option value="<?= e((string) $value) ?>" <?= $inlinePaymentMethod === (string) $value ? 'selected' : '' ?>><?= e((string) $label) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                        <?php if ($hasError('payment_method')): ?><div class="invalid-feedback d-block"><?= e($fieldError('payment_method')) ?></div><?php endif; ?>
+                    </div>
+                    <div class="col-12 col-lg-3">
+                        <label class="form-label fw-semibold" for="inline-payment-amount">Amount</label>
+                        <input id="inline-payment-amount" type="number" step="0.01" min="0" name="payment_amount" class="form-control <?= $hasError('payment_amount') ? 'is-invalid' : '' ?>" value="<?= e($inlinePaymentAmount) ?>" placeholder="Optional" />
+                        <?php if ($hasError('payment_amount')): ?><div class="invalid-feedback d-block"><?= e($fieldError('payment_amount')) ?></div><?php endif; ?>
+                    </div>
+                    <div class="col-12 col-lg-6">
+                        <label class="form-label fw-semibold" for="inline-payment-reference">Reference Number</label>
+                        <input id="inline-payment-reference" type="text" name="payment_reference_number" class="form-control <?= $hasError('payment_reference_number') ? 'is-invalid' : '' ?>" maxlength="120" value="<?= e($inlinePaymentReference) ?>" placeholder="Check #, Venmo ID, etc" />
+                        <?php if ($hasError('payment_reference_number')): ?><div class="invalid-feedback d-block"><?= e($fieldError('payment_reference_number')) ?></div><?php endif; ?>
+                    </div>
+                    <div class="col-12 col-lg-6">
+                        <label class="form-label fw-semibold" for="inline-payment-note">Payment Note</label>
+                        <input id="inline-payment-note" type="text" name="payment_note" class="form-control <?= $hasError('payment_note') ? 'is-invalid' : '' ?>" maxlength="255" value="<?= e($inlinePaymentNote) ?>" placeholder="Optional note" />
+                        <?php if ($hasError('payment_note')): ?><div class="invalid-feedback d-block"><?= e($fieldError('payment_note')) ?></div><?php endif; ?>
+                    </div>
+                </div>
+            </div>
+        </section>
+    <?php endif; ?>
 
     <div class="d-flex gap-2">
         <button class="btn btn-primary" type="submit" <?= ($clientId <= 0 || $jobId <= 0) ? 'disabled' : '' ?>><?= e($mode === 'edit' ? 'Save Changes' : 'Create ' . ucfirst($documentType)) ?></button>

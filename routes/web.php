@@ -15,6 +15,7 @@ use App\Controllers\ExpensesController;
 use App\Controllers\HomeController;
 use App\Controllers\JobsController;
 use App\Controllers\PurchasesController;
+use App\Controllers\ReportsController;
 use App\Controllers\SettingsController;
 use App\Controllers\SiteAdminController;
 use App\Controllers\SalesController;
@@ -136,6 +137,8 @@ $router->get('/sales/{id}/edit', [SalesController::class, 'edit']);
 $router->post('/sales/{id}/update', [SalesController::class, 'update']);
 $router->post('/sales/{id}/delete', [SalesController::class, 'delete']);
 $router->get('/sales/{id}', [SalesController::class, 'show']);
+
+$router->get('/reports', [ReportsController::class, 'index']);
 
 $router->get('/purchases', [PurchasesController::class, 'index']);
 $router->get('/purchases/create', [PurchasesController::class, 'create']);

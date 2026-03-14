@@ -2,7 +2,7 @@
 $pageTitle = isset($pageTitle) ? (string) $pageTitle : 'JunkTracker';
 $publicPage = (bool) ($publicPage ?? false);
 $user = auth_user();
-$appVersion = (string) config('app.version', '3.2.2 (beta)');
+$appVersion = (string) config('app.version', '3.3 (beta)');
 $workspaceRole = workspace_role();
 $businessId = current_business_id();
 $isGlobalSiteAdminContext = is_site_admin() && $businessId <= 0;
@@ -122,6 +122,7 @@ $globalSearchQuery = trim((string) ($_GET['global_q'] ?? ''));
                             <a class="nav-link jt-nav-sublink" href="<?= e(url('/time-tracking/punch-board')) ?>"><div class="sb-nav-link-icon"><i class="fas fa-user-clock"></i></div>Punch Board</a> -->
                             <a class="nav-link" href="<?= e(url('/billing')) ?>"><div class="sb-nav-link-icon"><i class="fas fa-file-invoice-dollar"></i></div>Billing</a>
                             <a class="nav-link" href="<?= e(url('/expenses')) ?>"><div class="sb-nav-link-icon"><i class="fas fa-receipt"></i></div>Expenses</a>
+                            <a class="nav-link" href="<?= e(url('/reports')) ?>"><div class="sb-nav-link-icon"><i class="fas fa-chart-line"></i></div>Reports</a>
                             <a class="nav-link collapsed" href="#" data-bs-toggle="collapse" data-bs-target="#collapseTimeTracking" aria-expanded="false" aria-controls="collapseCustomers">
                                 <div class="sb-nav-link-icon"><i class="fas fa-stopwatch"></i></div>
                                 Time Tracking

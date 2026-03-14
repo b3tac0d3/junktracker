@@ -1170,7 +1170,61 @@ final class Invoice
         }
 
         $stmt->execute($params);
-        return $stmt->rowCount() > 0;
+        if ($stmt->rowCount() > 0) {
+            return true;
+        }
+
+        $checkSql = 'SELECT 1
+                     FROM invoices
+                     WHERE ' . implode(' AND ', $whereParts) . '
+                     LIMIT 1';
+        $checkStmt = Database::connection()->prepare($checkSql);
+        $checkParams = ['invoice_id' => $invoiceId];
+        if (SchemaInspector::hasColumn('invoices', 'business_id')) {
+            $checkParams['business_id'] = $businessId;
+        }
+        $checkStmt->execute($checkParams);
+
+        return (bool) $checkStmt->fetchColumn();
+    }
+
+    public static function remainingBalanceForInvoice(int $businessId, int $invoiceId): float
+    {
+        if ($invoiceId <= 0) {
+            return 0.0;
+        }
+
+        $invoice = self::findForBusiness($businessId, $invoiceId);
+        if ($invoice === null || strtolower(trim((string) ($invoice['type'] ?? 'invoice'))) !== 'invoice') {
+            return 0.0;
+        }
+
+        $invoiceTotal = max(0.0, (float) ($invoice['total'] ?? 0));
+        if ($invoiceTotal <= 0.0 || !SchemaInspector::hasTable('payments')) {
+            return $invoiceTotal;
+        }
+
+        $amountSql = SchemaInspector::hasColumn('payments', 'amount') ? 'p.amount' : '0';
+        $where = ['p.invoice_id = :invoice_id'];
+        if (SchemaInspector::hasColumn('payments', 'business_id')) {
+            $where[] = 'p.business_id = :business_id';
+        }
+        if (SchemaInspector::hasColumn('payments', 'deleted_at')) {
+            $where[] = 'p.deleted_at IS NULL';
+        }
+
+        $sql = "SELECT COALESCE(SUM({$amountSql}), 0) AS paid_total
+                FROM payments p
+                WHERE " . implode(' AND ', $where);
+        $stmt = Database::connection()->prepare($sql);
+        $params = ['invoice_id' => $invoiceId];
+        if (SchemaInspector::hasColumn('payments', 'business_id')) {
+            $params['business_id'] = $businessId;
+        }
+        $stmt->execute($params);
+        $paidTotal = (float) ($stmt->fetchColumn() ?: 0);
+
+        return round(max(0.0, $invoiceTotal - $paidTotal), 2);
     }
 
     public static function softDelete(int $businessId, int $invoiceId, int $actorUserId): bool
@@ -1383,7 +1437,7 @@ final class Invoice
             $type = 'invoice';
         }
 
-        $status = strtolower(trim($status));
+        $status = self::normalizeStatusToken($status);
         if ($status === '') {
             $status = $type === 'estimate' ? 'draft' : 'unsent';
         }
@@ -1393,8 +1447,17 @@ final class Invoice
             return $status;
         }
 
-        if (in_array($status, $allowed, true)) {
-            return $status;
+        $allowedMap = [];
+        foreach ($allowed as $rawAllowed) {
+            $normalizedAllowed = self::normalizeStatusToken($rawAllowed);
+            if ($normalizedAllowed === '') {
+                continue;
+            }
+            $allowedMap[$normalizedAllowed] = $rawAllowed;
+        }
+
+        if (isset($allowedMap[$status])) {
+            return $allowedMap[$status];
         }
 
         if ($type === 'invoice') {
@@ -1403,8 +1466,11 @@ final class Invoice
                 'partially_paid' => 'partial',
                 'paid_in_full' => 'paid',
             ];
-            if (isset($legacyMap[$status]) && in_array($legacyMap[$status], $allowed, true)) {
-                return $legacyMap[$status];
+            if (isset($legacyMap[$status])) {
+                $legacyCandidate = self::normalizeStatusToken($legacyMap[$status]);
+                if (isset($allowedMap[$legacyCandidate])) {
+                    return $allowedMap[$legacyCandidate];
+                }
             }
         }
 
@@ -1413,12 +1479,26 @@ final class Invoice
             : ['unsent', 'sent', 'partially_paid', 'paid_in_full', 'draft', 'partial', 'paid'];
 
         foreach ($preferred as $candidate) {
-            if (in_array($candidate, $allowed, true)) {
-                return $candidate;
+            $normalizedCandidate = self::normalizeStatusToken($candidate);
+            if (isset($allowedMap[$normalizedCandidate])) {
+                return $allowedMap[$normalizedCandidate];
             }
         }
 
         return $allowed[0];
+    }
+
+    private static function normalizeStatusToken(string $value): string
+    {
+        $normalized = strtolower(trim($value));
+        if ($normalized === '') {
+            return '';
+        }
+
+        $normalized = preg_replace('/[\s\-]+/', '_', $normalized) ?? $normalized;
+        $normalized = preg_replace('/[^a-z0-9_]+/', '', $normalized) ?? $normalized;
+        $normalized = preg_replace('/_+/', '_', $normalized) ?? $normalized;
+        return trim($normalized, '_');
     }
 
     /**

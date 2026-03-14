@@ -69,6 +69,9 @@ final class BillingController extends Controller
             if ($requestedType === 'estimate') {
                 $form['issue_date'] = date('Y-m-d');
                 $form['due_date'] = date('Y-m-d', strtotime('+30 days'));
+            } else {
+                $form['issue_date'] = date('Y-m-d');
+                $form['due_date'] = $form['issue_date'];
             }
         }
 
@@ -110,6 +113,8 @@ final class BillingController extends Controller
             $form['type'] = 'invoice';
             $form['status'] = (string) (array_key_first($this->invoiceStatusOptions()) ?? 'unsent');
             $form['invoice_number'] = '';
+            $form['issue_date'] = date('Y-m-d');
+            $form['due_date'] = $form['issue_date'];
             $documentType = 'invoice';
         }
 
@@ -125,6 +130,8 @@ final class BillingController extends Controller
             'documentType' => $documentType,
             'estimateStatusOptions' => $this->estimateStatusOptions(),
             'invoiceStatusOptions' => $this->invoiceStatusOptions(),
+            'paymentCategoryOptions' => $this->paymentCategoryOptions(),
+            'paymentTypeOptions' => $this->paymentTypeOptions(),
         ]);
     }
 
@@ -156,6 +163,8 @@ final class BillingController extends Controller
                 'documentType' => $form['type'],
                 'estimateStatusOptions' => $this->estimateStatusOptions(),
                 'invoiceStatusOptions' => $this->invoiceStatusOptions(),
+                'paymentCategoryOptions' => $this->paymentCategoryOptions(),
+                'paymentTypeOptions' => $this->paymentTypeOptions(),
             ]);
             return;
         }
@@ -165,6 +174,9 @@ final class BillingController extends Controller
         Invoice::replaceLineItems($businessId, $invoiceId, $form['items'], $actorUserId);
         if ($form['type'] === 'invoice') {
             $syncJobId = (int) ($form['job_id'] ?? 0);
+            if ($this->hasInlinePayment($form)) {
+                Invoice::createPayment($businessId, $this->inlinePaymentPayloadForSave($form, $invoiceId), $actorUserId);
+            }
             if ($syncJobId > 0) {
                 Invoice::syncInvoicePaymentStatusesForJob($businessId, $syncJobId, $actorUserId);
             }
@@ -205,6 +217,8 @@ final class BillingController extends Controller
             'documentType' => strtolower((string) ($invoice['type'] ?? 'invoice')) === 'estimate' ? 'estimate' : 'invoice',
             'estimateStatusOptions' => $this->estimateStatusOptions(),
             'invoiceStatusOptions' => $this->invoiceStatusOptions(),
+            'paymentCategoryOptions' => $this->paymentCategoryOptions(),
+            'paymentTypeOptions' => $this->paymentTypeOptions(),
         ]);
     }
 
@@ -252,6 +266,8 @@ final class BillingController extends Controller
                 'documentType' => $form['type'],
                 'estimateStatusOptions' => $this->estimateStatusOptions(),
                 'invoiceStatusOptions' => $this->invoiceStatusOptions(),
+                'paymentCategoryOptions' => $this->paymentCategoryOptions(),
+                'paymentTypeOptions' => $this->paymentTypeOptions(),
             ]);
             return;
         }
@@ -261,6 +277,9 @@ final class BillingController extends Controller
         $previousJobId = max(0, (int) ($invoice['job_id'] ?? 0));
         Invoice::update($businessId, $invoiceId, $this->payloadForSave($form), $actorUserId);
         Invoice::replaceLineItems($businessId, $invoiceId, $form['items'], $actorUserId);
+        if ($form['type'] === 'invoice' && $this->hasInlinePayment($form)) {
+            Invoice::createPayment($businessId, $this->inlinePaymentPayloadForSave($form, $invoiceId), $actorUserId);
+        }
         if ($previousType === 'invoice' && $previousJobId > 0) {
             Invoice::syncInvoicePaymentStatusesForJob($businessId, $previousJobId, $actorUserId);
         }
@@ -386,7 +405,7 @@ final class BillingController extends Controller
             $type = 'invoice';
         }
 
-        $status = strtolower(trim((string) ($_POST['status'] ?? '')));
+        $status = $this->normalizeOptionKey((string) ($_POST['status'] ?? ''));
         $allowedStatuses = $type === 'estimate'
             ? array_keys($this->estimateStatusOptions())
             : array_keys($this->invoiceStatusOptions());
@@ -434,11 +453,16 @@ final class BillingController extends Controller
             $invoiceId = (int) ($invoiceOptions[0]['id'] ?? 0);
         }
 
+        $defaultAmount = '';
+        if ($invoiceId > 0) {
+            $defaultAmount = number_format(Invoice::remainingBalanceForInvoice($businessId, $invoiceId), 2, '.', '');
+        }
+
         $this->render('billing/payment_form', [
             'pageTitle' => 'Add Payment',
             'mode' => 'create',
             'actionUrl' => url('/billing/payments'),
-            'form' => $this->defaultPaymentForm($invoiceId),
+            'form' => $this->defaultPaymentForm($invoiceId, $defaultAmount),
             'errors' => [],
             'invoiceOptions' => $invoiceOptions,
             'paymentCategoryOptions' => $this->paymentCategoryOptions(),
@@ -728,20 +752,27 @@ final class BillingController extends Controller
     private function defaultForm(): array
     {
         $invoiceStatuses = array_keys($this->invoiceStatusOptions());
+        $today = date('Y-m-d');
         return [
             'type' => 'invoice',
             'status' => (string) ($invoiceStatuses[0] ?? 'unsent'),
             'invoice_number' => '',
             'client_id' => '',
             'job_id' => '',
-            'issue_date' => '',
-            'due_date' => '',
+            'issue_date' => $today,
+            'due_date' => $today,
             'subtotal' => '0.00',
             'tax_rate' => '0',
             'tax_amount' => '0.00',
             'total' => '0.00',
             'customer_note' => '',
             'internal_note' => '',
+            'payment_paid_date' => $today,
+            'payment_type' => 'payment',
+            'payment_method' => 'cash',
+            'payment_reference_number' => '',
+            'payment_amount' => '',
+            'payment_note' => '',
             'items' => [],
         ];
     }
@@ -803,15 +834,16 @@ final class BillingController extends Controller
         return $this->selectValueMap('payment_type', $fallback);
     }
 
-    private function defaultPaymentForm(int $invoiceId = 0): array
+    private function defaultPaymentForm(int $invoiceId = 0, string $amount = ''): array
     {
+        $normalizedAmount = trim($amount);
         return [
             'invoice_id' => $invoiceId > 0 ? (string) $invoiceId : '',
             'paid_date' => date('Y-m-d'),
             'payment_type' => 'payment',
             'method' => 'cash',
             'reference_number' => '',
-            'amount' => '',
+            'amount' => $normalizedAmount,
             'note' => '',
         ];
     }
@@ -827,8 +859,8 @@ final class BillingController extends Controller
         return [
             'invoice_id' => (string) ((int) ($payment['invoice_id'] ?? 0)),
             'paid_date' => $paidDate,
-            'payment_type' => strtolower(trim((string) ($payment['payment_type'] ?? 'payment'))),
-            'method' => strtolower(trim((string) ($payment['method'] ?? 'cash'))),
+            'payment_type' => $this->normalizeOptionKey((string) ($payment['payment_type'] ?? 'payment')),
+            'method' => $this->normalizeOptionKey((string) ($payment['method'] ?? 'cash')),
             'reference_number' => trim((string) ($payment['reference_number'] ?? '')),
             'amount' => number_format((float) ($payment['amount'] ?? 0), 2, '.', ''),
             'note' => trim((string) ($payment['note'] ?? '')),
@@ -840,11 +872,35 @@ final class BillingController extends Controller
         return [
             'invoice_id' => trim((string) ($input['invoice_id'] ?? '')),
             'paid_date' => trim((string) ($input['paid_date'] ?? '')),
-            'payment_type' => strtolower(trim((string) ($input['payment_type'] ?? 'payment'))),
-            'method' => strtolower(trim((string) ($input['method'] ?? 'cash'))),
+            'payment_type' => $this->normalizeOptionKey((string) ($input['payment_type'] ?? 'payment')),
+            'method' => $this->normalizeOptionKey((string) ($input['method'] ?? 'cash')),
             'reference_number' => trim((string) ($input['reference_number'] ?? '')),
             'amount' => trim((string) ($input['amount'] ?? '')),
             'note' => trim((string) ($input['note'] ?? '')),
+        ];
+    }
+
+    private function hasInlinePayment(array $form): bool
+    {
+        $amountRaw = trim((string) ($form['payment_amount'] ?? ''));
+        if ($amountRaw === '' || !is_numeric($amountRaw)) {
+            return false;
+        }
+
+        return (float) $amountRaw > 0;
+    }
+
+    private function inlinePaymentPayloadForSave(array $form, int $invoiceId): array
+    {
+        $paidDate = trim((string) ($form['payment_paid_date'] ?? ''));
+        return [
+            'invoice_id' => $invoiceId,
+            'paid_at' => $paidDate !== '' ? ($paidDate . ' 12:00:00') : null,
+            'payment_type' => $this->normalizeOptionKey((string) ($form['payment_type'] ?? 'payment')),
+            'method' => $this->normalizeOptionKey((string) ($form['payment_method'] ?? 'cash')),
+            'reference_number' => trim((string) ($form['payment_reference_number'] ?? '')),
+            'amount' => max(0.0, (float) ($form['payment_amount'] ?? 0)),
+            'note' => trim((string) ($form['payment_note'] ?? '')),
         ];
     }
 
@@ -895,8 +951,8 @@ final class BillingController extends Controller
         return [
             'invoice_id' => (int) ($form['invoice_id'] ?? 0),
             'paid_at' => $paidDate !== '' ? ($paidDate . ' 12:00:00') : null,
-            'payment_type' => strtolower(trim((string) ($form['payment_type'] ?? 'payment'))),
-            'method' => strtolower(trim((string) ($form['method'] ?? 'cash'))),
+            'payment_type' => $this->normalizeOptionKey((string) ($form['payment_type'] ?? 'payment')),
+            'method' => $this->normalizeOptionKey((string) ($form['method'] ?? 'cash')),
             'reference_number' => trim((string) ($form['reference_number'] ?? '')),
             'amount' => max(0.0, (float) ($form['amount'] ?? 0)),
             'note' => trim((string) ($form['note'] ?? '')),
@@ -949,7 +1005,7 @@ final class BillingController extends Controller
 
         $map = [];
         foreach ($options as $optionRaw) {
-            $value = strtolower(trim((string) $optionRaw));
+            $value = $this->normalizeOptionKey((string) $optionRaw);
             if ($value === '') {
                 continue;
             }
@@ -973,7 +1029,7 @@ final class BillingController extends Controller
 
         $normalized = [];
         foreach ($options as $optionRaw) {
-            $value = strtolower(trim((string) $optionRaw));
+            $value = $this->normalizeOptionKey((string) $optionRaw);
             if ($value === '' || in_array($value, $normalized, true)) {
                 continue;
             }
@@ -991,7 +1047,7 @@ final class BillingController extends Controller
     {
         $map = [];
         foreach ($values as $valueRaw) {
-            $value = strtolower(trim((string) $valueRaw));
+            $value = $this->normalizeOptionKey((string) $valueRaw);
             if ($value === '' || array_key_exists($value, $map)) {
                 continue;
             }
@@ -1060,6 +1116,12 @@ final class BillingController extends Controller
             'total' => number_format((float) ($invoice['total'] ?? 0), 2, '.', ''),
             'customer_note' => trim((string) ($invoice['customer_note'] ?? '')),
             'internal_note' => trim((string) ($invoice['internal_note'] ?? '')),
+            'payment_paid_date' => date('Y-m-d'),
+            'payment_type' => 'payment',
+            'payment_method' => 'cash',
+            'payment_reference_number' => '',
+            'payment_amount' => '',
+            'payment_note' => '',
             'items' => $normalizedItems,
         ];
     }
@@ -1098,11 +1160,13 @@ final class BillingController extends Controller
             }
         }
 
+        $defaultStatus = $type === 'estimate'
+            ? ((string) (array_key_first($this->estimateStatusOptions()) ?? 'draft'))
+            : ((string) (array_key_first($this->invoiceStatusOptions()) ?? 'unsent'));
+
         return [
             'type' => $type,
-            'status' => strtolower(trim((string) ($input['status'] ?? ($type === 'estimate'
-                ? ((string) (array_key_first($this->estimateStatusOptions()) ?? 'draft'))
-                : ((string) (array_key_first($this->invoiceStatusOptions()) ?? 'unsent')))))),
+            'status' => $this->normalizeOptionKey((string) ($input['status'] ?? $defaultStatus)),
             'invoice_number' => trim((string) ($input['invoice_number'] ?? '')),
             'client_id' => trim((string) ($input['client_id'] ?? '')),
             'job_id' => trim((string) ($input['job_id'] ?? '')),
@@ -1114,6 +1178,12 @@ final class BillingController extends Controller
             'total' => trim((string) ($input['total'] ?? '0')),
             'customer_note' => trim((string) ($input['customer_note'] ?? '')),
             'internal_note' => trim((string) ($input['internal_note'] ?? '')),
+            'payment_paid_date' => trim((string) ($input['payment_paid_date'] ?? date('Y-m-d'))),
+            'payment_type' => $this->normalizeOptionKey((string) ($input['payment_type'] ?? 'payment')),
+            'payment_method' => $this->normalizeOptionKey((string) ($input['payment_method'] ?? 'cash')),
+            'payment_reference_number' => trim((string) ($input['payment_reference_number'] ?? '')),
+            'payment_amount' => trim((string) ($input['payment_amount'] ?? '')),
+            'payment_note' => trim((string) ($input['payment_note'] ?? '')),
             'items' => $items,
         ];
     }
@@ -1211,7 +1281,41 @@ final class BillingController extends Controller
             }
         }
 
+        if ($form['type'] === 'invoice' && $this->hasInlinePayment($form)) {
+            if (!$this->isValidDate((string) ($form['payment_paid_date'] ?? ''))) {
+                $errors['payment_paid_date'] = 'Enter a valid payment date.';
+            }
+            if (!array_key_exists((string) ($form['payment_type'] ?? ''), $this->paymentCategoryOptions())) {
+                $errors['payment_type'] = 'Choose a valid payment category.';
+            }
+            if (!array_key_exists((string) ($form['payment_method'] ?? ''), $this->paymentTypeOptions())) {
+                $errors['payment_method'] = 'Choose a valid payment method.';
+            }
+            if (!is_numeric($form['payment_amount'] ?? '') || (float) ($form['payment_amount'] ?? 0) <= 0) {
+                $errors['payment_amount'] = 'Payment amount must be greater than zero.';
+            }
+            if (strlen((string) ($form['payment_reference_number'] ?? '')) > 120) {
+                $errors['payment_reference_number'] = 'Reference number is too long.';
+            }
+            if (strlen((string) ($form['payment_note'] ?? '')) > 255) {
+                $errors['payment_note'] = 'Payment note is too long.';
+            }
+        }
+
         return $errors;
+    }
+
+    private function normalizeOptionKey(string $value): string
+    {
+        $normalized = strtolower(trim($value));
+        if ($normalized === '') {
+            return '';
+        }
+
+        $normalized = preg_replace('/[\s\-]+/', '_', $normalized) ?? $normalized;
+        $normalized = preg_replace('/[^a-z0-9_]+/', '', $normalized) ?? $normalized;
+        $normalized = preg_replace('/_+/', '_', $normalized) ?? $normalized;
+        return trim($normalized, '_');
     }
 
     private function payloadForSave(array $form): array
