@@ -16,7 +16,8 @@ final class ReportSummary
         $purchases = self::purchaseSummary($businessId, $fromDate, $toDate);
 
         $overallGross = $sales['gross'] + $service['gross'];
-        $overallNet = $sales['net'] + $service['net'] - $expenses['general_total'] - $purchases['total'];
+        $overallNet = $sales['net'] + $service['net'] - $expenses['general_total'];
+        $overallNetMinusPurchases = $overallNet - $purchases['total'];
 
         return [
             'sales' => $sales,
@@ -26,6 +27,7 @@ final class ReportSummary
             'overall' => [
                 'gross' => round($overallGross, 2),
                 'net' => round($overallNet, 2),
+                'net_minus_purchases' => round($overallNetMinusPurchases, 2),
             ],
             'lists' => [
                 'jobs' => self::jobsList($businessId, $fromDate, $toDate),

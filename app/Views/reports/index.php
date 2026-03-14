@@ -65,7 +65,7 @@ $formatDate = static function (?string $value): string {
         <strong><i class="fas fa-chart-column me-2"></i>Totals</strong>
     </div>
     <div class="card-body">
-        <div class="record-row-fields record-row-fields-4">
+        <div class="record-row-fields record-row-fields-5">
             <div class="record-field">
                 <span class="record-label">Overall Gross</span>
                 <span class="record-value"><?= e($formatMoney($overall['gross'] ?? 0)) ?></span>
@@ -73,6 +73,10 @@ $formatDate = static function (?string $value): string {
             <div class="record-field">
                 <span class="record-label">Overall Net</span>
                 <span class="record-value"><?= e($formatMoney($overall['net'] ?? 0)) ?></span>
+            </div>
+            <div class="record-field">
+                <span class="record-label">Net - Purchases</span>
+                <span class="record-value"><?= e($formatMoney($overall['net_minus_purchases'] ?? 0)) ?></span>
             </div>
             <div class="record-field">
                 <span class="record-label">Expense Total</span>

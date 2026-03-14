@@ -172,7 +172,6 @@ function current_business_id(): int
 function require_auth(): void
 {
     if (auth_user() === null) {
-        flash('error', 'Please log in.');
         redirect('/login');
     }
 }

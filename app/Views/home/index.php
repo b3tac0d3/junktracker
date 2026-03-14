@@ -2,6 +2,8 @@
 $businessName = (string) (($business['name'] ?? '') !== '' ? $business['name'] : ('Business #' . (string) current_business_id()));
 $summary = is_array($summary ?? null) ? $summary : [];
 $sales = is_array($summary['sales'] ?? null) ? $summary['sales'] : [];
+$service = is_array($summary['service'] ?? null) ? $summary['service'] : [];
+$purchasesSummary = is_array($summary['purchases'] ?? null) ? $summary['purchases'] : [];
 $jobs = is_array($summary['jobs'] ?? null) ? $summary['jobs'] : [];
 $tasks = is_array($summary['tasks'] ?? null) ? $summary['tasks'] : [];
 $lists = is_array($summary['lists'] ?? null) ? $summary['lists'] : [];
@@ -60,9 +62,19 @@ $employeeDisplayName = static function (array $row): string {
 
 <div class="kpi-grid">
     <a class="kpi-card kpi-card-link" href="<?= e(url('/sales')) ?>">
-        <span>Sales MTD</span>
-        <strong>$<?= e(number_format((float) ($sales['mtd_gross'] ?? 0), 2)) ?></strong>
-        <small>Net $<?= e(number_format((float) ($sales['mtd_net'] ?? 0), 2)) ?> · <?= e((string) ((int) ($sales['mtd_count'] ?? 0))) ?> sale(s)</small>
+        <span>Sales MTD / YTD</span>
+        <strong>$<?= e(number_format((float) ($sales['mtd_gross'] ?? 0), 2)) ?> / $<?= e(number_format((float) ($sales['ytd_gross'] ?? 0), 2)) ?></strong>
+        <small>Net MTD $<?= e(number_format((float) ($sales['mtd_net'] ?? 0), 2)) ?> · Net YTD $<?= e(number_format((float) ($sales['ytd_net'] ?? 0), 2)) ?></small>
+    </a>
+    <a class="kpi-card kpi-card-link" href="<?= e(url('/reports')) ?>">
+        <span>Service MTD / YTD</span>
+        <strong>$<?= e(number_format((float) ($service['mtd_gross'] ?? 0), 2)) ?> / $<?= e(number_format((float) ($service['ytd_gross'] ?? 0), 2)) ?></strong>
+        <small>Net MTD $<?= e(number_format((float) ($service['mtd_net'] ?? 0), 2)) ?> · Net YTD $<?= e(number_format((float) ($service['ytd_net'] ?? 0), 2)) ?></small>
+    </a>
+    <a class="kpi-card kpi-card-link" href="<?= e(url('/purchases')) ?>">
+        <span>Purchases MTD / YTD</span>
+        <strong>$<?= e(number_format((float) ($purchasesSummary['mtd_total'] ?? 0), 2)) ?> / $<?= e(number_format((float) ($purchasesSummary['ytd_total'] ?? 0), 2)) ?></strong>
+        <small>MTD <?= e((string) ((int) ($purchasesSummary['mtd_count'] ?? 0))) ?> · YTD <?= e((string) ((int) ($purchasesSummary['ytd_count'] ?? 0))) ?></small>
     </a>
     <a class="kpi-card kpi-card-link" href="<?= e(url('/jobs?status=dispatch')) ?>">
         <span>Dispatch Jobs</span>

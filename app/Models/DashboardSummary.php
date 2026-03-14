@@ -12,6 +12,8 @@ final class DashboardSummary
     {
         return [
             'sales' => self::salesSummary($businessId),
+            'service' => self::serviceSummary($businessId),
+            'purchases' => self::purchasesSummary($businessId),
             'jobs' => self::jobsSummary($businessId),
             'tasks' => self::tasksSummary($businessId, $ownerUserId),
             'lists' => [
@@ -30,6 +32,9 @@ final class DashboardSummary
             'mtd_gross' => 0.0,
             'mtd_net' => 0.0,
             'mtd_count' => 0,
+            'ytd_gross' => 0.0,
+            'ytd_net' => 0.0,
+            'ytd_count' => 0,
         ];
 
         if (!SchemaInspector::hasTable('sales')) {
@@ -48,13 +53,14 @@ final class DashboardSummary
         ];
 
         $sql = "SELECT
-                    COUNT(*) AS mtd_count,
-                    COALESCE(SUM({$grossSql}), 0) AS mtd_gross,
-                    COALESCE(SUM({$netSql}), 0) AS mtd_net
+                    COALESCE(SUM(CASE WHEN {$dateSql} >= DATE_FORMAT(CURDATE(), '%Y-%m-01') AND {$dateSql} <= CURDATE() THEN {$grossSql} ELSE 0 END), 0) AS mtd_gross,
+                    COALESCE(SUM(CASE WHEN {$dateSql} >= DATE_FORMAT(CURDATE(), '%Y-%m-01') AND {$dateSql} <= CURDATE() THEN {$netSql} ELSE 0 END), 0) AS mtd_net,
+                    COALESCE(SUM(CASE WHEN {$dateSql} >= DATE_FORMAT(CURDATE(), '%Y-%m-01') AND {$dateSql} <= CURDATE() THEN 1 ELSE 0 END), 0) AS mtd_count,
+                    COALESCE(SUM(CASE WHEN {$dateSql} >= DATE_FORMAT(CURDATE(), '%Y-01-01') AND {$dateSql} <= CURDATE() THEN {$grossSql} ELSE 0 END), 0) AS ytd_gross,
+                    COALESCE(SUM(CASE WHEN {$dateSql} >= DATE_FORMAT(CURDATE(), '%Y-01-01') AND {$dateSql} <= CURDATE() THEN {$netSql} ELSE 0 END), 0) AS ytd_net,
+                    COALESCE(SUM(CASE WHEN {$dateSql} >= DATE_FORMAT(CURDATE(), '%Y-01-01') AND {$dateSql} <= CURDATE() THEN 1 ELSE 0 END), 0) AS ytd_count
                 FROM sales s
-                WHERE " . implode(' AND ', $where) . "
-                  AND {$dateSql} >= DATE_FORMAT(CURDATE(), '%Y-%m-01')
-                  AND {$dateSql} <= CURDATE()";
+                WHERE " . implode(' AND ', $where);
 
         $stmt = Database::connection()->prepare($sql);
         if (SchemaInspector::hasColumn('sales', 'business_id')) {
@@ -71,7 +77,156 @@ final class DashboardSummary
             'mtd_gross' => (float) ($row['mtd_gross'] ?? 0),
             'mtd_net' => (float) ($row['mtd_net'] ?? 0),
             'mtd_count' => (int) ($row['mtd_count'] ?? 0),
+            'ytd_gross' => (float) ($row['ytd_gross'] ?? 0),
+            'ytd_net' => (float) ($row['ytd_net'] ?? 0),
+            'ytd_count' => (int) ($row['ytd_count'] ?? 0),
         ];
+    }
+
+    private static function serviceSummary(int $businessId): array
+    {
+        $summary = [
+            'mtd_gross' => 0.0,
+            'mtd_net' => 0.0,
+            'mtd_count' => 0,
+            'ytd_gross' => 0.0,
+            'ytd_net' => 0.0,
+            'ytd_count' => 0,
+        ];
+
+        if (!SchemaInspector::hasTable('invoices')) {
+            return $summary;
+        }
+
+        $totalSql = SchemaInspector::hasColumn('invoices', 'total')
+            ? 'COALESCE(i.total, 0)'
+            : (SchemaInspector::hasColumn('invoices', 'subtotal') ? 'COALESCE(i.subtotal, 0)' : '0');
+        $dateSql = SchemaInspector::hasColumn('invoices', 'issue_date') ? 'DATE(i.issue_date)' : 'DATE(i.created_at)';
+
+        $where = [
+            SchemaInspector::hasColumn('invoices', 'business_id') ? 'i.business_id = :business_id' : '1=1',
+            SchemaInspector::hasColumn('invoices', 'deleted_at') ? 'i.deleted_at IS NULL' : '1=1',
+        ];
+        if (SchemaInspector::hasColumn('invoices', 'type')) {
+            $where[] = "(LOWER(COALESCE(NULLIF(TRIM(i.type), ''), 'invoice')) = 'invoice')";
+        }
+
+        $sql = "SELECT
+                    COALESCE(SUM(CASE WHEN {$dateSql} >= DATE_FORMAT(CURDATE(), '%Y-%m-01') AND {$dateSql} <= CURDATE() THEN {$totalSql} ELSE 0 END), 0) AS mtd_gross,
+                    COALESCE(SUM(CASE WHEN {$dateSql} >= DATE_FORMAT(CURDATE(), '%Y-%m-01') AND {$dateSql} <= CURDATE() THEN 1 ELSE 0 END), 0) AS mtd_count,
+                    COALESCE(SUM(CASE WHEN {$dateSql} >= DATE_FORMAT(CURDATE(), '%Y-01-01') AND {$dateSql} <= CURDATE() THEN {$totalSql} ELSE 0 END), 0) AS ytd_gross,
+                    COALESCE(SUM(CASE WHEN {$dateSql} >= DATE_FORMAT(CURDATE(), '%Y-01-01') AND {$dateSql} <= CURDATE() THEN 1 ELSE 0 END), 0) AS ytd_count
+                FROM invoices i
+                WHERE " . implode(' AND ', $where);
+
+        $stmt = Database::connection()->prepare($sql);
+        if (SchemaInspector::hasColumn('invoices', 'business_id')) {
+            $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
+        }
+        $stmt->execute();
+
+        $row = $stmt->fetch();
+        if (!is_array($row)) {
+            return $summary;
+        }
+
+        $mtdGross = (float) ($row['mtd_gross'] ?? 0);
+        $ytdGross = (float) ($row['ytd_gross'] ?? 0);
+        $mtdExpenses = self::expensesTotalBetween($businessId, date('Y-m-01'), date('Y-m-d'), true);
+        $ytdExpenses = self::expensesTotalBetween($businessId, date('Y-01-01'), date('Y-m-d'), true);
+
+        return [
+            'mtd_gross' => $mtdGross,
+            'mtd_net' => round($mtdGross - $mtdExpenses, 2),
+            'mtd_count' => (int) ($row['mtd_count'] ?? 0),
+            'ytd_gross' => $ytdGross,
+            'ytd_net' => round($ytdGross - $ytdExpenses, 2),
+            'ytd_count' => (int) ($row['ytd_count'] ?? 0),
+        ];
+    }
+
+    private static function purchasesSummary(int $businessId): array
+    {
+        $summary = [
+            'mtd_total' => 0.0,
+            'mtd_count' => 0,
+            'ytd_total' => 0.0,
+            'ytd_count' => 0,
+        ];
+
+        if (!SchemaInspector::hasTable('purchases')) {
+            return $summary;
+        }
+
+        $amountSql = SchemaInspector::hasColumn('purchases', 'purchase_price') ? 'COALESCE(p.purchase_price, 0)' : '0';
+        $dateSql = SchemaInspector::hasColumn('purchases', 'purchase_date') ? 'DATE(p.purchase_date)' : 'DATE(p.created_at)';
+
+        $where = [
+            SchemaInspector::hasColumn('purchases', 'business_id') ? 'p.business_id = :business_id' : '1=1',
+            SchemaInspector::hasColumn('purchases', 'deleted_at') ? 'p.deleted_at IS NULL' : '1=1',
+        ];
+
+        $sql = "SELECT
+                    COALESCE(SUM(CASE WHEN {$dateSql} >= DATE_FORMAT(CURDATE(), '%Y-%m-01') AND {$dateSql} <= CURDATE() THEN {$amountSql} ELSE 0 END), 0) AS mtd_total,
+                    COALESCE(SUM(CASE WHEN {$dateSql} >= DATE_FORMAT(CURDATE(), '%Y-%m-01') AND {$dateSql} <= CURDATE() THEN 1 ELSE 0 END), 0) AS mtd_count,
+                    COALESCE(SUM(CASE WHEN {$dateSql} >= DATE_FORMAT(CURDATE(), '%Y-01-01') AND {$dateSql} <= CURDATE() THEN {$amountSql} ELSE 0 END), 0) AS ytd_total,
+                    COALESCE(SUM(CASE WHEN {$dateSql} >= DATE_FORMAT(CURDATE(), '%Y-01-01') AND {$dateSql} <= CURDATE() THEN 1 ELSE 0 END), 0) AS ytd_count
+                FROM purchases p
+                WHERE " . implode(' AND ', $where);
+
+        $stmt = Database::connection()->prepare($sql);
+        if (SchemaInspector::hasColumn('purchases', 'business_id')) {
+            $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
+        }
+        $stmt->execute();
+
+        $row = $stmt->fetch();
+        if (!is_array($row)) {
+            return $summary;
+        }
+
+        return [
+            'mtd_total' => (float) ($row['mtd_total'] ?? 0),
+            'mtd_count' => (int) ($row['mtd_count'] ?? 0),
+            'ytd_total' => (float) ($row['ytd_total'] ?? 0),
+            'ytd_count' => (int) ($row['ytd_count'] ?? 0),
+        ];
+    }
+
+    private static function expensesTotalBetween(int $businessId, string $fromDate, string $toDate, bool $jobOnly): float
+    {
+        if (!SchemaInspector::hasTable('expenses')) {
+            return 0.0;
+        }
+
+        $amountSql = SchemaInspector::hasColumn('expenses', 'amount') ? 'COALESCE(e.amount, 0)' : '0';
+        $dateSql = SchemaInspector::hasColumn('expenses', 'expense_date') ? 'DATE(e.expense_date)' : 'DATE(e.created_at)';
+        $where = [
+            SchemaInspector::hasColumn('expenses', 'business_id') ? 'e.business_id = :business_id' : '1=1',
+            SchemaInspector::hasColumn('expenses', 'deleted_at') ? 'e.deleted_at IS NULL' : '1=1',
+            "{$dateSql} BETWEEN :from_date AND :to_date",
+        ];
+
+        if (SchemaInspector::hasColumn('expenses', 'job_id')) {
+            $where[] = $jobOnly ? 'e.job_id IS NOT NULL' : 'e.job_id IS NULL';
+        } elseif ($jobOnly) {
+            return 0.0;
+        }
+
+        $sql = "SELECT COALESCE(SUM({$amountSql}), 0) AS total_amount
+                FROM expenses e
+                WHERE " . implode(' AND ', $where);
+
+        $stmt = Database::connection()->prepare($sql);
+        if (SchemaInspector::hasColumn('expenses', 'business_id')) {
+            $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
+        }
+        $stmt->bindValue(':from_date', $fromDate, \PDO::PARAM_STR);
+        $stmt->bindValue(':to_date', $toDate, \PDO::PARAM_STR);
+        $stmt->execute();
+
+        $row = $stmt->fetch();
+        return (float) ($row['total_amount'] ?? 0);
     }
 
     private static function jobsSummary(int $businessId): array
