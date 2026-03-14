@@ -28,6 +28,7 @@ $router = new Router();
 $router->get('/', [HomeController::class, 'index']);
 $router->get('/login', [AuthController::class, 'login']);
 $router->post('/login', [AuthController::class, 'authenticate']);
+$router->get('/logout', [AuthController::class, 'logout']);
 $router->post('/logout', [AuthController::class, 'logout']);
 $router->get('/settings', [SettingsController::class, 'edit']);
 $router->post('/settings/update', [SettingsController::class, 'update']);
