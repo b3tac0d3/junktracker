@@ -34,6 +34,12 @@ $router->post('/settings/update', [SettingsController::class, 'update']);
 $router->get('/search', [SearchController::class, 'index']);
 
 $router->get('/site-admin/businesses', [SiteAdminController::class, 'businesses']);
+$router->get('/site-admin/businesses/create', [SiteAdminController::class, 'createBusiness']);
+$router->post('/site-admin/businesses', [SiteAdminController::class, 'storeBusiness']);
+$router->get('/site-admin/businesses/{id}', [SiteAdminController::class, 'showBusiness']);
+$router->get('/site-admin/businesses/{id}/edit', [SiteAdminController::class, 'editBusiness']);
+$router->post('/site-admin/businesses/{id}/update', [SiteAdminController::class, 'updateBusiness']);
+$router->post('/site-admin/businesses/{id}/toggle-active', [SiteAdminController::class, 'toggleBusinessActive']);
 $router->post('/site-admin/switch-business', [SiteAdminController::class, 'switchBusiness']);
 $router->post('/site-admin/exit-workspace', [SiteAdminController::class, 'exitWorkspace']);
 

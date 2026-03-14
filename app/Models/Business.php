@@ -8,6 +8,88 @@ use Core\Database;
 
 final class Business
 {
+    public static function allForSiteAdmin(string $status = 'all', string $search = '', int $limit = 25, int $offset = 0): array
+    {
+        $status = self::normalizeStatus($status);
+        $search = trim($search);
+        $where = 'WHERE deleted_at IS NULL';
+        if ($status === 'active') {
+            $where .= ' AND is_active = 1';
+        } elseif ($status === 'inactive') {
+            $where .= ' AND is_active = 0';
+        }
+        if ($search !== '') {
+            $where .= ' AND (
+                name LIKE :query_like_1
+                OR legal_name LIKE :query_like_2
+                OR email LIKE :query_like_3
+                OR city LIKE :query_like_4
+                OR state LIKE :query_like_5
+            )';
+        }
+
+        $stmt = Database::connection()->prepare(
+            "SELECT id, name, legal_name, email, phone, city, state, is_active
+             FROM businesses
+             {$where}
+             ORDER BY name ASC
+             LIMIT :row_limit
+             OFFSET :row_offset"
+        );
+        if ($search !== '') {
+            $like = '%' . $search . '%';
+            $stmt->bindValue(':query_like_1', $like, \PDO::PARAM_STR);
+            $stmt->bindValue(':query_like_2', $like, \PDO::PARAM_STR);
+            $stmt->bindValue(':query_like_3', $like, \PDO::PARAM_STR);
+            $stmt->bindValue(':query_like_4', $like, \PDO::PARAM_STR);
+            $stmt->bindValue(':query_like_5', $like, \PDO::PARAM_STR);
+        }
+        $stmt->bindValue(':row_limit', max(1, min($limit, 1000)), \PDO::PARAM_INT);
+        $stmt->bindValue(':row_offset', max(0, $offset), \PDO::PARAM_INT);
+        $stmt->execute();
+
+        $rows = $stmt->fetchAll();
+        return is_array($rows) ? $rows : [];
+    }
+
+    public static function countForSiteAdmin(string $status = 'all', string $search = ''): int
+    {
+        $status = self::normalizeStatus($status);
+        $search = trim($search);
+        $where = 'WHERE deleted_at IS NULL';
+        if ($status === 'active') {
+            $where .= ' AND is_active = 1';
+        } elseif ($status === 'inactive') {
+            $where .= ' AND is_active = 0';
+        }
+        if ($search !== '') {
+            $where .= ' AND (
+                name LIKE :query_like_1
+                OR legal_name LIKE :query_like_2
+                OR email LIKE :query_like_3
+                OR city LIKE :query_like_4
+                OR state LIKE :query_like_5
+            )';
+        }
+
+        $stmt = Database::connection()->prepare(
+            "SELECT COUNT(*)
+             FROM businesses
+             {$where}"
+        );
+        if ($search !== '') {
+            $like = '%' . $search . '%';
+            $stmt->bindValue(':query_like_1', $like, \PDO::PARAM_STR);
+            $stmt->bindValue(':query_like_2', $like, \PDO::PARAM_STR);
+            $stmt->bindValue(':query_like_3', $like, \PDO::PARAM_STR);
+            $stmt->bindValue(':query_like_4', $like, \PDO::PARAM_STR);
+            $stmt->bindValue(':query_like_5', $like, \PDO::PARAM_STR);
+        }
+        $stmt->execute();
+
+        return (int) $stmt->fetchColumn();
+    }
+
     public static function allActive(int $limit = 25, int $offset = 0): array
     {
         $stmt = Database::connection()->prepare(
@@ -139,6 +221,7 @@ final class Business
         $columnMap = [
             'name' => 'name',
             'legal_name' => 'legal_name',
+            'email' => 'email',
             'phone' => 'phone',
             'address_line1' => 'address_line1',
             'address_line2' => 'address_line2',
@@ -187,5 +270,43 @@ final class Business
 
         $stmt = Database::connection()->prepare($sql);
         $stmt->execute($params);
+    }
+
+    public static function setActive(int $businessId, bool $isActive, int $actorUserId): void
+    {
+        if (!SchemaInspector::hasTable('businesses')) {
+            return;
+        }
+
+        $set = ['is_active = :is_active'];
+        $params = [
+            'is_active' => $isActive ? 1 : 0,
+            'business_id' => $businessId,
+        ];
+
+        if (SchemaInspector::hasColumn('businesses', 'updated_by')) {
+            $set[] = 'updated_by = :updated_by';
+            $params['updated_by'] = $actorUserId;
+        }
+        if (SchemaInspector::hasColumn('businesses', 'updated_at')) {
+            $set[] = 'updated_at = NOW()';
+        }
+
+        $sql = 'UPDATE businesses
+                SET ' . implode(', ', $set) . '
+                WHERE id = :business_id
+                  AND deleted_at IS NULL';
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute($params);
+    }
+
+    private static function normalizeStatus(string $status): string
+    {
+        $status = strtolower(trim($status));
+        if ($status !== 'active' && $status !== 'inactive') {
+            return 'all';
+        }
+
+        return $status;
     }
 }
