@@ -10,8 +10,7 @@ final class View
     {
         $viewPath = base_path('app/Views/' . $template . '.php');
         if (!is_file($viewPath)) {
-            http_response_code(500);
-            echo 'View not found: ' . htmlspecialchars($template, ENT_QUOTES, 'UTF-8');
+            ErrorHandler::renderHttpError(500, 'View rendering failed', 'The requested view could not be loaded.');
             return;
         }
 

@@ -205,8 +205,7 @@ function require_role(array $roles): void
 {
     require_auth();
     if (!in_array(auth_role(), $roles, true)) {
-        http_response_code(403);
-        \Core\View::renderFile('errors/403', ['pageTitle' => 'Forbidden']);
+        \Core\ErrorHandler::renderHttpError(403, 'Access denied', 'You do not have permission to access this area.');
         exit;
     }
 }
@@ -230,8 +229,7 @@ function require_business_role(array $roles): void
     }
 
     if (!in_array(workspace_role(), $roles, true)) {
-        http_response_code(403);
-        \Core\View::renderFile('errors/403', ['pageTitle' => 'Forbidden']);
+        \Core\ErrorHandler::renderHttpError(403, 'Access denied', 'You do not have permission to access this area.');
         exit;
     }
 }

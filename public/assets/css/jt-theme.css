@@ -691,3 +691,72 @@ main .card.index-card-overflow-visible .card-body {
     margin-right: 0;
   }
 }
+
+.error-shell {
+  min-height: calc(100vh - 6rem);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.error-card {
+  width: min(42rem, 100%);
+  background: #fff;
+  border: 1px solid #d7e4fb;
+  border-radius: 1.5rem;
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.08);
+  padding: 2rem;
+}
+
+.error-status {
+  color: cornflowerblue;
+  font-size: 0.9rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  margin-bottom: 0.75rem;
+}
+
+.error-title {
+  margin: 0 0 0.75rem;
+}
+
+.error-message {
+  color: #61718a;
+  font-size: 1.05rem;
+  margin-bottom: 1.5rem;
+}
+
+.error-context {
+  border: 1px solid #d7e4fb;
+  border-radius: 1rem;
+  background: #f8fbff;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.5rem;
+}
+
+.error-context-row + .error-context-row {
+  margin-top: 0.5rem;
+}
+
+.error-context-label {
+  display: block;
+  color: cornflowerblue;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.error-context-value {
+  display: block;
+  color: #273142;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.error-actions {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}

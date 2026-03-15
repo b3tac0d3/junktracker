@@ -52,8 +52,7 @@ final class Router
             return;
         }
 
-        http_response_code(404);
-        View::renderFile('errors/404', ['pageTitle' => 'Not Found']);
+        ErrorHandler::renderHttpError(404, 'Page not found', 'The page you requested does not exist or is no longer available.');
     }
 
     private function add(string $method, string $pattern, array $handler): void

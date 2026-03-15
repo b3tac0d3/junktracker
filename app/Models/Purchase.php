@@ -460,15 +460,16 @@ final class Purchase
                 INNER JOIN clients c ON c.id = p.client_id
                     AND c.deleted_at IS NULL
                 WHERE c.id = :client_id
-                  AND c.business_id = :business_id
-                  AND (p.business_id = :business_id OR p.business_id IS NULL OR p.business_id = 0)
+                  AND c.business_id = :client_business_id
+                  AND (p.business_id = :purchase_business_id OR p.business_id IS NULL OR p.business_id = 0)
                   AND p.deleted_at IS NULL
                 ORDER BY p.id DESC
                 LIMIT ' . $safeLimit;
 
         $stmt = Database::connection()->prepare($sql);
         $stmt->execute([
-            'business_id' => $businessId,
+            'client_business_id' => $businessId,
+            'purchase_business_id' => $businessId,
             'client_id' => $clientId,
         ]);
 
