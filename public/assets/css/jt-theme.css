@@ -196,26 +196,6 @@ main .card.index-card-overflow-visible .card-body {
   border-bottom: 1px solid var(--jt-border);
 }
 
-.date-range-picker {
-  position: relative;
-}
-
-.date-range-picker .date-range-display {
-  cursor: pointer;
-  background: #fff;
-}
-
-.date-range-picker .date-range-native {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: 0;
-  opacity: 0;
-  pointer-events: none;
-  border: 0;
-}
-
 .record-empty {
   border: 1px dashed var(--jt-border);
   border-radius: 12px;

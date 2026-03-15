@@ -78,13 +78,13 @@ $formatSaleDate = static function (?string $value): string {
                     <?php endforeach; ?>
                 </select>
             </div>
-            <div class="col-12 col-md-6 col-lg-4">
-                <label class="form-label fw-semibold" for="sales-date-range">Date Range</label>
-                <div class="date-range-picker">
-                    <input id="sales-date-range" class="form-control date-range-display" type="text" value="" placeholder="Select date range" readonly />
-                    <input class="date-range-native date-range-start" type="date" name="from" value="<?= e($fromDate) ?>" />
-                    <input class="date-range-native date-range-end" type="date" name="to" value="<?= e($toDate) ?>" />
-                </div>
+            <div class="col-12 col-md-3 col-lg-2">
+                <label class="form-label fw-semibold" for="sales-from-date">From</label>
+                <input id="sales-from-date" class="form-control" type="date" name="from" value="<?= e($fromDate) ?>" />
+            </div>
+            <div class="col-12 col-md-3 col-lg-2">
+                <label class="form-label fw-semibold" for="sales-to-date">To</label>
+                <input id="sales-to-date" class="form-control" type="date" name="to" value="<?= e($toDate) ?>" />
             </div>
             <div class="col-12 col-lg-2 d-grid d-lg-flex gap-2">
                 <button class="btn btn-primary flex-fill" type="submit">Apply</button>
