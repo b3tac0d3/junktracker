@@ -49,6 +49,11 @@ foreach ($clientOptions as $clientOption) {
     $selectedClientName = trim((string) ($clientOption['name'] ?? ''));
     break;
 }
+$stateOptions = us_state_options();
+$selectedState = strtoupper(trim((string) ($form['state'] ?? '')));
+if ($selectedState !== '' && !array_key_exists($selectedState, $stateOptions)) {
+    $stateOptions[$selectedState] = $selectedState;
+}
 ?>
 
 <div class="page-header d-flex flex-wrap align-items-end justify-content-between gap-2">
@@ -150,7 +155,11 @@ foreach ($clientOptions as $clientOption) {
 
             <div class="col-6 col-lg-4">
                 <label class="form-label fw-semibold" for="job-state">State</label>
-                <input id="job-state" name="state" class="form-control" value="<?= e((string) ($form['state'] ?? '')) ?>" maxlength="60" />
+                <select id="job-state" name="state" class="form-select">
+                    <?php foreach ($stateOptions as $value => $label): ?>
+                        <option value="<?= e($value) ?>" <?= $selectedState === $value ? 'selected' : '' ?>><?= e($label) ?></option>
+                    <?php endforeach; ?>
+                </select>
             </div>
 
             <div class="col-6 col-lg-4">
@@ -249,7 +258,11 @@ foreach ($clientOptions as $clientOption) {
                     </div>
                     <div class="col-6 col-lg-4">
                         <label class="form-label fw-semibold" for="quick-client-state">State</label>
-                        <input id="quick-client-state" name="state" class="form-control" maxlength="60" />
+                        <select id="quick-client-state" name="state" class="form-select">
+                            <?php foreach ($stateOptions as $value => $label): ?>
+                                <option value="<?= e($value) ?>"><?= e($label) ?></option>
+                            <?php endforeach; ?>
+                        </select>
                     </div>
                     <div class="col-6 col-lg-4">
                         <label class="form-label fw-semibold" for="quick-client-postal">Postal Code</label>

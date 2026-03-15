@@ -10,15 +10,31 @@ final class User
 {
     public static function create(array $payload, int $actorUserId): int
     {
-        $stmt = Database::connection()->prepare(
-            'INSERT INTO users (
-                email, password_hash, first_name, last_name, role, is_active, created_by, updated_by, created_at, updated_at
-             ) VALUES (
-                :email, :password_hash, :first_name, :last_name, :role, :is_active, :created_by, :updated_by, NOW(), NOW()
-             )'
-        );
-
-        $stmt->execute([
+        $columns = [
+            'email',
+            'password_hash',
+            'first_name',
+            'last_name',
+            'role',
+            'is_active',
+            'created_by',
+            'updated_by',
+            'created_at',
+            'updated_at',
+        ];
+        $placeholders = [
+            ':email',
+            ':password_hash',
+            ':first_name',
+            ':last_name',
+            ':role',
+            ':is_active',
+            ':created_by',
+            ':updated_by',
+            'NOW()',
+            'NOW()',
+        ];
+        $params = [
             'email' => trim(strtolower((string) ($payload['email'] ?? ''))),
             'password_hash' => (string) ($payload['password_hash'] ?? ''),
             'first_name' => trim((string) ($payload['first_name'] ?? '')),
@@ -27,14 +43,38 @@ final class User
             'is_active' => (int) ($payload['is_active'] ?? 1) === 0 ? 0 : 1,
             'created_by' => $actorUserId > 0 ? $actorUserId : null,
             'updated_by' => $actorUserId > 0 ? $actorUserId : null,
-        ]);
+        ];
+
+        if (SchemaInspector::hasColumn('users', 'must_change_password')) {
+            $columns[] = 'must_change_password';
+            $placeholders[] = ':must_change_password';
+            $params['must_change_password'] = (int) ($payload['must_change_password'] ?? 0) === 1 ? 1 : 0;
+        }
+
+        if (self::hasInvitationColumns()) {
+            $columns[] = 'invited_at';
+            $placeholders[] = 'NOW()';
+            $columns[] = 'invitation_expires_at';
+            $placeholders[] = 'DATE_ADD(NOW(), INTERVAL 1 DAY)';
+            $columns[] = 'invitation_accepted_at';
+            $placeholders[] = 'NULL';
+        }
+
+        $stmt = Database::connection()->prepare(
+            'INSERT INTO users (' . implode(', ', $columns) . ')
+             VALUES (' . implode(', ', $placeholders) . ')'
+        );
+
+        $stmt->execute($params);
 
         return (int) Database::connection()->lastInsertId();
     }
 
     public static function findByEmail(string $email): ?array
     {
-        $sql = 'SELECT id, email, password_hash, first_name, last_name, role
+        $mustChangeSql = self::hasMustChangePasswordColumn() ? 'COALESCE(must_change_password, 0)' : '0';
+
+        $sql = 'SELECT id, email, password_hash, first_name, last_name, role, ' . $mustChangeSql . ' AS must_change_password, ' . self::invitationSelectSql() . '
                 FROM users
                 WHERE email = :email
                   AND deleted_at IS NULL
@@ -50,8 +90,10 @@ final class User
 
     public static function findById(int $id): ?array
     {
+        $mustChangeSql = self::hasMustChangePasswordColumn() ? 'COALESCE(must_change_password, 0)' : '0';
+
         $stmt = Database::connection()->prepare(
-            'SELECT id, email, first_name, last_name, role, is_active
+            'SELECT id, email, first_name, last_name, role, is_active, ' . $mustChangeSql . ' AS must_change_password, ' . self::invitationSelectSql() . '
              FROM users
              WHERE id = :id
                AND deleted_at IS NULL
@@ -112,6 +154,10 @@ final class User
         if (is_string($passwordHash) && $passwordHash !== '') {
             $sql .= ', password_hash = :password_hash';
             $params['password_hash'] = $passwordHash;
+        }
+        if (array_key_exists('must_change_password', $payload) && self::hasMustChangePasswordColumn()) {
+            $sql .= ', must_change_password = :must_change_password';
+            $params['must_change_password'] = (int) ($payload['must_change_password'] ?? 0) === 1 ? 1 : 0;
         }
 
         $sql .= '
@@ -186,7 +232,8 @@ final class User
                     u.role,
                     m.role AS workspace_role,
                     COALESCE(u.is_active, 1) AS is_active,
-                    COALESCE(m.is_active, 1) AS membership_active
+                    COALESCE(m.is_active, 1) AS membership_active,
+                    ' . self::invitationSelectSql() . '
                 FROM business_user_memberships m
                 INNER JOIN users u ON u.id = m.user_id
                 WHERE m.business_id = :business_id
@@ -288,7 +335,8 @@ final class User
                     u.first_name,
                     u.last_name,
                     u.role,
-                    COALESCE(u.is_active, 1) AS is_active
+                    COALESCE(u.is_active, 1) AS is_active,
+                    " . self::invitationSelectSql() . "
                 FROM users u
                 WHERE u.deleted_at IS NULL
                   AND u.role = 'site_admin'
@@ -350,6 +398,91 @@ final class User
         return $stmt->rowCount() > 0;
     }
 
+    public static function resendInvitation(int $userId, string $passwordHash, int $actorUserId): void
+    {
+        $sql = 'UPDATE users
+                SET password_hash = :password_hash,
+                    updated_by = :updated_by,
+                    updated_at = NOW()';
+        $params = [
+            'password_hash' => $passwordHash,
+            'updated_by' => $actorUserId > 0 ? $actorUserId : null,
+            'id' => $userId,
+        ];
+
+        if (self::hasMustChangePasswordColumn()) {
+            $sql .= ', must_change_password = 1';
+        }
+        if (self::hasInvitationColumns()) {
+            $sql .= ',
+                    invited_at = NOW(),
+                    invitation_expires_at = DATE_ADD(NOW(), INTERVAL 1 DAY),
+                    invitation_accepted_at = NULL';
+        }
+
+        $sql .= '
+                WHERE id = :id
+                  AND deleted_at IS NULL
+                LIMIT 1';
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute($params);
+    }
+
+    public static function autoAcceptInvitation(int $userId, string $passwordHash, int $actorUserId): void
+    {
+        $sql = 'UPDATE users
+                SET password_hash = :password_hash,
+                    updated_by = :updated_by,
+                    updated_at = NOW()';
+        $params = [
+            'password_hash' => $passwordHash,
+            'updated_by' => $actorUserId > 0 ? $actorUserId : null,
+            'id' => $userId,
+        ];
+
+        if (self::hasMustChangePasswordColumn()) {
+            $sql .= ', must_change_password = 1';
+        }
+        if (self::hasInvitationColumns()) {
+            $sql .= ',
+                    invited_at = NOW(),
+                    invitation_expires_at = NULL,
+                    invitation_accepted_at = NOW()';
+        }
+
+        $sql .= '
+                WHERE id = :id
+                  AND deleted_at IS NULL
+                LIMIT 1';
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute($params);
+    }
+
+    public static function markInvitationAccepted(int $userId, int $actorUserId): void
+    {
+        if (!self::hasInvitationColumns()) {
+            return;
+        }
+
+        $stmt = Database::connection()->prepare(
+            'UPDATE users
+             SET invitation_accepted_at = NOW(),
+                 invitation_expires_at = NULL,
+                 updated_by = :updated_by,
+                 updated_at = NOW()
+             WHERE id = :id
+               AND deleted_at IS NULL
+               AND invitation_accepted_at IS NULL
+             LIMIT 1'
+        );
+        $stmt->execute([
+            'updated_by' => $actorUserId > 0 ? $actorUserId : null,
+            'id' => $userId,
+        ]);
+    }
+
     public static function displayName(array $user): string
     {
         $full = trim(((string) ($user['first_name'] ?? '')) . ' ' . ((string) ($user['last_name'] ?? '')));
@@ -358,5 +491,26 @@ final class User
         }
 
         return (string) ($user['email'] ?? 'User');
+    }
+
+    private static function hasMustChangePasswordColumn(): bool
+    {
+        return SchemaInspector::hasColumn('users', 'must_change_password');
+    }
+
+    private static function hasInvitationColumns(): bool
+    {
+        return SchemaInspector::hasColumn('users', 'invited_at')
+            && SchemaInspector::hasColumn('users', 'invitation_expires_at')
+            && SchemaInspector::hasColumn('users', 'invitation_accepted_at');
+    }
+
+    private static function invitationSelectSql(): string
+    {
+        if (!self::hasInvitationColumns()) {
+            return 'NULL AS invited_at, NULL AS invitation_expires_at, NULL AS invitation_accepted_at';
+        }
+
+        return 'invited_at AS invited_at, invitation_expires_at AS invitation_expires_at, invitation_accepted_at AS invitation_accepted_at';
     }
 }

@@ -24,7 +24,7 @@ $hasError = static function (string $field) use ($errors): bool {
     </div>
 </div>
 
-<section class="card index-card">
+<section class="card index-card index-card-overflow-visible">
     <div class="card-header index-card-header">
         <strong><i class="fas fa-plus me-2"></i><?= e($mode === 'edit' ? 'Update Sale' : 'Create Sale') ?></strong>
     </div>

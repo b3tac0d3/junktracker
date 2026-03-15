@@ -19,18 +19,23 @@ final class SalesController extends Controller
 
         $search = trim((string) ($_GET['q'] ?? ''));
         $type = trim((string) ($_GET['type'] ?? ''));
+        $fromDate = $this->normalizeDateFilter((string) ($_GET['from'] ?? ''));
+        $toDate = $this->normalizeDateFilter((string) ($_GET['to'] ?? ''));
+        if ($fromDate !== '' && $toDate !== '' && strtotime($fromDate) > strtotime($toDate)) {
+            [$fromDate, $toDate] = [$toDate, $fromDate];
+        }
         $businessId = current_business_id();
 
         $perPage = pagination_per_page($_GET['per_page'] ?? null);
         $page = pagination_current_page($_GET['page'] ?? null);
-        $totalRows = Sale::indexCount($businessId, $search, $type);
+        $totalRows = Sale::indexCount($businessId, $search, $type, $fromDate, $toDate);
         $totalPages = pagination_total_pages($totalRows, $perPage);
         if ($page > $totalPages) {
             $page = $totalPages;
         }
         $offset = pagination_offset($page, $perPage);
 
-        $sales = Sale::indexList($businessId, $search, $type, $perPage, $offset);
+        $sales = Sale::indexList($businessId, $search, $type, $fromDate, $toDate, $perPage, $offset);
         $summary = Sale::summary($businessId);
         $typeOptions = FormSelectValue::optionsForSection($businessId, 'sale_type');
         if ($typeOptions === []) {
@@ -42,6 +47,8 @@ final class SalesController extends Controller
             'pageTitle' => 'Sales',
             'search' => $search,
             'type' => $type,
+            'fromDate' => $fromDate,
+            'toDate' => $toDate,
             'sales' => $sales,
             'summary' => $summary,
             'typeOptions' => $typeOptions,
@@ -477,6 +484,17 @@ final class SalesController extends Controller
 
         $timestamp = strtotime($value);
         return $timestamp === false ? null : date('Y-m-d H:i:s', $timestamp);
+    }
+
+    private function normalizeDateFilter(string $value): string
+    {
+        $value = trim($value);
+        if ($value === '') {
+            return '';
+        }
+
+        $timestamp = strtotime($value);
+        return $timestamp === false ? '' : date('Y-m-d', $timestamp);
     }
 
     /**

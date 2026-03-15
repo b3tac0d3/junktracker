@@ -16,7 +16,7 @@ final class Sale
         return ['shop', 'ebay', 'scrap', 'b2b'];
     }
 
-    public static function indexList(int $businessId, string $search = '', string $type = '', int $limit = 25, int $offset = 0): array
+    public static function indexList(int $businessId, string $search = '', string $type = '', string $fromDate = '', string $toDate = '', int $limit = 25, int $offset = 0): array
     {
         if (!SchemaInspector::hasTable('sales')) {
             return [];
@@ -24,10 +24,13 @@ final class Sale
 
         $query = trim($search);
         $type = trim($type);
+        $fromDate = trim($fromDate);
+        $toDate = trim($toDate);
 
         $nameSql = self::saleNameExpr();
         $typeSql = self::saleTypeExpr();
         $dateSql = self::saleDateExpr();
+        $filterDateSql = self::saleFilterDateExpr();
         $grossSql = self::saleGrossExpr();
         $netSql = self::saleNetExpr();
         $notesSql = self::saleNotesExpr();
@@ -58,6 +61,12 @@ final class Sale
         $where[] = SchemaInspector::hasColumn('sales', 'deleted_at') ? 's.deleted_at IS NULL' : '1=1';
         if ($type !== '' && SchemaInspector::hasColumn('sales', 'sale_type')) {
             $where[] = 's.sale_type = :sale_type';
+        }
+        if ($fromDate !== '') {
+            $where[] = "{$filterDateSql} >= :from_date";
+        }
+        if ($toDate !== '') {
+            $where[] = "{$filterDateSql} <= :to_date";
         }
 
         $queryLike = '%' . $query . '%';
@@ -121,6 +130,12 @@ final class Sale
         if ($type !== '' && SchemaInspector::hasColumn('sales', 'sale_type')) {
             $stmt->bindValue(':sale_type', $type);
         }
+        if ($fromDate !== '') {
+            $stmt->bindValue(':from_date', $fromDate);
+        }
+        if ($toDate !== '') {
+            $stmt->bindValue(':to_date', $toDate);
+        }
         foreach ($bind as $placeholder => $value) {
             $stmt->bindValue($placeholder, $value);
         }
@@ -132,7 +147,7 @@ final class Sale
         return is_array($rows) ? $rows : [];
     }
 
-    public static function indexCount(int $businessId, string $search = '', string $type = ''): int
+    public static function indexCount(int $businessId, string $search = '', string $type = '', string $fromDate = '', string $toDate = ''): int
     {
         if (!SchemaInspector::hasTable('sales')) {
             return 0;
@@ -140,10 +155,13 @@ final class Sale
 
         $query = trim($search);
         $type = trim($type);
+        $fromDate = trim($fromDate);
+        $toDate = trim($toDate);
 
         $nameSql = self::saleNameExpr();
         $typeSql = self::saleTypeExpr();
         $notesSql = self::saleNotesExpr();
+        $filterDateSql = self::saleFilterDateExpr();
 
         $clientNameSql = 'NULL';
         $jobTitleSql = 'NULL';
@@ -168,6 +186,12 @@ final class Sale
         $where[] = SchemaInspector::hasColumn('sales', 'deleted_at') ? 's.deleted_at IS NULL' : '1=1';
         if ($type !== '' && SchemaInspector::hasColumn('sales', 'sale_type')) {
             $where[] = 's.sale_type = :sale_type';
+        }
+        if ($fromDate !== '') {
+            $where[] = "{$filterDateSql} >= :from_date";
+        }
+        if ($toDate !== '') {
+            $where[] = "{$filterDateSql} <= :to_date";
         }
 
         $queryLike = '%' . $query . '%';
@@ -212,6 +236,12 @@ final class Sale
         }
         if ($type !== '' && SchemaInspector::hasColumn('sales', 'sale_type')) {
             $stmt->bindValue(':sale_type', $type);
+        }
+        if ($fromDate !== '') {
+            $stmt->bindValue(':from_date', $fromDate);
+        }
+        if ($toDate !== '') {
+            $stmt->bindValue(':to_date', $toDate);
         }
         foreach ($bind as $placeholder => $value) {
             $stmt->bindValue($placeholder, $value);
@@ -940,6 +970,23 @@ final class Sale
     private static function saleDateExpr(string $alias = 's'): string
     {
         return SchemaInspector::hasColumn('sales', 'sale_date') ? $alias . '.sale_date' : 'NULL';
+    }
+
+    private static function saleFilterDateExpr(string $alias = 's'): string
+    {
+        if (SchemaInspector::hasColumn('sales', 'sale_date')) {
+            if (SchemaInspector::hasColumn('sales', 'created_at')) {
+                return "DATE(COALESCE({$alias}.sale_date, {$alias}.created_at))";
+            }
+
+            return "DATE({$alias}.sale_date)";
+        }
+
+        if (SchemaInspector::hasColumn('sales', 'created_at')) {
+            return "DATE({$alias}.created_at)";
+        }
+
+        return "'0000-00-00'";
     }
 
     private static function saleGrossExpr(string $alias = 's'): string

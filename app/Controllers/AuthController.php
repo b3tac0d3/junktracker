@@ -14,6 +14,10 @@ final class AuthController extends Controller
     public function login(): void
     {
         if (auth_user() !== null) {
+            if (auth_requires_password_change()) {
+                redirect('/settings');
+            }
+
             redirect('/');
         }
 
@@ -46,6 +50,21 @@ final class AuthController extends Controller
 
         $userId = (int) ($user['id'] ?? 0);
         $globalRole = trim((string) ($user['role'] ?? 'general_user'));
+        $invitedAt = trim((string) ($user['invited_at'] ?? ''));
+        $invitationAcceptedAt = trim((string) ($user['invitation_accepted_at'] ?? ''));
+        $invitationExpiresAt = trim((string) ($user['invitation_expires_at'] ?? ''));
+        $invitationExpired = $invitedAt !== ''
+            && $invitationAcceptedAt === ''
+            && $invitationExpiresAt !== ''
+            && strtotime($invitationExpiresAt) !== false
+            && strtotime($invitationExpiresAt) < time();
+
+        if ($invitationExpired) {
+            flash('error', 'This invite has expired. Ask an admin to resend it.');
+            redirect('/login');
+        }
+
+        $invitationPending = $invitedAt !== '' && $invitationAcceptedAt === '';
 
         $sessionUser = [
             'id' => $userId,
@@ -53,6 +72,8 @@ final class AuthController extends Controller
             'first_name' => (string) ($user['first_name'] ?? ''),
             'last_name' => (string) ($user['last_name'] ?? ''),
             'role' => $globalRole,
+            'must_change_password' => (int) ($user['must_change_password'] ?? 0) === 1,
+            'invitation_pending' => $invitationPending,
             'workspace_role' => $globalRole === 'site_admin' ? 'site_admin' : 'general_user',
             'business_id' => 0,
         ];
@@ -72,6 +93,11 @@ final class AuthController extends Controller
         }
 
         $_SESSION['user'] = $sessionUser;
+
+        if (!empty($sessionUser['must_change_password']) || !empty($sessionUser['invitation_pending'])) {
+            flash('error', 'Temporary password detected. Set a new password before continuing.');
+            redirect('/settings');
+        }
 
         AuditLog::write(
             action: 'user_login',

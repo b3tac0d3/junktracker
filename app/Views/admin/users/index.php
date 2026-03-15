@@ -82,6 +82,11 @@ $displayName = static function (array $row): string {
                     $isUserActive = (int) ($row['is_active'] ?? 1) === 1;
                     $isMembershipActive = (int) ($row['membership_active'] ?? 1) === 1;
                     $effectiveActive = $isSiteAdminGlobal ? $isUserActive : ($isUserActive && $isMembershipActive);
+                    $invitedAt = trim((string) ($row['invited_at'] ?? ''));
+                    $acceptedAt = trim((string) ($row['invitation_accepted_at'] ?? ''));
+                    $expiresAt = trim((string) ($row['invitation_expires_at'] ?? ''));
+                    $inviteExpired = $invitedAt !== '' && $acceptedAt === '' && $expiresAt !== '' && strtotime($expiresAt) !== false && strtotime($expiresAt) < time();
+                    $inviteStatus = $acceptedAt !== '' || $invitedAt === '' ? 'Accepted' : ($inviteExpired ? 'Expired' : 'Pending');
                     ?>
                     <article class="record-row-simple">
                         <a class="record-row-link" href="<?= e(url('/admin/users/' . (string) $userId . '/edit')) ?>">
@@ -112,6 +117,9 @@ $displayName = static function (array $row): string {
                                     <span class="record-value">
                                         <span class="badge <?= $effectiveActive ? 'text-bg-success' : 'text-bg-secondary' ?>">
                                             <?= e($effectiveActive ? 'Active' : 'Inactive') ?>
+                                        </span>
+                                        <span class="badge <?= $acceptedAt !== '' ? 'text-bg-success' : ($inviteExpired ? 'text-bg-danger' : 'text-bg-warning') ?> ms-1">
+                                            <?= e($inviteStatus) ?>
                                         </span>
                                     </span>
                                 </div>

@@ -100,7 +100,7 @@ $secondaryCanTextClass = $secondaryCanTextRaw === null ? 'text-flag-neutral' : (
             <div class="record-field">
                 <span class="record-label">Phone</span>
                 <span class="record-value">
-                    <?= e($primaryPhone !== '' ? $primaryPhone : '—') ?>
+                    <?= e(format_phone($primaryPhone)) ?>
                     <?php if ($primaryPhone !== ''): ?>
                         <span class="text-flag <?= e($canTextClass) ?>">Text: <?= e($canTextLabel) ?></span>
                     <?php endif; ?>
@@ -109,7 +109,7 @@ $secondaryCanTextClass = $secondaryCanTextRaw === null ? 'text-flag-neutral' : (
             <div class="record-field">
                 <span class="record-label">Secondary Phone</span>
                 <span class="record-value">
-                    <?= e($secondaryPhone !== '' ? $secondaryPhone : '—') ?>
+                    <?= e(format_phone($secondaryPhone)) ?>
                     <?php if ($secondaryPhone !== ''): ?>
                         <span class="text-flag <?= e($secondaryCanTextClass) ?>">Text: <?= e($secondaryCanTextLabel) ?></span>
                     <?php endif; ?>

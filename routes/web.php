@@ -159,6 +159,8 @@ $router->post('/admin/users', [AdminUsersController::class, 'store']);
 $router->get('/admin/users/{id}/edit', [AdminUsersController::class, 'edit']);
 $router->post('/admin/users/{id}/update', [AdminUsersController::class, 'update']);
 $router->post('/admin/users/{id}/toggle-active', [AdminUsersController::class, 'toggleActive']);
+$router->post('/admin/users/{id}/resend-invite', [AdminUsersController::class, 'resendInvite']);
+$router->post('/admin/users/{id}/auto-accept', [AdminUsersController::class, 'autoAccept']);
 $router->get('/admin/employees', [AdminEmployeesController::class, 'index']);
 $router->get('/admin/employees/create', [AdminEmployeesController::class, 'create']);
 $router->post('/admin/employees', [AdminEmployeesController::class, 'store']);

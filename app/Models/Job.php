@@ -40,7 +40,15 @@ final class Job
         return is_array($rows) ? $rows : [];
     }
 
-    public static function indexList(int $businessId, string $search = '', string $status = '', int $limit = 25, int $offset = 0): array
+    public static function indexList(
+        int $businessId,
+        string $search = '',
+        string $status = '',
+        int $limit = 25,
+        int $offset = 0,
+        ?string $fromDate = null,
+        ?string $toDate = null
+    ): array
     {
         if (!SchemaInspector::hasTable('jobs')) {
             return [];
@@ -58,6 +66,11 @@ final class Job
         $startSql = SchemaInspector::hasColumn('jobs', 'scheduled_start_at')
             ? 'j.scheduled_start_at'
             : (SchemaInspector::hasColumn('jobs', 'start_date') ? 'j.start_date' : 'NULL');
+        $createdDateSql = SchemaInspector::hasColumn('jobs', 'created_at') ? 'DATE(j.created_at)' : 'NULL';
+        $scheduledDateSql = SchemaInspector::hasColumn('jobs', 'scheduled_start_at')
+            ? 'DATE(j.scheduled_start_at)'
+            : (SchemaInspector::hasColumn('jobs', 'start_date') ? 'DATE(j.start_date)' : $createdDateSql);
+        $filterDateSql = "COALESCE({$scheduledDateSql}, {$createdDateSql})";
         $clientIdSql = SchemaInspector::hasColumn('jobs', 'client_id') ? 'j.client_id' : 'NULL';
 
         $joinClient = SchemaInspector::hasTable('clients') && SchemaInspector::hasColumn('jobs', 'client_id');
@@ -78,6 +91,12 @@ final class Job
             } else {
                 $where[] = 'LOWER(' . $statusSql . ') = :status';
             }
+        }
+        if ($fromDate !== null && trim($fromDate) !== '') {
+            $where[] = "{$filterDateSql} >= :from_date";
+        }
+        if ($toDate !== null && trim($toDate) !== '') {
+            $where[] = "{$filterDateSql} <= :to_date";
         }
         $where[] = "(
             :query = ''
@@ -110,6 +129,12 @@ final class Job
         if ($status !== '' && $status !== 'dispatch') {
             $stmt->bindValue(':status', $status);
         }
+        if ($fromDate !== null && trim($fromDate) !== '') {
+            $stmt->bindValue(':from_date', $fromDate);
+        }
+        if ($toDate !== null && trim($toDate) !== '') {
+            $stmt->bindValue(':to_date', $toDate);
+        }
         $stmt->bindValue(':query', $query);
         $stmt->bindValue(':query_like_1', $queryLike);
         $stmt->bindValue(':query_like_2', $queryLike);
@@ -123,7 +148,13 @@ final class Job
         return is_array($rows) ? $rows : [];
     }
 
-    public static function indexCount(int $businessId, string $search = '', string $status = ''): int
+    public static function indexCount(
+        int $businessId,
+        string $search = '',
+        string $status = '',
+        ?string $fromDate = null,
+        ?string $toDate = null
+    ): int
     {
         if (!SchemaInspector::hasTable('jobs')) {
             return 0;
@@ -137,6 +168,11 @@ final class Job
             : (SchemaInspector::hasColumn('jobs', 'name') ? 'j.name' : "CONCAT('Job #', j.id)");
         $statusSql = SchemaInspector::hasColumn('jobs', 'status') ? 'j.status' : "'pending'";
         $citySql = SchemaInspector::hasColumn('jobs', 'city') ? 'j.city' : 'NULL';
+        $createdDateSql = SchemaInspector::hasColumn('jobs', 'created_at') ? 'DATE(j.created_at)' : 'NULL';
+        $scheduledDateSql = SchemaInspector::hasColumn('jobs', 'scheduled_start_at')
+            ? 'DATE(j.scheduled_start_at)'
+            : (SchemaInspector::hasColumn('jobs', 'start_date') ? 'DATE(j.start_date)' : $createdDateSql);
+        $filterDateSql = "COALESCE({$scheduledDateSql}, {$createdDateSql})";
 
         $joinClient = SchemaInspector::hasTable('clients') && SchemaInspector::hasColumn('jobs', 'client_id');
         $clientNameSql = "'—'";
@@ -156,6 +192,12 @@ final class Job
             } else {
                 $where[] = 'LOWER(' . $statusSql . ') = :status';
             }
+        }
+        if ($fromDate !== null && trim($fromDate) !== '') {
+            $where[] = "{$filterDateSql} >= :from_date";
+        }
+        if ($toDate !== null && trim($toDate) !== '') {
+            $where[] = "{$filterDateSql} <= :to_date";
         }
         $where[] = "(
             :query = ''
@@ -177,6 +219,12 @@ final class Job
         }
         if ($status !== '' && $status !== 'dispatch') {
             $stmt->bindValue(':status', $status);
+        }
+        if ($fromDate !== null && trim($fromDate) !== '') {
+            $stmt->bindValue(':from_date', $fromDate);
+        }
+        if ($toDate !== null && trim($toDate) !== '') {
+            $stmt->bindValue(':to_date', $toDate);
         }
         $stmt->bindValue(':query', $query);
         $stmt->bindValue(':query_like_1', $queryLike);

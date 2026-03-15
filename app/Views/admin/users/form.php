@@ -33,6 +33,14 @@ $hasError = static function (string $field) use ($errors): bool {
 };
 
 $effectiveActive = (int) ($targetUser['effective_active'] ?? $targetUser['is_active'] ?? 1) === 1;
+$invitedAt = trim((string) ($targetUser['invited_at'] ?? ''));
+$invitationExpiresAt = trim((string) ($targetUser['invitation_expires_at'] ?? ''));
+$invitationAcceptedAt = trim((string) ($targetUser['invitation_accepted_at'] ?? ''));
+$invitationExpired = !$isCreate && $invitedAt !== '' && $invitationAcceptedAt === '' && $invitationExpiresAt !== '' && strtotime($invitationExpiresAt) !== false && strtotime($invitationExpiresAt) < time();
+$invitationPending = !$isCreate && $invitedAt !== '' && $invitationAcceptedAt === '' && !$invitationExpired;
+$invitationStatus = $isCreate
+    ? ''
+    : ($invitationAcceptedAt !== '' ? 'Accepted' : ($invitationExpired ? 'Expired' : ($invitedAt !== '' ? 'Pending' : 'Accepted')));
 ?>
 
 <div class="page-header d-flex flex-wrap align-items-end justify-content-between gap-2">
@@ -41,6 +49,16 @@ $effectiveActive = (int) ($targetUser['effective_active'] ?? $targetUser['is_act
         <p class="muted"><?= e($targetName) ?></p>
     </div>
     <div class="d-flex flex-wrap gap-2">
+        <?php if (!$isCreate && ($invitationPending || $invitationExpired)): ?>
+            <form method="post" action="<?= e(url('/admin/users/' . (string) ((int) ($targetUser['id'] ?? 0)) . '/resend-invite')) ?>">
+                <?= csrf_field() ?>
+                <button class="btn btn-outline-primary" type="submit">Resend Invite</button>
+            </form>
+            <form method="post" action="<?= e(url('/admin/users/' . (string) ((int) ($targetUser['id'] ?? 0)) . '/auto-accept')) ?>" onsubmit="return confirm('Auto-accept this user and generate a new temporary password?');">
+                <?= csrf_field() ?>
+                <button class="btn btn-primary" type="submit">Auto-Accept</button>
+            </form>
+        <?php endif; ?>
         <?php if (!$isCreate && $canToggleActive): ?>
             <form method="post" action="<?= e(url('/admin/users/' . (string) ((int) ($targetUser['id'] ?? 0)) . '/toggle-active')) ?>" onsubmit="return confirm('Are you sure?');">
                 <?= csrf_field() ?>
@@ -68,6 +86,15 @@ $effectiveActive = (int) ($targetUser['effective_active'] ?? $targetUser['is_act
                     <span class="badge <?= $effectiveActive ? 'text-bg-success' : 'text-bg-secondary' ?>">
                         <?= e($effectiveActive ? 'Active' : 'Inactive') ?>
                     </span>
+                    <span class="small text-muted ms-3 me-2">Invite:</span>
+                    <span class="badge <?= $invitationAcceptedAt !== '' ? 'text-bg-success' : ($invitationExpired ? 'text-bg-danger' : 'text-bg-warning') ?>">
+                        <?= e($invitationStatus) ?>
+                    </span>
+                    <?php if ($invitationPending && $invitationExpiresAt !== ''): ?>
+                        <span class="small text-muted ms-2">Expires <?= e(format_datetime($invitationExpiresAt)) ?></span>
+                    <?php elseif ($invitationAcceptedAt !== ''): ?>
+                        <span class="small text-muted ms-2">Accepted <?= e(format_datetime($invitationAcceptedAt)) ?></span>
+                    <?php endif; ?>
                 </div>
             <?php endif; ?>
 
@@ -110,21 +137,25 @@ $effectiveActive = (int) ($targetUser['effective_active'] ?? $targetUser['is_act
             <div class="col-12">
                 <hr class="my-1" />
                 <p class="small muted mb-0">
-                    <?= e($isCreate ? 'Password is required for new users.' : 'Leave password fields blank to keep the current password.') ?>
+                    <?= e($isCreate
+                        ? 'A temporary password will be generated automatically and shown once after save. The user will be required to change it at first login.'
+                        : 'Leave password fields blank to keep the current password.') ?>
                 </p>
             </div>
 
-            <div class="col-12 col-lg-6">
-                <label class="form-label fw-semibold" for="user-password"><?= e($isCreate ? 'Password' : 'New Password') ?></label>
-                <input id="user-password" type="password" name="password" class="form-control <?= $hasError('password') ? 'is-invalid' : '' ?>" autocomplete="new-password" />
-                <?php if ($hasError('password')): ?><div class="invalid-feedback d-block"><?= e($fieldError('password')) ?></div><?php endif; ?>
-            </div>
+            <?php if (!$isCreate): ?>
+                <div class="col-12 col-lg-6">
+                    <label class="form-label fw-semibold" for="user-password">New Password</label>
+                    <input id="user-password" type="password" name="password" class="form-control <?= $hasError('password') ? 'is-invalid' : '' ?>" autocomplete="new-password" />
+                    <?php if ($hasError('password')): ?><div class="invalid-feedback d-block"><?= e($fieldError('password')) ?></div><?php endif; ?>
+                </div>
 
-            <div class="col-12 col-lg-6">
-                <label class="form-label fw-semibold" for="user-password-confirm">Confirm Password</label>
-                <input id="user-password-confirm" type="password" name="password_confirm" class="form-control <?= $hasError('password_confirm') ? 'is-invalid' : '' ?>" autocomplete="new-password" />
-                <?php if ($hasError('password_confirm')): ?><div class="invalid-feedback d-block"><?= e($fieldError('password_confirm')) ?></div><?php endif; ?>
-            </div>
+                <div class="col-12 col-lg-6">
+                    <label class="form-label fw-semibold" for="user-password-confirm">Confirm Password</label>
+                    <input id="user-password-confirm" type="password" name="password_confirm" class="form-control <?= $hasError('password_confirm') ? 'is-invalid' : '' ?>" autocomplete="new-password" />
+                    <?php if ($hasError('password_confirm')): ?><div class="invalid-feedback d-block"><?= e($fieldError('password_confirm')) ?></div><?php endif; ?>
+                </div>
+            <?php endif; ?>
 
             <div class="col-12 d-flex flex-wrap gap-2">
                 <button class="btn btn-primary" type="submit"><?= e($isCreate ? 'Create User' : 'Save User') ?></button>

@@ -12,7 +12,9 @@ $lists = is_array($report['lists'] ?? null) ? $report['lists'] : [];
 
 $jobs = is_array($lists['jobs'] ?? null) ? $lists['jobs'] : [];
 $salesList = is_array($lists['sales'] ?? null) ? $lists['sales'] : [];
+$purchasesList = is_array($lists['purchases'] ?? null) ? $lists['purchases'] : [];
 $expensesByCategory = is_array($expenses['by_category'] ?? null) ? $expenses['by_category'] : [];
+$salesByType = is_array($sales['by_type'] ?? null) ? $sales['by_type'] : [];
 
 $formatMoney = static function ($value): string {
     return '$' . number_format((float) $value, 2);
@@ -108,10 +110,20 @@ $formatDate = static function (?string $value): string {
         <section class="card index-card h-100">
             <div class="card-header index-card-header"><strong><i class="fas fa-sack-dollar me-2"></i>Sales</strong></div>
             <div class="card-body">
-                <div class="record-row-fields record-row-fields-3">
+                <div class="record-row-fields record-row-fields-3 mb-3">
                     <div class="record-field"><span class="record-label">Count</span><span class="record-value"><?= e((string) ((int) ($sales['count'] ?? 0))) ?></span></div>
                     <div class="record-field"><span class="record-label">Gross</span><span class="record-value"><?= e($formatMoney($sales['gross'] ?? 0)) ?></span></div>
                     <div class="record-field"><span class="record-label">Net</span><span class="record-value"><?= e($formatMoney($sales['net'] ?? 0)) ?></span></div>
+                </div>
+                <div class="record-row-fields record-row-fields-4">
+                    <?php foreach (['ebay' => 'Ebay', 'shop' => 'Shop', 'b2b' => 'B2B', 'scrap' => 'Scrap'] as $typeKey => $typeLabel): ?>
+                        <?php $typeSummary = is_array($salesByType[$typeKey] ?? null) ? $salesByType[$typeKey] : ['count' => 0, 'gross' => 0.0, 'net' => 0.0]; ?>
+                        <div class="record-field">
+                            <span class="record-label"><?= e($typeLabel) ?></span>
+                            <span class="record-value"><?= e($formatMoney($typeSummary['gross'] ?? 0)) ?></span>
+                            <span class="record-meta small text-muted">Net <?= e($formatMoney($typeSummary['net'] ?? 0)) ?> · <?= e((string) ((int) ($typeSummary['count'] ?? 0))) ?> sale(s)</span>
+                        </div>
+                    <?php endforeach; ?>
                 </div>
             </div>
         </section>
@@ -215,6 +227,37 @@ $formatDate = static function (?string $value): string {
                             <a class="simple-list-row simple-list-row-link" href="<?= e(url('/sales/' . (string) $saleId)) ?>">
                                 <span class="simple-list-title"><?= e($name) ?></span>
                                 <span class="simple-list-meta"><?= e($typeLabel) ?> · <?= e($date) ?> · Gross <?= e($gross) ?> · Net <?= e($net) ?></span>
+                            </a>
+                        <?php endforeach; ?>
+                    </div>
+                <?php endif; ?>
+            </div>
+        </section>
+    </div>
+    <div class="col-12 col-xl-6">
+        <section class="card index-card h-100">
+            <div class="card-header index-card-header d-flex align-items-center justify-content-between">
+                <strong><i class="fas fa-cart-arrow-down me-2"></i>Purchases (Within Range)</strong>
+                <a class="small text-decoration-none fw-semibold" href="<?= e(url('/purchases')) ?>">Open Purchases</a>
+            </div>
+            <div class="card-body">
+                <?php if ($purchasesList === []): ?>
+                    <div class="record-empty">No purchases in this date range.</div>
+                <?php else: ?>
+                    <div class="simple-list-table">
+                        <?php foreach ($purchasesList as $purchase): ?>
+                            <?php
+                            $purchaseId = (int) ($purchase['id'] ?? 0);
+                            $title = trim((string) ($purchase['title'] ?? '')) ?: ('Purchase #' . (string) $purchaseId);
+                            $client = trim((string) ($purchase['client_name'] ?? '')) ?: '—';
+                            $status = trim((string) ($purchase['status'] ?? ''));
+                            $statusLabel = $status !== '' ? ucfirst(str_replace('_', ' ', $status)) : '—';
+                            $purchaseDate = $formatDate((string) ($purchase['purchase_date'] ?? ''));
+                            $price = $formatMoney((float) ($purchase['purchase_price'] ?? 0));
+                            ?>
+                            <a class="simple-list-row simple-list-row-link" href="<?= e(url('/purchases/' . (string) $purchaseId)) ?>">
+                                <span class="simple-list-title"><?= e($title) ?></span>
+                                <span class="simple-list-meta"><?= e($client) ?> · <?= e($statusLabel) ?> · <?= e($purchaseDate) ?> · <?= e($price) ?></span>
                             </a>
                         <?php endforeach; ?>
                     </div>

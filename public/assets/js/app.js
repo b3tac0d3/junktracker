@@ -1,4 +1,69 @@
 window.addEventListener('DOMContentLoaded', () => {
+    const preserveMeridiemOnKeyboardEdit = (input) => {
+        if (!(input instanceof HTMLInputElement) || input.type !== 'datetime-local') {
+            return;
+        }
+
+        const rememberValue = () => {
+            input.dataset.previousDateTimeValue = input.value || '';
+        };
+
+        rememberValue();
+
+        input.addEventListener('focus', rememberValue);
+        input.addEventListener('keydown', (event) => {
+            if (event.metaKey || event.ctrlKey || event.altKey) {
+                return;
+            }
+
+            const ignoredKeys = new Set(['Tab', 'Shift', 'Control', 'Alt', 'Meta', 'Escape', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown']);
+            if (ignoredKeys.has(event.key)) {
+                return;
+            }
+
+            input.dataset.keyboardDateTimeEdit = '1';
+        });
+
+        const maybePreserveMeridiem = () => {
+            const previousValue = input.dataset.previousDateTimeValue || '';
+            const currentValue = input.value || '';
+            const keyboardEdit = input.dataset.keyboardDateTimeEdit === '1';
+
+            if (!keyboardEdit || previousValue === '' || currentValue === '') {
+                rememberValue();
+                delete input.dataset.keyboardDateTimeEdit;
+                return;
+            }
+
+            const previous = new Date(previousValue);
+            const current = new Date(currentValue);
+            if (Number.isNaN(previous.getTime()) || Number.isNaN(current.getTime())) {
+                rememberValue();
+                delete input.dataset.keyboardDateTimeEdit;
+                return;
+            }
+
+            const previousHour = previous.getHours();
+            const currentHour = current.getHours();
+            if (previousHour >= 12 && currentHour < 12) {
+                current.setHours(currentHour + 12);
+                const offset = current.getTimezoneOffset();
+                const localTime = new Date(current.getTime() - (offset * 60000));
+                input.value = localTime.toISOString().slice(0, 16);
+            }
+
+            rememberValue();
+            delete input.dataset.keyboardDateTimeEdit;
+        };
+
+        input.addEventListener('change', maybePreserveMeridiem);
+        input.addEventListener('blur', maybePreserveMeridiem);
+    };
+
+    document.querySelectorAll('input[type="datetime-local"]').forEach((input) => {
+        preserveMeridiemOnKeyboardEdit(input);
+    });
+
     const alerts = document.querySelectorAll('.alert');
     alerts.forEach((el) => {
         setTimeout(() => {

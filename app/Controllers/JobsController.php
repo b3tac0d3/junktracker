@@ -22,6 +22,14 @@ final class JobsController extends Controller
 
         $search = trim((string) ($_GET['q'] ?? ''));
         $status = strtolower(trim((string) ($_GET['status'] ?? 'dispatch')));
+        $fromDate = trim((string) ($_GET['from_date'] ?? date('Y-01-01')));
+        $toDate = trim((string) ($_GET['to_date'] ?? date('Y-m-d')));
+        if (!$this->isValidDateFilter($fromDate)) {
+            $fromDate = date('Y-01-01');
+        }
+        if (!$this->isValidDateFilter($toDate)) {
+            $toDate = date('Y-m-d');
+        }
         $businessId = current_business_id();
         $statusOptions = $this->jobStatusOptions($businessId);
         $allowedStatuses = array_merge(['dispatch'], $statusOptions);
@@ -31,24 +39,36 @@ final class JobsController extends Controller
 
         $perPage = pagination_per_page($_GET['per_page'] ?? null);
         $page = pagination_current_page($_GET['page'] ?? null);
-        $totalRows = Job::indexCount($businessId, $search, $status);
+        $totalRows = Job::indexCount($businessId, $search, $status, $fromDate, $toDate);
         $totalPages = pagination_total_pages($totalRows, $perPage);
         if ($page > $totalPages) {
             $page = $totalPages;
         }
         $offset = pagination_offset($page, $perPage);
 
-        $jobs = Job::indexList($businessId, $search, $status, $perPage, $offset);
+        $jobs = Job::indexList($businessId, $search, $status, $perPage, $offset, $fromDate, $toDate);
         $pagination = pagination_meta($page, $perPage, $totalRows, count($jobs));
 
         $this->render('jobs/index', [
             'pageTitle' => 'Jobs',
             'search' => $search,
             'status' => $status,
+            'fromDate' => $fromDate,
+            'toDate' => $toDate,
             'statusOptions' => $statusOptions,
             'jobs' => $jobs,
             'pagination' => $pagination,
         ]);
+    }
+
+    private function isValidDateFilter(string $value): bool
+    {
+        if ($value === '') {
+            return false;
+        }
+
+        $date = \DateTimeImmutable::createFromFormat('Y-m-d', $value);
+        return $date instanceof \DateTimeImmutable && $date->format('Y-m-d') === $value;
     }
 
     public function create(): void

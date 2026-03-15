@@ -26,6 +26,7 @@ final class SettingsController extends Controller
             'actionUrl' => url('/settings/update'),
             'form' => $this->formFromUser($user),
             'errors' => [],
+            'mustChangePassword' => auth_requires_password_change(),
         ]);
     }
 
@@ -47,13 +48,15 @@ final class SettingsController extends Controller
         }
 
         $form = $this->formFromPost($_POST);
-        $errors = $this->validateForm($form, $userId);
+        $mustChangePassword = auth_requires_password_change();
+        $errors = $this->validateForm($form, $userId, $mustChangePassword);
         if ($errors !== []) {
             $this->render('settings/edit', [
                 'pageTitle' => 'Settings',
                 'actionUrl' => url('/settings/update'),
                 'form' => $form,
                 'errors' => $errors,
+                'mustChangePassword' => $mustChangePassword,
             ]);
             return;
         }
@@ -66,16 +69,26 @@ final class SettingsController extends Controller
         if ($form['password'] !== '') {
             $payload['password_hash'] = password_hash($form['password'], PASSWORD_DEFAULT);
         }
+        if ($mustChangePassword) {
+            $payload['must_change_password'] = 0;
+        }
 
         User::updateProfile($userId, $payload, $userId);
+        if ($mustChangePassword) {
+            User::markInvitationAccepted($userId, $userId);
+        }
 
         if (isset($_SESSION['user']) && is_array($_SESSION['user'])) {
             $_SESSION['user']['first_name'] = $form['first_name'];
             $_SESSION['user']['last_name'] = $form['last_name'];
             $_SESSION['user']['email'] = strtolower($form['email']);
+            if ($mustChangePassword) {
+                $_SESSION['user']['must_change_password'] = false;
+                $_SESSION['user']['invitation_pending'] = false;
+            }
         }
 
-        flash('success', 'Settings updated.');
+        flash('success', $mustChangePassword ? 'Password updated. Access restored.' : 'Settings updated.');
         redirect('/settings');
     }
 
@@ -101,7 +114,7 @@ final class SettingsController extends Controller
         ];
     }
 
-    private function validateForm(array $form, int $userId): array
+    private function validateForm(array $form, int $userId, bool $mustChangePassword = false): array
     {
         $errors = [];
 
@@ -113,6 +126,10 @@ final class SettingsController extends Controller
             $errors['email'] = 'Enter a valid email.';
         } elseif (User::emailExists($form['email'], $userId)) {
             $errors['email'] = 'Email is already in use.';
+        }
+
+        if ($mustChangePassword && $form['password'] === '') {
+            $errors['password'] = 'A new password is required.';
         }
 
         if ($form['password'] !== '') {
@@ -127,4 +144,3 @@ final class SettingsController extends Controller
         return $errors;
     }
 }
-

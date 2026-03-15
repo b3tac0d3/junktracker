@@ -437,6 +437,8 @@ window.addEventListener('DOMContentLoaded', () => {
     const addBtn = document.getElementById('line-item-add');
     const tpl = document.getElementById('line-item-template');
     const formEl = document.getElementById('financial-doc-form');
+    const issueDateInput = document.getElementById('billing-issue-date');
+    const dueDateInput = document.getElementById('billing-due-date');
     const subtotalInput = document.getElementById('billing-subtotal');
     const taxRateInput = document.getElementById('billing-tax-rate');
     const taxAmountInput = document.getElementById('billing-tax-amount');
@@ -449,6 +451,31 @@ window.addEventListener('DOMContentLoaded', () => {
         const v = parseFloat(String(value || '0').replace(/,/g, '').trim());
         return Number.isFinite(v) ? v : 0;
     };
+
+    let dueDateManuallyChanged = false;
+
+    if (issueDateInput && dueDateInput) {
+        const syncDueDateFromIssueDate = () => {
+            if (dueDateManuallyChanged) {
+                return;
+            }
+            dueDateInput.value = String(issueDateInput.value || '');
+        };
+
+        const initialIssueDate = String(issueDateInput.defaultValue || issueDateInput.value || '');
+        const initialDueDate = String(dueDateInput.defaultValue || dueDateInput.value || '');
+        dueDateManuallyChanged = initialDueDate !== '' && initialIssueDate !== '' && initialDueDate !== initialIssueDate;
+
+        issueDateInput.addEventListener('input', syncDueDateFromIssueDate);
+        issueDateInput.addEventListener('change', syncDueDateFromIssueDate);
+
+        dueDateInput.addEventListener('input', () => {
+            dueDateManuallyChanged = String(dueDateInput.value || '') !== String(issueDateInput.value || '');
+        });
+        dueDateInput.addEventListener('change', () => {
+            dueDateManuallyChanged = String(dueDateInput.value || '') !== String(issueDateInput.value || '');
+        });
+    }
 
     const money = (value) => {
         return (Math.round((value + Number.EPSILON) * 100) / 100).toFixed(2);

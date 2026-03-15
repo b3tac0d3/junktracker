@@ -241,14 +241,10 @@ $formatDuration = static function (int $minutes): string {
             if ($docId <= 0) {
                 continue;
             }
-            $docNumber = trim((string) ($estimate['invoice_number'] ?? ''));
-            if ($docNumber === '') {
-                $docNumber = 'Estimate #' . (string) $docId;
-            }
             $transactions[] = [
                 'type' => 'Estimate',
                 'id' => $docId,
-                'number' => $docNumber,
+                'number' => 'Estimate',
                 'status' => $formatDocStatus((string) ($estimate['status'] ?? '')),
                 'date' => $formatDocDate((string) ($estimate['issue_date'] ?? '')),
                 'total_label' => '',
@@ -265,14 +261,10 @@ $formatDuration = static function (int $minutes): string {
             if ($docId <= 0) {
                 continue;
             }
-            $docNumber = trim((string) ($invoice['invoice_number'] ?? ''));
-            if ($docNumber === '') {
-                $docNumber = 'Invoice #' . (string) $docId;
-            }
             $transactions[] = [
                 'type' => 'Invoice',
                 'id' => $docId,
-                'number' => $docNumber,
+                'number' => 'Invoice',
                 'status' => $formatDocStatus((string) ($invoice['status'] ?? '')),
                 'date' => $formatDocDate((string) ($invoice['issue_date'] ?? '')),
                 'total_label' => '',
@@ -301,7 +293,7 @@ $formatDuration = static function (int $minutes): string {
             $transactions[] = [
                 'type' => 'Payment',
                 'id' => $paymentId,
-                'number' => 'Payment #' . (string) $paymentId,
+                'number' => 'Payment',
                 'status' => $methodLabel,
                 'date' => $formatDocDate((string) ($payment['paid_at'] ?? '')),
                 'total_label' => '',

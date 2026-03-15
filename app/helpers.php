@@ -169,10 +169,35 @@ function current_business_id(): int
     return $businessId > 0 ? $businessId : 0;
 }
 
+function auth_requires_password_change(): bool
+{
+    $user = auth_user();
+    if (!$user) {
+        return false;
+    }
+
+    return !empty($user['must_change_password']) || !empty($user['invitation_pending']);
+}
+
 function require_auth(): void
 {
     if (auth_user() === null) {
         redirect('/login');
+    }
+
+    if (!auth_requires_password_change()) {
+        return;
+    }
+
+    $path = (string) parse_url((string) ($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_PATH);
+    $allowedPaths = [
+        url('/settings'),
+        url('/settings/update'),
+        url('/logout'),
+    ];
+
+    if (!in_array($path, $allowedPaths, true)) {
+        redirect('/settings');
     }
 }
 
@@ -225,12 +250,96 @@ function format_datetime(?string $value): string
     return date('m/d/Y g:i A', $timestamp);
 }
 
+function format_phone(?string $value): string
+{
+    $raw = trim((string) ($value ?? ''));
+    if ($raw === '') {
+        return '—';
+    }
+
+    $digits = preg_replace('/\D+/', '', $raw);
+    if (!is_string($digits) || $digits === '') {
+        return $raw;
+    }
+
+    if (strlen($digits) === 11 && str_starts_with($digits, '1')) {
+        $digits = substr($digits, 1);
+    }
+
+    if (strlen($digits) !== 10) {
+        return $raw;
+    }
+
+    return sprintf('(%s) %s - %s', substr($digits, 0, 3), substr($digits, 3, 3), substr($digits, 6, 4));
+}
+
 /**
  * @return array<int, int>
  */
 function pagination_per_page_options(): array
 {
     return [25, 50, 100, 200];
+}
+
+/**
+ * @return array<string, string>
+ */
+function us_state_options(): array
+{
+    return [
+        '' => 'Select state',
+        'AL' => 'AL',
+        'AK' => 'AK',
+        'AZ' => 'AZ',
+        'AR' => 'AR',
+        'CA' => 'CA',
+        'CO' => 'CO',
+        'CT' => 'CT',
+        'DE' => 'DE',
+        'FL' => 'FL',
+        'GA' => 'GA',
+        'HI' => 'HI',
+        'ID' => 'ID',
+        'IL' => 'IL',
+        'IN' => 'IN',
+        'IA' => 'IA',
+        'KS' => 'KS',
+        'KY' => 'KY',
+        'LA' => 'LA',
+        'ME' => 'ME',
+        'MD' => 'MD',
+        'MA' => 'MA',
+        'MI' => 'MI',
+        'MN' => 'MN',
+        'MS' => 'MS',
+        'MO' => 'MO',
+        'MT' => 'MT',
+        'NE' => 'NE',
+        'NV' => 'NV',
+        'NH' => 'NH',
+        'NJ' => 'NJ',
+        'NM' => 'NM',
+        'NY' => 'NY',
+        'NC' => 'NC',
+        'ND' => 'ND',
+        'OH' => 'OH',
+        'OK' => 'OK',
+        'OR' => 'OR',
+        'PA' => 'PA',
+        'RI' => 'RI',
+        'SC' => 'SC',
+        'SD' => 'SD',
+        'TN' => 'TN',
+        'TX' => 'TX',
+        'UT' => 'UT',
+        'VT' => 'VT',
+        'VA' => 'VA',
+        'WA' => 'WA',
+        'WV' => 'WV',
+        'WI' => 'WI',
+        'WY' => 'WY',
+        'DC' => 'DC',
+    ];
 }
 
 function pagination_per_page(mixed $value, int $default = 25): int

@@ -1,6 +1,8 @@
 <?php
 $search = trim((string) ($search ?? ''));
 $status = strtolower(trim((string) ($status ?? 'dispatch')));
+$fromDate = trim((string) ($fromDate ?? date('Y-01-01')));
+$toDate = trim((string) ($toDate ?? date('Y-m-d')));
 $jobs = is_array($jobs ?? null) ? $jobs : [];
 $pagination = is_array($pagination ?? null) ? $pagination : pagination_meta(1, 25, count($jobs), count($jobs));
 $perPage = (int) ($pagination['per_page'] ?? 25);
@@ -39,17 +41,25 @@ foreach ($statusOptionsRaw as $statusOptionRaw) {
         <form method="get" action="<?= e(url('/jobs')) ?>" class="row g-3 align-items-end">
             <input type="hidden" name="page" value="1">
             <input type="hidden" name="per_page" value="<?= e((string) $perPage) ?>">
-            <div class="col-12 col-lg-7">
+            <div class="col-12 col-lg-4">
                 <label class="form-label fw-semibold" for="jobs-search">Search</label>
                 <input id="jobs-search" class="form-control" name="q" value="<?= e($search) ?>" placeholder="Search by job, client, city, or id..." />
             </div>
-            <div class="col-12 col-lg-3">
+            <div class="col-12 col-md-4 col-lg-2">
                 <label class="form-label fw-semibold" for="jobs-status">Status</label>
                 <select id="jobs-status" class="form-select" name="status">
                     <?php foreach ($statusOptions as $value => $label): ?>
                         <option value="<?= e($value) ?>" <?= $status === $value ? 'selected' : '' ?>><?= e($label) ?></option>
                     <?php endforeach; ?>
                 </select>
+            </div>
+            <div class="col-12 col-md-4 col-lg-2">
+                <label class="form-label fw-semibold" for="jobs-from-date">From</label>
+                <input id="jobs-from-date" class="form-control" type="date" name="from_date" value="<?= e($fromDate) ?>">
+            </div>
+            <div class="col-12 col-md-4 col-lg-2">
+                <label class="form-label fw-semibold" for="jobs-to-date">To</label>
+                <input id="jobs-to-date" class="form-control" type="date" name="to_date" value="<?= e($toDate) ?>">
             </div>
             <div class="col-12 col-lg-2 d-grid d-lg-flex gap-2">
                 <button class="btn btn-primary flex-fill" type="submit">Apply</button>

@@ -105,13 +105,15 @@ final class AdminUsersController extends Controller
         }
 
         $actorId = (int) (auth_user_id() ?? 0);
+        $temporaryPassword = $this->generateTemporaryPassword();
         $userId = User::create([
             'first_name' => $form['first_name'],
             'last_name' => $form['last_name'],
             'email' => $form['email'],
-            'password_hash' => password_hash($form['password'], PASSWORD_DEFAULT),
+            'password_hash' => password_hash($temporaryPassword, PASSWORD_DEFAULT),
             'role' => $isSiteAdminGlobal ? 'site_admin' : 'general_user',
             'is_active' => 1,
+            'must_change_password' => 1,
         ], $actorId);
 
         if (!$isSiteAdminGlobal) {
@@ -121,7 +123,8 @@ final class AdminUsersController extends Controller
             }
         }
 
-        flash('success', $isSiteAdminGlobal ? 'Site admin added.' : 'User added.');
+        $message = $isSiteAdminGlobal ? 'Site admin added.' : 'User added.';
+        flash('success', $message . ' Temporary password: ' . $temporaryPassword . '. The user must change it at first login.');
         redirect('/admin/users');
     }
 
@@ -261,6 +264,54 @@ final class AdminUsersController extends Controller
         redirect('/admin/users/' . (string) $targetId . '/edit');
     }
 
+    public function resendInvite(array $params): void
+    {
+        $this->requireUsersAdminAccess();
+
+        $targetUser = $this->resolveTargetUser((int) ($params['id'] ?? 0));
+        if ($targetUser === null) {
+            http_response_code(404);
+            $this->render('errors/404', ['pageTitle' => 'Not Found']);
+            return;
+        }
+
+        if (!verify_csrf($_POST['csrf_token'] ?? null)) {
+            flash('error', 'Session expired. Please try again.');
+            redirect('/admin/users/' . (string) ((int) ($targetUser['id'] ?? 0)) . '/edit');
+        }
+
+        $temporaryPassword = $this->generateTemporaryPassword();
+        $actorId = (int) (auth_user_id() ?? 0);
+        User::resendInvitation((int) ($targetUser['id'] ?? 0), password_hash($temporaryPassword, PASSWORD_DEFAULT), $actorId);
+
+        flash('success', 'Invite resent. Temporary password: ' . $temporaryPassword . '. The user must change it at first login.');
+        redirect('/admin/users/' . (string) ((int) ($targetUser['id'] ?? 0)) . '/edit');
+    }
+
+    public function autoAccept(array $params): void
+    {
+        $this->requireUsersAdminAccess();
+
+        $targetUser = $this->resolveTargetUser((int) ($params['id'] ?? 0));
+        if ($targetUser === null) {
+            http_response_code(404);
+            $this->render('errors/404', ['pageTitle' => 'Not Found']);
+            return;
+        }
+
+        if (!verify_csrf($_POST['csrf_token'] ?? null)) {
+            flash('error', 'Session expired. Please try again.');
+            redirect('/admin/users/' . (string) ((int) ($targetUser['id'] ?? 0)) . '/edit');
+        }
+
+        $temporaryPassword = $this->generateTemporaryPassword();
+        $actorId = (int) (auth_user_id() ?? 0);
+        User::autoAcceptInvitation((int) ($targetUser['id'] ?? 0), password_hash($temporaryPassword, PASSWORD_DEFAULT), $actorId);
+
+        flash('success', 'Invite accepted on behalf of the user. Temporary password: ' . $temporaryPassword . '. The user must change it at first login.');
+        redirect('/admin/users/' . (string) ((int) ($targetUser['id'] ?? 0)) . '/edit');
+    }
+
     private function requireUsersAdminAccess(): void
     {
         require_auth();
@@ -364,10 +415,6 @@ final class AdminUsersController extends Controller
         }
 
         $password = (string) ($form['password'] ?? '');
-        if ($isCreate && $password === '') {
-            $errors['password'] = 'Password is required.';
-        }
-
         if ($password !== '') {
             if (strlen($password) < 8) {
                 $errors['password'] = 'Password must be at least 8 characters.';
@@ -399,5 +446,18 @@ final class AdminUsersController extends Controller
     private function isGlobalSiteAdminContext(): bool
     {
         return is_site_admin() && current_business_id() <= 0;
+    }
+
+    private function generateTemporaryPassword(int $length = 12): string
+    {
+        $alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@$%';
+        $maxIndex = strlen($alphabet) - 1;
+        $password = '';
+
+        for ($i = 0; $i < $length; $i++) {
+            $password .= $alphabet[random_int(0, $maxIndex)];
+        }
+
+        return $password;
     }
 }

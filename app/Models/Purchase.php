@@ -447,6 +447,7 @@ final class Purchase
         }
 
         $purchasePriceSql = SchemaInspector::hasColumn('purchases', 'purchase_price') ? 'p.purchase_price' : '0';
+        $safeLimit = max(1, min($limit, 1000));
 
         $sql = 'SELECT
                     p.id,
@@ -456,17 +457,20 @@ final class Purchase
                     p.purchase_date,
                     ' . $purchasePriceSql . ' AS purchase_price
                 FROM purchases p
-                WHERE p.business_id = :business_id
-                  AND p.client_id = :client_id
+                INNER JOIN clients c ON c.id = p.client_id
+                    AND c.deleted_at IS NULL
+                WHERE c.id = :client_id
+                  AND c.business_id = :business_id
+                  AND (p.business_id = :business_id OR p.business_id IS NULL OR p.business_id = 0)
                   AND p.deleted_at IS NULL
                 ORDER BY p.id DESC
-                LIMIT :row_limit';
+                LIMIT ' . $safeLimit;
 
         $stmt = Database::connection()->prepare($sql);
-        $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
-        $stmt->bindValue(':client_id', $clientId, \PDO::PARAM_INT);
-        $stmt->bindValue(':row_limit', max(1, min($limit, 1000)), \PDO::PARAM_INT);
-        $stmt->execute();
+        $stmt->execute([
+            'business_id' => $businessId,
+            'client_id' => $clientId,
+        ]);
 
         $rows = $stmt->fetchAll();
         return is_array($rows) ? $rows : [];

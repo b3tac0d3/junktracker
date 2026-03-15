@@ -32,20 +32,29 @@ final class ReportSummary
             'lists' => [
                 'jobs' => self::jobsList($businessId, $fromDate, $toDate),
                 'sales' => self::salesList($businessId, $fromDate, $toDate),
+                'purchases' => self::purchasesList($businessId, $fromDate, $toDate),
             ],
         ];
     }
 
     private static function salesSummary(int $businessId, string $fromDate, string $toDate): array
     {
+        $defaultTypes = [
+            'ebay' => ['count' => 0, 'gross' => 0.0, 'net' => 0.0],
+            'shop' => ['count' => 0, 'gross' => 0.0, 'net' => 0.0],
+            'b2b' => ['count' => 0, 'gross' => 0.0, 'net' => 0.0],
+            'scrap' => ['count' => 0, 'gross' => 0.0, 'net' => 0.0],
+        ];
+
         if (!SchemaInspector::hasTable('sales')) {
-            return ['count' => 0, 'gross' => 0.0, 'net' => 0.0];
+            return ['count' => 0, 'gross' => 0.0, 'net' => 0.0, 'by_type' => $defaultTypes];
         }
 
         $grossSql = SchemaInspector::hasColumn('sales', 'gross_amount')
             ? 'COALESCE(s.gross_amount, 0)'
             : (SchemaInspector::hasColumn('sales', 'amount') ? 'COALESCE(s.amount, 0)' : '0');
         $netSql = SchemaInspector::hasColumn('sales', 'net_amount') ? 'COALESCE(s.net_amount, 0)' : $grossSql;
+        $typeSql = SchemaInspector::hasColumn('sales', 'type') ? "LOWER(COALESCE(NULLIF(TRIM(s.type), ''), 'other'))" : "'other'";
         $dateSql = self::dateSql('sales', 's', ['sale_date', 'created_at']);
 
         $where = self::baseWhere('sales', 's', $businessId);
@@ -69,10 +78,34 @@ final class ReportSummary
         $stmt->execute($params);
         $row = $stmt->fetch();
 
+        $byType = $defaultTypes;
+        $typeStmt = Database::connection()->prepare("SELECT
+                    {$typeSql} AS sale_type,
+                    COUNT(*) AS item_count,
+                    COALESCE(SUM({$grossSql}), 0) AS gross_total,
+                    COALESCE(SUM({$netSql}), 0) AS net_total
+                FROM sales s
+                WHERE " . implode(' AND ', $where) . "
+                GROUP BY {$typeSql}");
+        $typeStmt->execute($params);
+        foreach ($typeStmt->fetchAll() as $typeRow) {
+            $typeKey = strtolower(trim((string) ($typeRow['sale_type'] ?? '')));
+            if (!isset($byType[$typeKey])) {
+                continue;
+            }
+
+            $byType[$typeKey] = [
+                'count' => (int) ($typeRow['item_count'] ?? 0),
+                'gross' => (float) ($typeRow['gross_total'] ?? 0),
+                'net' => (float) ($typeRow['net_total'] ?? 0),
+            ];
+        }
+
         return [
             'count' => (int) ($row['item_count'] ?? 0),
             'gross' => (float) ($row['gross_total'] ?? 0),
             'net' => (float) ($row['net_total'] ?? 0),
+            'by_type' => $byType,
         ];
     }
 
@@ -276,6 +309,66 @@ final class ReportSummary
 
         $stmt = Database::connection()->prepare($sql);
         $params = self::baseParams('sales', $businessId);
+        if ($dateSql !== null) {
+            $params['from_date'] = $fromDate;
+            $params['to_date'] = $toDate;
+        }
+        foreach ($params as $key => $value) {
+            $stmt->bindValue(':' . $key, $value, is_int($value) ? \PDO::PARAM_INT : \PDO::PARAM_STR);
+        }
+        $stmt->bindValue(':row_limit', max(1, min($limit, 200)), \PDO::PARAM_INT);
+        $stmt->execute();
+
+        $rows = $stmt->fetchAll();
+        return is_array($rows) ? $rows : [];
+    }
+
+    private static function purchasesList(int $businessId, string $fromDate, string $toDate, int $limit = 25): array
+    {
+        if (!SchemaInspector::hasTable('purchases')) {
+            return [];
+        }
+
+        $titleSql = SchemaInspector::hasColumn('purchases', 'title')
+            ? "COALESCE(NULLIF(TRIM(p.title), ''), CONCAT('Purchase #', p.id))"
+            : "CONCAT('Purchase #', p.id)";
+        $statusSql = SchemaInspector::hasColumn('purchases', 'status') ? 'LOWER(COALESCE(p.status, \'\'))' : "''";
+        $priceSql = SchemaInspector::hasColumn('purchases', 'purchase_price') ? 'COALESCE(p.purchase_price, 0)' : '0';
+        $dateSql = self::dateSql('purchases', 'p', ['purchase_date', 'contact_date', 'created_at']);
+
+        $joinSql = '';
+        $clientNameSql = "'—'";
+        if (SchemaInspector::hasTable('clients') && SchemaInspector::hasColumn('purchases', 'client_id')) {
+            $joinSql = 'LEFT JOIN clients c ON c.id = p.client_id';
+            if (SchemaInspector::hasColumn('clients', 'business_id') && SchemaInspector::hasColumn('purchases', 'business_id')) {
+                $joinSql .= ' AND c.business_id = p.business_id';
+            }
+            if (SchemaInspector::hasColumn('clients', 'deleted_at')) {
+                $joinSql .= ' AND c.deleted_at IS NULL';
+            }
+            $clientNameSql = self::clientNameSql('c');
+        }
+
+        $where = self::baseWhere('purchases', 'p', $businessId);
+        if ($dateSql !== null) {
+            $where[] = "DATE({$dateSql}) BETWEEN :from_date AND :to_date";
+        }
+
+        $sql = "SELECT
+                    p.id,
+                    {$titleSql} AS title,
+                    {$statusSql} AS status,
+                    {$priceSql} AS purchase_price,
+                    {$clientNameSql} AS client_name,
+                    " . ($dateSql !== null ? $dateSql : 'NULL') . " AS purchase_date
+                FROM purchases p
+                {$joinSql}
+                WHERE " . implode(' AND ', $where) . '
+                ORDER BY p.id DESC
+                LIMIT :row_limit';
+
+        $stmt = Database::connection()->prepare($sql);
+        $params = self::baseParams('purchases', $businessId);
         if ($dateSql !== null) {
             $params['from_date'] = $fromDate;
             $params['to_date'] = $toDate;

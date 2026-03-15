@@ -83,7 +83,7 @@ $clientDisplayName = static function (array $row): string {
                                 </div>
                                 <div class="record-field">
                                     <span class="record-label">Phone</span>
-                                    <span class="record-value"><?= e(trim((string) ($client['phone'] ?? '')) ?: '—') ?></span>
+                                    <span class="record-value"><?= e(format_phone((string) ($client['phone'] ?? ''))) ?></span>
                                 </div>
                                 <div class="record-field">
                                     <span class="record-label">City</span>

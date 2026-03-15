@@ -13,6 +13,7 @@ final class DashboardSummary
         return [
             'sales' => self::salesSummary($businessId),
             'service' => self::serviceSummary($businessId),
+            'expenses' => self::expensesSummary($businessId),
             'purchases' => self::purchasesSummary($businessId),
             'jobs' => self::jobsSummary($businessId),
             'tasks' => self::tasksSummary($businessId, $ownerUserId),
@@ -23,6 +24,14 @@ final class DashboardSummary
                 'my_tasks_due' => self::myTasksDue($businessId, $ownerUserId),
                 'recent_sales' => self::recentSales($businessId),
             ],
+        ];
+    }
+
+    private static function expensesSummary(int $businessId): array
+    {
+        return [
+            'mtd_total' => self::expensesTotalBetween($businessId, date('Y-m-01'), date('Y-m-d'), false),
+            'ytd_total' => self::expensesTotalBetween($businessId, date('Y-01-01'), date('Y-m-d'), false),
         ];
     }
 

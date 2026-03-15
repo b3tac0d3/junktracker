@@ -3,10 +3,16 @@ $businessName = (string) (($business['name'] ?? '') !== '' ? $business['name'] :
 $summary = is_array($summary ?? null) ? $summary : [];
 $sales = is_array($summary['sales'] ?? null) ? $summary['sales'] : [];
 $service = is_array($summary['service'] ?? null) ? $summary['service'] : [];
+$expenses = is_array($summary['expenses'] ?? null) ? $summary['expenses'] : [];
 $purchasesSummary = is_array($summary['purchases'] ?? null) ? $summary['purchases'] : [];
 $jobs = is_array($summary['jobs'] ?? null) ? $summary['jobs'] : [];
 $tasks = is_array($summary['tasks'] ?? null) ? $summary['tasks'] : [];
 $lists = is_array($summary['lists'] ?? null) ? $summary['lists'] : [];
+
+$totalMtdGross = (float) ($sales['mtd_gross'] ?? 0) + (float) ($service['mtd_gross'] ?? 0);
+$totalYtdGross = (float) ($sales['ytd_gross'] ?? 0) + (float) ($service['ytd_gross'] ?? 0);
+$totalMtdNet = (float) ($sales['mtd_net'] ?? 0) + (float) ($service['mtd_net'] ?? 0);
+$totalYtdNet = (float) ($sales['ytd_net'] ?? 0) + (float) ($service['ytd_net'] ?? 0);
 
 $dispatchJobs = is_array($lists['dispatch_jobs'] ?? null) ? $lists['dispatch_jobs'] : [];
 $prospects = is_array($lists['prospects'] ?? null) ? $lists['prospects'] : [];
@@ -71,25 +77,20 @@ $employeeDisplayName = static function (array $row): string {
         <strong>$<?= e(number_format((float) ($service['mtd_gross'] ?? 0), 2)) ?> / $<?= e(number_format((float) ($service['ytd_gross'] ?? 0), 2)) ?></strong>
         <small>Net MTD $<?= e(number_format((float) ($service['mtd_net'] ?? 0), 2)) ?> · Net YTD $<?= e(number_format((float) ($service['ytd_net'] ?? 0), 2)) ?></small>
     </a>
+    <a class="kpi-card kpi-card-link" href="<?= e(url('/reports')) ?>">
+        <span>Total Income MTD / YTD</span>
+        <strong>$<?= e(number_format($totalMtdGross, 2)) ?> / $<?= e(number_format($totalYtdGross, 2)) ?></strong>
+        <small>Net MTD $<?= e(number_format($totalMtdNet, 2)) ?> · Net YTD $<?= e(number_format($totalYtdNet, 2)) ?></small>
+    </a>
     <a class="kpi-card kpi-card-link" href="<?= e(url('/purchases')) ?>">
         <span>Purchases MTD / YTD</span>
         <strong>$<?= e(number_format((float) ($purchasesSummary['mtd_total'] ?? 0), 2)) ?> / $<?= e(number_format((float) ($purchasesSummary['ytd_total'] ?? 0), 2)) ?></strong>
         <small>MTD <?= e((string) ((int) ($purchasesSummary['mtd_count'] ?? 0))) ?> · YTD <?= e((string) ((int) ($purchasesSummary['ytd_count'] ?? 0))) ?></small>
     </a>
-    <a class="kpi-card kpi-card-link" href="<?= e(url('/jobs?status=dispatch')) ?>">
-        <span>Dispatch Jobs</span>
-        <strong><?= e((string) ((int) ($jobs['dispatch'] ?? 0))) ?></strong>
-        <small>Active <?= e((string) ((int) ($jobs['active'] ?? 0))) ?> · Prospects <?= e((string) ((int) ($jobs['prospect'] ?? 0))) ?></small>
-    </a>
-    <a class="kpi-card kpi-card-link" href="<?= e(url('/tasks?status=open')) ?>">
-        <span>My Open Tasks</span>
-        <strong><?= e((string) ((int) ($tasks['mine_open'] ?? 0))) ?></strong>
-        <small>Due Today <?= e((string) ((int) ($tasks['mine_due_today'] ?? 0))) ?> · Overdue <?= e((string) ((int) ($tasks['mine_overdue'] ?? 0))) ?></small>
-    </a>
-    <a class="kpi-card kpi-card-link" href="<?= e(url('/jobs?status=prospect')) ?>">
-        <span>Job Prospects</span>
-        <strong><?= e((string) ((int) ($jobs['prospect'] ?? 0))) ?></strong>
-        <small>Prospect pipeline</small>
+    <a class="kpi-card kpi-card-link" href="<?= e(url('/expenses')) ?>">
+        <span>Expenses MTD / YTD</span>
+        <strong>$<?= e(number_format((float) ($expenses['mtd_total'] ?? 0), 2)) ?> / $<?= e(number_format((float) ($expenses['ytd_total'] ?? 0), 2)) ?></strong>
+        <small>All recorded expenses</small>
     </a>
 </div>
 

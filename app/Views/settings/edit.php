@@ -2,6 +2,7 @@
 $form = is_array($form ?? null) ? $form : [];
 $errors = is_array($errors ?? null) ? $errors : [];
 $actionUrl = (string) ($actionUrl ?? url('/settings/update'));
+$mustChangePassword = (bool) ($mustChangePassword ?? false);
 
 $fieldError = static function (string $field) use ($errors): string {
     return isset($errors[$field]) ? (string) $errors[$field] : '';
@@ -15,7 +16,7 @@ $hasError = static function (string $field) use ($errors): bool {
 <div class="page-header d-flex flex-wrap align-items-end justify-content-between gap-2">
     <div>
         <h1>Settings</h1>
-        <p class="muted">Update your name, email, and password.</p>
+        <p class="muted"><?= e($mustChangePassword ? 'Set a new password before continuing.' : 'Update your name, email, and password.') ?></p>
     </div>
 </div>
 
@@ -26,6 +27,14 @@ $hasError = static function (string $field) use ($errors): bool {
     <div class="card-body">
         <form method="post" action="<?= e($actionUrl) ?>" class="row g-3">
             <?= csrf_field() ?>
+
+            <?php if ($mustChangePassword): ?>
+                <div class="col-12">
+                    <div class="alert alert-warning mb-0">
+                        You are signed in with a temporary password. Set a new password to continue.
+                    </div>
+                </div>
+            <?php endif; ?>
 
             <div class="col-12 col-lg-6">
                 <label class="form-label fw-semibold" for="settings-first-name">First Name</label>
@@ -46,7 +55,9 @@ $hasError = static function (string $field) use ($errors): bool {
 
             <div class="col-12">
                 <hr class="my-1" />
-                <p class="small muted mb-0">Leave password fields blank to keep your current password.</p>
+                <p class="small muted mb-0">
+                    <?= e($mustChangePassword ? 'A new password is required for this account before you can continue.' : 'Leave password fields blank to keep your current password.') ?>
+                </p>
             </div>
 
             <div class="col-12 col-lg-6">
@@ -63,9 +74,12 @@ $hasError = static function (string $field) use ($errors): bool {
 
             <div class="col-12 d-flex gap-2">
                 <button class="btn btn-primary" type="submit">Save Settings</button>
-                <a class="btn btn-outline-secondary" href="<?= e(url('/')) ?>">Cancel</a>
+                <?php if ($mustChangePassword): ?>
+                    <a class="btn btn-outline-secondary" href="<?= e(url('/logout')) ?>">Logout</a>
+                <?php else: ?>
+                    <a class="btn btn-outline-secondary" href="<?= e(url('/')) ?>">Cancel</a>
+                <?php endif; ?>
             </div>
         </form>
     </div>
 </section>
-

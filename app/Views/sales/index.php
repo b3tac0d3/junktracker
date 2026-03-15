@@ -1,6 +1,8 @@
 <?php
 $search = trim((string) ($search ?? ''));
 $type = trim((string) ($type ?? ''));
+$fromDate = trim((string) ($fromDate ?? ''));
+$toDate = trim((string) ($toDate ?? ''));
 $sales = is_array($sales ?? null) ? $sales : [];
 $summary = is_array($summary ?? null) ? $summary : [];
 $typeOptions = is_array($typeOptions ?? null) ? $typeOptions : [];
@@ -63,7 +65,7 @@ $formatSaleDate = static function (?string $value): string {
         <form method="get" action="<?= e(url('/sales')) ?>" class="row g-3 align-items-end">
             <input type="hidden" name="page" value="1">
             <input type="hidden" name="per_page" value="<?= e((string) $perPage) ?>">
-            <div class="col-12 col-lg-8">
+            <div class="col-12 col-lg-4">
                 <label class="form-label fw-semibold" for="sales-search">Search</label>
                 <input id="sales-search" class="form-control" name="q" value="<?= e($search) ?>" placeholder="Search by sale name, type, note, or id..." />
             </div>
@@ -75,6 +77,14 @@ $formatSaleDate = static function (?string $value): string {
                         <option value="<?= e($option) ?>" <?= $type === $option ? 'selected' : '' ?>><?= e($option) ?></option>
                     <?php endforeach; ?>
                 </select>
+            </div>
+            <div class="col-12 col-md-6 col-lg-2">
+                <label class="form-label fw-semibold" for="sales-from">From</label>
+                <input id="sales-from" class="form-control" type="date" name="from" value="<?= e($fromDate) ?>" />
+            </div>
+            <div class="col-12 col-md-6 col-lg-2">
+                <label class="form-label fw-semibold" for="sales-to">To</label>
+                <input id="sales-to" class="form-control" type="date" name="to" value="<?= e($toDate) ?>" />
             </div>
             <div class="col-12 col-lg-2 d-grid d-lg-flex gap-2">
                 <button class="btn btn-primary flex-fill" type="submit">Apply</button>
