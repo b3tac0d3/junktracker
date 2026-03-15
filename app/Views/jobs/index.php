@@ -53,13 +53,13 @@ foreach ($statusOptionsRaw as $statusOptionRaw) {
                     <?php endforeach; ?>
                 </select>
             </div>
-            <div class="col-12 col-md-4 col-lg-2">
-                <label class="form-label fw-semibold" for="jobs-from-date">From</label>
-                <input id="jobs-from-date" class="form-control" type="date" name="from_date" value="<?= e($fromDate) ?>">
-            </div>
-            <div class="col-12 col-md-4 col-lg-2">
-                <label class="form-label fw-semibold" for="jobs-to-date">To</label>
-                <input id="jobs-to-date" class="form-control" type="date" name="to_date" value="<?= e($toDate) ?>">
+            <div class="col-12 col-md-8 col-lg-4">
+                <label class="form-label fw-semibold" for="jobs-date-range">Date Range</label>
+                <div class="date-range-picker">
+                    <input id="jobs-date-range" class="form-control date-range-display" type="text" value="" placeholder="Select date range" readonly>
+                    <input class="date-range-native date-range-start" type="date" name="from_date" value="<?= e($fromDate) ?>">
+                    <input class="date-range-native date-range-end" type="date" name="to_date" value="<?= e($toDate) ?>">
+                </div>
             </div>
             <div class="col-12 col-lg-2 d-grid d-lg-flex gap-2">
                 <button class="btn btn-primary flex-fill" type="submit">Apply</button>

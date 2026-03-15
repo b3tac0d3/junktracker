@@ -30,8 +30,8 @@ final class DashboardSummary
     private static function expensesSummary(int $businessId): array
     {
         return [
-            'mtd_total' => self::expensesTotalBetween($businessId, date('Y-m-01'), date('Y-m-d'), false),
-            'ytd_total' => self::expensesTotalBetween($businessId, date('Y-01-01'), date('Y-m-d'), false),
+            'mtd_total' => self::expensesTotalBetween($businessId, date('Y-m-01'), date('Y-m-d'), null),
+            'ytd_total' => self::expensesTotalBetween($businessId, date('Y-01-01'), date('Y-m-d'), null),
         ];
     }
 
@@ -202,7 +202,7 @@ final class DashboardSummary
         ];
     }
 
-    private static function expensesTotalBetween(int $businessId, string $fromDate, string $toDate, bool $jobOnly): float
+    private static function expensesTotalBetween(int $businessId, string $fromDate, string $toDate, ?bool $jobOnly): float
     {
         if (!SchemaInspector::hasTable('expenses')) {
             return 0.0;
@@ -217,8 +217,12 @@ final class DashboardSummary
         ];
 
         if (SchemaInspector::hasColumn('expenses', 'job_id')) {
-            $where[] = $jobOnly ? 'e.job_id IS NOT NULL' : 'e.job_id IS NULL';
-        } elseif ($jobOnly) {
+            if ($jobOnly === true) {
+                $where[] = 'e.job_id IS NOT NULL';
+            } elseif ($jobOnly === false) {
+                $where[] = 'e.job_id IS NULL';
+            }
+        } elseif ($jobOnly === true) {
             return 0.0;
         }
 

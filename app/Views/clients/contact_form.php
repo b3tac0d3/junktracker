@@ -13,6 +13,10 @@ if ($displayName === '') {
     $displayName = 'Client #' . (string) max(0, $clientId);
 }
 
+$primaryPhone = trim((string) ($client['phone'] ?? ''));
+$secondaryPhone = trim((string) ($client['secondary_phone'] ?? ''));
+$email = trim((string) ($client['email'] ?? ''));
+
 $fieldError = static function (string $field) use ($errors): string {
     return isset($errors[$field]) ? (string) $errors[$field] : '';
 };
@@ -45,6 +49,21 @@ $typeOptions = [
         <strong><i class="fas fa-phone-volume me-2"></i>Contact Details</strong>
     </div>
     <div class="card-body">
+        <div class="record-row-fields record-row-fields-3 mb-3">
+            <div class="record-field">
+                <span class="record-label">Phone</span>
+                <span class="record-value"><?= e(format_phone($primaryPhone)) ?></span>
+            </div>
+            <div class="record-field">
+                <span class="record-label">Secondary Phone</span>
+                <span class="record-value"><?= e(format_phone($secondaryPhone)) ?></span>
+            </div>
+            <div class="record-field">
+                <span class="record-label">Email</span>
+                <span class="record-value"><?= e($email !== '' ? $email : '—') ?></span>
+            </div>
+        </div>
+
         <form method="post" action="<?= e($actionUrl) ?>" class="row g-3">
             <?= csrf_field() ?>
 

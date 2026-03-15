@@ -147,6 +147,19 @@ $itemTypeNames = array_keys($itemTypeDefaults);
 natcasesort($itemTypeNames);
 $itemTypeNames = array_values($itemTypeNames);
 
+$renderItemTypeOptions = static function (string $selected, array $options): string {
+    $html = '<option value="">Select</option>';
+    foreach ($options as $option) {
+        $value = trim((string) $option);
+        if ($value === '') {
+            continue;
+        }
+        $isSelected = strcasecmp($selected, $value) === 0 ? ' selected' : '';
+        $html .= '<option value="' . e($value) . '"' . $isSelected . '>' . e($value) . '</option>';
+    }
+    return $html;
+};
+
 $from = strtolower(trim((string) ($_GET['from'] ?? ($_POST['from'] ?? ''))));
 $jobBackId = (int) ($_GET['job_id'] ?? ($_POST['job_id'] ?? $jobId));
 $fromJob = $from === 'job' && $jobBackId > 0;
@@ -269,10 +282,9 @@ $cancelUrl = $fromJob
                                 <span class="line-item-drag-handle" title="Drag to reorder"><i class="fas fa-grip-vertical"></i></span>
                             </div>
                             <div class="line-item-cell line-item-cell-name">
-                                <div class="line-item-name-wrap">
-                                    <input class="form-control line-item-name" aria-label="Line item name" placeholder="Name" autocomplete="off" name="items[<?= e((string) $idx) ?>][name]" value="<?= e($name) ?>" maxlength="80" />
-                                    <div class="line-item-suggestions d-none"></div>
-                                </div>
+                                <select class="form-select line-item-name" aria-label="Line item name" name="items[<?= e((string) $idx) ?>][name]">
+                                    <?= $renderItemTypeOptions($name, $itemTypeNames) ?>
+                                </select>
                             </div>
                             <div class="line-item-cell line-item-cell-note">
                                 <input class="form-control line-item-note" aria-label="Line item note" placeholder="Note" name="items[<?= e((string) $idx) ?>][note]" value="<?= e($note) ?>" maxlength="255" />
@@ -392,10 +404,7 @@ $cancelUrl = $fromJob
                 <span class="line-item-drag-handle" title="Drag to reorder"><i class="fas fa-grip-vertical"></i></span>
             </div>
             <div class="line-item-cell line-item-cell-name">
-                <div class="line-item-name-wrap">
-                    <input class="form-control line-item-name" aria-label="Line item name" placeholder="Name" autocomplete="off" maxlength="80" />
-                    <div class="line-item-suggestions d-none"></div>
-                </div>
+                <select class="form-select line-item-name" aria-label="Line item name"></select>
             </div>
             <div class="line-item-cell line-item-cell-note">
                 <input class="form-control line-item-note" aria-label="Line item note" placeholder="Note" maxlength="255" />
@@ -480,33 +489,6 @@ window.addEventListener('DOMContentLoaded', () => {
     const money = (value) => {
         return (Math.round((value + Number.EPSILON) * 100) / 100).toFixed(2);
     };
-    let activeSuggestionRow = null;
-    const getSuggestionListEl = (row) => {
-        if (row.__lineItemSuggestions instanceof HTMLElement) {
-            return row.__lineItemSuggestions;
-        }
-        const el = row.querySelector('.line-item-suggestions');
-        if (el instanceof HTMLElement) {
-            row.__lineItemSuggestions = el;
-            return el;
-        }
-        return null;
-    };
-
-    const positionSuggestionList = (row) => {
-        const inputEl = row.querySelector('.line-item-name');
-        const listEl = getSuggestionListEl(row);
-        if (!inputEl || !listEl) {
-            return;
-        }
-        const rect = inputEl.getBoundingClientRect();
-        listEl.style.position = 'fixed';
-        listEl.style.left = `${Math.max(8, rect.left)}px`;
-        listEl.style.top = `${rect.bottom + 4}px`;
-        listEl.style.width = `${Math.max(180, rect.width)}px`;
-        listEl.style.zIndex = '6000';
-    };
-
     const normalizeItemName = (value) => String(value || '').trim().toLowerCase();
     const hasConfiguredItemTypes = Array.isArray(itemTypeNames) && itemTypeNames.length > 0;
     const isKnownItemType = (value) => {
@@ -618,93 +600,27 @@ window.addEventListener('DOMContentLoaded', () => {
         recalcTotals();
     };
 
-    const hideNameSuggestions = (row) => {
-        const listEl = getSuggestionListEl(row);
-        const wrapEl = row.querySelector('.line-item-name-wrap');
-        if (!listEl) {
+    const populateItemTypeSelect = (selectEl, selectedValue = '') => {
+        if (!(selectEl instanceof HTMLSelectElement)) {
             return;
         }
-        listEl.classList.add('d-none');
-        listEl.innerHTML = '';
-        listEl.style.left = '';
-        listEl.style.top = '';
-        listEl.style.width = '';
-        listEl.style.position = '';
-        listEl.style.zIndex = '';
-        if (wrapEl && listEl.parentElement !== wrapEl) {
-            wrapEl.appendChild(listEl);
-        }
-        row.classList.remove('line-item-row-suggest-open');
-        if (wrapEl) {
-            wrapEl.classList.remove('suggest-open');
-        }
-        if (activeSuggestionRow === row) {
-            activeSuggestionRow = null;
-        }
-    };
+        const normalizedSelected = String(selectedValue || '').trim().toLowerCase();
+        selectEl.innerHTML = '';
 
-    const renderNameSuggestions = (row, forceOpen = false) => {
-        const inputEl = row.querySelector('.line-item-name');
-        const listEl = getSuggestionListEl(row);
-        if (!inputEl || !listEl) {
-            return;
-        }
-        if (!Array.isArray(itemTypeNames) || itemTypeNames.length === 0) {
-            hideNameSuggestions(row);
-            return;
-        }
+        const placeholderOption = document.createElement('option');
+        placeholderOption.value = '';
+        placeholderOption.textContent = 'Select';
+        selectEl.appendChild(placeholderOption);
 
-        const query = String(inputEl.value || '').trim().toLowerCase();
-        if (query === '' && !forceOpen) {
-            hideNameSuggestions(row);
-            return;
-        }
-
-        const matches = itemTypeNames
-            .filter((name) => {
-                const label = String(name || '').trim();
-                if (label === '') {
-                    return false;
-                }
-                if (query === '') {
-                    return true;
-                }
-                return label.toLowerCase().includes(query);
-            })
-            .slice(0, 8);
-
-        if (matches.length === 0) {
-            hideNameSuggestions(row);
-            return;
-        }
-
-        listEl.innerHTML = '';
-        if (listEl.parentElement !== document.body) {
-            document.body.appendChild(listEl);
-        }
-        matches.forEach((match) => {
-            const btn = document.createElement('button');
-            btn.type = 'button';
-            btn.className = 'line-item-suggestion-item';
-            btn.textContent = match;
-            btn.addEventListener('mousedown', (event) => {
-                event.preventDefault();
-                inputEl.value = match;
-                hideNameSuggestions(row);
-                applyItemTypeDefaults(row);
-                setItemNameValidity(row);
-            });
-            listEl.appendChild(btn);
+        itemTypeNames.forEach((name) => {
+            const option = document.createElement('option');
+            option.value = name;
+            option.textContent = name;
+            if (normalizedSelected !== '' && name.trim().toLowerCase() === normalizedSelected) {
+                option.selected = true;
+            }
+            selectEl.appendChild(option);
         });
-
-        listEl.classList.remove('d-none');
-        positionSuggestionList(row);
-        activeSuggestionRow = row;
-        row.classList.add('line-item-row-suggest-open');
-        const wrapEl = row.querySelector('.line-item-name-wrap');
-        if (wrapEl) {
-            wrapEl.classList.add('suggest-open');
-        }
     };
 
     const attachDragEvents = (row) => {
@@ -768,34 +684,9 @@ window.addEventListener('DOMContentLoaded', () => {
             }
         });
         if (name) {
-            name.addEventListener('input', () => {
-                setItemNameValidity(row);
-                renderNameSuggestions(row);
-            });
-            name.addEventListener('focus', () => renderNameSuggestions(row, true));
             name.addEventListener('change', () => {
                 applyItemTypeDefaults(row);
                 setItemNameValidity(row);
-            });
-            name.addEventListener('blur', () => {
-                window.setTimeout(() => hideNameSuggestions(row), 120);
-                applyItemTypeDefaults(row);
-                setItemNameValidity(row);
-            });
-            name.addEventListener('keydown', (event) => {
-                if (event.key !== 'Enter') {
-                    return;
-                }
-                const listEl = getSuggestionListEl(row);
-                if (!listEl || listEl.classList.contains('d-none')) {
-                    return;
-                }
-                const first = listEl.querySelector('.line-item-suggestion-item');
-                if (!first) {
-                    return;
-                }
-                event.preventDefault();
-                first.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
             });
         }
         if (taxable) {
@@ -815,7 +706,6 @@ window.addEventListener('DOMContentLoaded', () => {
                     if (rateInput) rateInput.value = '0.00';
                     if (taxableInput) taxableInput.checked = true;
                 } else {
-                    hideNameSuggestions(row);
                     row.remove();
                     reindexRows();
                 }
@@ -829,6 +719,10 @@ window.addEventListener('DOMContentLoaded', () => {
 
     addBtn.addEventListener('click', () => {
         const clone = tpl.content.firstElementChild.cloneNode(true);
+        const cloneName = clone.querySelector('.line-item-name');
+        if (cloneName) {
+            populateItemTypeSelect(cloneName);
+        }
         wrap.appendChild(clone);
         reindexRows();
         attachRowEvents(clone);
@@ -836,28 +730,6 @@ window.addEventListener('DOMContentLoaded', () => {
     });
 
     taxRateInput.addEventListener('input', recalcTotals);
-    window.addEventListener('resize', () => {
-        if (activeSuggestionRow) {
-            positionSuggestionList(activeSuggestionRow);
-        }
-    });
-    window.addEventListener('scroll', () => {
-        if (activeSuggestionRow) {
-            positionSuggestionList(activeSuggestionRow);
-        }
-    }, true);
-    document.addEventListener('click', (event) => {
-        const target = event.target;
-        if (!(target instanceof HTMLElement) || !activeSuggestionRow) {
-            return;
-        }
-        const listEl = getSuggestionListEl(activeSuggestionRow);
-        const inputEl = activeSuggestionRow.querySelector('.line-item-name');
-        if ((listEl && listEl.contains(target)) || (inputEl && inputEl.contains(target))) {
-            return;
-        }
-        hideNameSuggestions(activeSuggestionRow);
-    });
     formEl.addEventListener('submit', (event) => {
         let hasInvalidName = false;
         Array.from(wrap.querySelectorAll('.line-item-row')).forEach((row) => {
@@ -869,7 +741,13 @@ window.addEventListener('DOMContentLoaded', () => {
             event.preventDefault();
         }
     });
-    Array.from(wrap.querySelectorAll('.line-item-row')).forEach((row) => attachRowEvents(row));
+    Array.from(wrap.querySelectorAll('.line-item-row')).forEach((row) => {
+        const name = row.querySelector('.line-item-name');
+        if (name) {
+            populateItemTypeSelect(name, name.value);
+        }
+        attachRowEvents(row);
+    });
     reindexRows();
     recalcTotals();
 });

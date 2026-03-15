@@ -11,8 +11,8 @@ $lists = is_array($summary['lists'] ?? null) ? $summary['lists'] : [];
 
 $totalMtdGross = (float) ($sales['mtd_gross'] ?? 0) + (float) ($service['mtd_gross'] ?? 0);
 $totalYtdGross = (float) ($sales['ytd_gross'] ?? 0) + (float) ($service['ytd_gross'] ?? 0);
-$totalMtdNet = (float) ($sales['mtd_net'] ?? 0) + (float) ($service['mtd_net'] ?? 0);
-$totalYtdNet = (float) ($sales['ytd_net'] ?? 0) + (float) ($service['ytd_net'] ?? 0);
+$totalMtdNet = ((float) ($sales['mtd_net'] ?? 0) + (float) ($service['mtd_gross'] ?? 0)) - (float) ($expenses['mtd_total'] ?? 0);
+$totalYtdNet = ((float) ($sales['ytd_net'] ?? 0) + (float) ($service['ytd_gross'] ?? 0)) - (float) ($expenses['ytd_total'] ?? 0);
 
 $dispatchJobs = is_array($lists['dispatch_jobs'] ?? null) ? $lists['dispatch_jobs'] : [];
 $prospects = is_array($lists['prospects'] ?? null) ? $lists['prospects'] : [];

@@ -46,13 +46,13 @@ $formatDate = static function (?string $value): string {
     </div>
     <div class="card-body">
         <form method="get" action="<?= e(url('/reports')) ?>" class="row g-3 align-items-end">
-            <div class="col-12 col-md-4">
-                <label class="form-label fw-semibold" for="report-from">From</label>
-                <input id="report-from" class="form-control" type="date" name="from" value="<?= e($fromDate) ?>" />
-            </div>
-            <div class="col-12 col-md-4">
-                <label class="form-label fw-semibold" for="report-to">To</label>
-                <input id="report-to" class="form-control" type="date" name="to" value="<?= e($toDate) ?>" />
+            <div class="col-12 col-md-8">
+                <label class="form-label fw-semibold" for="report-date-range">Date Range</label>
+                <div class="date-range-picker">
+                    <input id="report-date-range" class="form-control date-range-display" type="text" value="" placeholder="Select date range" readonly />
+                    <input class="date-range-native date-range-start" type="date" name="from" value="<?= e($fromDate) ?>" />
+                    <input class="date-range-native date-range-end" type="date" name="to" value="<?= e($toDate) ?>" />
+                </div>
             </div>
             <div class="col-12 col-md-4 d-grid d-md-flex gap-2">
                 <button class="btn btn-primary flex-fill" type="submit">Run Report</button>
