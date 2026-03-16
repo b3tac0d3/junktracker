@@ -1,8 +1,8 @@
 <?php
 $search = trim((string) ($search ?? ''));
 $type = trim((string) ($type ?? ''));
-$fromDate = trim((string) ($fromDate ?? ''));
-$toDate = trim((string) ($toDate ?? ''));
+$fromDate = trim((string) ($fromDate ?? date('Y-01-01')));
+$toDate = trim((string) ($toDate ?? date('Y-m-d')));
 $sales = is_array($sales ?? null) ? $sales : [];
 $summary = is_array($summary ?? null) ? $summary : [];
 $typeOptions = is_array($typeOptions ?? null) ? $typeOptions : [];

@@ -1,6 +1,8 @@
 <?php
 $search = trim((string) ($search ?? ''));
 $status = trim((string) ($status ?? ''));
+$fromDate = trim((string) ($fromDate ?? date('Y-01-01')));
+$toDate = trim((string) ($toDate ?? date('Y-m-d')));
 $statusOptions = is_array($statusOptions ?? null) ? $statusOptions : [];
 $purchases = is_array($purchases ?? null) ? $purchases : [];
 $summary = is_array($summary ?? null) ? $summary : [];
@@ -88,7 +90,7 @@ $notePreview = static function (?string $value): string {
         <form method="get" action="<?= e(url('/purchases')) ?>" class="row g-3 align-items-end">
             <input type="hidden" name="page" value="1">
             <input type="hidden" name="per_page" value="<?= e((string) $perPage) ?>">
-            <div class="col-12 col-lg-8">
+            <div class="col-12 col-lg-4">
                 <label class="form-label fw-semibold" for="purchase-search">Search</label>
                 <input id="purchase-search" class="form-control" name="q" value="<?= e($search) ?>" placeholder="Search by title, client, notes, or id..." />
             </div>
@@ -100,6 +102,14 @@ $notePreview = static function (?string $value): string {
                         <option value="<?= e((string) $option) ?>" <?= $status === (string) $option ? 'selected' : '' ?>><?= e($statusLabel((string) $option)) ?></option>
                     <?php endforeach; ?>
                 </select>
+            </div>
+            <div class="col-12 col-md-3 col-lg-2">
+                <label class="form-label fw-semibold" for="purchase-from-date">From</label>
+                <input id="purchase-from-date" class="form-control" type="date" name="from" value="<?= e($fromDate) ?>" />
+            </div>
+            <div class="col-12 col-md-3 col-lg-2">
+                <label class="form-label fw-semibold" for="purchase-to-date">To</label>
+                <input id="purchase-to-date" class="form-control" type="date" name="to" value="<?= e($toDate) ?>" />
             </div>
             <div class="col-12 col-lg-2 d-grid d-lg-flex gap-2">
                 <button class="btn btn-primary flex-fill" type="submit">Apply</button>

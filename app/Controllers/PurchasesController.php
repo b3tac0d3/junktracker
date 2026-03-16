@@ -19,6 +19,11 @@ final class PurchasesController extends Controller
 
         $search = trim((string) ($_GET['q'] ?? ''));
         $status = strtolower(trim((string) ($_GET['status'] ?? '')));
+        $fromDate = $this->normalizeDateFilter((string) ($_GET['from'] ?? date('Y-01-01')));
+        $toDate = $this->normalizeDateFilter((string) ($_GET['to'] ?? date('Y-m-d')));
+        if ($fromDate !== '' && $toDate !== '' && strtotime($fromDate) > strtotime($toDate)) {
+            [$fromDate, $toDate] = [$toDate, $fromDate];
+        }
         $businessId = current_business_id();
         $statusOptions = $this->purchaseStatusOptions($businessId);
         if ($status !== '' && !in_array($status, $statusOptions, true)) {
@@ -27,14 +32,14 @@ final class PurchasesController extends Controller
 
         $perPage = pagination_per_page($_GET['per_page'] ?? null);
         $page = pagination_current_page($_GET['page'] ?? null);
-        $totalRows = Purchase::indexCount($businessId, $search, $status);
+        $totalRows = Purchase::indexCount($businessId, $search, $status, $fromDate, $toDate);
         $totalPages = pagination_total_pages($totalRows, $perPage);
         if ($page > $totalPages) {
             $page = $totalPages;
         }
         $offset = pagination_offset($page, $perPage);
 
-        $purchases = Purchase::indexList($businessId, $search, $status, $perPage, $offset);
+        $purchases = Purchase::indexList($businessId, $search, $status, $fromDate, $toDate, $perPage, $offset);
         $summary = Purchase::statusSummary($businessId);
         $pagination = pagination_meta($page, $perPage, $totalRows, count($purchases));
 
@@ -42,11 +47,28 @@ final class PurchasesController extends Controller
             'pageTitle' => 'Purchasing',
             'search' => $search,
             'status' => $status,
+            'fromDate' => $fromDate,
+            'toDate' => $toDate,
             'statusOptions' => $statusOptions,
             'purchases' => $purchases,
             'summary' => $summary,
             'pagination' => $pagination,
         ]);
+    }
+
+    private function normalizeDateFilter(string $value): string
+    {
+        $value = trim($value);
+        if ($value === '') {
+            return '';
+        }
+
+        $date = \DateTimeImmutable::createFromFormat('Y-m-d', $value);
+        if (!$date instanceof \DateTimeImmutable || $date->format('Y-m-d') !== $value) {
+            return '';
+        }
+
+        return $value;
     }
 
     public function create(): void

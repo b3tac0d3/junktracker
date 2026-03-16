@@ -19,8 +19,8 @@ final class SalesController extends Controller
 
         $search = trim((string) ($_GET['q'] ?? ''));
         $type = trim((string) ($_GET['type'] ?? ''));
-        $fromDate = $this->normalizeDateFilter((string) ($_GET['from'] ?? ''));
-        $toDate = $this->normalizeDateFilter((string) ($_GET['to'] ?? ''));
+        $fromDate = $this->normalizeDateFilter((string) ($_GET['from'] ?? date('Y-01-01')));
+        $toDate = $this->normalizeDateFilter((string) ($_GET['to'] ?? date('Y-m-d')));
         if ($fromDate !== '' && $toDate !== '' && strtotime($fromDate) > strtotime($toDate)) {
             [$fromDate, $toDate] = [$toDate, $fromDate];
         }

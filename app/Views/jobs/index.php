@@ -2,7 +2,7 @@
 $search = trim((string) ($search ?? ''));
 $status = strtolower(trim((string) ($status ?? 'dispatch')));
 $fromDate = trim((string) ($fromDate ?? date('Y-01-01')));
-$toDate = trim((string) ($toDate ?? date('Y-m-d')));
+$toDate = trim((string) ($toDate ?? date('Y-12-31')));
 $jobs = is_array($jobs ?? null) ? $jobs : [];
 $pagination = is_array($pagination ?? null) ? $pagination : pagination_meta(1, 25, count($jobs), count($jobs));
 $perPage = (int) ($pagination['per_page'] ?? 25);

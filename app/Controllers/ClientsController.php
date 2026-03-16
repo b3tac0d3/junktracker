@@ -296,6 +296,7 @@ final class ClientsController extends Controller
             'first_name' => '',
             'last_name' => '',
             'company_name' => '',
+            'email' => '',
             'phone' => '',
             'secondary_phone' => '',
             'can_text' => '0',
@@ -316,6 +317,7 @@ final class ClientsController extends Controller
             'first_name' => trim((string) ($client['first_name'] ?? '')),
             'last_name' => trim((string) ($client['last_name'] ?? '')),
             'company_name' => trim((string) ($client['company_name'] ?? '')),
+            'email' => trim((string) ($client['email'] ?? '')),
             'phone' => trim((string) ($client['phone'] ?? '')),
             'secondary_phone' => trim((string) ($client['secondary_phone'] ?? '')),
             'can_text' => ((int) ($client['can_text'] ?? 0)) === 1 ? '1' : '0',
@@ -347,6 +349,7 @@ final class ClientsController extends Controller
             'first_name' => $firstName,
             'last_name' => $lastName,
             'company_name' => $companyName,
+            'email' => trim((string) ($input['email'] ?? '')),
             'phone' => trim((string) ($input['phone'] ?? '')),
             'secondary_phone' => trim((string) ($input['secondary_phone'] ?? '')),
             'can_text' => isset($input['can_text']) ? '1' : '0',
@@ -378,6 +381,9 @@ final class ClientsController extends Controller
         if (!in_array($form['client_type'], $allowedTypes, true) && SchemaInspector::hasColumn('clients', 'client_type')) {
             $errors['client_type'] = 'Choose a valid client type.';
         }
+        if ($form['email'] !== '' && filter_var($form['email'], FILTER_VALIDATE_EMAIL) === false) {
+            $errors['email'] = 'Enter a valid email address.';
+        }
 
         return $errors;
     }
@@ -388,6 +394,7 @@ final class ClientsController extends Controller
             'first_name' => $form['first_name'],
             'last_name' => $form['last_name'],
             'company_name' => $form['company_name'],
+            'email' => $form['email'],
             'phone' => $form['phone'],
             'secondary_phone' => $form['secondary_phone'],
             'can_text' => ((int) $form['can_text']) === 1 ? 1 : 0,
