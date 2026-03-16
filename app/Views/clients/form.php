@@ -54,6 +54,12 @@ if ($selectedState !== '' && !array_key_exists($selectedState, $stateOptions)) {
                 <input id="client-company-name" name="company_name" class="form-control" value="<?= e((string) ($form['company_name'] ?? '')) ?>" maxlength="150" />
             </div>
 
+            <div class="col-12 col-lg-4">
+                <label class="form-label fw-semibold" for="client-email">Email</label>
+                <input id="client-email" name="email" type="email" class="form-control <?= $hasError('email') ? 'is-invalid' : '' ?>" value="<?= e((string) ($form['email'] ?? '')) ?>" maxlength="190" />
+                <?php if ($hasError('email')): ?><div class="invalid-feedback d-block"><?= e($fieldError('email')) ?></div><?php endif; ?>
+            </div>
+
             <?php if ($hasClientType): ?>
                 <div class="col-12 col-lg-4">
                     <label class="form-label fw-semibold" for="client-type">Client Type</label>

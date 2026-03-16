@@ -23,12 +23,12 @@ final class JobsController extends Controller
         $search = trim((string) ($_GET['q'] ?? ''));
         $status = strtolower(trim((string) ($_GET['status'] ?? 'dispatch')));
         $fromDate = trim((string) ($_GET['from_date'] ?? date('Y-01-01')));
-        $toDate = trim((string) ($_GET['to_date'] ?? date('Y-m-d')));
+        $toDate = trim((string) ($_GET['to_date'] ?? date('Y-12-31')));
         if (!$this->isValidDateFilter($fromDate)) {
             $fromDate = date('Y-01-01');
         }
         if (!$this->isValidDateFilter($toDate)) {
-            $toDate = date('Y-m-d');
+            $toDate = date('Y-12-31');
         }
         $businessId = current_business_id();
         $statusOptions = $this->jobStatusOptions($businessId);

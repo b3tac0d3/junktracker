@@ -34,7 +34,15 @@ final class Purchase
         return $normalized !== [] ? $normalized : $fallback;
     }
 
-    public static function indexList(int $businessId, string $search = '', string $status = '', int $limit = 25, int $offset = 0): array
+    public static function indexList(
+        int $businessId,
+        string $search = '',
+        string $status = '',
+        string $fromDate = '',
+        string $toDate = '',
+        int $limit = 25,
+        int $offset = 0
+    ): array
     {
         if (!SchemaInspector::hasTable('purchases')) {
             return [];
@@ -42,6 +50,10 @@ final class Purchase
 
         $query = trim($search);
         $status = strtolower(trim($status));
+        $fromDate = trim($fromDate);
+        $toDate = trim($toDate);
+
+        $filterDateSql = 'COALESCE(DATE(p.purchase_date), DATE(p.contact_date), DATE(p.created_at))';
 
         $where = [
             'p.business_id = :business_id',
@@ -50,6 +62,12 @@ final class Purchase
 
         if ($status !== '' && in_array($status, self::statusOptions($businessId), true)) {
             $where[] = 'p.status = :status';
+        }
+        if ($fromDate !== '') {
+            $where[] = "{$filterDateSql} >= :from_date";
+        }
+        if ($toDate !== '') {
+            $where[] = "{$filterDateSql} <= :to_date";
         }
 
         $where[] = '(
@@ -90,6 +108,12 @@ final class Purchase
         if ($status !== '' && in_array($status, self::statusOptions($businessId), true)) {
             $stmt->bindValue(':status', $status);
         }
+        if ($fromDate !== '') {
+            $stmt->bindValue(':from_date', $fromDate);
+        }
+        if ($toDate !== '') {
+            $stmt->bindValue(':to_date', $toDate);
+        }
         $stmt->bindValue(':query', $query);
         $stmt->bindValue(':query_like_1', $queryLike);
         $stmt->bindValue(':query_like_2', $queryLike);
@@ -104,7 +128,7 @@ final class Purchase
         return is_array($rows) ? $rows : [];
     }
 
-    public static function indexCount(int $businessId, string $search = '', string $status = ''): int
+    public static function indexCount(int $businessId, string $search = '', string $status = '', string $fromDate = '', string $toDate = ''): int
     {
         if (!SchemaInspector::hasTable('purchases')) {
             return 0;
@@ -112,6 +136,10 @@ final class Purchase
 
         $query = trim($search);
         $status = strtolower(trim($status));
+        $fromDate = trim($fromDate);
+        $toDate = trim($toDate);
+
+        $filterDateSql = 'COALESCE(DATE(p.purchase_date), DATE(p.contact_date), DATE(p.created_at))';
 
         $where = [
             'p.business_id = :business_id',
@@ -120,6 +148,12 @@ final class Purchase
 
         if ($status !== '' && in_array($status, self::statusOptions($businessId), true)) {
             $where[] = 'p.status = :status';
+        }
+        if ($fromDate !== '') {
+            $where[] = "{$filterDateSql} >= :from_date";
+        }
+        if ($toDate !== '') {
+            $where[] = "{$filterDateSql} <= :to_date";
         }
 
         $where[] = '(
@@ -144,6 +178,12 @@ final class Purchase
         $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
         if ($status !== '' && in_array($status, self::statusOptions($businessId), true)) {
             $stmt->bindValue(':status', $status);
+        }
+        if ($fromDate !== '') {
+            $stmt->bindValue(':from_date', $fromDate);
+        }
+        if ($toDate !== '') {
+            $stmt->bindValue(':to_date', $toDate);
         }
         $stmt->bindValue(':query', $query);
         $stmt->bindValue(':query_like_1', $queryLike);

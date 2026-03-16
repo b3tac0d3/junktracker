@@ -74,8 +74,8 @@ final class SearchController extends Controller
                     $results['clients'] = Client::indexList($businessId, $query, $limit, 0);
                     $results['jobs'] = Job::indexList($businessId, $query, '', $limit, 0);
                     $results['tasks'] = Task::indexList($businessId, $query, '', $limit, 0);
-                    $results['sales'] = Sale::indexList($businessId, $query, '', $limit, 0);
-                    $results['purchases'] = Purchase::indexList($businessId, $query, '', $limit, 0);
+                    $results['sales'] = Sale::indexList($businessId, $query, '', '', '', $limit, 0);
+                    $results['purchases'] = Purchase::indexList($businessId, $query, '', '', '', $limit, 0);
                     $results['billing'] = Invoice::indexList($businessId, $query, '', $limit, 0);
                     $results['expenses'] = Expense::indexList($businessId, $query, 'all', $limit, 0);
                     $results['time_entries'] = TimeEntry::indexList($businessId, $query, '', $limit, 0, null);
