@@ -49,6 +49,12 @@ $invitationStatus = $isCreate
         <p class="muted"><?= e($targetName) ?></p>
     </div>
     <div class="d-flex flex-wrap gap-2">
+        <?php if (!$isCreate): ?>
+            <form method="post" action="<?= e(url('/admin/users/' . (string) ((int) ($targetUser['id'] ?? 0)) . '/send-password-reset')) ?>" onsubmit="return confirm('Send a password reset link to this user?');">
+                <?= csrf_field() ?>
+                <button class="btn btn-outline-primary" type="submit">Send Password Reset</button>
+            </form>
+        <?php endif; ?>
         <?php if (!$isCreate && ($invitationPending || $invitationExpired)): ?>
             <form method="post" action="<?= e(url('/admin/users/' . (string) ((int) ($targetUser['id'] ?? 0)) . '/resend-invite')) ?>">
                 <?= csrf_field() ?>

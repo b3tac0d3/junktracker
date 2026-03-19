@@ -116,16 +116,36 @@ $formatDate = static function (?string $value): string {
                     <div class="record-field"><span class="record-label">Gross</span><span class="record-value"><?= e($formatMoney($sales['gross'] ?? 0)) ?></span></div>
                     <div class="record-field"><span class="record-label">Net</span><span class="record-value"><?= e($formatMoney($sales['net'] ?? 0)) ?></span></div>
                 </div>
-                <div class="record-row-fields record-row-fields-4">
-                    <?php foreach (['ebay' => 'Ebay', 'shop' => 'Shop', 'b2b' => 'B2B', 'scrap' => 'Scrap'] as $typeKey => $typeLabel): ?>
-                        <?php $typeSummary = is_array($salesByType[$typeKey] ?? null) ? $salesByType[$typeKey] : ['count' => 0, 'gross' => 0.0, 'net' => 0.0]; ?>
-                        <div class="record-field">
-                            <span class="record-label"><?= e($typeLabel) ?></span>
-                            <span class="record-value"><?= e($formatMoney($typeSummary['gross'] ?? 0)) ?></span>
-                            <span class="record-meta small text-muted">Net <?= e($formatMoney($typeSummary['net'] ?? 0)) ?> · <?= e((string) ((int) ($typeSummary['count'] ?? 0))) ?> sale(s)</span>
-                        </div>
-                    <?php endforeach; ?>
-                </div>
+                <?php
+                $saleTypeLabel = static function (string $value): string {
+                    $normalized = trim($value);
+                    if ($normalized === '') {
+                        return 'Uncategorized';
+                    }
+                    $map = [
+                        'b2b' => 'B2B',
+                        'ebay' => 'Ebay',
+                    ];
+                    $key = strtolower($normalized);
+                    if (isset($map[$key])) {
+                        return $map[$key];
+                    }
+                    return ucwords(str_replace('_', ' ', $normalized));
+                };
+                ?>
+                <?php if ($salesByType === []): ?>
+                    <div class="record-empty">No sale type totals available for this period.</div>
+                <?php else: ?>
+                    <div class="simple-list-table">
+                        <?php foreach ($salesByType as $typeKey => $typeSummary): ?>
+                            <?php $typeSummary = is_array($typeSummary) ? $typeSummary : ['count' => 0, 'gross' => 0.0, 'net' => 0.0]; ?>
+                            <div class="simple-list-row">
+                                <span class="simple-list-title"><?= e($saleTypeLabel((string) $typeKey)) ?></span>
+                                <span class="simple-list-meta">Gross <?= e($formatMoney($typeSummary['gross'] ?? 0)) ?> · Net <?= e($formatMoney($typeSummary['net'] ?? 0)) ?> · <?= e((string) ((int) ($typeSummary['count'] ?? 0))) ?> sale(s)</span>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                <?php endif; ?>
             </div>
         </section>
     </div>

@@ -101,6 +101,7 @@ final class JobsController extends Controller
             'form' => $form,
             'errors' => [],
             'statusOptions' => $statusOptions,
+            'jobTypeOptions' => FormSelectValue::optionsForSection($businessId, 'job_type'),
             'clientOptions' => Job::clientOptions($businessId),
             'clientTypeOptions' => FormSelectValue::optionsForSection($businessId, 'client_type'),
         ]);
@@ -254,6 +255,7 @@ final class JobsController extends Controller
                 'form' => $form,
                 'errors' => $errors,
                 'statusOptions' => $statusOptions,
+                'jobTypeOptions' => FormSelectValue::optionsForSection($businessId, 'job_type'),
                 'clientOptions' => Job::clientOptions($businessId),
                 'clientTypeOptions' => FormSelectValue::optionsForSection($businessId, 'client_type'),
             ]);
@@ -293,6 +295,7 @@ final class JobsController extends Controller
             'form' => $this->formFromModel($job),
             'errors' => [],
             'statusOptions' => $this->jobStatusOptions($businessId),
+            'jobTypeOptions' => FormSelectValue::optionsForSection($businessId, 'job_type'),
             'clientOptions' => Job::clientOptions($businessId),
             'clientTypeOptions' => FormSelectValue::optionsForSection($businessId, 'client_type'),
             'jobId' => $jobId,
@@ -334,6 +337,7 @@ final class JobsController extends Controller
                 'form' => $form,
                 'errors' => $errors,
                 'statusOptions' => $statusOptions,
+                'jobTypeOptions' => FormSelectValue::optionsForSection($businessId, 'job_type'),
                 'clientOptions' => Job::clientOptions($businessId),
                 'clientTypeOptions' => FormSelectValue::optionsForSection($businessId, 'client_type'),
                 'jobId' => $jobId,
@@ -1125,6 +1129,7 @@ final class JobsController extends Controller
     {
         return [
             'title' => '',
+            'job_type' => '',
             'status' => 'pending',
             'client_id' => '',
             'scheduled_start_at' => '',
@@ -1168,6 +1173,7 @@ final class JobsController extends Controller
     {
         return [
             'title' => trim((string) ($job['title'] ?? '')),
+            'job_type' => trim((string) ($job['job_type'] ?? '')),
             'status' => strtolower(trim((string) ($job['status'] ?? 'pending'))),
             'client_id' => (string) ((int) ($job['client_id'] ?? 0)),
             'scheduled_start_at' => $this->toInputDatetime((string) ($job['scheduled_start_at'] ?? '')),
@@ -1190,6 +1196,7 @@ final class JobsController extends Controller
     {
         return [
             'title' => trim((string) ($input['title'] ?? '')),
+            'job_type' => trim((string) ($input['job_type'] ?? '')),
             'status' => strtolower(trim((string) ($input['status'] ?? 'pending'))),
             'client_id' => trim((string) ($input['client_id'] ?? '')),
             'scheduled_start_at' => trim((string) ($input['scheduled_start_at'] ?? '')),
@@ -1267,6 +1274,17 @@ final class JobsController extends Controller
             $errors['title'] = 'Job name is required.';
         }
 
+        $allowedJobTypes = array_values(array_filter(
+            array_map(
+                static fn (string $value): string => trim($value),
+                FormSelectValue::optionsForSection($businessId, 'job_type')
+            ),
+            static fn (string $value): bool => $value !== ''
+        ));
+        if ($form['job_type'] !== '' && !in_array($form['job_type'], $allowedJobTypes, true)) {
+            $errors['job_type'] = 'Choose a valid job type.';
+        }
+
         $clientId = (int) $form['client_id'];
         if ($clientId <= 0 || Client::findForBusiness($businessId, $clientId) === null) {
             $errors['client_id'] = 'Choose a valid client.';
@@ -1308,6 +1326,7 @@ final class JobsController extends Controller
     {
         return [
             'title' => $form['title'],
+            'job_type' => $form['job_type'],
             'status' => $form['status'],
             'client_id' => (int) $form['client_id'],
             'scheduled_start_at' => $this->toDatabaseDatetime($form['scheduled_start_at']),

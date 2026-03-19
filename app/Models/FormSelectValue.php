@@ -50,6 +50,11 @@ final class FormSelectValue
             'jobs' => [
                 'label' => 'Jobs',
                 'sections' => [
+                    'job_type' => [
+                        'label' => 'Job Type',
+                        'hint' => 'Used on job create/edit forms and job details.',
+                        'defaults' => [],
+                    ],
                     'job_status' => [
                         'label' => 'Job Status',
                         'hint' => 'Used on job forms and job filters.',

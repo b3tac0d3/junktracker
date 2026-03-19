@@ -39,12 +39,10 @@ final class ReportSummary
 
     private static function salesSummary(int $businessId, string $fromDate, string $toDate): array
     {
-        $defaultTypes = [
-            'ebay' => ['count' => 0, 'gross' => 0.0, 'net' => 0.0],
-            'shop' => ['count' => 0, 'gross' => 0.0, 'net' => 0.0],
-            'b2b' => ['count' => 0, 'gross' => 0.0, 'net' => 0.0],
-            'scrap' => ['count' => 0, 'gross' => 0.0, 'net' => 0.0],
-        ];
+        $defaultTypes = [];
+        foreach (self::saleTypeOptions($businessId) as $type) {
+            $defaultTypes[$type] = ['count' => 0, 'gross' => 0.0, 'net' => 0.0];
+        }
 
         if (!SchemaInspector::hasTable('sales')) {
             return ['count' => 0, 'gross' => 0.0, 'net' => 0.0, 'by_type' => $defaultTypes];
@@ -54,7 +52,7 @@ final class ReportSummary
             ? 'COALESCE(s.gross_amount, 0)'
             : (SchemaInspector::hasColumn('sales', 'amount') ? 'COALESCE(s.amount, 0)' : '0');
         $netSql = SchemaInspector::hasColumn('sales', 'net_amount') ? 'COALESCE(s.net_amount, 0)' : $grossSql;
-        $typeSql = SchemaInspector::hasColumn('sales', 'type') ? "LOWER(COALESCE(NULLIF(TRIM(s.type), ''), 'other'))" : "'other'";
+        $typeSql = SchemaInspector::hasColumn('sales', 'sale_type') ? "LOWER(COALESCE(NULLIF(TRIM(s.sale_type), ''), 'other'))" : "'other'";
         $dateSql = self::dateSql('sales', 's', ['sale_date', 'created_at']);
 
         $where = self::baseWhere('sales', 's', $businessId);
@@ -90,8 +88,11 @@ final class ReportSummary
         $typeStmt->execute($params);
         foreach ($typeStmt->fetchAll() as $typeRow) {
             $typeKey = strtolower(trim((string) ($typeRow['sale_type'] ?? '')));
+            if ($typeKey === '') {
+                $typeKey = 'other';
+            }
             if (!isset($byType[$typeKey])) {
-                continue;
+                $byType[$typeKey] = ['count' => 0, 'gross' => 0.0, 'net' => 0.0];
             }
 
             $byType[$typeKey] = [
@@ -107,6 +108,29 @@ final class ReportSummary
             'net' => (float) ($row['net_total'] ?? 0),
             'by_type' => $byType,
         ];
+    }
+
+    /**
+     * @return list<string>
+     */
+    private static function saleTypeOptions(int $businessId): array
+    {
+        $options = array_map(
+            static fn ($value): string => strtolower(trim((string) $value)),
+            FormSelectValue::optionsForSection($businessId, 'sale_type')
+        );
+
+        foreach (Sale::typeOptions($businessId) as $value) {
+            $normalized = strtolower(trim((string) $value));
+            if ($normalized !== '') {
+                $options[] = $normalized;
+            }
+        }
+
+        $options = array_values(array_unique(array_filter($options, static fn (string $value): bool => $value !== '')));
+        sort($options);
+
+        return $options;
     }
 
     private static function serviceSummary(int $businessId, string $fromDate, string $toDate): array

@@ -7,6 +7,23 @@ $sales = is_array($sales ?? null) ? $sales : [];
 $purchases = is_array($purchases ?? null) ? $purchases : [];
 $contacts = is_array($contacts ?? null) ? $contacts : [];
 
+$formatDateValue = static function (?string $value): string {
+    if (function_exists('format_date')) {
+        return format_date($value);
+    }
+
+    if ($value === null || trim($value) === '') {
+        return '—';
+    }
+
+    $timestamp = strtotime($value);
+    if ($timestamp === false) {
+        return '—';
+    }
+
+    return date('m/d/Y', $timestamp);
+};
+
 $displayName = trim(((string) ($client['first_name'] ?? '')) . ' ' . ((string) ($client['last_name'] ?? '')));
 if ($displayName === '') {
     $displayName = trim((string) ($client['company_name'] ?? ''));
@@ -243,7 +260,7 @@ $secondaryCanTextClass = $secondaryCanTextRaw === null ? 'text-flag-neutral' : (
                     }
                     $saleType = trim((string) ($sale['sale_type'] ?? ''));
                     $saleTypeLabel = $saleType === '' ? 'Sale' : ucwords(str_replace('_', ' ', strtolower($saleType)));
-                    $saleDate = format_date((string) ($sale['sale_date'] ?? null));
+                    $saleDate = $formatDateValue((string) ($sale['sale_date'] ?? null));
                     ?>
                     <a class="simple-list-row simple-list-row-link" href="<?= e(url('/sales/' . (string) $saleId)) ?>">
                         <div class="simple-list-title"><?= e($saleName) ?></div>
@@ -289,7 +306,7 @@ $secondaryCanTextClass = $secondaryCanTextRaw === null ? 'text-flag-neutral' : (
                     }
                     $purchaseStatus = trim((string) ($purchase['status'] ?? ''));
                     $purchaseStatusLabel = $purchaseStatus === '' ? '—' : ucwords(str_replace('_', ' ', strtolower($purchaseStatus)));
-                    $purchaseDate = format_date((string) ($purchase['purchase_date'] ?? ($purchase['contact_date'] ?? null)));
+                    $purchaseDate = $formatDateValue((string) ($purchase['purchase_date'] ?? ($purchase['contact_date'] ?? null)));
                     ?>
                     <a class="simple-list-row simple-list-row-link" href="<?= e(url('/purchases/' . (string) $purchaseId)) ?>">
                         <div class="simple-list-title"><?= e($purchaseTitle) ?></div>

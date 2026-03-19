@@ -3,6 +3,7 @@ $form = is_array($form ?? null) ? $form : [];
 $errors = is_array($errors ?? null) ? $errors : [];
 $clientOptions = is_array($clientOptions ?? null) ? $clientOptions : [];
 $clientTypeOptions = is_array($clientTypeOptions ?? null) ? $clientTypeOptions : ['client', 'company', 'realtor', 'other'];
+$jobTypeOptionsRaw = is_array($jobTypeOptions ?? null) ? $jobTypeOptions : [];
 $statusOptionsRaw = is_array($statusOptions ?? null) ? $statusOptions : ['prospect', 'pending', 'active', 'complete', 'cancelled'];
 $mode = (string) ($mode ?? 'create');
 $actionUrl = (string) ($actionUrl ?? url('/jobs'));
@@ -26,6 +27,15 @@ if ($statusOptions === []) {
         'complete' => 'Complete',
         'cancelled' => 'Cancelled',
     ];
+}
+
+$jobTypeOptions = [];
+foreach ($jobTypeOptionsRaw as $jobTypeOptionRaw) {
+    $jobTypeOption = trim((string) $jobTypeOptionRaw);
+    if ($jobTypeOption === '' || in_array($jobTypeOption, $jobTypeOptions, true)) {
+        continue;
+    }
+    $jobTypeOptions[] = $jobTypeOption;
 }
 
 $fieldError = static function (string $field) use ($errors): string {
@@ -74,7 +84,7 @@ if ($selectedState !== '' && !array_key_exists($selectedState, $stateOptions)) {
         <form method="post" action="<?= e($actionUrl) ?>" class="row g-3">
             <?= csrf_field() ?>
 
-            <div class="col-12 col-lg-6">
+            <div class="col-12 col-lg-4">
                 <label class="form-label fw-semibold" for="job-title">Job Name</label>
                 <input
                     id="job-title"
@@ -84,6 +94,17 @@ if ($selectedState !== '' && !array_key_exists($selectedState, $stateOptions)) {
                     maxlength="190"
                 />
                 <?php if ($hasError('title')): ?><div class="invalid-feedback d-block"><?= e($fieldError('title')) ?></div><?php endif; ?>
+            </div>
+
+            <div class="col-12 col-lg-2">
+                <label class="form-label fw-semibold" for="job-type">Job Type</label>
+                <select id="job-type" name="job_type" class="form-select <?= $hasError('job_type') ? 'is-invalid' : '' ?>">
+                    <option value="">Select type...</option>
+                    <?php foreach ($jobTypeOptions as $jobTypeOption): ?>
+                        <option value="<?= e($jobTypeOption) ?>" <?= ((string) ($form['job_type'] ?? '')) === $jobTypeOption ? 'selected' : '' ?>><?= e($jobTypeOption) ?></option>
+                    <?php endforeach; ?>
+                </select>
+                <?php if ($hasError('job_type')): ?><div class="invalid-feedback d-block"><?= e($fieldError('job_type')) ?></div><?php endif; ?>
             </div>
 
             <div class="col-12 col-lg-3">
@@ -116,25 +137,25 @@ if ($selectedState !== '' && !array_key_exists($selectedState, $stateOptions)) {
 
             <div class="col-12 col-lg-3">
                 <label class="form-label fw-semibold" for="scheduled-start">Scheduled Start</label>
-                <input id="scheduled-start" type="datetime-local" step="3600" name="scheduled_start_at" class="form-control <?= $hasError('scheduled_start_at') ? 'is-invalid' : '' ?>" value="<?= e((string) ($form['scheduled_start_at'] ?? '')) ?>" />
+                <input id="scheduled-start" type="datetime-local" step="60" name="scheduled_start_at" class="form-control <?= $hasError('scheduled_start_at') ? 'is-invalid' : '' ?>" value="<?= e((string) ($form['scheduled_start_at'] ?? '')) ?>" />
                 <?php if ($hasError('scheduled_start_at')): ?><div class="invalid-feedback d-block"><?= e($fieldError('scheduled_start_at')) ?></div><?php endif; ?>
             </div>
 
             <div class="col-12 col-lg-3">
                 <label class="form-label fw-semibold" for="scheduled-end">Scheduled End</label>
-                <input id="scheduled-end" type="datetime-local" step="3600" name="scheduled_end_at" class="form-control <?= $hasError('scheduled_end_at') ? 'is-invalid' : '' ?>" value="<?= e((string) ($form['scheduled_end_at'] ?? '')) ?>" />
+                <input id="scheduled-end" type="datetime-local" step="60" name="scheduled_end_at" class="form-control <?= $hasError('scheduled_end_at') ? 'is-invalid' : '' ?>" value="<?= e((string) ($form['scheduled_end_at'] ?? '')) ?>" />
                 <?php if ($hasError('scheduled_end_at')): ?><div class="invalid-feedback d-block"><?= e($fieldError('scheduled_end_at')) ?></div><?php endif; ?>
             </div>
 
             <div class="col-12 col-lg-3">
                 <label class="form-label fw-semibold" for="actual-start">Actual Start</label>
-                <input id="actual-start" type="datetime-local" step="3600" name="actual_start_at" class="form-control <?= $hasError('actual_start_at') ? 'is-invalid' : '' ?>" value="<?= e((string) ($form['actual_start_at'] ?? '')) ?>" />
+                <input id="actual-start" type="datetime-local" step="60" name="actual_start_at" class="form-control <?= $hasError('actual_start_at') ? 'is-invalid' : '' ?>" value="<?= e((string) ($form['actual_start_at'] ?? '')) ?>" />
                 <?php if ($hasError('actual_start_at')): ?><div class="invalid-feedback d-block"><?= e($fieldError('actual_start_at')) ?></div><?php endif; ?>
             </div>
 
             <div class="col-12 col-lg-3">
                 <label class="form-label fw-semibold" for="actual-end">Actual End</label>
-                <input id="actual-end" type="datetime-local" step="3600" name="actual_end_at" class="form-control <?= $hasError('actual_end_at') ? 'is-invalid' : '' ?>" value="<?= e((string) ($form['actual_end_at'] ?? '')) ?>" />
+                <input id="actual-end" type="datetime-local" step="60" name="actual_end_at" class="form-control <?= $hasError('actual_end_at') ? 'is-invalid' : '' ?>" value="<?= e((string) ($form['actual_end_at'] ?? '')) ?>" />
                 <?php if ($hasError('actual_end_at')): ?><div class="invalid-feedback d-block"><?= e($fieldError('actual_end_at')) ?></div><?php endif; ?>
             </div>
 
@@ -366,10 +387,13 @@ window.addEventListener('DOMContentLoaded', () => {
         if (!input) {
             return false;
         }
-        const { fillIfEmpty = false, baseDate = null } = options;
+        const { fillIfEmpty = false, baseDate = null, roundExisting = false } = options;
         const raw = (input.value || '').trim();
 
         let base = parseLocalDatetimeValue(raw);
+        if (base && !roundExisting) {
+            return false;
+        }
         if (!base && fillIfEmpty) {
             base = baseDate instanceof Date ? new Date(baseDate.getTime()) : new Date();
         }
@@ -386,12 +410,26 @@ window.addEventListener('DOMContentLoaded', () => {
         return false;
     };
 
-    const applyStartEndDefaults = () => {
+    const seedScheduledDefaults = () => {
         if (!scheduledStartInput || !scheduledEndInput) {
             return;
         }
 
-        const startChanged = normalizeDatetimeInput(scheduledStartInput, { fillIfEmpty: false });
+        if ((scheduledStartInput.value || '').trim() !== '' || (scheduledEndInput.value || '').trim() !== '') {
+            return;
+        }
+
+        const rounded = roundToNearestHour(new Date());
+        const endDate = new Date(rounded.getTime() + (60 * 60 * 1000));
+        scheduledStartInput.value = toLocalDatetimeValue(rounded);
+        scheduledEndInput.value = toLocalDatetimeValue(endDate);
+        scheduledEndInput.dataset.autoDefaulted = '1';
+    };
+
+    const applyStartEndDefaults = () => {
+        if (!scheduledStartInput || !scheduledEndInput) {
+            return;
+        }
         const startDate = parseLocalDatetimeValue(scheduledStartInput.value);
         if (!startDate) {
             return;
@@ -401,10 +439,8 @@ window.addEventListener('DOMContentLoaded', () => {
         const canSetEnd = endRaw === '' || scheduledEndInput.dataset.autoDefaulted === '1';
         if (canSetEnd) {
             const endDate = new Date(startDate.getTime() + (60 * 60 * 1000));
-            scheduledEndInput.value = toLocalDatetimeValue(roundToNearestHour(endDate));
+            scheduledEndInput.value = toLocalDatetimeValue(endDate);
             scheduledEndInput.dataset.autoDefaulted = '1';
-        } else if (startChanged) {
-            normalizeDatetimeInput(scheduledEndInput, { fillIfEmpty: false });
         }
     };
 
@@ -413,27 +449,19 @@ window.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        normalizeDatetimeInput(input, { fillIfEmpty: false });
-
         input.addEventListener('focus', () => {
             let baseDate = null;
             if (typeof options.baseDateResolver === 'function') {
                 baseDate = options.baseDateResolver();
             }
-            const changed = normalizeDatetimeInput(input, { fillIfEmpty: true, baseDate });
-            if (changed && typeof options.onValueSet === 'function') {
-                options.onValueSet();
-            }
-        });
-
-        input.addEventListener('blur', () => {
-            const changed = normalizeDatetimeInput(input, { fillIfEmpty: false });
+            const changed = normalizeDatetimeInput(input, { fillIfEmpty: true, baseDate, roundExisting: false });
             if (changed && typeof options.onValueSet === 'function') {
                 options.onValueSet();
             }
         });
     };
 
+    seedScheduledDefaults();
     attachHourlyRounding(scheduledStartInput, { onValueSet: applyStartEndDefaults });
     if (scheduledStartInput) {
         scheduledStartInput.addEventListener('change', applyStartEndDefaults);

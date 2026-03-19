@@ -9,4 +9,5 @@ return [
     'from_address' => 'no-reply@junktracker.jimmysjunk.com',
     'from_name' => 'JunkTracker',
     'invite_subject' => 'Your JunkTracker invite',
+    'reset_subject' => 'Your JunkTracker password reset link',
 ];

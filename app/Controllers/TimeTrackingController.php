@@ -68,11 +68,21 @@ final class TimeTrackingController extends Controller
         $canManageEmployees = $this->canManageEmployees();
         $selfEmployee = $this->currentUserEmployee($businessId);
         if (!$canManageEmployees && $selfEmployee === null) {
-            flash('error', 'No employee profile is linked to your user yet. Ask an admin to link one.');
-            redirect('/');
+            $this->render('time_tracking/punch_board', [
+                'pageTitle' => 'Punch Board',
+                'punchEmployees' => [],
+                'canManageEmployees' => false,
+                'selfEmployee' => null,
+                'punchBoardJobs' => [],
+                'recentEntries' => [],
+                'isPunchOnly' => workspace_role() === 'punch_only',
+                'employeeLinkMissing' => true,
+            ]);
+            return;
         }
         $scopeEmployeeId = (!$canManageEmployees && $selfEmployee !== null) ? (int) ($selfEmployee['id'] ?? 0) : null;
         $punchEmployees = TimeEntry::punchBoardEmployees($businessId, $scopeEmployeeId);
+        $punchBoardJobs = TimeEntry::punchBoardJobOptions($businessId, 200);
         $recentEntries = [];
         if ($scopeEmployeeId !== null && $scopeEmployeeId > 0) {
             $recentEntries = TimeEntry::indexList($businessId, '', '', 25, 0, $scopeEmployeeId);
@@ -83,8 +93,10 @@ final class TimeTrackingController extends Controller
             'punchEmployees' => $punchEmployees,
             'canManageEmployees' => $canManageEmployees,
             'selfEmployee' => $selfEmployee,
+            'punchBoardJobs' => $punchBoardJobs,
             'recentEntries' => $recentEntries,
             'isPunchOnly' => workspace_role() === 'punch_only',
+            'employeeLinkMissing' => false,
         ]);
     }
 
@@ -140,7 +152,7 @@ final class TimeTrackingController extends Controller
             'employeeOptions' => $this->employeeAutosuggestOptions($businessId, $canManageEmployees, $selfEmployee),
             'canManageEmployees' => $canManageEmployees,
             'selfEmployee' => $selfEmployee,
-            'jobSearchUrl' => url('/time-tracking/job-search'),
+            'punchBoardJobs' => TimeEntry::punchBoardJobOptions($businessId, 200),
             'returnTo' => $returnTo,
         ]);
     }
@@ -180,7 +192,7 @@ final class TimeTrackingController extends Controller
                 'employeeOptions' => $this->employeeAutosuggestOptions($businessId, $canManageEmployees, $selfEmployee),
                 'canManageEmployees' => $canManageEmployees,
                 'selfEmployee' => $selfEmployee,
-                'jobSearchUrl' => url('/time-tracking/job-search'),
+                'punchBoardJobs' => TimeEntry::punchBoardJobOptions($businessId, 200),
                 'returnTo' => $returnTo,
             ]);
             return;
@@ -235,7 +247,7 @@ final class TimeTrackingController extends Controller
             'employeeOptions' => $this->employeeAutosuggestOptions($businessId, $canManageEmployees, $selfEmployee),
             'canManageEmployees' => $canManageEmployees,
             'selfEmployee' => $selfEmployee,
-            'jobSearchUrl' => url('/time-tracking/job-search'),
+            'punchBoardJobs' => TimeEntry::punchBoardJobOptions($businessId, 200),
             'entryId' => $entryId,
         ]);
     }
@@ -291,7 +303,7 @@ final class TimeTrackingController extends Controller
                 'employeeOptions' => $this->employeeAutosuggestOptions($businessId, $canManageEmployees, $selfEmployee),
                 'canManageEmployees' => $canManageEmployees,
                 'selfEmployee' => $selfEmployee,
-                'jobSearchUrl' => url('/time-tracking/job-search'),
+                'punchBoardJobs' => TimeEntry::punchBoardJobOptions($businessId, 200),
                 'entryId' => $entryId,
             ]);
             return;
@@ -308,7 +320,7 @@ final class TimeTrackingController extends Controller
                 'employeeOptions' => $this->employeeAutosuggestOptions($businessId, $canManageEmployees, $selfEmployee),
                 'canManageEmployees' => $canManageEmployees,
                 'selfEmployee' => $selfEmployee,
-                'jobSearchUrl' => url('/time-tracking/job-search'),
+                'punchBoardJobs' => TimeEntry::punchBoardJobOptions($businessId, 200),
                 'entryId' => $entryId,
             ]);
             return;
@@ -461,12 +473,25 @@ final class TimeTrackingController extends Controller
             redirect('/time-tracking/punch-board');
         }
 
-        $jobId = (int) ($_POST['job_id'] ?? 0);
-        $isNonJob = $jobId <= 0;
+        $jobSelection = trim((string) ($_POST['job_selection'] ?? ''));
+        $specialSelections = [
+            'shop_time' => 'Shop Time',
+            'general_labor' => 'General Labor',
+        ];
+        $jobId = 0;
+        $isNonJob = true;
+        $notes = trim((string) ($_POST['notes'] ?? ''));
 
-        if (!$isNonJob && !TimeEntry::jobExistsForBusiness($businessId, $jobId)) {
-            flash('error', 'Choose a valid job from suggestions or leave Job blank for non-job time.');
-            redirect('/time-tracking/punch-board');
+        if ($jobSelection !== '' && isset($specialSelections[$jobSelection])) {
+            $specialLabel = $specialSelections[$jobSelection];
+            $notes = $notes !== '' ? ($specialLabel . ' - ' . $notes) : $specialLabel;
+        } else {
+            $jobId = (int) ($_POST['job_selection'] ?? 0);
+            $isNonJob = $jobId <= 0;
+            if (!$isNonJob && !TimeEntry::jobExistsForBusiness($businessId, $jobId)) {
+                flash('error', 'Choose a valid active job or one of the built-in non-job types.');
+                redirect('/time-tracking/punch-board');
+            }
         }
 
         $clockInAt = date('Y-m-d H:i:s');
@@ -481,7 +506,7 @@ final class TimeTrackingController extends Controller
             $isNonJob ? null : $jobId,
             $isNonJob,
             auth_user_id() ?? 0,
-            trim((string) ($_POST['notes'] ?? ''))
+            $notes
         );
         if ($entryId > 0 && !$isNonJob && $jobId > 0) {
             Job::assignEmployee($businessId, $jobId, $employeeId, auth_user_id() ?? 0);
@@ -535,6 +560,7 @@ final class TimeTrackingController extends Controller
             'employee_name' => '',
             'job_id' => '',
             'job_title' => '',
+            'job_selection' => '',
             'clock_in_at' => '',
             'clock_out_at' => '',
             'clock_in_lat' => '',
@@ -554,6 +580,7 @@ final class TimeTrackingController extends Controller
             'employee_name' => trim((string) ($entry['employee_name'] ?? '')),
             'job_id' => (string) $jobId,
             'job_title' => trim((string) ($entry['job_title'] ?? '')),
+            'job_selection' => $jobId > 0 ? (string) $jobId : '',
             'clock_in_at' => $this->toInputDatetime((string) ($entry['clock_in_at'] ?? '')),
             'clock_out_at' => $this->toInputDatetime((string) ($entry['clock_out_at'] ?? '')),
             'clock_in_lat' => trim((string) ($entry['clock_in_lat'] ?? '')),
@@ -569,8 +596,9 @@ final class TimeTrackingController extends Controller
         return [
             'employee_id' => trim((string) ($input['employee_id'] ?? '')),
             'employee_name' => trim((string) ($input['employee_name'] ?? '')),
-            'job_id' => trim((string) ($input['job_id'] ?? '')),
-            'job_title' => trim((string) ($input['job_title'] ?? '')),
+            'job_selection' => trim((string) ($input['job_selection'] ?? '')),
+            'job_id' => '',
+            'job_title' => '',
             'clock_in_at' => trim((string) ($input['clock_in_at'] ?? '')),
             'clock_out_at' => trim((string) ($input['clock_out_at'] ?? '')),
             'clock_in_lat' => trim((string) ($input['clock_in_lat'] ?? '')),
@@ -602,10 +630,16 @@ final class TimeTrackingController extends Controller
             }
         }
 
-        $jobId = (int) ($form['job_id'] ?? 0);
-        $isNonJob = $jobId <= 0;
-        if (!$isNonJob && !TimeEntry::jobExistsForBusiness($businessId, $jobId)) {
-            $errors['job_id'] = 'Choose a valid job from suggestions or leave Job blank for non-job time.';
+        $jobSelection = trim((string) ($form['job_selection'] ?? ''));
+        $specialSelections = ['shop_time', 'general_labor'];
+        $jobId = 0;
+        $isNonJob = true;
+        if ($jobSelection !== '' && !in_array($jobSelection, $specialSelections, true)) {
+            $jobId = (int) $jobSelection;
+            $isNonJob = $jobId <= 0;
+            if (!$isNonJob && !TimeEntry::jobExistsForBusiness($businessId, $jobId)) {
+                $errors['job_id'] = 'Choose a valid active job or one of the built-in non-job types.';
+            }
         }
 
         if ($form['clock_in_at'] === '' || $this->asTimestamp($form['clock_in_at']) === null) {
@@ -656,8 +690,21 @@ final class TimeTrackingController extends Controller
             $durationMinutes = (int) floor(($clockOutTs - $clockInTs) / 60);
         }
 
-        $jobId = (int) ($form['job_id'] ?? 0);
-        $isNonJob = $jobId <= 0;
+        $jobSelection = trim((string) ($form['job_selection'] ?? ''));
+        $specialSelections = [
+            'shop_time' => 'Shop Time',
+            'general_labor' => 'General Labor',
+        ];
+        $jobId = 0;
+        $isNonJob = true;
+        $notes = trim((string) ($form['notes'] ?? ''));
+        if ($jobSelection !== '' && isset($specialSelections[$jobSelection])) {
+            $label = $specialSelections[$jobSelection];
+            $notes = $notes !== '' ? ($label . ' - ' . $notes) : $label;
+        } elseif ($jobSelection !== '') {
+            $jobId = (int) $jobSelection;
+            $isNonJob = $jobId <= 0;
+        }
 
         return [
             'employee_id' => (int) $form['employee_id'],
@@ -670,7 +717,7 @@ final class TimeTrackingController extends Controller
             'clock_in_lng' => $form['clock_in_lng'] !== '' ? (float) $form['clock_in_lng'] : null,
             'clock_out_lat' => $form['clock_out_lat'] !== '' ? (float) $form['clock_out_lat'] : null,
             'clock_out_lng' => $form['clock_out_lng'] !== '' ? (float) $form['clock_out_lng'] : null,
-            'notes' => $form['notes'],
+            'notes' => $notes,
         ];
     }
 

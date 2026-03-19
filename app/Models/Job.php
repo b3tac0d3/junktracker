@@ -62,6 +62,7 @@ final class Job
             ? 'j.title'
             : (SchemaInspector::hasColumn('jobs', 'name') ? 'j.name' : "CONCAT('Job #', j.id)");
         $statusSql = SchemaInspector::hasColumn('jobs', 'status') ? 'j.status' : "'pending'";
+        $jobTypeSql = SchemaInspector::hasColumn('jobs', 'job_type') ? 'j.job_type' : 'NULL';
         $citySql = SchemaInspector::hasColumn('jobs', 'city') ? 'j.city' : 'NULL';
         $startSql = SchemaInspector::hasColumn('jobs', 'scheduled_start_at')
             ? 'j.scheduled_start_at'
@@ -109,6 +110,7 @@ final class Job
         $sql = "SELECT
                     j.id,
                     {$titleSql} AS title,
+                    {$jobTypeSql} AS job_type,
                     {$statusSql} AS status,
                     {$citySql} AS city,
                     {$startSql} AS scheduled_start_at,
@@ -167,6 +169,7 @@ final class Job
             ? 'j.title'
             : (SchemaInspector::hasColumn('jobs', 'name') ? 'j.name' : "CONCAT('Job #', j.id)");
         $statusSql = SchemaInspector::hasColumn('jobs', 'status') ? 'j.status' : "'pending'";
+        $jobTypeSql = SchemaInspector::hasColumn('jobs', 'job_type') ? 'j.job_type' : 'NULL';
         $citySql = SchemaInspector::hasColumn('jobs', 'city') ? 'j.city' : 'NULL';
         $createdDateSql = SchemaInspector::hasColumn('jobs', 'created_at') ? 'DATE(j.created_at)' : 'NULL';
         $scheduledDateSql = SchemaInspector::hasColumn('jobs', 'scheduled_start_at')
@@ -245,6 +248,7 @@ final class Job
         $titleSql = SchemaInspector::hasColumn('jobs', 'title')
             ? 'j.title'
             : (SchemaInspector::hasColumn('jobs', 'name') ? 'j.name' : "CONCAT('Job #', j.id)");
+        $jobTypeSql = SchemaInspector::hasColumn('jobs', 'job_type') ? 'j.job_type' : 'NULL';
         $statusSql = SchemaInspector::hasColumn('jobs', 'status') ? 'j.status' : "'pending'";
         $citySql = SchemaInspector::hasColumn('jobs', 'city') ? 'j.city' : 'NULL';
         $stateSql = SchemaInspector::hasColumn('jobs', 'state') ? 'j.state' : 'NULL';
@@ -279,6 +283,7 @@ final class Job
         $sql = "SELECT
                     j.id,
                     {$titleSql} AS title,
+                    {$jobTypeSql} AS job_type,
                     {$statusSql} AS status,
                     {$address1Sql} AS address_line1,
                     {$address2Sql} AS address_line2,
@@ -555,20 +560,21 @@ final class Job
 
     public static function create(int $businessId, array $data, int $actorUserId): int
     {
+        $hasJobType = SchemaInspector::hasColumn('jobs', 'job_type');
         $sql = 'INSERT INTO jobs (
-                    business_id, client_id, title, status,
+                    business_id, client_id, title, ' . ($hasJobType ? 'job_type, ' : '') . 'status,
                     scheduled_start_at, scheduled_end_at, actual_start_at, actual_end_at,
                     address_line1, address_line2, city, state, postal_code, notes,
                     created_by, updated_by, created_at, updated_at
                 ) VALUES (
-                    :business_id, :client_id, :title, :status,
+                    :business_id, :client_id, :title, ' . ($hasJobType ? ':job_type, ' : '') . ':status,
                     :scheduled_start_at, :scheduled_end_at, :actual_start_at, :actual_end_at,
                     :address_line1, :address_line2, :city, :state, :postal_code, :notes,
                     :created_by, :updated_by, NOW(), NOW()
                 )';
 
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute([
+        $params = [
             'business_id' => $businessId,
             'client_id' => (int) ($data['client_id'] ?? 0),
             'title' => trim((string) ($data['title'] ?? '')),
@@ -585,7 +591,11 @@ final class Job
             'notes' => trim((string) ($data['notes'] ?? '')),
             'created_by' => $actorUserId,
             'updated_by' => $actorUserId,
-        ]);
+        ];
+        if ($hasJobType) {
+            $params['job_type'] = trim((string) ($data['job_type'] ?? ''));
+        }
+        $stmt->execute($params);
 
         return (int) Database::connection()->lastInsertId();
     }
@@ -593,10 +603,12 @@ final class Job
     public static function update(int $businessId, int $jobId, array $data, int $actorUserId): bool
     {
         $deletedWhere = SchemaInspector::hasColumn('jobs', 'deleted_at') ? 'AND deleted_at IS NULL' : '';
+        $hasJobType = SchemaInspector::hasColumn('jobs', 'job_type');
 
         $sql = 'UPDATE jobs
                 SET client_id = :client_id,
                     title = :title,
+                    ' . ($hasJobType ? 'job_type = :job_type,' : '') . '
                     status = :status,
                     scheduled_start_at = :scheduled_start_at,
                     scheduled_end_at = :scheduled_end_at,
@@ -615,7 +627,7 @@ final class Job
                   ' . $deletedWhere;
 
         $stmt = Database::connection()->prepare($sql);
-        return $stmt->execute([
+        $params = [
             'client_id' => (int) ($data['client_id'] ?? 0),
             'title' => trim((string) ($data['title'] ?? '')),
             'status' => strtolower(trim((string) ($data['status'] ?? 'pending'))),
@@ -632,7 +644,12 @@ final class Job
             'updated_by' => $actorUserId,
             'job_id' => $jobId,
             'business_id' => $businessId,
-        ]);
+        ];
+        if ($hasJobType) {
+            $params['job_type'] = trim((string) ($data['job_type'] ?? ''));
+        }
+
+        return $stmt->execute($params);
     }
 
     public static function expensesByJob(int $businessId, int $jobId, int $limit = 200): array

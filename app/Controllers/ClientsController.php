@@ -186,6 +186,30 @@ final class ClientsController extends Controller
         $purchases = Client::purchaseHistory($businessId, $clientId, 50);
         $contacts = ClientContact::forClient($businessId, $clientId, 50);
 
+        // #region agent log
+        @file_put_contents(
+            dirname(__DIR__, 2) . '/.cursor/debug-7ed08c.log',
+            json_encode([
+                'sessionId' => '7ed08c',
+                'runId' => 'pre-fix',
+                'hypothesisId' => 'bug-1',
+                'location' => 'ClientsController.php:show',
+                'message' => 'Client show purchases snapshot',
+                'data' => [
+                    'businessId' => $businessId,
+                    'clientId' => $clientId,
+                    'purchases_is_array' => is_array($purchases),
+                    'purchases_count' => is_array($purchases) ? count($purchases) : null,
+                    'first_purchase_keys' => (is_array($purchases) && $purchases !== [] && is_array($purchases[0] ?? null))
+                        ? array_keys($purchases[0])
+                        : null,
+                ],
+                'timestamp' => (int) (microtime(true) * 1000),
+            ]) . PHP_EOL,
+            FILE_APPEND
+        );
+        // #endregion
+
         $this->render('clients/show', [
             'pageTitle' => 'Client',
             'client' => $client,

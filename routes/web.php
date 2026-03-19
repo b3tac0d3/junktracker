@@ -28,6 +28,8 @@ use Core\Router;
 $router = new Router();
 
 $router->get('/', [HomeController::class, 'index']);
+$router->get('/reset-password/{token}', [AuthController::class, 'resetPasswordForm']);
+$router->post('/reset-password/{token}', [AuthController::class, 'resetPassword']);
 $router->get('/login', [AuthController::class, 'login']);
 $router->post('/login', [AuthController::class, 'authenticate']);
 $router->get('/logout', [AuthController::class, 'logout']);
@@ -112,6 +114,7 @@ $router->get('/tasks/{id}', [TasksController::class, 'show']);
 
 $router->get('/time-tracking', [TimeTrackingController::class, 'index']);
 $router->get('/time-tracking/punch-board', [TimeTrackingController::class, 'punchBoard']);
+$router->get('/punch-board', [TimeTrackingController::class, 'punchBoard']);
 $router->get('/time-tracking/create', [TimeTrackingController::class, 'create']);
 $router->get('/time-tracking/job-search', [TimeTrackingController::class, 'jobSearch']);
 $router->post('/time-tracking', [TimeTrackingController::class, 'store']);
@@ -170,6 +173,7 @@ $router->get('/admin/users/{id}/edit', [AdminUsersController::class, 'edit']);
 $router->post('/admin/users/{id}/update', [AdminUsersController::class, 'update']);
 $router->post('/admin/users/{id}/toggle-active', [AdminUsersController::class, 'toggleActive']);
 $router->post('/admin/users/{id}/resend-invite', [AdminUsersController::class, 'resendInvite']);
+$router->post('/admin/users/{id}/send-password-reset', [AdminUsersController::class, 'sendPasswordReset']);
 $router->post('/admin/users/{id}/auto-accept', [AdminUsersController::class, 'autoAccept']);
 $router->get('/admin/employees', [AdminEmployeesController::class, 'index']);
 $router->get('/admin/employees/create', [AdminEmployeesController::class, 'create']);

@@ -277,6 +277,20 @@ function format_datetime(?string $value): string
     return date('m/d/Y g:i A', $timestamp);
 }
 
+function format_date(?string $value): string
+{
+    if ($value === null || trim($value) === '') {
+        return '—';
+    }
+
+    $timestamp = strtotime($value);
+    if ($timestamp === false) {
+        return '—';
+    }
+
+    return date('m/d/Y', $timestamp);
+}
+
 function format_phone(?string $value): string
 {
     $raw = trim((string) ($value ?? ''));

@@ -5,7 +5,7 @@ $employeeOptions = is_array($employeeOptions ?? null) ? $employeeOptions : [];
 $mode = (string) ($mode ?? 'create');
 $actionUrl = (string) ($actionUrl ?? url('/time-tracking'));
 $canManageEmployees = (bool) ($canManageEmployees ?? false);
-$jobSearchUrl = (string) ($jobSearchUrl ?? url('/time-tracking/job-search'));
+$punchBoardJobs = is_array($punchBoardJobs ?? null) ? $punchBoardJobs : [];
 $returnTo = (string) ($returnTo ?? '');
 $backPath = $returnTo !== '' ? $returnTo : '/time-tracking';
 $backLabel = $returnTo !== '' ? 'Back to Job' : 'Back to Time Tracking';
@@ -48,6 +48,31 @@ if ($selectedEmployeeName === '' && $selectedEmployeeId > 0 && isset($employeeMa
 
 $selectedJobId = (int) ($form['job_id'] ?? 0);
 $selectedJobTitle = trim((string) ($form['job_title'] ?? ''));
+$jobSelectOptions = [
+    ['value' => '', 'label' => 'Select active job or non-job type'],
+    ['value' => 'shop_time', 'label' => 'Shop Time'],
+    ['value' => 'general_labor', 'label' => 'General Labor'],
+];
+foreach ($punchBoardJobs as $jobOption) {
+    if (!is_array($jobOption)) {
+        continue;
+    }
+    $jobOptionId = (int) ($jobOption['id'] ?? 0);
+    if ($jobOptionId <= 0) {
+        continue;
+    }
+    $jobOptionTitle = trim((string) ($jobOption['title'] ?? ''));
+    $jobOptionCity = trim((string) ($jobOption['city'] ?? ''));
+    $label = $jobOptionTitle !== '' ? $jobOptionTitle : ('Job #' . (string) $jobOptionId);
+    if ($jobOptionCity !== '') {
+        $label .= ' - ' . $jobOptionCity;
+    }
+    $jobSelectOptions[] = [
+        'value' => (string) $jobOptionId,
+        'label' => $label,
+    ];
+}
+$selectedJobSelection = $selectedJobId > 0 ? (string) $selectedJobId : trim((string) ($form['job_selection'] ?? ''));
 ?>
 
 <div class="page-header d-flex flex-wrap align-items-end justify-content-between gap-2">
@@ -97,33 +122,25 @@ $selectedJobTitle = trim((string) ($form['job_title'] ?? ''));
             </div>
 
             <div class="col-12 col-lg-6">
-                <label class="form-label fw-semibold" for="entry-job-search">Job</label>
-                <div class="position-relative client-autosuggest-wrap">
-                    <input type="hidden" id="entry-job-id" name="job_id" value="<?= e((string) $selectedJobId) ?>" />
-                    <input
-                        id="entry-job-search"
-                        name="job_title"
-                        class="form-control<?= $hasError('job_id') ? ' is-invalid' : '' ?>"
-                        value="<?= e($selectedJobTitle) ?>"
-                        autocomplete="off"
-                        placeholder="Search job by title, id, or city... (leave blank for non-job)"
-                        data-search-url="<?= e($jobSearchUrl) ?>"
-                    />
-                    <div id="entry-job-suggestions" class="client-suggestions d-none" role="listbox" aria-label="Job suggestions"></div>
-                </div>
-                <div class="small muted mt-1">Leave blank to save as non-job time.</div>
+                <label class="form-label fw-semibold" for="entry-job-selection">Job</label>
+                <select id="entry-job-selection" name="job_selection" class="form-select<?= $hasError('job_id') ? ' is-invalid' : '' ?>">
+                    <?php foreach ($jobSelectOptions as $option): ?>
+                        <option value="<?= e((string) ($option['value'] ?? '')) ?>"<?= (string) ($option['value'] ?? '') === $selectedJobSelection ? ' selected' : '' ?>><?= e((string) ($option['label'] ?? '')) ?></option>
+                    <?php endforeach; ?>
+                </select>
+                <div class="small muted mt-1">Choose an active job or one of the built-in non-job types.</div>
                 <?php if ($hasError('job_id')): ?><div class="invalid-feedback d-block"><?= e($fieldError('job_id')) ?></div><?php endif; ?>
             </div>
 
             <div class="col-12 col-lg-6">
                 <label class="form-label fw-semibold" for="entry-clock-in">Clock In</label>
-                <input id="entry-clock-in" type="datetime-local" step="3600" name="clock_in_at" class="form-control <?= $hasError('clock_in_at') ? 'is-invalid' : '' ?>" value="<?= e((string) ($form['clock_in_at'] ?? '')) ?>" />
+                <input id="entry-clock-in" type="datetime-local" step="60" name="clock_in_at" class="form-control <?= $hasError('clock_in_at') ? 'is-invalid' : '' ?>" value="<?= e((string) ($form['clock_in_at'] ?? '')) ?>" />
                 <?php if ($hasError('clock_in_at')): ?><div class="invalid-feedback d-block"><?= e($fieldError('clock_in_at')) ?></div><?php endif; ?>
             </div>
 
             <div class="col-12 col-lg-6">
                 <label class="form-label fw-semibold" for="entry-clock-out">Clock Out</label>
-                <input id="entry-clock-out" type="datetime-local" step="3600" name="clock_out_at" class="form-control <?= $hasError('clock_out_at') ? 'is-invalid' : '' ?>" value="<?= e((string) ($form['clock_out_at'] ?? '')) ?>" />
+                <input id="entry-clock-out" type="datetime-local" step="60" name="clock_out_at" class="form-control <?= $hasError('clock_out_at') ? 'is-invalid' : '' ?>" value="<?= e((string) ($form['clock_out_at'] ?? '')) ?>" />
                 <?php if ($hasError('clock_out_at')): ?><div class="invalid-feedback d-block"><?= e($fieldError('clock_out_at')) ?></div><?php endif; ?>
             </div>
 
@@ -148,10 +165,6 @@ window.addEventListener('DOMContentLoaded', () => {
     const employeeIdInput = document.getElementById('entry-employee-id');
     const employeeSuggestions = document.getElementById('entry-employee-suggestions');
     const employeeOptions = <?= json_encode($employeeAutosuggest, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
-
-    const jobInput = document.getElementById('entry-job-search');
-    const jobIdInput = document.getElementById('entry-job-id');
-    const jobSuggestions = document.getElementById('entry-job-suggestions');
 
     const clockInInput = document.getElementById('entry-clock-in');
     const toLocalDatetimeValue = (dateObj) => {

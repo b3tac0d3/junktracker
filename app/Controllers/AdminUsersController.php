@@ -325,6 +325,40 @@ final class AdminUsersController extends Controller
         redirect('/admin/users/' . (string) ((int) ($targetUser['id'] ?? 0)) . '/edit');
     }
 
+    public function sendPasswordReset(array $params): void
+    {
+        $this->requireUsersAdminAccess();
+
+        $targetUser = $this->resolveTargetUser((int) ($params['id'] ?? 0));
+        if ($targetUser === null) {
+            http_response_code(404);
+            $this->render('errors/404', ['pageTitle' => 'Not Found']);
+            return;
+        }
+
+        if (!verify_csrf($_POST['csrf_token'] ?? null)) {
+            flash('error', 'Session expired. Please try again.');
+            redirect('/admin/users/' . (string) ((int) ($targetUser['id'] ?? 0)) . '/edit');
+        }
+
+        $token = bin2hex(random_bytes(32));
+        $actorId = (int) (auth_user_id() ?? 0);
+        $issued = User::issuePasswordReset((int) ($targetUser['id'] ?? 0), hash('sha256', $token), 24, $actorId);
+        if (!$issued) {
+            flash('error', 'Password reset storage is not available yet. Run the latest migration first.');
+            redirect('/admin/users/' . (string) ((int) ($targetUser['id'] ?? 0)) . '/edit');
+        }
+
+        $sent = $this->sendPasswordResetEmail($targetUser, $token);
+        if ($sent) {
+            flash('success', 'Password reset link sent.');
+        } else {
+            flash('error', 'Password reset link was generated, but the email could not be sent.');
+        }
+
+        redirect('/admin/users/' . (string) ((int) ($targetUser['id'] ?? 0)) . '/edit');
+    }
+
     private function requireUsersAdminAccess(): void
     {
         require_auth();
@@ -497,6 +531,29 @@ final class AdminUsersController extends Controller
             'This invite expires in 24 hours.',
             'You will be required to change your password after your first login.',
             '',
+            'If you were not expecting this message, you can ignore it.',
+        ]);
+
+        return Mailer::send($email, $subject, $body);
+    }
+
+    private function sendPasswordResetEmail(array $user, string $token): bool
+    {
+        $email = trim((string) ($user['email'] ?? ''));
+        if ($email === '') {
+            return false;
+        }
+
+        $fullName = trim((string) ($user['first_name'] ?? '') . ' ' . (string) ($user['last_name'] ?? ''));
+        $greeting = $fullName !== '' ? $fullName : $email;
+        $subject = (string) config('mail.reset_subject', 'Your JunkTracker password reset link');
+        $body = implode("\n", [
+            'Hello ' . $greeting . ',',
+            '',
+            'An administrator sent you a password reset link for JunkTracker.',
+            'Reset URL: ' . absolute_url('/reset-password/' . rawurlencode($token)),
+            '',
+            'This link expires in 24 hours.',
             'If you were not expecting this message, you can ignore it.',
         ]);
 

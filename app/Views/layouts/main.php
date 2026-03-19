@@ -37,7 +37,7 @@ $globalSearchQuery = trim((string) ($_GET['global_q'] ?? ''));
     </main>
 <?php else: ?>
     <nav class="sb-topnav navbar navbar-expand navbar-dark">
-        <a class="navbar-brand ps-3" href="<?= e(url('/')) ?>">JunkTracker</a>
+        <a class="navbar-brand ps-3" href="<?= e(url($isPunchOnlyWorkspace ? '/time-tracking/punch-board' : '/')) ?>">JunkTracker</a>
         <?php if (!$isPunchOnlyWorkspace): ?>
             <button class="btn btn-link btn-sm order-1 order-lg-0 me-4 me-lg-0" id="sidebarToggle" type="button"><i class="fas fa-bars"></i></button>
         <?php endif; ?>
@@ -122,11 +122,11 @@ $globalSearchQuery = trim((string) ($_GET['global_q'] ?? ''));
                                 <a class="nav-link" href="<?= e(url('/clients')) ?>"><div class="sb-nav-link-icon"><i class="fas fa-users"></i></div>Clients</a>
                                 <a class="nav-link" href="<?= e(url('/jobs')) ?>"><div class="sb-nav-link-icon"><i class="fas fa-briefcase"></i></div>Jobs</a>
                                 <a class="nav-link" href="<?= e(url('/sales')) ?>"><div class="sb-nav-link-icon"><i class="fas fa-sack-dollar"></i></div>Sales</a>
-                                <a class="nav-link" href="<?= e(url('/purchases')) ?>"><div class="sb-nav-link-icon"><i class="fas fa-cart-arrow-down"></i></div>Purchasing</a>
+                                <a class="nav-link" href="<?= e(url('/purchases')) ?>"><div class="sb-nav-link-icon"><i class="fas fa-cart-arrow-down"></i></div>Purchases</a>
                                 <a class="nav-link" href="<?= e(url('/tasks')) ?>"><div class="sb-nav-link-icon"><i class="fas fa-list-check"></i></div>Tasks</a>
+                                <a class="nav-link" href="<?= e(url('/events')) ?>"><div class="sb-nav-link-icon"><i class="fas fa-calendar-days"></i></div>Events</a>
                                 <a class="nav-link" href="<?= e(url('/billing')) ?>"><div class="sb-nav-link-icon"><i class="fas fa-file-invoice-dollar"></i></div>Billing</a>
                                 <a class="nav-link" href="<?= e(url('/expenses')) ?>"><div class="sb-nav-link-icon"><i class="fas fa-receipt"></i></div>Expenses</a>
-                                <a class="nav-link" href="<?= e(url('/reports')) ?>"><div class="sb-nav-link-icon"><i class="fas fa-chart-line"></i></div>Reports</a>
                                 <a class="nav-link collapsed" href="#" data-bs-toggle="collapse" data-bs-target="#collapseTimeTracking" aria-expanded="false" aria-controls="collapseCustomers">
                                     <div class="sb-nav-link-icon"><i class="fas fa-stopwatch"></i></div>
                                     Time Tracking
@@ -138,7 +138,7 @@ $globalSearchQuery = trim((string) ($_GET['global_q'] ?? ''));
                                         <a class="nav-link" href="<?= e(url('/time-tracking/punch-board')) ?>"><div class="sb-nav-link-icon"><i class="fas fa-user-clock"></i></div>Punch Board</a>
                                     </nav>
                                 </div>
-                                <a class="nav-link" href="<?= e(url('/events')) ?>"><div class="sb-nav-link-icon"><i class="fas fa-calendar-days"></i></div>Events</a>
+                                <a class="nav-link" href="<?= e(url('/reports')) ?>"><div class="sb-nav-link-icon"><i class="fas fa-chart-line"></i></div>Reports</a>
                             <?php endif; ?>
 
                             <?php if ($canAccessBusinessAdmin): ?>

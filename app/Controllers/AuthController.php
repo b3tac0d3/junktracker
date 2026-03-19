@@ -11,6 +11,89 @@ use Core\Controller;
 
 final class AuthController extends Controller
 {
+    public function resetPasswordForm(array $params): void
+    {
+        $token = trim((string) ($params['token'] ?? ''));
+        $user = $token !== '' ? User::findByPasswordResetToken($token) : null;
+
+        $this->render('auth/reset_password', [
+            'pageTitle' => 'Reset Password',
+            'publicPage' => true,
+            'token' => $token,
+            'targetUser' => $user,
+            'errors' => [],
+            'form' => [
+                'password' => '',
+                'password_confirm' => '',
+            ],
+            'linkExpired' => $user === null,
+        ]);
+    }
+
+    public function resetPassword(array $params): void
+    {
+        $token = trim((string) ($params['token'] ?? ''));
+        if (!verify_csrf($_POST['csrf_token'] ?? null)) {
+            flash('error', 'Session expired. Try again.');
+            redirect('/reset-password/' . rawurlencode($token));
+        }
+
+        $user = $token !== '' ? User::findByPasswordResetToken($token) : null;
+        if ($user === null) {
+            $this->render('auth/reset_password', [
+                'pageTitle' => 'Reset Password',
+                'publicPage' => true,
+                'token' => $token,
+                'targetUser' => null,
+                'errors' => [],
+                'form' => [
+                    'password' => '',
+                    'password_confirm' => '',
+                ],
+                'linkExpired' => true,
+            ]);
+            return;
+        }
+
+        $form = [
+            'password' => (string) ($_POST['password'] ?? ''),
+            'password_confirm' => (string) ($_POST['password_confirm'] ?? ''),
+        ];
+        $errors = [];
+        if ($form['password'] === '') {
+            $errors['password'] = 'A new password is required.';
+        } elseif (strlen($form['password']) < 8) {
+            $errors['password'] = 'Password must be at least 8 characters.';
+        }
+        if (!hash_equals($form['password'], $form['password_confirm'])) {
+            $errors['password_confirm'] = 'Passwords do not match.';
+        }
+
+        if ($errors !== []) {
+            $this->render('auth/reset_password', [
+                'pageTitle' => 'Reset Password',
+                'publicPage' => true,
+                'token' => $token,
+                'targetUser' => $user,
+                'errors' => $errors,
+                'form' => $form,
+                'linkExpired' => false,
+            ]);
+            return;
+        }
+
+        $userId = (int) ($user['id'] ?? 0);
+        User::updateProfile($userId, [
+            'password_hash' => password_hash($form['password'], PASSWORD_DEFAULT),
+            'must_change_password' => 0,
+        ], $userId);
+        User::clearPasswordReset($userId, $userId);
+        User::markInvitationAccepted($userId, $userId);
+
+        flash('success', 'Password updated. You can log in now.');
+        redirect('/login');
+    }
+
     public function login(): void
     {
         if (auth_user() !== null) {
@@ -110,6 +193,10 @@ final class AuthController extends Controller
 
         if ($globalRole === 'site_admin' && current_business_id() <= 0) {
             redirect('/site-admin/businesses');
+        }
+
+        if (($sessionUser['workspace_role'] ?? '') === 'punch_only') {
+            redirect('/time-tracking/punch-board');
         }
 
         redirect('/');

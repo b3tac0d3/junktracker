@@ -512,6 +512,47 @@ final class TimeEntry
         return $stmt->rowCount() > 0;
     }
 
+    public static function punchBoardJobOptions(int $businessId, int $limit = 200): array
+    {
+        if (!SchemaInspector::hasTable('jobs')) {
+            return [];
+        }
+
+        $titleSql = SchemaInspector::hasColumn('jobs', 'title')
+            ? 'j.title'
+            : (SchemaInspector::hasColumn('jobs', 'name') ? 'j.name' : "CONCAT('Job #', j.id)");
+        $citySql = SchemaInspector::hasColumn('jobs', 'city') ? 'j.city' : "''";
+
+        $where = [];
+        $where[] = SchemaInspector::hasColumn('jobs', 'business_id') ? 'j.business_id = :business_id' : '1=1';
+        $where[] = SchemaInspector::hasColumn('jobs', 'deleted_at') ? 'j.deleted_at IS NULL' : '1=1';
+        if (SchemaInspector::hasColumn('jobs', 'status')) {
+            $where[] = "LOWER(COALESCE(j.status, '')) = :active_status";
+        }
+
+        $sql = "SELECT
+                    j.id,
+                    COALESCE(NULLIF({$titleSql}, ''), CONCAT('Job #', j.id)) AS title,
+                    {$citySql} AS city
+                FROM jobs j
+                WHERE " . implode(' AND ', $where) . '
+                ORDER BY title ASC, j.id ASC
+                LIMIT :row_limit';
+
+        $stmt = Database::connection()->prepare($sql);
+        if (SchemaInspector::hasColumn('jobs', 'business_id')) {
+            $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
+        }
+        if (SchemaInspector::hasColumn('jobs', 'status')) {
+            $stmt->bindValue(':active_status', 'active');
+        }
+        $stmt->bindValue(':row_limit', max(1, min($limit, 500)), \PDO::PARAM_INT);
+        $stmt->execute();
+
+        $rows = $stmt->fetchAll();
+        return is_array($rows) ? $rows : [];
+    }
+
     public static function jobSearchOptions(int $businessId, string $query = '', int $limit = 8): array
     {
         if (!SchemaInspector::hasTable('jobs')) {

@@ -622,7 +622,12 @@ main .card.index-card-overflow-visible .card-body {
 }
 
 .client-autosuggest-wrap {
+  position: relative;
   z-index: 20;
+}
+
+.client-autosuggest-wrap:focus-within {
+  z-index: 2200;
 }
 
 .client-suggestions {
@@ -779,31 +784,49 @@ main .card.index-card-overflow-visible .card-body {
   order: 3;
 }
 
+.jt-calendar .fc .fc-today-button {
+  margin-left: 0 !important;
+}
+
+.jt-calendar .jt-calendar-empty-day {
+  color: #94a3b8;
+  font-size: .72rem;
+  font-weight: 700;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+  padding: .25rem 0;
+}
+
 @media (max-width: 767.98px) {
   .jt-calendar .fc .fc-toolbar {
-    flex-direction: column;
-    align-items: stretch;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+      'title title'
+      'nav today';
+    align-items: center;
+    gap: .75rem;
   }
 
   .jt-calendar .fc .fc-toolbar-chunk {
-    width: 100%;
+    width: auto;
     display: flex;
-    justify-content: space-between;
-  }
-
-  .jt-calendar .fc .fc-toolbar-chunk:first-child {
-    order: 2;
-    justify-content: flex-start;
-    gap: .4rem;
+    align-items: center;
   }
 
   .jt-calendar .fc .fc-toolbar-chunk:nth-child(2) {
-    order: 1;
-    justify-content: center;
+    grid-area: title;
+    justify-content: flex-start;
+  }
+
+  .jt-calendar .fc .fc-toolbar-chunk:first-child {
+    grid-area: nav;
+    justify-content: flex-start;
+    gap: .5rem;
   }
 
   .jt-calendar .fc .fc-toolbar-chunk:last-child {
-    order: 3;
+    grid-area: today;
     justify-content: flex-end;
   }
 
@@ -812,7 +835,29 @@ main .card.index-card-overflow-visible .card-body {
   }
 
   .jt-calendar .fc .fc-button {
-    padding-inline: .6rem;
+    min-width: 3rem;
+    min-height: 2.5rem;
+    padding: .4rem .75rem;
+  }
+
+  .jt-calendar .fc .fc-toolbar-title {
+    font-size: 1.45rem;
+    line-height: 1.1;
+    white-space: nowrap;
+    margin: 0;
+  }
+
+  .jt-calendar .fc .fc-header-toolbar {
+    margin-bottom: .85rem;
+  }
+
+  .jt-calendar .fc .fc-daygrid-day-top {
+    flex-direction: row;
+    justify-content: flex-end;
+  }
+
+  .jt-calendar .fc .fc-daygrid-day-events {
+    min-height: 4rem;
   }
 }
 

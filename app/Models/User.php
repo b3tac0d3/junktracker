@@ -483,6 +483,87 @@ final class User
         ]);
     }
 
+    public static function issuePasswordReset(int $userId, string $tokenHash, int $expiresInHours, int $actorUserId): bool
+    {
+        if (!self::hasPasswordResetColumns()) {
+            return false;
+        }
+
+        $stmt = Database::connection()->prepare(
+            'UPDATE users
+             SET password_reset_token_hash = :token_hash,
+                 password_reset_sent_at = NOW(),
+                 password_reset_expires_at = DATE_ADD(NOW(), INTERVAL :expires_hours HOUR),
+                 updated_by = :updated_by,
+                 updated_at = NOW()
+             WHERE id = :id
+               AND deleted_at IS NULL
+             LIMIT 1'
+        );
+        $stmt->bindValue(':token_hash', $tokenHash);
+        $stmt->bindValue(':expires_hours', max(1, $expiresInHours), \PDO::PARAM_INT);
+        $stmt->bindValue(':updated_by', $actorUserId > 0 ? $actorUserId : null);
+        $stmt->bindValue(':id', $userId, \PDO::PARAM_INT);
+        $stmt->execute();
+
+        return $stmt->rowCount() > 0;
+    }
+
+    public static function findByPasswordResetToken(string $token): ?array
+    {
+        if (!self::hasPasswordResetColumns()) {
+            return null;
+        }
+
+        $tokenHash = hash('sha256', $token);
+        $mustChangeSql = self::hasMustChangePasswordColumn() ? 'COALESCE(must_change_password, 0)' : '0';
+
+        $stmt = Database::connection()->prepare(
+            'SELECT id,
+                    email,
+                    first_name,
+                    last_name,
+                    role,
+                    is_active,
+                    ' . $mustChangeSql . ' AS must_change_password,
+                    ' . self::invitationSelectSql() . '
+             FROM users
+             WHERE password_reset_token_hash = :token_hash
+               AND password_reset_expires_at IS NOT NULL
+               AND password_reset_expires_at >= NOW()
+               AND deleted_at IS NULL
+               AND COALESCE(is_active, 1) = 1
+             LIMIT 1'
+        );
+        $stmt->execute(['token_hash' => $tokenHash]);
+        $row = $stmt->fetch();
+
+        return is_array($row) ? $row : null;
+    }
+
+    public static function clearPasswordReset(int $userId, int $actorUserId): void
+    {
+        if (!self::hasPasswordResetColumns()) {
+            return;
+        }
+
+        $stmt = Database::connection()->prepare(
+            'UPDATE users
+             SET password_reset_token_hash = NULL,
+                 password_reset_sent_at = NULL,
+                 password_reset_expires_at = NULL,
+                 updated_by = :updated_by,
+                 updated_at = NOW()
+             WHERE id = :id
+               AND deleted_at IS NULL
+             LIMIT 1'
+        );
+        $stmt->execute([
+            'updated_by' => $actorUserId > 0 ? $actorUserId : null,
+            'id' => $userId,
+        ]);
+    }
+
     public static function displayName(array $user): string
     {
         $full = trim(((string) ($user['first_name'] ?? '')) . ' ' . ((string) ($user['last_name'] ?? '')));
@@ -503,6 +584,13 @@ final class User
         return SchemaInspector::hasColumn('users', 'invited_at')
             && SchemaInspector::hasColumn('users', 'invitation_expires_at')
             && SchemaInspector::hasColumn('users', 'invitation_accepted_at');
+    }
+
+    private static function hasPasswordResetColumns(): bool
+    {
+        return SchemaInspector::hasColumn('users', 'password_reset_token_hash')
+            && SchemaInspector::hasColumn('users', 'password_reset_expires_at')
+            && SchemaInspector::hasColumn('users', 'password_reset_sent_at');
     }
 
     private static function invitationSelectSql(): string

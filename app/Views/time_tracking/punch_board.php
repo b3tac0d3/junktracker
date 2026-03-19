@@ -3,7 +3,8 @@ $punchEmployees = is_array($punchEmployees ?? null) ? $punchEmployees : [];
 $canManageEmployees = (bool) ($canManageEmployees ?? false);
 $recentEntries = is_array($recentEntries ?? null) ? $recentEntries : [];
 $isPunchOnly = (bool) ($isPunchOnly ?? false);
-$jobSearchUrl = e(url('/time-tracking/job-search'));
+$employeeLinkMissing = (bool) ($employeeLinkMissing ?? false);
+$punchBoardJobs = is_array($punchBoardJobs ?? null) ? $punchBoardJobs : [];
 
 $employeeDisplayName = static function (array $row): string {
     $linked = trim((string) ($row['linked_user_name'] ?? ''));
@@ -37,7 +38,11 @@ $employeeDisplayName = static function (array $row): string {
         <strong><i class="fas fa-user-clock me-2"></i><?= e($canManageEmployees ? 'Employee Punch Board' : 'My Punch Clock') ?></strong>
     </div>
     <div class="card-body">
-        <?php if ($punchEmployees === []): ?>
+        <?php if ($employeeLinkMissing): ?>
+            <div class="alert alert-warning mb-0">
+                No employee profile is linked to this user yet. An admin needs to link your user to an employee before punch in/out will work.
+            </div>
+        <?php elseif ($punchEmployees === []): ?>
             <div class="record-empty mb-0">No active employees available for punch tracking.</div>
         <?php else: ?>
             <div class="record-list-simple">
@@ -87,17 +92,32 @@ $employeeDisplayName = static function (array $row): string {
                                 </form>
                             </div>
                         <?php else: ?>
-                            <form method="post" action="<?= e(url('/time-tracking/punch-in')) ?>" class="row g-2 align-items-end time-punch-in-form" data-search-url="<?= $jobSearchUrl ?>">
+                            <form method="post" action="<?= e(url('/time-tracking/punch-in')) ?>" class="row g-2 align-items-end">
                                 <?= csrf_field() ?>
                                 <input type="hidden" name="employee_id" value="<?= e((string) $employeeId) ?>" />
-                                <input type="hidden" name="job_id" class="time-punch-job-id" value="" />
 
                                 <div class="col-12 col-xl-6">
                                     <label class="form-label fw-semibold">Job</label>
-                                    <div class="position-relative client-autosuggest-wrap">
-                                        <input type="text" class="form-control time-punch-job-search" placeholder="Search job by title, id, or city... (leave blank for non-job)" autocomplete="off" />
-                                        <div class="client-suggestions d-none time-punch-job-suggestions" role="listbox" aria-label="Punch job suggestions"></div>
-                                    </div>
+                                    <select class="form-select" name="job_selection">
+                                        <option value="">Select active job or non-job type</option>
+                                        <option value="shop_time">Shop Time</option>
+                                        <option value="general_labor">General Labor</option>
+                                        <?php foreach ($punchBoardJobs as $jobOption): ?>
+                                            <?php
+                                            $jobOptionId = (int) ($jobOption['id'] ?? 0);
+                                            if ($jobOptionId <= 0) {
+                                                continue;
+                                            }
+                                            $jobOptionTitle = trim((string) ($jobOption['title'] ?? ''));
+                                            $jobOptionCity = trim((string) ($jobOption['city'] ?? ''));
+                                            $jobOptionLabel = $jobOptionTitle !== '' ? $jobOptionTitle : ('Job #' . (string) $jobOptionId);
+                                            if ($jobOptionCity !== '') {
+                                                $jobOptionLabel .= ' - ' . $jobOptionCity;
+                                            }
+                                            ?>
+                                            <option value="<?= e((string) $jobOptionId) ?>"><?= e($jobOptionLabel) ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
                                 </div>
 
                                 <div class="col-12 col-xl-4">
@@ -160,136 +180,3 @@ $employeeDisplayName = static function (array $row): string {
         </div>
     </section>
 <?php endif; ?>
-
-<script>
-window.addEventListener('DOMContentLoaded', () => {
-    const forms = Array.from(document.querySelectorAll('.time-punch-in-form'));
-    if (forms.length === 0) {
-        return;
-    }
-
-    forms.forEach((form) => {
-        const searchUrl = String(form.dataset.searchUrl || '').trim();
-        const jobSearchInput = form.querySelector('.time-punch-job-search');
-        const jobIdInput = form.querySelector('.time-punch-job-id');
-        const suggestions = form.querySelector('.time-punch-job-suggestions');
-
-        if (!jobSearchInput || !jobIdInput || !suggestions) {
-            return;
-        }
-
-        let debounce = null;
-        let lastQuery = '';
-
-        const clearSuggestions = () => {
-            suggestions.innerHTML = '';
-            suggestions.classList.add('d-none');
-        };
-
-        const renderSuggestions = (items) => {
-            suggestions.innerHTML = '';
-            const rows = Array.isArray(items) ? items : [];
-            if (rows.length === 0) {
-                const empty = document.createElement('div');
-                empty.className = 'client-suggestion-item';
-                empty.innerHTML = '<span class="client-suggestion-name">No jobs found</span><span class="client-suggestion-meta">Try a different search.</span>';
-                suggestions.appendChild(empty);
-                suggestions.classList.remove('d-none');
-                return;
-            }
-
-            rows.forEach((item) => {
-                const id = Number(item.id || 0);
-                const title = String(item.title || '').trim();
-                if (!Number.isFinite(id) || id <= 0 || title === '') {
-                    return;
-                }
-
-                const row = document.createElement('button');
-                row.type = 'button';
-                row.className = 'client-suggestion-item';
-                row.innerHTML = '<span class="client-suggestion-name"></span><span class="client-suggestion-meta"></span>';
-                row.querySelector('.client-suggestion-name').textContent = title;
-                row.querySelector('.client-suggestion-meta').textContent = String(item.city || ('Job #' + String(id)));
-                row.addEventListener('click', () => {
-                    jobSearchInput.value = title;
-                    jobIdInput.value = String(id);
-                    clearSuggestions();
-                });
-                suggestions.appendChild(row);
-            });
-
-            if (suggestions.children.length > 0) {
-                suggestions.classList.remove('d-none');
-            } else {
-                suggestions.classList.add('d-none');
-            }
-        };
-
-        const fetchSuggestions = (query) => {
-            if (searchUrl === '') {
-                return;
-            }
-
-            const url = new URL(searchUrl, window.location.origin);
-            url.searchParams.set('q', query);
-
-            fetch(url.toString(), {
-                method: 'GET',
-                credentials: 'same-origin',
-                headers: {
-                    'Accept': 'application/json'
-                }
-            })
-                .then((response) => response.ok ? response.json() : null)
-                .then((payload) => {
-                    if (!payload || !payload.ok) {
-                        renderSuggestions([]);
-                        return;
-                    }
-                    renderSuggestions(payload.results || []);
-                })
-                .catch(() => renderSuggestions([]));
-        };
-
-        const search = () => {
-            const query = String(jobSearchInput.value || '').trim();
-            if (query === '') {
-                clearSuggestions();
-                return;
-            }
-
-            lastQuery = query;
-            if (debounce) {
-                clearTimeout(debounce);
-            }
-
-            debounce = setTimeout(() => {
-                fetchSuggestions(lastQuery);
-            }, 180);
-        };
-
-        jobSearchInput.addEventListener('input', () => {
-            jobIdInput.value = '';
-            search();
-        });
-
-        jobSearchInput.addEventListener('focus', search);
-
-        jobSearchInput.addEventListener('blur', () => {
-            window.setTimeout(() => {
-                if (jobIdInput.value === '') {
-                    jobSearchInput.value = '';
-                }
-                clearSuggestions();
-            }, 120);
-        });
-
-        document.addEventListener('click', (event) => {
-            if (!suggestions.contains(event.target) && event.target !== jobSearchInput) {
-                clearSuggestions();
-            }
-        });
-    });
-});
-</script>

@@ -72,7 +72,7 @@ $typeOptions = [
                 <input
                     id="client-contact-contacted-at"
                     type="datetime-local"
-                    step="3600"
+                    step="60"
                     name="contacted_at"
                     class="form-control <?= $hasError('contacted_at') ? 'is-invalid' : '' ?>"
                     value="<?= e((string) ($form['contacted_at'] ?? '')) ?>"

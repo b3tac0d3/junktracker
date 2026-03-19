@@ -77,6 +77,10 @@ final class PurchasesController extends Controller
 
         $businessId = current_business_id();
         $form = $this->defaultForm();
+        $requestedTitle = trim((string) ($_GET['title'] ?? ''));
+        if ($requestedTitle !== '') {
+            $form['title'] = $requestedTitle;
+        }
         $requestedClientId = (int) ($_GET['client_id'] ?? 0);
         if ($requestedClientId > 0) {
             $client = Client::findForBusiness($businessId, $requestedClientId);
@@ -393,7 +397,7 @@ final class PurchasesController extends Controller
             'client_id' => '',
             'client_name' => '',
             'contact_date' => date('Y-m-d'),
-            'purchase_date' => '',
+            'purchase_date' => date('Y-m-d'),
             'purchase_price' => '',
             'notes' => '',
             'create_follow_up_task' => '',

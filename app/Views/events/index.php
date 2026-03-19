@@ -108,27 +108,82 @@ window.addEventListener('DOMContentLoaded', () => {
   const mobileMedia = window.matchMedia('(max-width: 767.98px)');
   const isMobile = mobileMedia.matches;
 
+  const eventDatesInRange = (event) => {
+    const dates = [];
+    if (!event.start) {
+      return dates;
+    }
+
+    const start = new Date(event.start);
+    const end = event.end ? new Date(event.end) : new Date(event.start);
+
+    start.setHours(0, 0, 0, 0);
+    end.setHours(0, 0, 0, 0);
+
+    if (event.allDay && event.end) {
+      end.setDate(end.getDate() - 1);
+    }
+
+    for (let cursor = new Date(start); cursor <= end; cursor.setDate(cursor.getDate() + 1)) {
+      dates.push(cursor.toISOString().slice(0, 10));
+    }
+
+    return dates;
+  };
+
+  const refreshEmptyDayPlaceholders = (calendar) => {
+    const viewType = calendar.view?.type || '';
+    const placeholders = el.querySelectorAll('.jt-calendar-empty-day');
+    placeholders.forEach((node) => node.remove());
+
+    if (!viewType.startsWith('dayGrid') || !mobileMedia.matches) {
+      return;
+    }
+
+    const eventDays = new Set();
+    calendar.getEvents().forEach((event) => {
+      eventDatesInRange(event).forEach((dateKey) => eventDays.add(dateKey));
+    });
+
+    el.querySelectorAll('.fc-daygrid-day[data-date]').forEach((cell) => {
+      const dateKey = cell.getAttribute('data-date');
+      const isOtherMonth = cell.classList.contains('fc-day-other');
+      const eventsWrap = cell.querySelector('.fc-daygrid-day-events');
+
+      if (!dateKey || isOtherMonth || !eventsWrap || eventDays.has(dateKey)) {
+        return;
+      }
+
+      const placeholder = document.createElement('div');
+      placeholder.className = 'jt-calendar-empty-day';
+      placeholder.textContent = 'No events';
+      eventsWrap.appendChild(placeholder);
+    });
+  };
+
   const calendar = new FullCalendar.Calendar(el, {
-    initialView: isMobile ? 'listWeek' : 'dayGridMonth',
+    initialView: isMobile ? 'dayGridWeek' : 'dayGridMonth',
     height: 'auto',
     headerToolbar: isMobile
       ? {
-          left: 'prev,next today',
+          left: 'prev,next',
           center: 'title',
-          right: '',
+          right: 'today',
         }
       : {
           left: 'prev,next today',
           center: 'title',
           right: 'dayGridMonth,timeGridWeek,timeGridDay,listWeek'
         },
-    navLinks: true,
+    navLinks: false,
     nowIndicator: true,
     dayMaxEvents: true,
     eventTimeFormat: { hour: 'numeric', minute: '2-digit', meridiem: 'short' },
     editable: false,
     eventStartEditable: false,
     eventDurationEditable: false,
+    datesSet: () => refreshEmptyDayPlaceholders(calendar),
+    eventsSet: () => refreshEmptyDayPlaceholders(calendar),
     events: (info, success, failure) => {
       const params = new URLSearchParams();
       params.set('start', info.startStr);
@@ -267,4 +322,3 @@ window.addEventListener('DOMContentLoaded', () => {
         </div>
     </div>
 </div>
-

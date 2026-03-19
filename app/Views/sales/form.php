@@ -96,7 +96,9 @@ $hasError = static function (string $field) use ($errors): bool {
                 <?php if ($hasError('sale_date')): ?><div class="invalid-feedback d-block"><?= e($fieldError('sale_date')) ?></div><?php endif; ?>
             </div>
 
-            <div class="col-12 col-lg-9">
+            <div class="w-100"></div>
+
+            <div class="col-12">
                 <label class="form-label fw-semibold" for="sale-client-search">Client (Optional)</label>
                 <div class="position-relative client-autosuggest-wrap">
                     <input type="hidden" id="sale-client-id" name="client_id" value="<?= e((string) ($form['client_id'] ?? '')) ?>" />

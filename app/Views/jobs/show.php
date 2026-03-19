@@ -35,6 +35,11 @@ $paymentCreateUrl = url('/billing/payments/create') . '?job_id=' . (string) $job
 if ($defaultInvoiceId > 0) {
     $paymentCreateUrl .= '&invoice_id=' . (string) $defaultInvoiceId;
 }
+$purchaseQuery = ['title' => $title];
+if ($clientId > 0) {
+    $purchaseQuery['client_id'] = (string) $clientId;
+}
+$purchaseCreateUrl = url('/purchases/create') . '?' . http_build_query($purchaseQuery);
 $expenseCreateUrl = url('/jobs/' . (string) $jobId . '/expenses/create');
 $adjustmentCreateUrl = url('/jobs/' . (string) $jobId . '/adjustments/create');
 $timeEntryCreateUrl = url('/time-tracking/create') . '?job_id=' . (string) $jobId . '&return_to=' . urlencode('/jobs/' . (string) $jobId);
@@ -93,6 +98,7 @@ $formatDuration = static function (int $minutes): string {
                 <li><a class="dropdown-item" href="<?= e($estimateCreateUrl) ?>"><i class="fas fa-file-signature me-2"></i>Add Estimate</a></li>
                 <li><a class="dropdown-item" href="<?= e($invoiceCreateUrl) ?>"><i class="fas fa-file-invoice me-2"></i>Add Invoice</a></li>
                 <li><a class="dropdown-item" href="<?= e($paymentCreateUrl) ?>"><i class="fas fa-money-check-dollar me-2"></i>Add Payment</a></li>
+                <li><a class="dropdown-item" href="<?= e($purchaseCreateUrl) ?>"><i class="fas fa-cart-arrow-down me-2"></i>Add Purchase</a></li>
                 <li><a class="dropdown-item" href="<?= e($expenseCreateUrl) ?>"><i class="fas fa-receipt me-2"></i>Add Expense</a></li>
                 <li><a class="dropdown-item" href="<?= e($adjustmentCreateUrl) ?>"><i class="fas fa-sliders-h me-2"></i>Add Adjustment</a></li>
             </ul>
@@ -112,9 +118,16 @@ $formatDuration = static function (int $minutes): string {
                 <span class="record-value text-capitalize"><?= e((string) ($job['status'] ?? 'pending')) ?></span>
             </div>
             <div class="record-field">
+                <span class="record-label">Job Type</span>
+                <span class="record-value"><?= e(trim((string) ($job['job_type'] ?? '')) ?: '—') ?></span>
+            </div>
+            <div class="record-field">
                 <span class="record-label">Job ID</span>
                 <span class="record-value"><?= e((string) ((int) ($job['id'] ?? 0))) ?></span>
             </div>
+        </div>
+
+        <div class="record-row-fields mt-3">
             <div class="record-field">
                 <span class="record-label">Client</span>
                 <span class="record-value">
@@ -518,6 +531,8 @@ $formatDuration = static function (int $minutes): string {
                     }
                     $openClockInAt = trim((string) ($employee['open_clock_in_at'] ?? ''));
                     $linkedUserEmail = trim((string) ($employee['linked_user_email'] ?? ''));
+                    $canManageEmployeeTime = is_site_admin() || workspace_role() === 'admin';
+                    $addTimeEntryUrl = url('/time-tracking/create?job_id=' . rawurlencode((string) $jobId) . '&employee_id=' . rawurlencode((string) $employeeId) . '&return_to=' . rawurlencode('/jobs/' . (string) $jobId));
                     ?>
                     <article class="record-row-simple">
                         <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
@@ -539,6 +554,9 @@ $formatDuration = static function (int $minutes): string {
                                 </div>
                             </div>
                             <div class="d-flex gap-2">
+                                <?php if ($canManageEmployeeTime): ?>
+                                    <a class="btn btn-outline-primary btn-sm" href="<?= e($addTimeEntryUrl) ?>"><i class="fas fa-plus me-1"></i>Add Time Entry</a>
+                                <?php endif; ?>
                                 <?php if ($isOpen): ?>
                                     <form method="post" action="<?= e(url('/jobs/' . (string) $jobId . '/employees/' . (string) $employeeId . '/punch-out')) ?>">
                                         <?= csrf_field() ?>
