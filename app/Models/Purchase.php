@@ -38,8 +38,8 @@ final class Purchase
         int $businessId,
         string $search = '',
         string $status = '',
-        string $fromDate = '',
-        string $toDate = '',
+        string|int $fromDate = '',
+        string|int $toDate = '',
         int $limit = 25,
         int $offset = 0
     ): array
@@ -50,8 +50,8 @@ final class Purchase
 
         $query = trim($search);
         $status = strtolower(trim($status));
-        $fromDate = trim($fromDate);
-        $toDate = trim($toDate);
+        $fromDate = trim((string) $fromDate);
+        $toDate = trim((string) $toDate);
 
         $filterDateSql = 'COALESCE(DATE(p.purchase_date), DATE(p.contact_date), DATE(p.created_at))';
 
@@ -128,7 +128,7 @@ final class Purchase
         return is_array($rows) ? $rows : [];
     }
 
-    public static function indexCount(int $businessId, string $search = '', string $status = '', string $fromDate = '', string $toDate = ''): int
+    public static function indexCount(int $businessId, string $search = '', string $status = '', string|int $fromDate = '', string|int $toDate = ''): int
     {
         if (!SchemaInspector::hasTable('purchases')) {
             return 0;
@@ -136,8 +136,8 @@ final class Purchase
 
         $query = trim($search);
         $status = strtolower(trim($status));
-        $fromDate = trim($fromDate);
-        $toDate = trim($toDate);
+        $fromDate = trim((string) $fromDate);
+        $toDate = trim((string) $toDate);
 
         $filterDateSql = 'COALESCE(DATE(p.purchase_date), DATE(p.contact_date), DATE(p.created_at))';
 

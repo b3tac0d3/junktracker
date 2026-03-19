@@ -1,6 +1,8 @@
 <?php
 $punchEmployees = is_array($punchEmployees ?? null) ? $punchEmployees : [];
 $canManageEmployees = (bool) ($canManageEmployees ?? false);
+$recentEntries = is_array($recentEntries ?? null) ? $recentEntries : [];
+$isPunchOnly = (bool) ($isPunchOnly ?? false);
 $jobSearchUrl = e(url('/time-tracking/job-search'));
 
 $employeeDisplayName = static function (array $row): string {
@@ -21,11 +23,13 @@ $employeeDisplayName = static function (array $row): string {
 <div class="page-header d-flex flex-wrap align-items-end justify-content-between gap-2">
     <div>
         <h1><?= e($canManageEmployees ? 'Punch Board' : 'My Punch Clock') ?></h1>
-        <p class="muted">Punch employees in or out with optional job selection.</p>
+        <p class="muted"><?= e($isPunchOnly ? 'Punch in, punch out, and review your recent time.' : 'Punch employees in or out with optional job selection.') ?></p>
     </div>
+    <?php if (!$isPunchOnly): ?>
     <div>
         <a class="btn btn-outline-secondary" href="<?= e(url('/time-tracking')) ?>"><i class="fas fa-arrow-left me-2"></i>Back to Time Tracking</a>
     </div>
+    <?php endif; ?>
 </div>
 
 <section class="card index-card index-card-overflow-visible mb-3">
@@ -112,6 +116,50 @@ $employeeDisplayName = static function (array $row): string {
         <?php endif; ?>
     </div>
 </section>
+
+<?php if ($isPunchOnly): ?>
+    <section class="card index-card">
+        <div class="card-header index-card-header d-flex justify-content-between align-items-center">
+            <strong><i class="fas fa-clock-rotate-left me-2"></i>Recent Time</strong>
+            <span class="muted small">Last 25 entries</span>
+        </div>
+        <div class="card-body">
+            <?php if ($recentEntries === []): ?>
+                <div class="record-empty mb-0">No time entries recorded yet.</div>
+            <?php else: ?>
+                <div class="record-list-simple">
+                    <?php foreach ($recentEntries as $entry): ?>
+                        <?php
+                        $clockInAt = trim((string) ($entry['clock_in_at'] ?? ''));
+                        $clockOutAt = trim((string) ($entry['clock_out_at'] ?? ''));
+                        $durationMinutes = (int) ($entry['duration_minutes'] ?? 0);
+                        $durationHours = $durationMinutes > 0 ? number_format($durationMinutes / 60, 2) . 'h' : 'Open';
+                        ?>
+                        <article class="record-row-simple">
+                            <div class="record-row-main mb-2">
+                                <h3 class="record-title-simple mb-0"><?= e(trim((string) ($entry['job_title'] ?? '')) !== '' ? (string) $entry['job_title'] : 'Non-Job Time') ?></h3>
+                                <div class="record-subline small muted mt-1">
+                                    <span>In <?= e(format_datetime($clockInAt !== '' ? $clockInAt : null)) ?></span>
+                                    <span>· Out <?= e(format_datetime($clockOutAt !== '' ? $clockOutAt : null)) ?></span>
+                                </div>
+                            </div>
+                            <div class="record-row-fields record-row-fields-2">
+                                <div class="record-field">
+                                    <span class="record-label">Hours</span>
+                                    <span class="record-value"><?= e($durationHours) ?></span>
+                                </div>
+                                <div class="record-field">
+                                    <span class="record-label">Status</span>
+                                    <span class="record-value"><?= e($clockOutAt === '' ? 'Open' : 'Closed') ?></span>
+                                </div>
+                            </div>
+                        </article>
+                    <?php endforeach; ?>
+                </div>
+            <?php endif; ?>
+        </div>
+    </section>
+<?php endif; ?>
 
 <script>
 window.addEventListener('DOMContentLoaded', () => {

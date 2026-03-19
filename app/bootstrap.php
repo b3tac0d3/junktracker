@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 require __DIR__ . '/helpers.php';
 
+if ((string) config('app.env', 'production') === 'local' && function_exists('opcache_reset')) {
+    @opcache_reset();
+}
+
 session_name((string) config('app.session_name', 'junktracker_session'));
 if (session_status() !== PHP_SESSION_ACTIVE) {
     session_start();

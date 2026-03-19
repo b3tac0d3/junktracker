@@ -7,6 +7,7 @@ namespace App\Controllers;
 use App\Models\BusinessMembership;
 use App\Models\User;
 use Core\Controller;
+use Core\Mailer;
 
 final class AdminUsersController extends Controller
 {
@@ -123,8 +124,16 @@ final class AdminUsersController extends Controller
             }
         }
 
-        $message = $isSiteAdminGlobal ? 'Site admin added.' : 'User added.';
-        flash('success', $message . ' Temporary password: ' . $temporaryPassword . '. The user must change it at first login.');
+        $inviteSent = $this->sendInviteEmail($form, $temporaryPassword, $isSiteAdminGlobal);
+        if ($inviteSent) {
+            flash('success', $isSiteAdminGlobal
+                ? 'Site admin added and invite email sent.'
+                : 'User added and invite email sent.');
+        } else {
+            flash('error', $isSiteAdminGlobal
+                ? 'Site admin added, but the invite email could not be sent. Use Resend Invite after mail is configured.'
+                : 'User added, but the invite email could not be sent. Use Resend Invite after mail is configured.');
+        }
         redirect('/admin/users');
     }
 
@@ -283,8 +292,12 @@ final class AdminUsersController extends Controller
         $temporaryPassword = $this->generateTemporaryPassword();
         $actorId = (int) (auth_user_id() ?? 0);
         User::resendInvitation((int) ($targetUser['id'] ?? 0), password_hash($temporaryPassword, PASSWORD_DEFAULT), $actorId);
-
-        flash('success', 'Invite resent. Temporary password: ' . $temporaryPassword . '. The user must change it at first login.');
+        $inviteSent = $this->sendInviteEmail($targetUser, $temporaryPassword, $this->isGlobalSiteAdminContext());
+        if ($inviteSent) {
+            flash('success', 'Invite resent.');
+        } else {
+            flash('error', 'Invite was reset, but the email could not be sent. Check mail configuration and try again.');
+        }
         redirect('/admin/users/' . (string) ((int) ($targetUser['id'] ?? 0)) . '/edit');
     }
 
@@ -459,5 +472,34 @@ final class AdminUsersController extends Controller
         }
 
         return $password;
+    }
+
+    private function sendInviteEmail(array $user, string $temporaryPassword, bool $isSiteAdminGlobal): bool
+    {
+        $email = trim((string) ($user['email'] ?? ''));
+        if ($email === '') {
+            return false;
+        }
+
+        $fullName = trim((string) ($user['first_name'] ?? '') . ' ' . (string) ($user['last_name'] ?? ''));
+        $greeting = $fullName !== '' ? $fullName : $email;
+        $workspaceLine = $isSiteAdminGlobal ? 'Access: Site Admin' : 'Access: Business Workspace';
+        $subject = (string) config('mail.invite_subject', 'Your JunkTracker invite');
+        $body = implode("\n", [
+            'Hello ' . $greeting . ',',
+            '',
+            'You have been invited to JunkTracker.',
+            $workspaceLine,
+            'Login URL: ' . absolute_url('/login'),
+            'Email: ' . $email,
+            'Temporary Password: ' . $temporaryPassword,
+            '',
+            'This invite expires in 24 hours.',
+            'You will be required to change your password after your first login.',
+            '',
+            'If you were not expecting this message, you can ignore it.',
+        ]);
+
+        return Mailer::send($email, $subject, $body);
     }
 }

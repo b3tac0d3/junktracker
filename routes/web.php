@@ -22,6 +22,7 @@ use App\Controllers\SalesController;
 use App\Controllers\SearchController;
 use App\Controllers\TasksController;
 use App\Controllers\TimeTrackingController;
+use App\Controllers\EventsController;
 use Core\Router;
 
 $router = new Router();
@@ -34,6 +35,15 @@ $router->post('/logout', [AuthController::class, 'logout']);
 $router->get('/settings', [SettingsController::class, 'edit']);
 $router->post('/settings/update', [SettingsController::class, 'update']);
 $router->get('/search', [SearchController::class, 'index']);
+$router->get('/events', [EventsController::class, 'index']);
+$router->get('/events/feed', [EventsController::class, 'feed']);
+$router->get('/events/{id}', [EventsController::class, 'show']);
+$router->get('/events/{id}/json', [EventsController::class, 'json']);
+$router->post('/events', [EventsController::class, 'store']);
+$router->post('/events/{id}/update', [EventsController::class, 'update']);
+$router->post('/events/{id}/cancel', [EventsController::class, 'cancel']);
+$router->post('/events/{id}/move', [EventsController::class, 'move']);
+$router->post('/events/{id}/delete', [EventsController::class, 'delete']);
 
 $router->get('/site-admin/businesses', [SiteAdminController::class, 'businesses']);
 $router->get('/site-admin/businesses/create', [SiteAdminController::class, 'createBusiness']);

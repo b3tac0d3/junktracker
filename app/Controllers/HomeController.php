@@ -20,6 +20,10 @@ final class HomeController extends Controller
             redirect('/site-admin/businesses');
         }
 
+        if (workspace_role() === 'punch_only') {
+            redirect('/time-tracking/punch-board');
+        }
+
         business_context_required();
 
         $businessId = current_business_id();
@@ -32,7 +36,7 @@ final class HomeController extends Controller
             $selfOpenEntry = TimeEntry::openEntryForEmployee($businessId, (int) $selfEmployee['id']);
         }
 
-        $canViewPunchBoard = is_site_admin() || in_array(workspace_role(), ['admin', 'manager'], true);
+        $canViewPunchBoard = is_site_admin() || workspace_role() === 'admin';
         $openPunches = [];
         if ($canViewPunchBoard) {
             $rows = TimeEntry::punchBoardEmployees($businessId);

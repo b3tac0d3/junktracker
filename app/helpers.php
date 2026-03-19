@@ -22,9 +22,11 @@ function config(string $key, mixed $default = null): mixed
     if ($__appConfig === []) {
         $app = require base_path('config/app.php');
         $database = require base_path('config/database.php');
+        $mail = require base_path('config/mail.php');
         $__appConfig = [
             'app' => $app,
             'database' => $database,
+            'mail' => $mail,
         ];
     }
 
@@ -45,6 +47,16 @@ function url(string $path = ''): string
     $base = rtrim(dirname((string) ($_SERVER['SCRIPT_NAME'] ?? '/')), '/');
     if ($base === '/') {
         $base = '';
+    }
+
+    return $base . '/' . ltrim($path, '/');
+}
+
+function absolute_url(string $path = ''): string
+{
+    $base = rtrim((string) config('app.url', ''), '/');
+    if ($base === '') {
+        return url($path);
     }
 
     return $base . '/' . ltrim($path, '/');
@@ -100,6 +112,23 @@ function flash(string $key, ?string $value = null): ?string
     unset($_SESSION['flash'][$key]);
 
     return is_string($message) ? $message : null;
+}
+
+function write_log_entry(string $channel, array $payload): void
+{
+    $channel = trim($channel);
+    if ($channel === '') {
+        $channel = 'app';
+    }
+
+    $logDir = base_path('storage/logs');
+    if (!is_dir($logDir)) {
+        @mkdir($logDir, 0775, true);
+    }
+
+    $payload['timestamp'] = $payload['timestamp'] ?? date('c');
+    $logFile = sprintf('%s/%s-%s.log', $logDir, preg_replace('/[^a-z0-9_-]+/i', '-', $channel), date('Y-m-d'));
+    @file_put_contents($logFile, json_encode($payload, JSON_UNESCAPED_SLASHES) . PHP_EOL, FILE_APPEND);
 }
 
 function auth_user(): ?array

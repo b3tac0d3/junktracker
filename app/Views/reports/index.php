@@ -33,6 +33,7 @@ $formatDate = static function (?string $value): string {
 };
 ?>
 
+<div class="reports-shell">
 <div class="page-header d-flex flex-wrap align-items-end justify-content-between gap-2">
     <div>
         <h1>Reports</h1>
@@ -60,7 +61,7 @@ $formatDate = static function (?string $value): string {
             </div>
         </form>
     </div>
-</section>
+    </section>
 
 <section class="card index-card mb-3">
     <div class="card-header index-card-header">
@@ -265,4 +266,5 @@ $formatDate = static function (?string $value): string {
             </div>
         </section>
     </div>
+</div>
 </div>

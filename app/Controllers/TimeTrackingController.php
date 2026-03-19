@@ -15,6 +15,10 @@ final class TimeTrackingController extends Controller
     {
         require_business_role(['punch_only', 'general_user', 'admin']);
 
+        if (workspace_role() === 'punch_only') {
+            redirect('/time-tracking/punch-board');
+        }
+
         $search = trim((string) ($_GET['q'] ?? ''));
         $state = strtolower(trim((string) ($_GET['state'] ?? '')));
         $allowedStates = ['open', 'closed'];
@@ -69,18 +73,24 @@ final class TimeTrackingController extends Controller
         }
         $scopeEmployeeId = (!$canManageEmployees && $selfEmployee !== null) ? (int) ($selfEmployee['id'] ?? 0) : null;
         $punchEmployees = TimeEntry::punchBoardEmployees($businessId, $scopeEmployeeId);
+        $recentEntries = [];
+        if ($scopeEmployeeId !== null && $scopeEmployeeId > 0) {
+            $recentEntries = TimeEntry::indexList($businessId, '', '', 25, 0, $scopeEmployeeId);
+        }
 
         $this->render('time_tracking/punch_board', [
             'pageTitle' => 'Punch Board',
             'punchEmployees' => $punchEmployees,
             'canManageEmployees' => $canManageEmployees,
             'selfEmployee' => $selfEmployee,
+            'recentEntries' => $recentEntries,
+            'isPunchOnly' => workspace_role() === 'punch_only',
         ]);
     }
 
     public function create(): void
     {
-        require_business_role(['punch_only', 'general_user', 'admin']);
+        require_business_role(['general_user', 'admin']);
 
         $businessId = current_business_id();
         $returnTo = $this->resolveReturnPath((string) ($_GET['return_to'] ?? ''));
@@ -137,7 +147,7 @@ final class TimeTrackingController extends Controller
 
     public function store(): void
     {
-        require_business_role(['punch_only', 'general_user', 'admin']);
+        require_business_role(['general_user', 'admin']);
 
         $returnTo = $this->resolveReturnPath((string) ($_POST['return_to'] ?? ''));
 
@@ -191,7 +201,7 @@ final class TimeTrackingController extends Controller
 
     public function edit(array $params): void
     {
-        require_business_role(['punch_only', 'general_user', 'admin']);
+        require_business_role(['general_user', 'admin']);
 
         $entryId = (int) ($params['id'] ?? 0);
         if ($entryId <= 0) {
@@ -232,7 +242,7 @@ final class TimeTrackingController extends Controller
 
     public function update(array $params): void
     {
-        require_business_role(['punch_only', 'general_user', 'admin']);
+        require_business_role(['general_user', 'admin']);
 
         $entryId = (int) ($params['id'] ?? 0);
         if ($entryId <= 0) {
@@ -316,7 +326,7 @@ final class TimeTrackingController extends Controller
 
     public function show(array $params): void
     {
-        require_business_role(['punch_only', 'general_user', 'admin']);
+        require_business_role(['general_user', 'admin']);
 
         $entryId = (int) ($params['id'] ?? 0);
         if ($entryId <= 0) {
