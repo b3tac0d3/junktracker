@@ -41,7 +41,15 @@ final class Task
         return is_array($rows) ? $rows : [];
     }
 
-    public static function indexList(int $businessId, string $search = '', string $status = '', int $limit = 25, int $offset = 0): array
+    public static function indexList(
+        int $businessId,
+        string $search = '',
+        string $status = '',
+        int $limit = 25,
+        int $offset = 0,
+        string $sortBy = 'date',
+        string $sortDir = 'desc'
+    ): array
     {
         if (!SchemaInspector::hasTable('tasks')) {
             return [];
@@ -88,6 +96,16 @@ final class Task
             OR CAST(t.id AS CHAR) LIKE :query_like_4
         )";
 
+        $sortBy = strtolower(trim($sortBy));
+        $sortDir = strtolower(trim($sortDir)) === 'asc' ? 'ASC' : 'DESC';
+        $createdDateExpr = SchemaInspector::hasColumn('tasks', 'created_at') ? 'DATE(t.created_at)' : 't.id';
+        $dateExpr = "COALESCE(DATE({$dueSql}), {$createdDateExpr})";
+        $sortMap = [
+            'date' => "{$dateExpr} {$sortDir}, t.id {$sortDir}",
+            'id' => "t.id {$sortDir}",
+        ];
+        $orderBy = $sortMap[$sortBy] ?? $sortMap['date'];
+
         $sql = "SELECT
                     t.id,
                     {$titleSql} AS title,
@@ -101,10 +119,10 @@ final class Task
                     {$completedByNameSql} AS completed_by_name
                 FROM tasks t
                 {$joinSql}
-                WHERE " . implode(' AND ', $where) . '
-                ORDER BY t.id DESC
+                WHERE " . implode(' AND ', $where) . "
+                ORDER BY {$orderBy}
                 LIMIT :row_limit
-                OFFSET :row_offset';
+                OFFSET :row_offset";
 
         $stmt = Database::connection()->prepare($sql);
         $queryLike = '%' . $query . '%';

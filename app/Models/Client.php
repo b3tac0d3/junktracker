@@ -14,7 +14,14 @@ final class Client
     /** @var array<string, bool> */
     private static array $tableCache = [];
 
-    public static function indexList(int $businessId, string $search = '', int $limit = 25, int $offset = 0): array
+    public static function indexList(
+        int $businessId,
+        string $search = '',
+        int $limit = 25,
+        int $offset = 0,
+        string $sortBy = 'name',
+        string $sortDir = 'asc'
+    ): array
     {
         $pdo = Database::connection();
         $query = trim($search);
@@ -22,8 +29,21 @@ final class Client
         $companySql = self::hasColumn('clients', 'company_name') ? 'c.company_name' : 'NULL';
         $phoneSql = self::hasColumn('clients', 'phone') ? 'c.phone' : 'NULL';
         $citySql = self::hasColumn('clients', 'city') ? 'c.city' : 'NULL';
+        $statusSql = self::hasColumn('clients', 'status') ? 'c.status' : "'active'";
+        $activeSql = self::hasColumn('clients', 'is_active') ? 'c.is_active' : '1';
         $businessWhere = self::hasColumn('clients', 'business_id') ? 'c.business_id = :business_id' : '1 = 1';
         $deletedWhere = self::hasColumn('clients', 'deleted_at') ? 'c.deleted_at IS NULL' : '1 = 1';
+
+        $sortBy = strtolower(trim($sortBy));
+        $sortDir = strtolower(trim($sortDir)) === 'desc' ? 'DESC' : 'ASC';
+        $sortNameExpr = "COALESCE(NULLIF(c.last_name, ''), {$companySql}, c.first_name, '')";
+        $sortDateExpr = self::hasColumn('clients', 'created_at') ? 'DATE(c.created_at)' : 'c.id';
+        $sortMap = [
+            'name' => "{$sortNameExpr} {$sortDir}, c.id {$sortDir}",
+            'id' => "c.id {$sortDir}",
+            'date' => "{$sortDateExpr} {$sortDir}, c.id {$sortDir}",
+        ];
+        $orderBy = $sortMap[$sortBy] ?? $sortMap['name'];
 
         $sql = "SELECT
                     c.id,
@@ -31,7 +51,9 @@ final class Client
                     c.last_name,
                     {$companySql} AS company_name,
                     {$phoneSql} AS phone,
-                    {$citySql} AS city
+                    {$citySql} AS city,
+                    {$statusSql} AS status,
+                    {$activeSql} AS is_active
                 FROM clients c
                 WHERE {$businessWhere}
                   AND {$deletedWhere}
@@ -41,10 +63,7 @@ final class Client
                     OR COALESCE({$phoneSql}, '') LIKE :query_like_2
                     OR COALESCE({$citySql}, '') LIKE :query_like_3
                   )
-                ORDER BY
-                    COALESCE(NULLIF(c.last_name, ''), {$companySql}, c.first_name, '') ASC,
-                    COALESCE(NULLIF(c.first_name, ''), '') ASC,
-                    c.id DESC
+                ORDER BY {$orderBy}
                 LIMIT :row_limit
                 OFFSET :row_offset";
 
@@ -183,6 +202,8 @@ final class Client
         $citySql = self::hasColumn('clients', 'city') ? 'c.city' : 'NULL';
         $stateSql = self::hasColumn('clients', 'state') ? 'c.state' : 'NULL';
         $postalCodeSql = self::hasColumn('clients', 'postal_code') ? 'c.postal_code' : 'NULL';
+        $statusSql = self::hasColumn('clients', 'status') ? 'c.status' : "'active'";
+        $activeSql = self::hasColumn('clients', 'is_active') ? 'c.is_active' : '1';
         $businessWhere = self::hasColumn('clients', 'business_id') ? 'c.business_id = :business_id' : '1 = 1';
         $deletedWhere = self::hasColumn('clients', 'deleted_at') ? 'c.deleted_at IS NULL' : '1 = 1';
 
@@ -201,7 +222,9 @@ final class Client
                     {$addressLine2Sql} AS address_line2,
                     {$citySql} AS city,
                     {$stateSql} AS state,
-                    {$postalCodeSql} AS postal_code
+                    {$postalCodeSql} AS postal_code,
+                    {$statusSql} AS status,
+                    {$activeSql} AS is_active
                 FROM clients c
                 WHERE {$businessWhere}
                   AND c.id = :client_id
@@ -711,6 +734,42 @@ final class Client
                 SET ' . implode(', ', $sets) . '
                 WHERE id = :client_id
                   AND business_id = :business_id' . $deletedWhere;
+
+        $stmt = Database::connection()->prepare($sql);
+        return $stmt->execute($params);
+    }
+
+    public static function deactivate(int $businessId, int $clientId, int $actorUserId): bool
+    {
+        $sets = [];
+        $params = [
+            'business_id' => $businessId,
+            'client_id' => $clientId,
+        ];
+
+        if (self::hasColumn('clients', 'is_active')) {
+            $sets[] = 'is_active = 0';
+        }
+        if (self::hasColumn('clients', 'status')) {
+            $sets[] = "status = 'inactive'";
+        }
+        if (self::hasColumn('clients', 'updated_by')) {
+            $sets[] = 'updated_by = :updated_by';
+            $params['updated_by'] = $actorUserId;
+        }
+        if (self::hasColumn('clients', 'updated_at')) {
+            $sets[] = 'updated_at = NOW()';
+        }
+        if ($sets === []) {
+            return false;
+        }
+
+        $businessWhere = self::hasColumn('clients', 'business_id') ? ' AND business_id = :business_id' : '';
+        $deletedWhere = self::hasColumn('clients', 'deleted_at') ? ' AND deleted_at IS NULL' : '';
+
+        $sql = 'UPDATE clients
+                SET ' . implode(', ', $sets) . '
+                WHERE id = :client_id' . $businessWhere . $deletedWhere;
 
         $stmt = Database::connection()->prepare($sql);
         return $stmt->execute($params);

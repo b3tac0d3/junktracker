@@ -134,13 +134,13 @@ $selectedJobSelection = $selectedJobId > 0 ? (string) $selectedJobId : trim((str
 
             <div class="col-12 col-lg-6">
                 <label class="form-label fw-semibold" for="entry-clock-in">Clock In</label>
-                <input id="entry-clock-in" type="datetime-local" step="60" name="clock_in_at" class="form-control <?= $hasError('clock_in_at') ? 'is-invalid' : '' ?>" value="<?= e((string) ($form['clock_in_at'] ?? '')) ?>" />
+                <input id="entry-clock-in" type="datetime-local" name="clock_in_at" class="form-control <?= $hasError('clock_in_at') ? 'is-invalid' : '' ?>" value="<?= e((string) ($form['clock_in_at'] ?? '')) ?>" />
                 <?php if ($hasError('clock_in_at')): ?><div class="invalid-feedback d-block"><?= e($fieldError('clock_in_at')) ?></div><?php endif; ?>
             </div>
 
             <div class="col-12 col-lg-6">
                 <label class="form-label fw-semibold" for="entry-clock-out">Clock Out</label>
-                <input id="entry-clock-out" type="datetime-local" step="60" name="clock_out_at" class="form-control <?= $hasError('clock_out_at') ? 'is-invalid' : '' ?>" value="<?= e((string) ($form['clock_out_at'] ?? '')) ?>" />
+                <input id="entry-clock-out" type="datetime-local" name="clock_out_at" class="form-control <?= $hasError('clock_out_at') ? 'is-invalid' : '' ?>" value="<?= e((string) ($form['clock_out_at'] ?? '')) ?>" />
                 <?php if ($hasError('clock_out_at')): ?><div class="invalid-feedback d-block"><?= e($fieldError('clock_out_at')) ?></div><?php endif; ?>
             </div>
 

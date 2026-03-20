@@ -62,7 +62,15 @@ final class Expense
         return array_values($merged);
     }
 
-    public static function indexList(int $businessId, string $search = '', string $scope = 'all', int $limit = 25, int $offset = 0): array
+    public static function indexList(
+        int $businessId,
+        string $search = '',
+        string $scope = 'all',
+        int $limit = 25,
+        int $offset = 0,
+        string $sortBy = 'date',
+        string $sortDir = 'desc'
+    ): array
     {
         if (!SchemaInspector::hasTable('expenses')) {
             return [];
@@ -139,6 +147,16 @@ final class Expense
             OR COALESCE({$paymentMethodSql}, '') LIKE :query_like_7
         )";
 
+        $sortBy = strtolower(trim($sortBy));
+        $sortDir = strtolower(trim($sortDir)) === 'asc' ? 'ASC' : 'DESC';
+        $sortDateExpr = "COALESCE({$dateSql}, {$createdSql})";
+        $sortMap = [
+            'date' => "{$sortDateExpr} {$sortDir}, e.id {$sortDir}",
+            'id' => "e.id {$sortDir}",
+            'client_name' => "{$clientNameSql} {$sortDir}, e.id {$sortDir}",
+        ];
+        $orderBy = $sortMap[$sortBy] ?? $sortMap['date'];
+
         $sql = "SELECT
                     e.id,
                     {$jobIdSql} AS job_id,
@@ -155,7 +173,7 @@ final class Expense
                 FROM expenses e
                 {$joinSql}
                 WHERE " . implode(' AND ', $where) . "
-                ORDER BY COALESCE({$dateSql}, {$createdSql}) DESC, e.id DESC
+                ORDER BY {$orderBy}
                 LIMIT :row_limit
                 OFFSET :row_offset";
 

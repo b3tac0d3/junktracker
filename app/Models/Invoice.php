@@ -75,7 +75,15 @@ final class Invoice
         return is_array($rows) ? $rows : [];
     }
 
-    public static function indexList(int $businessId, string $search = '', string $status = '', int $limit = 25, int $offset = 0): array
+    public static function indexList(
+        int $businessId,
+        string $search = '',
+        string $status = '',
+        int $limit = 25,
+        int $offset = 0,
+        string $sortBy = 'date',
+        string $sortDir = 'desc'
+    ): array
     {
         if (!SchemaInspector::hasTable('invoices')) {
             return [];
@@ -118,6 +126,17 @@ final class Invoice
             OR CAST(i.id AS CHAR) LIKE :query_like_4
         )";
 
+        $sortBy = strtolower(trim($sortBy));
+        $sortDir = strtolower(trim($sortDir)) === 'asc' ? 'ASC' : 'DESC';
+        $createdDateExpr = SchemaInspector::hasColumn('invoices', 'created_at') ? 'DATE(i.created_at)' : 'i.id';
+        $dateExpr = "COALESCE({$issueDateSql}, {$createdDateExpr})";
+        $sortMap = [
+            'date' => "{$dateExpr} {$sortDir}, i.id {$sortDir}",
+            'id' => "i.id {$sortDir}",
+            'client_name' => "{$clientNameSql} {$sortDir}, i.id {$sortDir}",
+        ];
+        $orderBy = $sortMap[$sortBy] ?? $sortMap['date'];
+
         $sql = "SELECT
                     i.id,
                     {$numberSql} AS invoice_number,
@@ -130,10 +149,10 @@ final class Invoice
                     {$clientNameSql} AS client_name
                 FROM invoices i
                 {$joinSql}
-                WHERE " . implode(' AND ', $where) . '
-                ORDER BY i.id DESC
+                WHERE " . implode(' AND ', $where) . "
+                ORDER BY {$orderBy}
                 LIMIT :row_limit
-                OFFSET :row_offset';
+                OFFSET :row_offset";
 
         $stmt = Database::connection()->prepare($sql);
         $queryLike = '%' . $query . '%';

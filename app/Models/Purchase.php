@@ -41,7 +41,9 @@ final class Purchase
         string|int $fromDate = '',
         string|int $toDate = '',
         int $limit = 25,
-        int $offset = 0
+        int $offset = 0,
+        string $sortBy = 'date',
+        string $sortDir = 'desc'
     ): array
     {
         if (!SchemaInspector::hasTable('purchases')) {
@@ -81,6 +83,15 @@ final class Purchase
 
         $purchasePriceSql = SchemaInspector::hasColumn('purchases', 'purchase_price') ? 'p.purchase_price' : '0';
 
+        $sortBy = strtolower(trim($sortBy));
+        $sortDir = strtolower(trim($sortDir)) === 'asc' ? 'ASC' : 'DESC';
+        $sortMap = [
+            'date' => "{$filterDateSql} {$sortDir}, p.id {$sortDir}",
+            'id' => "p.id {$sortDir}",
+            'client_name' => "COALESCE(NULLIF(TRIM(CONCAT_WS(\" \", c.first_name, c.last_name)), \"\"), NULLIF(c.company_name, \"\"), CONCAT(\"Client #\", c.id)) {$sortDir}, p.id {$sortDir}",
+        ];
+        $orderBy = $sortMap[$sortBy] ?? $sortMap['date'];
+
         $sql = 'SELECT
                     p.id,
                     p.client_id,
@@ -97,7 +108,7 @@ final class Purchase
                     AND c.business_id = p.business_id
                     AND c.deleted_at IS NULL
                 WHERE ' . implode(' AND ', $where) . '
-                ORDER BY p.id DESC
+                ORDER BY ' . $orderBy . '
                 LIMIT :row_limit
                 OFFSET :row_offset';
 
@@ -488,6 +499,14 @@ final class Purchase
 
         $purchasePriceSql = SchemaInspector::hasColumn('purchases', 'purchase_price') ? 'p.purchase_price' : '0';
         $safeLimit = max(1, min($limit, 1000));
+        $clientDeletedJoin = SchemaInspector::hasColumn('clients', 'deleted_at') ? ' AND c.deleted_at IS NULL' : '';
+        $purchaseDeletedWhere = SchemaInspector::hasColumn('purchases', 'deleted_at') ? ' AND p.deleted_at IS NULL' : '';
+        $purchaseBusinessWhere = SchemaInspector::hasColumn('purchases', 'business_id')
+            ? 'AND (p.business_id = :purchase_business_id OR p.business_id IS NULL OR p.business_id = 0)'
+            : '';
+        $clientBusinessWhere = SchemaInspector::hasColumn('clients', 'business_id')
+            ? 'AND c.business_id = :client_business_id'
+            : '';
 
         $sql = 'SELECT
                     p.id,
@@ -498,20 +517,23 @@ final class Purchase
                     ' . $purchasePriceSql . ' AS purchase_price
                 FROM purchases p
                 INNER JOIN clients c ON c.id = p.client_id
-                    AND c.deleted_at IS NULL
+                    ' . $clientDeletedJoin . '
                 WHERE c.id = :client_id
-                  AND c.business_id = :client_business_id
-                  AND (p.business_id = :purchase_business_id OR p.business_id IS NULL OR p.business_id = 0)
-                  AND p.deleted_at IS NULL
+                  ' . $clientBusinessWhere . '
+                  ' . $purchaseBusinessWhere . '
+                  ' . $purchaseDeletedWhere . '
                 ORDER BY p.id DESC
                 LIMIT ' . $safeLimit;
 
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute([
-            'client_business_id' => $businessId,
-            'purchase_business_id' => $businessId,
-            'client_id' => $clientId,
-        ]);
+        $params = ['client_id' => $clientId];
+        if (SchemaInspector::hasColumn('clients', 'business_id')) {
+            $params['client_business_id'] = $businessId;
+        }
+        if (SchemaInspector::hasColumn('purchases', 'business_id')) {
+            $params['purchase_business_id'] = $businessId;
+        }
+        $stmt->execute($params);
 
         $rows = $stmt->fetchAll();
         return is_array($rows) ? $rows : [];

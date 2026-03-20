@@ -16,7 +16,17 @@ final class Sale
         return ['shop', 'ebay', 'scrap', 'b2b'];
     }
 
-    public static function indexList(int $businessId, string $search = '', string $type = '', string $fromDate = '', string $toDate = '', int $limit = 25, int $offset = 0): array
+    public static function indexList(
+        int $businessId,
+        string $search = '',
+        string $type = '',
+        string $fromDate = '',
+        string $toDate = '',
+        int $limit = 25,
+        int $offset = 0,
+        string $sortBy = 'date',
+        string $sortDir = 'desc'
+    ): array
     {
         if (!SchemaInspector::hasTable('sales')) {
             return [];
@@ -118,8 +128,18 @@ final class Sale
             $sql .= implode("\n", $joins) . "\n";
         }
 
+        $sortBy = strtolower(trim($sortBy));
+        $sortDir = strtolower(trim($sortDir)) === 'asc' ? 'ASC' : 'DESC';
+        $sortDateExpr = "COALESCE({$dateSql}, DATE(s.created_at))";
+        $sortMap = [
+            'date' => "{$sortDateExpr} {$sortDir}, s.id {$sortDir}",
+            'id' => "s.id {$sortDir}",
+            'client_name' => "{$clientNameSql} {$sortDir}, s.id {$sortDir}",
+        ];
+        $orderBy = $sortMap[$sortBy] ?? $sortMap['date'];
+
         $sql .= "WHERE " . implode(' AND ', $where) . "\n";
-        $sql .= "ORDER BY COALESCE({$dateSql}, DATE(s.created_at)) DESC, s.id DESC\n";
+        $sql .= "ORDER BY {$orderBy}\n";
         $sql .= "LIMIT :row_limit\n";
         $sql .= 'OFFSET :row_offset';
 

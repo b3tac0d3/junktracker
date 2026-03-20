@@ -19,6 +19,14 @@ final class PurchasesController extends Controller
 
         $search = trim((string) ($_GET['q'] ?? ''));
         $status = strtolower(trim((string) ($_GET['status'] ?? '')));
+        $sortBy = strtolower(trim((string) ($_GET['sort_by'] ?? 'date')));
+        $sortDir = strtolower(trim((string) ($_GET['sort_dir'] ?? 'desc')));
+        if (!in_array($sortBy, ['date', 'id', 'client_name'], true)) {
+            $sortBy = 'date';
+        }
+        if (!in_array($sortDir, ['asc', 'desc'], true)) {
+            $sortDir = 'desc';
+        }
         $fromDate = $this->normalizeDateFilter((string) ($_GET['from'] ?? date('Y-01-01')));
         $toDate = $this->normalizeDateFilter((string) ($_GET['to'] ?? date('Y-m-d')));
         if ($fromDate !== '' && $toDate !== '' && strtotime($fromDate) > strtotime($toDate)) {
@@ -39,7 +47,7 @@ final class PurchasesController extends Controller
         }
         $offset = pagination_offset($page, $perPage);
 
-        $purchases = Purchase::indexList($businessId, $search, $status, $fromDate, $toDate, $perPage, $offset);
+        $purchases = Purchase::indexList($businessId, $search, $status, $fromDate, $toDate, $perPage, $offset, $sortBy, $sortDir);
         $summary = Purchase::statusSummary($businessId);
         $pagination = pagination_meta($page, $perPage, $totalRows, count($purchases));
 
@@ -47,6 +55,8 @@ final class PurchasesController extends Controller
             'pageTitle' => 'Purchasing',
             'search' => $search,
             'status' => $status,
+            'sortBy' => $sortBy,
+            'sortDir' => $sortDir,
             'fromDate' => $fromDate,
             'toDate' => $toDate,
             'statusOptions' => $statusOptions,

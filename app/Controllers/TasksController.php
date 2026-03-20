@@ -17,6 +17,14 @@ final class TasksController extends Controller
 
         $search = trim((string) ($_GET['q'] ?? ''));
         $status = strtolower(trim((string) ($_GET['status'] ?? 'open')));
+        $sortBy = strtolower(trim((string) ($_GET['sort_by'] ?? 'date')));
+        $sortDir = strtolower(trim((string) ($_GET['sort_dir'] ?? 'desc')));
+        if (!in_array($sortBy, ['date', 'id'], true)) {
+            $sortBy = 'date';
+        }
+        if (!in_array($sortDir, ['asc', 'desc'], true)) {
+            $sortDir = 'desc';
+        }
         $businessId = current_business_id();
         $statusOptions = $this->taskStatusOptions($businessId);
         $allowedStatuses = $statusOptions;
@@ -33,7 +41,7 @@ final class TasksController extends Controller
         }
         $offset = pagination_offset($page, $perPage);
 
-        $tasks = Task::indexList($businessId, $search, $status, $perPage, $offset);
+        $tasks = Task::indexList($businessId, $search, $status, $perPage, $offset, $sortBy, $sortDir);
         $pagination = pagination_meta($page, $perPage, $totalRows, count($tasks));
         $summary = Task::statusSummary($businessId);
 
@@ -41,6 +49,8 @@ final class TasksController extends Controller
             'pageTitle' => 'Tasks',
             'search' => $search,
             'status' => $status,
+            'sortBy' => $sortBy,
+            'sortDir' => $sortDir,
             'statusOptions' => $statusOptions,
             'tasks' => $tasks,
             'summary' => $summary,
@@ -191,6 +201,12 @@ final class TasksController extends Controller
         }
 
         $summary = Task::statusSummary($businessId);
+
+        $accept = (string) ($_SERVER['HTTP_ACCEPT'] ?? '');
+        if (stripos($accept, 'application/json') === false) {
+            redirect('/tasks/' . (string) $taskId);
+        }
+
         $this->json([
             'ok' => true,
             'task' => [

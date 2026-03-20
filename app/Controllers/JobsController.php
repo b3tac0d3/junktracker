@@ -24,6 +24,15 @@ final class JobsController extends Controller
         $status = strtolower(trim((string) ($_GET['status'] ?? 'dispatch')));
         $fromDate = trim((string) ($_GET['from_date'] ?? date('Y-01-01')));
         $toDate = trim((string) ($_GET['to_date'] ?? date('Y-12-31')));
+        $sortBy = strtolower(trim((string) ($_GET['sort_by'] ?? 'date')));
+        $sortDir = strtolower(trim((string) ($_GET['sort_dir'] ?? 'desc')));
+        $allowedSortBy = ['date', 'id', 'client_name'];
+        if (!in_array($sortBy, $allowedSortBy, true)) {
+            $sortBy = 'date';
+        }
+        if (!in_array($sortDir, ['asc', 'desc'], true)) {
+            $sortDir = 'desc';
+        }
         if (!$this->isValidDateFilter($fromDate)) {
             $fromDate = date('Y-01-01');
         }
@@ -46,7 +55,8 @@ final class JobsController extends Controller
         }
         $offset = pagination_offset($page, $perPage);
 
-        $jobs = Job::indexList($businessId, $search, $status, $perPage, $offset, $fromDate, $toDate);
+        $jobs = Job::indexList($businessId, $search, $status, $perPage, $offset, $fromDate, $toDate, $sortBy, $sortDir);
+        $filteredSummary = Job::filteredSummary($businessId, $search, $status, $fromDate, $toDate);
         $pagination = pagination_meta($page, $perPage, $totalRows, count($jobs));
 
         $this->render('jobs/index', [
@@ -56,7 +66,10 @@ final class JobsController extends Controller
             'fromDate' => $fromDate,
             'toDate' => $toDate,
             'statusOptions' => $statusOptions,
+            'sortBy' => $sortBy,
+            'sortDir' => $sortDir,
             'jobs' => $jobs,
+            'filteredSummary' => $filteredSummary,
             'pagination' => $pagination,
         ]);
     }
@@ -347,6 +360,35 @@ final class JobsController extends Controller
 
         Job::update($businessId, $jobId, $this->payloadForSave($form), auth_user_id() ?? 0);
         flash('success', 'Job updated.');
+        redirect('/jobs/' . (string) $jobId);
+    }
+
+    public function deactivate(array $params): void
+    {
+        require_business_role(['general_user', 'admin']);
+
+        $jobId = (int) ($params['id'] ?? 0);
+        if ($jobId <= 0) {
+            http_response_code(404);
+            $this->render('errors/404', ['pageTitle' => 'Not Found']);
+            return;
+        }
+
+        if (!verify_csrf($_POST['csrf_token'] ?? null)) {
+            flash('error', 'Session expired. Please try again.');
+            redirect('/jobs/' . (string) $jobId);
+        }
+
+        $businessId = current_business_id();
+        $job = Job::findForBusiness($businessId, $jobId);
+        if ($job === null) {
+            http_response_code(404);
+            $this->render('errors/404', ['pageTitle' => 'Not Found']);
+            return;
+        }
+
+        Job::deactivate($businessId, $jobId, auth_user_id() ?? 0);
+        flash('success', 'Job deactivated.');
         redirect('/jobs/' . (string) $jobId);
     }
 

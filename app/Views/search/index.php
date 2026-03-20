@@ -289,27 +289,33 @@ $queryEncoded = rawurlencode($query);
                         <?php else: ?>
                             <div class="record-list-simple">
                                 <?php foreach ($tasks as $task): ?>
-                                    <?php $taskId = (int) ($task['id'] ?? 0); ?>
+                                    <?php
+                                    $taskId = (int) ($task['id'] ?? 0);
+                                    $taskStatus = strtolower(trim((string) ($task['status'] ?? 'open')));
+                                    $isClosed = $taskStatus === 'closed';
+                                    ?>
                                     <article class="record-row-simple">
-                                        <a class="record-row-link" href="<?= e(url('/tasks/' . (string) $taskId)) ?>">
-                                            <div class="record-row-main">
-                                                <h3 class="record-title-simple"><?= e(trim((string) ($task['title'] ?? '')) ?: ('Task #' . $taskId)) ?></h3>
-                                            </div>
-                                            <div class="record-row-fields record-row-fields-compact">
-                                                <div class="record-field">
-                                                    <span class="record-label">Status</span>
-                                                    <span class="record-value"><?= e(ucfirst((string) ($task['status'] ?? 'open'))) ?></span>
+                                        <div class="d-flex align-items-center justify-content-between gap-2">
+                                            <a class="record-row-link flex-grow-1" href="<?= e(url('/tasks/' . (string) $taskId)) ?>">
+                                                <div class="record-row-main">
+                                                    <h3 class="record-title-simple<?= $isClosed ? ' text-decoration-line-through text-muted' : '' ?>"><?= e(trim((string) ($task['title'] ?? '')) ?: ('Task #' . $taskId)) ?></h3>
                                                 </div>
-                                                <div class="record-field">
-                                                    <span class="record-label">Owner</span>
-                                                    <span class="record-value"><?= e(trim((string) ($task['owner_name'] ?? '')) ?: '—') ?></span>
+                                                <div class="record-row-fields record-row-fields-compact">
+                                                    <div class="record-field">
+                                                        <span class="record-label">Status</span>
+                                                        <span class="record-value"><?= e(ucfirst((string) ($task['status'] ?? 'open'))) ?></span>
+                                                    </div>
+                                                    <div class="record-field">
+                                                        <span class="record-label">Owner</span>
+                                                        <span class="record-value"><?= e(trim((string) ($task['owner_name'] ?? '')) ?: '—') ?></span>
+                                                    </div>
+                                                    <div class="record-field">
+                                                        <span class="record-label">Due</span>
+                                                        <span class="record-value"><?= e(format_datetime((string) ($task['due_at'] ?? ''))) ?></span>
+                                                    </div>
                                                 </div>
-                                                <div class="record-field">
-                                                    <span class="record-label">Due</span>
-                                                    <span class="record-value"><?= e(format_datetime((string) ($task['due_at'] ?? ''))) ?></span>
-                                                </div>
-                                            </div>
-                                        </a>
+                                            </a>
+                                        </div>
                                     </article>
                                 <?php endforeach; ?>
                             </div>

@@ -15,6 +15,14 @@ final class ExpensesController extends Controller
 
         $search = trim((string) ($_GET['q'] ?? ''));
         $scope = strtolower(trim((string) ($_GET['scope'] ?? 'all')));
+        $sortBy = strtolower(trim((string) ($_GET['sort_by'] ?? 'date')));
+        $sortDir = strtolower(trim((string) ($_GET['sort_dir'] ?? 'desc')));
+        if (!in_array($sortBy, ['date', 'id', 'client_name'], true)) {
+            $sortBy = 'date';
+        }
+        if (!in_array($sortDir, ['asc', 'desc'], true)) {
+            $sortDir = 'desc';
+        }
         if (!in_array($scope, ['all', 'general', 'job'], true)) {
             $scope = 'all';
         }
@@ -29,13 +37,15 @@ final class ExpensesController extends Controller
         }
         $offset = pagination_offset($page, $perPage);
 
-        $expenses = Expense::indexList($businessId, $search, $scope, $perPage, $offset);
+        $expenses = Expense::indexList($businessId, $search, $scope, $perPage, $offset, $sortBy, $sortDir);
         $pagination = pagination_meta($page, $perPage, $totalRows, count($expenses));
 
         $this->render('expenses/index', [
             'pageTitle' => 'Expenses',
             'search' => $search,
             'scope' => $scope,
+            'sortBy' => $sortBy,
+            'sortDir' => $sortDir,
             'expenses' => $expenses,
             'pagination' => $pagination,
         ]);

@@ -47,7 +47,9 @@ final class Job
         int $limit = 25,
         int $offset = 0,
         ?string $fromDate = null,
-        ?string $toDate = null
+        ?string $toDate = null,
+        string $sortBy = 'date',
+        string $sortDir = 'desc'
     ): array
     {
         if (!SchemaInspector::hasTable('jobs')) {
@@ -63,6 +65,7 @@ final class Job
             : (SchemaInspector::hasColumn('jobs', 'name') ? 'j.name' : "CONCAT('Job #', j.id)");
         $statusSql = SchemaInspector::hasColumn('jobs', 'status') ? 'j.status' : "'pending'";
         $jobTypeSql = SchemaInspector::hasColumn('jobs', 'job_type') ? 'j.job_type' : 'NULL';
+        $activeSql = SchemaInspector::hasColumn('jobs', 'is_active') ? 'j.is_active' : '1';
         $citySql = SchemaInspector::hasColumn('jobs', 'city') ? 'j.city' : 'NULL';
         $startSql = SchemaInspector::hasColumn('jobs', 'scheduled_start_at')
             ? 'j.scheduled_start_at'
@@ -107,11 +110,21 @@ final class Job
             OR CAST(j.id AS CHAR) LIKE :query_like_4
         )";
 
+        $sortBy = strtolower(trim($sortBy));
+        $sortDir = strtolower(trim($sortDir)) === 'asc' ? 'ASC' : 'DESC';
+        $sortable = [
+            'date' => "{$filterDateSql} {$sortDir}, j.id {$sortDir}",
+            'id' => "j.id {$sortDir}",
+            'client_name' => "{$clientNameSql} {$sortDir}, j.id {$sortDir}",
+        ];
+        $orderBy = $sortable[$sortBy] ?? $sortable['date'];
+
         $sql = "SELECT
                     j.id,
                     {$titleSql} AS title,
                     {$jobTypeSql} AS job_type,
                     {$statusSql} AS status,
+                    {$activeSql} AS is_active,
                     {$citySql} AS city,
                     {$startSql} AS scheduled_start_at,
                     {$clientIdSql} AS client_id,
@@ -119,7 +132,7 @@ final class Job
                 FROM jobs j
                 {$joinSql}
                 WHERE " . implode(' AND ', $where) . '
-                ORDER BY j.id DESC
+                ORDER BY ' . $orderBy . '
                 LIMIT :row_limit
                 OFFSET :row_offset';
 
@@ -148,6 +161,145 @@ final class Job
 
         $rows = $stmt->fetchAll();
         return is_array($rows) ? $rows : [];
+    }
+
+    public static function filteredSummary(
+        int $businessId,
+        string $search = '',
+        string $status = '',
+        ?string $fromDate = null,
+        ?string $toDate = null
+    ): array {
+        if (!SchemaInspector::hasTable('jobs')) {
+            return ['job_potential' => 0.0, 'gross_mtd' => 0.0, 'net_mtd' => 0.0, 'gross_ytd' => 0.0, 'net_ytd' => 0.0];
+        }
+
+        $query = trim($search);
+        $status = strtolower(trim($status));
+        $statusSql = SchemaInspector::hasColumn('jobs', 'status') ? 'j.status' : "'pending'";
+        $createdDateSql = SchemaInspector::hasColumn('jobs', 'created_at') ? 'DATE(j.created_at)' : 'CURDATE()';
+        $scheduledDateSql = SchemaInspector::hasColumn('jobs', 'scheduled_start_at')
+            ? 'DATE(j.scheduled_start_at)'
+            : (SchemaInspector::hasColumn('jobs', 'start_date') ? 'DATE(j.start_date)' : $createdDateSql);
+        $filterDateSql = "COALESCE({$scheduledDateSql}, {$createdDateSql})";
+        $titleSql = SchemaInspector::hasColumn('jobs', 'title')
+            ? 'j.title'
+            : (SchemaInspector::hasColumn('jobs', 'name') ? 'j.name' : "CONCAT('Job #', j.id)");
+        $citySql = SchemaInspector::hasColumn('jobs', 'city') ? 'j.city' : "''";
+
+        $potentialExpr = '0';
+        if (SchemaInspector::hasTable('invoices') && SchemaInspector::hasColumn('invoices', 'job_id')) {
+            $invoiceTotalExpr = SchemaInspector::hasColumn('invoices', 'total')
+                ? 'COALESCE(i.total, 0)'
+                : (SchemaInspector::hasColumn('invoices', 'subtotal')
+                    ? 'COALESCE(i.subtotal, 0)'
+                    : '0');
+            $invoiceBusinessSql = SchemaInspector::hasColumn('invoices', 'business_id')
+                ? 'AND i.business_id = j.business_id'
+                : '';
+            $invoiceDeletedSql = SchemaInspector::hasColumn('invoices', 'deleted_at')
+                ? 'AND i.deleted_at IS NULL'
+                : '';
+            $invoiceTypeSql = SchemaInspector::hasColumn('invoices', 'type')
+                ? "AND LOWER(COALESCE(i.type, '')) = 'estimate'"
+                : '';
+
+            $potentialExpr = "(SELECT COALESCE(SUM({$invoiceTotalExpr}), 0)
+                FROM invoices i
+                WHERE i.job_id = j.id
+                {$invoiceBusinessSql}
+                {$invoiceDeletedSql}
+                {$invoiceTypeSql})";
+        } elseif (SchemaInspector::hasColumn('jobs', 'job_potential')) {
+            $potentialExpr = 'COALESCE(j.job_potential, 0)';
+        } elseif (SchemaInspector::hasColumn('jobs', 'potential')) {
+            $potentialExpr = 'COALESCE(j.potential, 0)';
+        } elseif (SchemaInspector::hasColumn('jobs', 'potential_amount')) {
+            $potentialExpr = 'COALESCE(j.potential_amount, 0)';
+        }
+        $grossExpr = SchemaInspector::hasColumn('jobs', 'gross_amount')
+            ? 'COALESCE(j.gross_amount, 0)'
+            : (SchemaInspector::hasColumn('jobs', 'job_gross')
+                ? 'COALESCE(j.job_gross, 0)'
+                : '0');
+        $netExpr = SchemaInspector::hasColumn('jobs', 'net_amount')
+            ? 'COALESCE(j.net_amount, 0)'
+            : (SchemaInspector::hasColumn('jobs', 'job_net')
+                ? 'COALESCE(j.job_net, 0)'
+                : '0');
+
+        $joinClient = SchemaInspector::hasTable('clients') && SchemaInspector::hasColumn('jobs', 'client_id');
+        $joinSql = '';
+        $clientNameSql = "''";
+        if ($joinClient) {
+            $clientNameSql = "COALESCE(NULLIF(TRIM(CONCAT_WS(' ', c.first_name, c.last_name)), ''), NULLIF(c.company_name, ''), CONCAT('Client #', c.id))";
+            $joinDeleted = SchemaInspector::hasColumn('clients', 'deleted_at') ? 'AND c.deleted_at IS NULL' : '';
+            $joinSql = " LEFT JOIN clients c ON c.id = j.client_id {$joinDeleted}";
+        }
+
+        $where = [];
+        $where[] = SchemaInspector::hasColumn('jobs', 'business_id') ? 'j.business_id = :business_id' : '1=1';
+        $where[] = SchemaInspector::hasColumn('jobs', 'deleted_at') ? 'j.deleted_at IS NULL' : '1=1';
+        if ($status !== '') {
+            if ($status === 'dispatch') {
+                $where[] = "LOWER({$statusSql}) IN ('pending', 'active')";
+            } else {
+                $where[] = 'LOWER(' . $statusSql . ') = :status';
+            }
+        }
+        if ($fromDate !== null && trim($fromDate) !== '') {
+            $where[] = "{$filterDateSql} >= :from_date";
+        }
+        if ($toDate !== null && trim($toDate) !== '') {
+            $where[] = "{$filterDateSql} <= :to_date";
+        }
+        $where[] = "(
+            :query = ''
+            OR {$titleSql} LIKE :query_like_1
+            OR {$clientNameSql} LIKE :query_like_2
+            OR COALESCE({$citySql}, '') LIKE :query_like_3
+            OR CAST(j.id AS CHAR) LIKE :query_like_4
+        )";
+
+        $sql = "SELECT
+                    COALESCE(SUM({$potentialExpr}), 0) AS job_potential,
+                    COALESCE(SUM(CASE WHEN {$filterDateSql} >= DATE_FORMAT(CURDATE(), '%Y-%m-01') AND {$filterDateSql} <= CURDATE() THEN {$grossExpr} ELSE 0 END), 0) AS gross_mtd,
+                    COALESCE(SUM(CASE WHEN {$filterDateSql} >= DATE_FORMAT(CURDATE(), '%Y-%m-01') AND {$filterDateSql} <= CURDATE() THEN {$netExpr} ELSE 0 END), 0) AS net_mtd,
+                    COALESCE(SUM(CASE WHEN YEAR({$filterDateSql}) = YEAR(CURDATE()) AND {$filterDateSql} <= CURDATE() THEN {$grossExpr} ELSE 0 END), 0) AS gross_ytd,
+                    COALESCE(SUM(CASE WHEN YEAR({$filterDateSql}) = YEAR(CURDATE()) AND {$filterDateSql} <= CURDATE() THEN {$netExpr} ELSE 0 END), 0) AS net_ytd
+                FROM jobs j
+                {$joinSql}
+                WHERE " . implode(' AND ', $where);
+
+        $stmt = Database::connection()->prepare($sql);
+        $queryLike = '%' . $query . '%';
+        if (SchemaInspector::hasColumn('jobs', 'business_id')) {
+            $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
+        }
+        if ($status !== '' && $status !== 'dispatch') {
+            $stmt->bindValue(':status', $status);
+        }
+        if ($fromDate !== null && trim($fromDate) !== '') {
+            $stmt->bindValue(':from_date', $fromDate);
+        }
+        if ($toDate !== null && trim($toDate) !== '') {
+            $stmt->bindValue(':to_date', $toDate);
+        }
+        $stmt->bindValue(':query', $query);
+        $stmt->bindValue(':query_like_1', $queryLike);
+        $stmt->bindValue(':query_like_2', $queryLike);
+        $stmt->bindValue(':query_like_3', $queryLike);
+        $stmt->bindValue(':query_like_4', $queryLike);
+        $stmt->execute();
+        $row = $stmt->fetch();
+
+        return [
+            'job_potential' => (float) ($row['job_potential'] ?? 0),
+            'gross_mtd' => (float) ($row['gross_mtd'] ?? 0),
+            'net_mtd' => (float) ($row['net_mtd'] ?? 0),
+            'gross_ytd' => (float) ($row['gross_ytd'] ?? 0),
+            'net_ytd' => (float) ($row['net_ytd'] ?? 0),
+        ];
     }
 
     public static function indexCount(
@@ -265,6 +417,7 @@ final class Job
         $actualEndSql = SchemaInspector::hasColumn('jobs', 'actual_end_at') ? 'j.actual_end_at' : 'NULL';
         $notesSql = SchemaInspector::hasColumn('jobs', 'notes') ? 'j.notes' : 'NULL';
         $clientIdSql = SchemaInspector::hasColumn('jobs', 'client_id') ? 'j.client_id' : 'NULL';
+        $activeSql = SchemaInspector::hasColumn('jobs', 'is_active') ? 'j.is_active' : '1';
 
         $joinClient = SchemaInspector::hasTable('clients') && SchemaInspector::hasColumn('jobs', 'client_id');
         $clientNameSql = "'—'";
@@ -280,11 +433,16 @@ final class Job
         $where[] = SchemaInspector::hasColumn('jobs', 'deleted_at') ? 'j.deleted_at IS NULL' : '1=1';
         $where[] = 'j.id = :job_id';
 
+        if (!isset($jobTypeSql)) {
+            $jobTypeSql = 'NULL';
+        }
+
         $sql = "SELECT
                     j.id,
                     {$titleSql} AS title,
                     {$jobTypeSql} AS job_type,
                     {$statusSql} AS status,
+                    {$activeSql} AS is_active,
                     {$address1Sql} AS address_line1,
                     {$address2Sql} AS address_line2,
                     {$citySql} AS city,
@@ -647,6 +805,49 @@ final class Job
         ];
         if ($hasJobType) {
             $params['job_type'] = trim((string) ($data['job_type'] ?? ''));
+        }
+
+        return $stmt->execute($params);
+    }
+
+    public static function deactivate(int $businessId, int $jobId, int $actorUserId): bool
+    {
+        if (!SchemaInspector::hasTable('jobs')) {
+            return false;
+        }
+
+        $sets = [];
+        if (SchemaInspector::hasColumn('jobs', 'is_active')) {
+            $sets[] = 'is_active = 0';
+        }
+        if (SchemaInspector::hasColumn('jobs', 'status')) {
+            $sets[] = "status = 'inactive'";
+        }
+        if (SchemaInspector::hasColumn('jobs', 'updated_by')) {
+            $sets[] = 'updated_by = :updated_by';
+        }
+        if (SchemaInspector::hasColumn('jobs', 'updated_at')) {
+            $sets[] = 'updated_at = NOW()';
+        }
+        if ($sets === []) {
+            return false;
+        }
+
+        $businessWhere = SchemaInspector::hasColumn('jobs', 'business_id') ? 'AND business_id = :business_id' : '';
+        $deletedWhere = SchemaInspector::hasColumn('jobs', 'deleted_at') ? 'AND deleted_at IS NULL' : '';
+        $sql = 'UPDATE jobs
+                SET ' . implode(', ', $sets) . '
+                WHERE id = :job_id
+                  ' . $businessWhere . '
+                  ' . $deletedWhere;
+
+        $stmt = Database::connection()->prepare($sql);
+        $params = ['job_id' => $jobId];
+        if (SchemaInspector::hasColumn('jobs', 'business_id')) {
+            $params['business_id'] = $businessId;
+        }
+        if (SchemaInspector::hasColumn('jobs', 'updated_by')) {
+            $params['updated_by'] = $actorUserId;
         }
 
         return $stmt->execute($params);

@@ -18,6 +18,14 @@ final class BillingController extends Controller
 
         $search = trim((string) ($_GET['q'] ?? ''));
         $status = strtolower(trim((string) ($_GET['status'] ?? '')));
+        $sortBy = strtolower(trim((string) ($_GET['sort_by'] ?? 'date')));
+        $sortDir = strtolower(trim((string) ($_GET['sort_dir'] ?? 'desc')));
+        if (!in_array($sortBy, ['date', 'id', 'client_name'], true)) {
+            $sortBy = 'date';
+        }
+        if (!in_array($sortDir, ['asc', 'desc'], true)) {
+            $sortDir = 'desc';
+        }
         $statusOptions = $this->billingFilterStatusOptions();
         $allowedStatuses = array_values(array_filter(array_keys($statusOptions), static fn (string $key): bool => $key !== ''));
         if ($status !== '' && !in_array($status, $allowedStatuses, true)) {
@@ -34,7 +42,7 @@ final class BillingController extends Controller
         }
         $offset = pagination_offset($page, $perPage);
 
-        $invoices = Invoice::indexList($businessId, $search, $status, $perPage, $offset);
+        $invoices = Invoice::indexList($businessId, $search, $status, $perPage, $offset, $sortBy, $sortDir);
         $pagination = pagination_meta($page, $perPage, $totalRows, count($invoices));
         $summary = Invoice::summary($businessId);
 
@@ -42,6 +50,8 @@ final class BillingController extends Controller
             'pageTitle' => 'Billing',
             'search' => $search,
             'status' => $status,
+            'sortBy' => $sortBy,
+            'sortDir' => $sortDir,
             'statusOptions' => $statusOptions,
             'invoices' => $invoices,
             'summary' => $summary,

@@ -286,12 +286,15 @@ $employeeDisplayName = static function (array $row): string {
                         $taskId = (int) ($task['id'] ?? 0);
                         $title = trim((string) ($task['title'] ?? '')) ?: ('Task #' . (string) $taskId);
                         $status = strtolower(trim((string) ($task['status'] ?? 'open')));
+                        $isClosed = $status === 'closed';
                         $due = $formatDate((string) ($task['due_at'] ?? ''));
                         ?>
-                        <a class="simple-list-row simple-list-row-link" href="<?= e(url('/tasks/' . (string) $taskId)) ?>">
-                            <span class="simple-list-title"><?= e($title) ?></span>
-                            <span class="simple-list-meta"><?= e(str_replace('_', ' ', ucfirst($status))) ?> · <?= e($due) ?></span>
-                        </a>
+                        <div class="simple-list-row">
+                            <a class="simple-list-row-link flex-grow-1 p-0 border-0 bg-transparent text-start text-decoration-none" href="<?= e(url('/tasks/' . (string) $taskId)) ?>">
+                                <span class="simple-list-title<?= $isClosed ? ' text-decoration-line-through text-muted' : '' ?>"><?= e($title) ?></span>
+                                <span class="simple-list-meta"><?= e(str_replace('_', ' ', ucfirst($status))) ?> · <?= e($due) ?></span>
+                            </a>
+                        </div>
                     <?php endforeach; ?>
                 </div>
             <?php endif; ?>

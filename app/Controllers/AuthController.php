@@ -101,6 +101,10 @@ final class AuthController extends Controller
                 redirect('/settings');
             }
 
+            if (workspace_role() === 'punch_only') {
+                redirect('/time-tracking/punch-board');
+            }
+
             redirect('/');
         }
 

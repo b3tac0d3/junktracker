@@ -1,5 +1,7 @@
 <?php
 $search = trim((string) ($search ?? ''));
+$sortBy = strtolower(trim((string) ($sortBy ?? 'name')));
+$sortDir = strtolower(trim((string) ($sortDir ?? 'asc')));
 $clients = is_array($clients ?? null) ? $clients : [];
 $pagination = is_array($pagination ?? null) ? $pagination : pagination_meta(1, 25, count($clients), count($clients));
 $perPage = (int) ($pagination['per_page'] ?? 25);
@@ -48,6 +50,21 @@ $clientDisplayName = static function (array $row): string {
                     autocomplete="off"
                 />
             </div>
+            <div class="col-12 col-md-6 col-lg-2">
+                <label class="form-label fw-semibold" for="clients-sort-by">Sort By</label>
+                <select id="clients-sort-by" class="form-select" name="sort_by">
+                    <option value="name" <?= $sortBy === 'name' ? 'selected' : '' ?>>Name</option>
+                    <option value="date" <?= $sortBy === 'date' ? 'selected' : '' ?>>Date</option>
+                    <option value="id" <?= $sortBy === 'id' ? 'selected' : '' ?>>ID</option>
+                </select>
+            </div>
+            <div class="col-12 col-md-6 col-lg-1">
+                <label class="form-label fw-semibold" for="clients-sort-dir">Sort Order</label>
+                <select id="clients-sort-dir" class="form-select" name="sort_dir">
+                    <option value="asc" <?= $sortDir === 'asc' ? 'selected' : '' ?>>Ascending</option>
+                    <option value="desc" <?= $sortDir === 'desc' ? 'selected' : '' ?>>Descending</option>
+                </select>
+            </div>
             <div class="col-12 col-lg-3 d-grid d-lg-flex gap-2">
                 <button class="btn btn-primary flex-fill" type="submit">Apply</button>
                 <a class="btn btn-outline-secondary flex-fill" href="<?= e(url('/clients')) ?>">Clear</a>
@@ -71,10 +88,17 @@ $clientDisplayName = static function (array $row): string {
         <?php else: ?>
             <div class="record-list-simple">
                 <?php foreach ($clients as $client): ?>
+                    <?php
+                    $clientStatus = strtolower(trim((string) ($client['status'] ?? 'active')));
+                    $isInactive = $clientStatus === 'inactive' || (array_key_exists('is_active', $client) && (int) ($client['is_active'] ?? 1) === 0);
+                    ?>
                     <article class="record-row-simple">
                         <a class="record-row-link" href="<?= e(url('/clients/' . (string) ((int) ($client['id'] ?? 0)))) ?>">
                             <div class="record-row-main">
                                 <h3 class="record-title-simple"><?= e($clientDisplayName($client)) ?></h3>
+                                <?php if ($isInactive): ?>
+                                    <span class="badge text-bg-secondary">Deactivated</span>
+                                <?php endif; ?>
                             </div>
                             <div class="record-row-fields record-row-fields-compact">
                                 <div class="record-field">

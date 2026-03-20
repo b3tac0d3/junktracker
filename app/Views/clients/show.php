@@ -56,6 +56,8 @@ $canTextClass = $canTextRaw === null ? 'text-flag-neutral' : ((((int) $canTextRa
 $secondaryCanTextRaw = $client['secondary_can_text'] ?? null;
 $secondaryCanTextLabel = $secondaryCanTextRaw === null ? 'Not Set' : (((int) $secondaryCanTextRaw) === 1 ? 'Yes' : 'No');
 $secondaryCanTextClass = $secondaryCanTextRaw === null ? 'text-flag-neutral' : ((((int) $secondaryCanTextRaw) === 1) ? 'text-flag-yes' : 'text-flag-no');
+$clientStatus = strtolower(trim((string) ($client['status'] ?? 'active')));
+$isInactive = $clientStatus === 'inactive' || (array_key_exists('is_active', $client) && (int) ($client['is_active'] ?? 1) === 0);
 ?>
 
 <div class="page-header d-flex flex-wrap align-items-end justify-content-between gap-2">
@@ -64,6 +66,9 @@ $secondaryCanTextClass = $secondaryCanTextRaw === null ? 'text-flag-neutral' : (
         <p class="muted"><?= e($displayName) ?></p>
     </div>
     <div class="d-flex gap-2">
+        <?php if ($isInactive): ?>
+            <span class="badge text-bg-secondary align-self-center">Deactivated</span>
+        <?php endif; ?>
         <div class="dropdown">
             <button class="btn btn-primary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
                 <i class="fas fa-ellipsis-h me-2"></i>Actions
@@ -93,6 +98,15 @@ $secondaryCanTextClass = $secondaryCanTextRaw === null ? 'text-flag-neutral' : (
                     <a class="dropdown-item" href="<?= e(url('/clients/' . (string) ((int) ($client['id'] ?? 0)) . '/contacts/create')) ?>">
                         <i class="fas fa-phone-volume me-2"></i>Add Contact
                     </a>
+                </li>
+                <li><hr class="dropdown-divider"></li>
+                <li>
+                    <form method="post" action="<?= e(url('/clients/' . (string) ((int) ($client['id'] ?? 0)) . '/deactivate')) ?>" onsubmit="return confirm('Deactivate this client?');">
+                        <?= csrf_field() ?>
+                        <button class="dropdown-item text-danger" type="submit" <?= $isInactive ? 'disabled' : '' ?>>
+                            <i class="fas fa-user-slash me-2"></i><?= $isInactive ? 'Already Deactivated' : 'Deactivate Client' ?>
+                        </button>
+                    </form>
                 </li>
             </ul>
         </div>

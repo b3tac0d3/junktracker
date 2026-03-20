@@ -125,7 +125,7 @@ if ($ownerNameValue === '') {
 
             <div class="col-12 col-lg-3">
                 <label class="form-label fw-semibold" for="task-due-at">Due Date</label>
-                <input id="task-due-at" type="datetime-local" step="60" name="due_at" class="form-control <?= $hasError('due_at') ? 'is-invalid' : '' ?>" value="<?= e((string) ($form['due_at'] ?? '')) ?>" />
+                <input id="task-due-at" type="datetime-local" name="due_at" class="form-control <?= $hasError('due_at') ? 'is-invalid' : '' ?>" value="<?= e((string) ($form['due_at'] ?? '')) ?>" />
                 <?php if ($hasError('due_at')): ?><div class="invalid-feedback d-block"><?= e($fieldError('due_at')) ?></div><?php endif; ?>
             </div>
 

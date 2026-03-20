@@ -1,6 +1,8 @@
 <?php
 $search = trim((string) ($search ?? ''));
 $status = trim((string) ($status ?? ''));
+$sortBy = strtolower(trim((string) ($sortBy ?? 'date')));
+$sortDir = strtolower(trim((string) ($sortDir ?? 'desc')));
 $fromDate = trim((string) ($fromDate ?? date('Y-01-01')));
 $toDate = trim((string) ($toDate ?? date('Y-m-d')));
 $statusOptions = is_array($statusOptions ?? null) ? $statusOptions : [];
@@ -110,6 +112,21 @@ $notePreview = static function (?string $value): string {
             <div class="col-12 col-md-3 col-lg-2">
                 <label class="form-label fw-semibold" for="purchase-to-date">To</label>
                 <input id="purchase-to-date" class="form-control" type="date" name="to" value="<?= e($toDate) ?>" />
+            </div>
+            <div class="col-12 col-md-3 col-lg-1">
+                <label class="form-label fw-semibold" for="purchase-sort-by">Sort By</label>
+                <select id="purchase-sort-by" class="form-select" name="sort_by">
+                    <option value="date" <?= $sortBy === 'date' ? 'selected' : '' ?>>Date</option>
+                    <option value="id" <?= $sortBy === 'id' ? 'selected' : '' ?>>ID</option>
+                    <option value="client_name" <?= $sortBy === 'client_name' ? 'selected' : '' ?>>Client Name</option>
+                </select>
+            </div>
+            <div class="col-12 col-md-3 col-lg-1">
+                <label class="form-label fw-semibold" for="purchase-sort-dir">Sort Order</label>
+                <select id="purchase-sort-dir" class="form-select" name="sort_dir">
+                    <option value="desc" <?= $sortDir === 'desc' ? 'selected' : '' ?>>Descending</option>
+                    <option value="asc" <?= $sortDir === 'asc' ? 'selected' : '' ?>>Ascending</option>
+                </select>
             </div>
             <div class="col-12 col-lg-2 d-grid d-lg-flex gap-2">
                 <button class="btn btn-primary flex-fill" type="submit">Apply</button>

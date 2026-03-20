@@ -2,6 +2,8 @@
 $task = is_array($task ?? null) ? $task : [];
 $title = trim((string) ($task['title'] ?? '')) !== '' ? (string) $task['title'] : ('Task #' . (string) ((int) ($task['id'] ?? 0)));
 $status = str_replace('_', ' ', (string) ($task['status'] ?? 'open'));
+$statusRaw = strtolower(trim((string) ($task['status'] ?? 'open')));
+$isClosed = $statusRaw === 'closed';
 $taskOwnerId = (int) ($task['owner_user_id'] ?? 0);
 $currentUserId = (int) (auth_user_id() ?? 0);
 $canTakeOwnership = $currentUserId > 0 && $currentUserId !== $taskOwnerId;
@@ -13,6 +15,19 @@ $canTakeOwnership = $currentUserId > 0 && $currentUserId !== $taskOwnerId;
         <p class="muted"><?= e($title) ?></p>
     </div>
     <div class="d-flex gap-2">
+        <?php if (!$isClosed): ?>
+            <form method="post" action="<?= e(url('/tasks/' . (string) ((int) ($task['id'] ?? 0)) . '/quick-complete')) ?>">
+                <?= csrf_field() ?>
+                <input type="hidden" name="done" value="1" />
+                <button class="btn btn-outline-success" type="submit"><i class="fas fa-check me-2"></i>Quick Complete</button>
+            </form>
+        <?php else: ?>
+            <form method="post" action="<?= e(url('/tasks/' . (string) ((int) ($task['id'] ?? 0)) . '/quick-complete')) ?>">
+                <?= csrf_field() ?>
+                <input type="hidden" name="done" value="0" />
+                <button class="btn btn-outline-warning" type="submit"><i class="fas fa-redo me-2"></i>Reopen</button>
+            </form>
+        <?php endif; ?>
         <?php if ($canTakeOwnership): ?>
             <form method="post" action="<?= e(url('/tasks/' . (string) ((int) ($task['id'] ?? 0)) . '/take-ownership')) ?>">
                 <?= csrf_field() ?>

@@ -44,6 +44,8 @@ $expenseCreateUrl = url('/jobs/' . (string) $jobId . '/expenses/create');
 $adjustmentCreateUrl = url('/jobs/' . (string) $jobId . '/adjustments/create');
 $timeEntryCreateUrl = url('/time-tracking/create') . '?job_id=' . (string) $jobId . '&return_to=' . urlencode('/jobs/' . (string) $jobId);
 $employeeAddUrl = url('/jobs/' . (string) $jobId . '/employees/add');
+$jobStatus = strtolower(trim((string) ($job['status'] ?? 'pending')));
+$isInactive = $jobStatus === 'inactive' || (array_key_exists('is_active', $job) && (int) ($job['is_active'] ?? 1) === 0);
 
 $formatDocDate = static function (?string $value): string {
     $raw = trim((string) $value);
@@ -87,6 +89,9 @@ $formatDuration = static function (int $minutes): string {
         <h1><?= e($title) ?></h1>
     </div>
     <div class="d-flex gap-2">
+        <?php if ($isInactive): ?>
+            <span class="badge text-bg-secondary align-self-center">Deactivated</span>
+        <?php endif; ?>
         <div class="dropdown">
             <button class="btn btn-primary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
                 <i class="fas fa-ellipsis-h me-2"></i>Actions
@@ -101,6 +106,15 @@ $formatDuration = static function (int $minutes): string {
                 <li><a class="dropdown-item" href="<?= e($purchaseCreateUrl) ?>"><i class="fas fa-cart-arrow-down me-2"></i>Add Purchase</a></li>
                 <li><a class="dropdown-item" href="<?= e($expenseCreateUrl) ?>"><i class="fas fa-receipt me-2"></i>Add Expense</a></li>
                 <li><a class="dropdown-item" href="<?= e($adjustmentCreateUrl) ?>"><i class="fas fa-sliders-h me-2"></i>Add Adjustment</a></li>
+                <li><hr class="dropdown-divider"></li>
+                <li>
+                    <form method="post" action="<?= e(url('/jobs/' . (string) $jobId . '/deactivate')) ?>" onsubmit="return confirm('Deactivate this job?');">
+                        <?= csrf_field() ?>
+                        <button class="dropdown-item text-danger" type="submit" <?= $isInactive ? 'disabled' : '' ?>>
+                            <i class="fas fa-ban me-2"></i><?= $isInactive ? 'Already Deactivated' : 'Deactivate Job' ?>
+                        </button>
+                    </form>
+                </li>
             </ul>
         </div>
         <a class="btn btn-outline-secondary" href="<?= e(url('/jobs')) ?>">Back to Jobs</a>

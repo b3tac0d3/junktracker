@@ -137,25 +137,25 @@ if ($selectedState !== '' && !array_key_exists($selectedState, $stateOptions)) {
 
             <div class="col-12 col-lg-3">
                 <label class="form-label fw-semibold" for="scheduled-start">Scheduled Start</label>
-                <input id="scheduled-start" type="datetime-local" step="60" name="scheduled_start_at" class="form-control <?= $hasError('scheduled_start_at') ? 'is-invalid' : '' ?>" value="<?= e((string) ($form['scheduled_start_at'] ?? '')) ?>" />
+                <input id="scheduled-start" type="datetime-local" name="scheduled_start_at" class="form-control <?= $hasError('scheduled_start_at') ? 'is-invalid' : '' ?>" value="<?= e((string) ($form['scheduled_start_at'] ?? '')) ?>" />
                 <?php if ($hasError('scheduled_start_at')): ?><div class="invalid-feedback d-block"><?= e($fieldError('scheduled_start_at')) ?></div><?php endif; ?>
             </div>
 
             <div class="col-12 col-lg-3">
                 <label class="form-label fw-semibold" for="scheduled-end">Scheduled End</label>
-                <input id="scheduled-end" type="datetime-local" step="60" name="scheduled_end_at" class="form-control <?= $hasError('scheduled_end_at') ? 'is-invalid' : '' ?>" value="<?= e((string) ($form['scheduled_end_at'] ?? '')) ?>" />
+                <input id="scheduled-end" type="datetime-local" name="scheduled_end_at" class="form-control <?= $hasError('scheduled_end_at') ? 'is-invalid' : '' ?>" value="<?= e((string) ($form['scheduled_end_at'] ?? '')) ?>" />
                 <?php if ($hasError('scheduled_end_at')): ?><div class="invalid-feedback d-block"><?= e($fieldError('scheduled_end_at')) ?></div><?php endif; ?>
             </div>
 
             <div class="col-12 col-lg-3">
                 <label class="form-label fw-semibold" for="actual-start">Actual Start</label>
-                <input id="actual-start" type="datetime-local" step="60" name="actual_start_at" class="form-control <?= $hasError('actual_start_at') ? 'is-invalid' : '' ?>" value="<?= e((string) ($form['actual_start_at'] ?? '')) ?>" />
+                <input id="actual-start" type="datetime-local" name="actual_start_at" class="form-control <?= $hasError('actual_start_at') ? 'is-invalid' : '' ?>" value="<?= e((string) ($form['actual_start_at'] ?? '')) ?>" />
                 <?php if ($hasError('actual_start_at')): ?><div class="invalid-feedback d-block"><?= e($fieldError('actual_start_at')) ?></div><?php endif; ?>
             </div>
 
             <div class="col-12 col-lg-3">
                 <label class="form-label fw-semibold" for="actual-end">Actual End</label>
-                <input id="actual-end" type="datetime-local" step="60" name="actual_end_at" class="form-control <?= $hasError('actual_end_at') ? 'is-invalid' : '' ?>" value="<?= e((string) ($form['actual_end_at'] ?? '')) ?>" />
+                <input id="actual-end" type="datetime-local" name="actual_end_at" class="form-control <?= $hasError('actual_end_at') ? 'is-invalid' : '' ?>" value="<?= e((string) ($form['actual_end_at'] ?? '')) ?>" />
                 <?php if ($hasError('actual_end_at')): ?><div class="invalid-feedback d-block"><?= e($fieldError('actual_end_at')) ?></div><?php endif; ?>
             </div>
 

@@ -19,6 +19,14 @@ final class SalesController extends Controller
 
         $search = trim((string) ($_GET['q'] ?? ''));
         $type = trim((string) ($_GET['type'] ?? ''));
+        $sortBy = strtolower(trim((string) ($_GET['sort_by'] ?? 'date')));
+        $sortDir = strtolower(trim((string) ($_GET['sort_dir'] ?? 'desc')));
+        if (!in_array($sortBy, ['date', 'id', 'client_name'], true)) {
+            $sortBy = 'date';
+        }
+        if (!in_array($sortDir, ['asc', 'desc'], true)) {
+            $sortDir = 'desc';
+        }
         $fromDate = $this->normalizeDateFilter((string) ($_GET['from'] ?? date('Y-01-01')));
         $toDate = $this->normalizeDateFilter((string) ($_GET['to'] ?? date('Y-m-d')));
         if ($fromDate !== '' && $toDate !== '' && strtotime($fromDate) > strtotime($toDate)) {
@@ -35,7 +43,7 @@ final class SalesController extends Controller
         }
         $offset = pagination_offset($page, $perPage);
 
-        $sales = Sale::indexList($businessId, $search, $type, $fromDate, $toDate, $perPage, $offset);
+        $sales = Sale::indexList($businessId, $search, $type, $fromDate, $toDate, $perPage, $offset, $sortBy, $sortDir);
         $summary = Sale::summary($businessId);
         $typeOptions = FormSelectValue::optionsForSection($businessId, 'sale_type');
         if ($typeOptions === []) {
@@ -47,6 +55,8 @@ final class SalesController extends Controller
             'pageTitle' => 'Sales',
             'search' => $search,
             'type' => $type,
+            'sortBy' => $sortBy,
+            'sortDir' => $sortDir,
             'fromDate' => $fromDate,
             'toDate' => $toDate,
             'sales' => $sales,

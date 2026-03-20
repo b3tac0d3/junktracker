@@ -17,6 +17,14 @@ final class ClientsController extends Controller
         require_business_role(['general_user', 'admin']);
 
         $search = trim((string) ($_GET['q'] ?? ''));
+        $sortBy = strtolower(trim((string) ($_GET['sort_by'] ?? 'name')));
+        $sortDir = strtolower(trim((string) ($_GET['sort_dir'] ?? 'asc')));
+        if (!in_array($sortBy, ['name', 'date', 'id'], true)) {
+            $sortBy = 'name';
+        }
+        if (!in_array($sortDir, ['asc', 'desc'], true)) {
+            $sortDir = 'asc';
+        }
         $businessId = current_business_id();
         $perPage = pagination_per_page($_GET['per_page'] ?? null);
         $page = pagination_current_page($_GET['page'] ?? null);
@@ -27,12 +35,14 @@ final class ClientsController extends Controller
         }
         $offset = pagination_offset($page, $perPage);
 
-        $clients = Client::indexList($businessId, $search, $perPage, $offset);
+        $clients = Client::indexList($businessId, $search, $perPage, $offset, $sortBy, $sortDir);
         $pagination = pagination_meta($page, $perPage, $totalRows, count($clients));
 
         $this->render('clients/index', [
             'pageTitle' => 'Clients',
             'search' => $search,
+            'sortBy' => $sortBy,
+            'sortDir' => $sortDir,
             'clients' => $clients,
             'pagination' => $pagination,
         ]);
@@ -186,30 +196,6 @@ final class ClientsController extends Controller
         $purchases = Client::purchaseHistory($businessId, $clientId, 50);
         $contacts = ClientContact::forClient($businessId, $clientId, 50);
 
-        // #region agent log
-        @file_put_contents(
-            dirname(__DIR__, 2) . '/.cursor/debug-7ed08c.log',
-            json_encode([
-                'sessionId' => '7ed08c',
-                'runId' => 'pre-fix',
-                'hypothesisId' => 'bug-1',
-                'location' => 'ClientsController.php:show',
-                'message' => 'Client show purchases snapshot',
-                'data' => [
-                    'businessId' => $businessId,
-                    'clientId' => $clientId,
-                    'purchases_is_array' => is_array($purchases),
-                    'purchases_count' => is_array($purchases) ? count($purchases) : null,
-                    'first_purchase_keys' => (is_array($purchases) && $purchases !== [] && is_array($purchases[0] ?? null))
-                        ? array_keys($purchases[0])
-                        : null,
-                ],
-                'timestamp' => (int) (microtime(true) * 1000),
-            ]) . PHP_EOL,
-            FILE_APPEND
-        );
-        // #endregion
-
         $this->render('clients/show', [
             'pageTitle' => 'Client',
             'client' => $client,
@@ -220,6 +206,35 @@ final class ClientsController extends Controller
             'purchases' => $purchases,
             'contacts' => $contacts,
         ]);
+    }
+
+    public function deactivate(array $params): void
+    {
+        require_business_role(['general_user', 'admin']);
+
+        $clientId = (int) ($params['id'] ?? 0);
+        if ($clientId <= 0) {
+            http_response_code(404);
+            $this->render('errors/404', ['pageTitle' => 'Not Found']);
+            return;
+        }
+
+        if (!verify_csrf($_POST['csrf_token'] ?? null)) {
+            flash('error', 'Session expired. Please try again.');
+            redirect('/clients/' . (string) $clientId);
+        }
+
+        $businessId = current_business_id();
+        $client = Client::findForBusiness($businessId, $clientId);
+        if ($client === null) {
+            http_response_code(404);
+            $this->render('errors/404', ['pageTitle' => 'Not Found']);
+            return;
+        }
+
+        Client::deactivate($businessId, $clientId, auth_user_id() ?? 0);
+        flash('success', 'Client deactivated.');
+        redirect('/clients/' . (string) $clientId);
     }
 
     public function createContact(array $params): void

@@ -1,6 +1,8 @@
 <?php
 $search = trim((string) ($search ?? ''));
 $status = strtolower(trim((string) ($status ?? '')));
+$sortBy = strtolower(trim((string) ($sortBy ?? 'date')));
+$sortDir = strtolower(trim((string) ($sortDir ?? 'desc')));
 $invoices = is_array($invoices ?? null) ? $invoices : [];
 $summary = is_array($summary ?? null) ? $summary : [];
 $pagination = is_array($pagination ?? null) ? $pagination : pagination_meta(1, 25, count($invoices), count($invoices));
@@ -84,6 +86,21 @@ $statusLabel = static function (?string $value) use ($statusLabelMap): string {
                     <?php foreach ($statusOptions as $value => $label): ?>
                         <option value="<?= e($value) ?>" <?= $status === $value ? 'selected' : '' ?>><?= e($label) ?></option>
                     <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="col-12 col-md-6 col-lg-1">
+                <label class="form-label fw-semibold" for="billing-sort-by">Sort By</label>
+                <select id="billing-sort-by" class="form-select" name="sort_by">
+                    <option value="date" <?= $sortBy === 'date' ? 'selected' : '' ?>>Date</option>
+                    <option value="id" <?= $sortBy === 'id' ? 'selected' : '' ?>>ID</option>
+                    <option value="client_name" <?= $sortBy === 'client_name' ? 'selected' : '' ?>>Client Name</option>
+                </select>
+            </div>
+            <div class="col-12 col-md-6 col-lg-1">
+                <label class="form-label fw-semibold" for="billing-sort-dir">Sort Order</label>
+                <select id="billing-sort-dir" class="form-select" name="sort_dir">
+                    <option value="desc" <?= $sortDir === 'desc' ? 'selected' : '' ?>>Descending</option>
+                    <option value="asc" <?= $sortDir === 'asc' ? 'selected' : '' ?>>Ascending</option>
                 </select>
             </div>
             <div class="col-12 col-lg-2 d-grid d-lg-flex gap-2">

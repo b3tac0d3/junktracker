@@ -1,6 +1,8 @@
 <?php
 $search = trim((string) ($search ?? ''));
 $status = strtolower(trim((string) ($status ?? 'open')));
+$sortBy = strtolower(trim((string) ($sortBy ?? 'date')));
+$sortDir = strtolower(trim((string) ($sortDir ?? 'desc')));
 $tasks = is_array($tasks ?? null) ? $tasks : [];
 $summary = is_array($summary ?? null) ? $summary : [];
 $pagination = is_array($pagination ?? null) ? $pagination : pagination_meta(1, 25, count($tasks), count($tasks));
@@ -16,7 +18,9 @@ foreach ($statusOptionsRaw as $statusOptionRaw) {
     if (array_key_exists($statusOption, $statusOptions)) {
         continue;
     }
-    $statusOptions[$statusOption] = ucwords(str_replace('_', ' ', $statusOption));
+    $statusOptions[$statusOption] = $statusOption === 'closed'
+        ? 'Completed'
+        : ucwords(str_replace('_', ' ', $statusOption));
 }
 ?>
 
@@ -67,6 +71,20 @@ foreach ($statusOptionsRaw as $statusOptionRaw) {
                     <?php foreach ($statusOptions as $value => $label): ?>
                         <option value="<?= e($value) ?>" <?= $status === $value ? 'selected' : '' ?>><?= e($label) ?></option>
                     <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="col-12 col-md-6 col-lg-1">
+                <label class="form-label fw-semibold" for="tasks-sort-by">Sort By</label>
+                <select id="tasks-sort-by" class="form-select" name="sort_by">
+                    <option value="date" <?= $sortBy === 'date' ? 'selected' : '' ?>>Date</option>
+                    <option value="id" <?= $sortBy === 'id' ? 'selected' : '' ?>>ID</option>
+                </select>
+            </div>
+            <div class="col-12 col-md-6 col-lg-1">
+                <label class="form-label fw-semibold" for="tasks-sort-dir">Sort Order</label>
+                <select id="tasks-sort-dir" class="form-select" name="sort_dir">
+                    <option value="desc" <?= $sortDir === 'desc' ? 'selected' : '' ?>>Descending</option>
+                    <option value="asc" <?= $sortDir === 'asc' ? 'selected' : '' ?>>Ascending</option>
                 </select>
             </div>
             <div class="col-12 col-lg-2 d-grid d-lg-flex gap-2">
@@ -137,11 +155,11 @@ foreach ($statusOptionsRaw as $statusOptionRaw) {
                 >
                     <div class="task-row-head">
                         <div class="task-row-check">
-                            <input class="form-check-input task-done-checkbox" type="checkbox" value="1" data-task-id="<?= e((string) $taskId) ?>" <?= $isDone ? 'checked' : '' ?> aria-label="Mark task complete">
+                            <input class="form-check-input task-done-checkbox" type="checkbox" value="1" data-task-id="<?= e((string) $taskId) ?>" <?= $isDone ? 'checked' : '' ?> aria-label="Mark complete or reopen">
                         </div>
                         <a class="record-row-link flex-grow-1" href="<?= e(url('/tasks/' . (string) $taskId)) ?>">
                             <div class="record-row-main">
-                                <h3 class="record-title-simple"><?= e($taskTitle) ?></h3>
+                                <h3 class="record-title-simple task-title-text<?= $isDone ? ' text-decoration-line-through text-muted' : '' ?>"><?= e($taskTitle) ?></h3>
                                 <div class="record-subline muted small">
                                     <span>#<?= e((string) $taskId) ?></span>
                                     <span>&middot;</span>
@@ -300,6 +318,22 @@ window.addEventListener('DOMContentLoaded', () => {
         actionButton.textContent = nextAction.label;
     };
 
+    const updateTaskTitleStrikethrough = (article, statusKey) => {
+        if (!article) {
+            return;
+        }
+        const titleEl = article.querySelector('.task-title-text');
+        if (!titleEl) {
+            return;
+        }
+        const closed = String(statusKey || '').toLowerCase() === 'closed';
+        if (closed) {
+            titleEl.classList.add('text-decoration-line-through', 'text-muted');
+        } else {
+            titleEl.classList.remove('text-decoration-line-through', 'text-muted');
+        }
+    };
+
     const updateTaskOwner = (article, ownerUserId, ownerName) => {
         if (!article) {
             return;
@@ -394,6 +428,7 @@ window.addEventListener('DOMContentLoaded', () => {
         }
 
         updateTaskActionLabel(article, statusKey);
+        updateTaskTitleStrikethrough(article, statusKey);
         applyCompletionMeta(article, taskPayload);
     };
 
@@ -417,11 +452,11 @@ window.addEventListener('DOMContentLoaded', () => {
         article.innerHTML = `
             <div class="task-row-head">
                 <div class="task-row-check">
-                    <input class="form-check-input task-done-checkbox" type="checkbox" value="1" data-task-id="${escapeHtml(String(id))}" aria-label="Mark task complete">
+                    <input class="form-check-input task-done-checkbox" type="checkbox" value="1" data-task-id="${escapeHtml(String(id))}" aria-label="Mark complete or reopen"${statusKey === 'closed' ? ' checked' : ''}>
                 </div>
                 <a class="record-row-link flex-grow-1" href="${escapeHtml(href)}">
                     <div class="record-row-main">
-                        <h3 class="record-title-simple">${escapeHtml(titleText)}</h3>
+                        <h3 class="record-title-simple task-title-text${statusKey === 'closed' ? ' text-decoration-line-through text-muted' : ''}">${escapeHtml(titleText)}</h3>
                         <div class="record-subline muted small">
                             <span>#${escapeHtml(String(id))}</span>
                             <span>&middot;</span>

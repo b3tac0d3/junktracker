@@ -1,6 +1,8 @@
 <?php
 $search = trim((string) ($search ?? ''));
 $scope = strtolower(trim((string) ($scope ?? 'all')));
+$sortBy = strtolower(trim((string) ($sortBy ?? 'date')));
+$sortDir = strtolower(trim((string) ($sortDir ?? 'desc')));
 if (!in_array($scope, ['all', 'general', 'job'], true)) {
     $scope = 'all';
 }
@@ -50,6 +52,21 @@ $scopeOptions = [
                     <?php foreach ($scopeOptions as $value => $label): ?>
                         <option value="<?= e($value) ?>" <?= $scope === $value ? 'selected' : '' ?>><?= e($label) ?></option>
                     <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="col-12 col-md-6 col-lg-1">
+                <label class="form-label fw-semibold" for="expenses-sort-by">Sort By</label>
+                <select id="expenses-sort-by" class="form-select" name="sort_by">
+                    <option value="date" <?= $sortBy === 'date' ? 'selected' : '' ?>>Date</option>
+                    <option value="id" <?= $sortBy === 'id' ? 'selected' : '' ?>>ID</option>
+                    <option value="client_name" <?= $sortBy === 'client_name' ? 'selected' : '' ?>>Client Name</option>
+                </select>
+            </div>
+            <div class="col-12 col-md-6 col-lg-1">
+                <label class="form-label fw-semibold" for="expenses-sort-dir">Sort Order</label>
+                <select id="expenses-sort-dir" class="form-select" name="sort_dir">
+                    <option value="desc" <?= $sortDir === 'desc' ? 'selected' : '' ?>>Descending</option>
+                    <option value="asc" <?= $sortDir === 'asc' ? 'selected' : '' ?>>Ascending</option>
                 </select>
             </div>
             <div class="col-12 col-lg-2 d-grid d-lg-flex gap-2">
