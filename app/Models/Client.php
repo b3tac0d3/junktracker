@@ -37,11 +37,9 @@ final class Client
         $sortBy = strtolower(trim($sortBy));
         $sortDir = strtolower(trim($sortDir)) === 'desc' ? 'DESC' : 'ASC';
         $sortNameExpr = "COALESCE(NULLIF(c.last_name, ''), {$companySql}, c.first_name, '')";
-        $sortDateExpr = self::hasColumn('clients', 'created_at') ? 'DATE(c.created_at)' : 'c.id';
         $sortMap = [
             'name' => "{$sortNameExpr} {$sortDir}, c.id {$sortDir}",
             'id' => "c.id {$sortDir}",
-            'date' => "{$sortDateExpr} {$sortDir}, c.id {$sortDir}",
         ];
         $orderBy = $sortMap[$sortBy] ?? $sortMap['name'];
 

@@ -19,7 +19,7 @@ final class ClientsController extends Controller
         $search = trim((string) ($_GET['q'] ?? ''));
         $sortBy = strtolower(trim((string) ($_GET['sort_by'] ?? 'name')));
         $sortDir = strtolower(trim((string) ($_GET['sort_dir'] ?? 'asc')));
-        if (!in_array($sortBy, ['name', 'date', 'id'], true)) {
+        if (!in_array($sortBy, ['name', 'id'], true)) {
             $sortBy = 'name';
         }
         if (!in_array($sortDir, ['asc', 'desc'], true)) {

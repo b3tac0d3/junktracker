@@ -54,7 +54,6 @@ $clientDisplayName = static function (array $row): string {
                 <label class="form-label fw-semibold" for="clients-sort-by">Sort By</label>
                 <select id="clients-sort-by" class="form-select" name="sort_by">
                     <option value="name" <?= $sortBy === 'name' ? 'selected' : '' ?>>Name</option>
-                    <option value="date" <?= $sortBy === 'date' ? 'selected' : '' ?>>Date</option>
                     <option value="id" <?= $sortBy === 'id' ? 'selected' : '' ?>>ID</option>
                 </select>
             </div>
