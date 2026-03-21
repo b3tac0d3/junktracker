@@ -21,8 +21,12 @@ final class SchemaInspector
             return self::$tableCache[$cacheKey];
         }
 
+        // Establish connection outside try/catch so auth/connection errors (e.g. SQLSTATE 1045)
+        // surface normally; only introspection query failures are treated as "not found".
+        $pdo = Database::connection();
+
         try {
-            $stmt = Database::connection()->prepare(
+            $stmt = $pdo->prepare(
                 'SELECT 1
                  FROM information_schema.TABLES
                  WHERE TABLE_SCHEMA = DATABASE()
@@ -49,8 +53,10 @@ final class SchemaInspector
             return self::$columnCache[$cacheKey];
         }
 
+        $pdo = Database::connection();
+
         try {
-            $stmt = Database::connection()->prepare(
+            $stmt = $pdo->prepare(
                 'SELECT 1
                  FROM information_schema.COLUMNS
                  WHERE TABLE_SCHEMA = DATABASE()
