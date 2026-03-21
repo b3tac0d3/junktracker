@@ -246,9 +246,9 @@ final class SiteAdminController extends Controller
     private function businessesPageData(): array
     {
         $query = trim((string) ($_GET['q'] ?? ''));
-        $status = strtolower(trim((string) ($_GET['status'] ?? 'all')));
+        $status = strtolower(trim((string) ($_GET['status'] ?? 'active')));
         if (!in_array($status, ['all', 'active', 'inactive'], true)) {
-            $status = 'all';
+            $status = 'active';
         }
 
         $perPage = pagination_per_page($_GET['per_page'] ?? null);

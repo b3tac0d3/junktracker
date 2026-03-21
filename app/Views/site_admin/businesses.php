@@ -2,7 +2,7 @@
 $businesses = is_array($businesses ?? null) ? $businesses : [];
 $pagination = is_array($pagination ?? null) ? $pagination : pagination_meta(1, 25, count($businesses), count($businesses));
 $counts = is_array($counts ?? null) ? $counts : ['all' => (int) count($businesses), 'active' => 0, 'inactive' => 0];
-$status = (string) ($status ?? 'all');
+$status = (string) ($status ?? 'active');
 $query = trim((string) ($query ?? ''));
 $businessCount = (int) ($pagination['total_rows'] ?? count($businesses));
 ?>
