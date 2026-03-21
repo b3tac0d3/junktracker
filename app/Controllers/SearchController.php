@@ -6,6 +6,7 @@ namespace App\Controllers;
 
 use App\Models\Business;
 use App\Models\Client;
+use App\Models\ClientBoloProfile;
 use App\Models\Employee;
 use App\Models\Expense;
 use App\Models\Invoice;
@@ -30,6 +31,7 @@ final class SearchController extends Controller
             'businesses' => [],
             'site_admin_users' => [],
             'clients' => [],
+            'bolo_matches' => [],
             'jobs' => [],
             'tasks' => [],
             'sales' => [],
@@ -42,6 +44,7 @@ final class SearchController extends Controller
             'businesses' => 0,
             'site_admin_users' => 0,
             'clients' => 0,
+            'bolo_matches' => 0,
             'jobs' => 0,
             'tasks' => 0,
             'sales' => 0,
@@ -72,6 +75,7 @@ final class SearchController extends Controller
                     }
                 } else {
                     $results['clients'] = Client::indexList($businessId, $query, $limit, 0);
+                    $results['bolo_matches'] = ClientBoloProfile::searchMatches($businessId, $query, $limit);
                     $results['jobs'] = Job::indexList($businessId, $query, '', $limit, 0);
                     $results['tasks'] = Task::indexList($businessId, $query, '', $limit, 0);
                     $searchFromDate = '';
@@ -83,6 +87,7 @@ final class SearchController extends Controller
                     $results['time_entries'] = TimeEntry::indexList($businessId, $query, '', $limit, 0, null);
 
                     $totals['clients'] = Client::indexCount($businessId, $query);
+                    $totals['bolo_matches'] = ClientBoloProfile::searchMatchesCount($businessId, $query);
                     $totals['jobs'] = Job::indexCount($businessId, $query, '');
                     $totals['tasks'] = Task::indexCount($businessId, $query, '');
                     $totals['sales'] = Sale::indexCount($businessId, $query, '');

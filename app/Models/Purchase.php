@@ -255,6 +255,125 @@ final class Purchase
         return $summary;
     }
 
+    public static function filteredSummary(
+        int $businessId,
+        string $search = '',
+        string $status = '',
+        string|int $fromDate = '',
+        string|int $toDate = ''
+    ): array {
+        $empty = [
+            'potential' => 0.0,
+            'gross_mtd' => 0.0,
+            'net_mtd' => 0.0,
+            'gross_ytd' => 0.0,
+            'net_ytd' => 0.0,
+        ];
+        if (!SchemaInspector::hasTable('purchases')) {
+            return $empty;
+        }
+
+        $query = trim($search);
+        $status = strtolower(trim($status));
+        $fromDate = trim((string) $fromDate);
+        $toDate = trim((string) $toDate);
+        $filterDateSql = 'COALESCE(DATE(p.purchase_date), DATE(p.contact_date), DATE(p.created_at))';
+        $purchasePriceSql = SchemaInspector::hasColumn('purchases', 'purchase_price') ? 'COALESCE(p.purchase_price, 0)' : '0';
+
+        $where = [
+            'p.business_id = :business_id',
+            'p.deleted_at IS NULL',
+        ];
+        if ($status !== '' && in_array($status, self::statusOptions($businessId), true)) {
+            $where[] = 'p.status = :status';
+        }
+        if ($fromDate !== '') {
+            $where[] = "{$filterDateSql} >= :from_date";
+        }
+        if ($toDate !== '') {
+            $where[] = "{$filterDateSql} <= :to_date";
+        }
+        $where[] = '(
+            :query = ""
+            OR p.title LIKE :query_like_1
+            OR COALESCE(CONCAT_WS(" ", c.first_name, c.last_name), "") LIKE :query_like_2
+            OR COALESCE(c.company_name, "") LIKE :query_like_3
+            OR COALESCE(p.notes, "") LIKE :query_like_4
+            OR CAST(p.id AS CHAR) LIKE :query_like_5
+        )';
+
+        $queryLike = '%' . $query . '%';
+
+        $potentialSql = 'SELECT
+                    COALESCE(SUM(CASE
+                        WHEN LOWER(COALESCE(p.status, "")) IN ("pending","prospect") THEN ' . $purchasePriceSql . '
+                        ELSE 0
+                    END), 0) AS potential_total
+                FROM purchases p
+                INNER JOIN clients c ON c.id = p.client_id
+                    AND c.business_id = p.business_id
+                    AND c.deleted_at IS NULL
+                WHERE ' . implode(' AND ', $where);
+        $potentialStmt = Database::connection()->prepare($potentialSql);
+        $potentialStmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
+        if ($status !== '' && in_array($status, self::statusOptions($businessId), true)) {
+            $potentialStmt->bindValue(':status', $status);
+        }
+        if ($fromDate !== '') {
+            $potentialStmt->bindValue(':from_date', $fromDate);
+        }
+        if ($toDate !== '') {
+            $potentialStmt->bindValue(':to_date', $toDate);
+        }
+        $potentialStmt->bindValue(':query', $query);
+        $potentialStmt->bindValue(':query_like_1', $queryLike);
+        $potentialStmt->bindValue(':query_like_2', $queryLike);
+        $potentialStmt->bindValue(':query_like_3', $queryLike);
+        $potentialStmt->bindValue(':query_like_4', $queryLike);
+        $potentialStmt->bindValue(':query_like_5', $queryLike);
+        $potentialStmt->execute();
+        $potentialRow = $potentialStmt->fetch();
+        $potential = (float) ($potentialRow['potential_total'] ?? 0);
+
+        $totalsSql = "SELECT
+                    COALESCE(SUM(CASE WHEN {$filterDateSql} >= DATE_FORMAT(CURDATE(), '%Y-%m-01') AND {$filterDateSql} <= CURDATE() THEN {$purchasePriceSql} ELSE 0 END), 0) AS gross_mtd,
+                    COALESCE(SUM(CASE WHEN {$filterDateSql} >= DATE_FORMAT(CURDATE(), '%Y-%m-01') AND {$filterDateSql} <= CURDATE() THEN {$purchasePriceSql} ELSE 0 END), 0) AS net_mtd,
+                    COALESCE(SUM(CASE WHEN YEAR({$filterDateSql}) = YEAR(CURDATE()) AND {$filterDateSql} <= CURDATE() THEN {$purchasePriceSql} ELSE 0 END), 0) AS gross_ytd,
+                    COALESCE(SUM(CASE WHEN YEAR({$filterDateSql}) = YEAR(CURDATE()) AND {$filterDateSql} <= CURDATE() THEN {$purchasePriceSql} ELSE 0 END), 0) AS net_ytd
+                FROM purchases p
+                INNER JOIN clients c ON c.id = p.client_id
+                    AND c.business_id = p.business_id
+                    AND c.deleted_at IS NULL
+                WHERE " . implode(' AND ', $where);
+        $totalsStmt = Database::connection()->prepare($totalsSql);
+        $totalsStmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
+        if ($status !== '' && in_array($status, self::statusOptions($businessId), true)) {
+            $totalsStmt->bindValue(':status', $status);
+        }
+        if ($fromDate !== '') {
+            $totalsStmt->bindValue(':from_date', $fromDate);
+        }
+        if ($toDate !== '') {
+            $totalsStmt->bindValue(':to_date', $toDate);
+        }
+        $totalsStmt->bindValue(':query', $query);
+        $totalsStmt->bindValue(':query_like_1', $queryLike);
+        $totalsStmt->bindValue(':query_like_2', $queryLike);
+        $totalsStmt->bindValue(':query_like_3', $queryLike);
+        $totalsStmt->bindValue(':query_like_4', $queryLike);
+        $totalsStmt->bindValue(':query_like_5', $queryLike);
+        $totalsStmt->execute();
+        $totalsRow = $totalsStmt->fetch();
+
+        return [
+            'potential' => $potential,
+            'gross_mtd' => (float) ($totalsRow['gross_mtd'] ?? 0),
+            'net_mtd' => (float) ($totalsRow['net_mtd'] ?? 0),
+            'gross_ytd' => (float) ($totalsRow['gross_ytd'] ?? 0),
+            'net_ytd' => (float) ($totalsRow['net_ytd'] ?? 0),
+        ];
+    }
+
     public static function findForBusiness(int $businessId, int $purchaseId): ?array
     {
         if (!SchemaInspector::hasTable('purchases') || $purchaseId <= 0) {

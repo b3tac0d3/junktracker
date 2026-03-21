@@ -4,6 +4,7 @@ $errors = is_array($errors ?? null) ? $errors : [];
 $mode = (string) ($mode ?? 'create');
 $actionUrl = (string) ($actionUrl ?? url('/clients'));
 $hasClientType = (bool) ($hasClientType ?? false);
+$hasNewsletter = (bool) ($hasNewsletter ?? false);
 $clientTypeOptions = is_array($clientTypeOptions ?? null) ? $clientTypeOptions : ['client', 'company', 'realtor', 'other'];
 
 $fieldError = static function (string $field) use ($errors): string {
@@ -59,6 +60,16 @@ if ($selectedState !== '' && !array_key_exists($selectedState, $stateOptions)) {
                 <input id="client-email" name="email" type="email" class="form-control <?= $hasError('email') ? 'is-invalid' : '' ?>" value="<?= e((string) ($form['email'] ?? '')) ?>" maxlength="190" />
                 <?php if ($hasError('email')): ?><div class="invalid-feedback d-block"><?= e($fieldError('email')) ?></div><?php endif; ?>
             </div>
+
+            <?php if ($hasNewsletter): ?>
+                <div class="col-12 col-lg-8">
+                    <div class="form-check mt-2">
+                        <input class="form-check-input" type="checkbox" id="client-newsletter" name="newsletter_subscribed" value="1" <?= ((string) ($form['newsletter_subscribed'] ?? '0')) === '1' ? 'checked' : '' ?> />
+                        <label class="form-check-label fw-semibold" for="client-newsletter">Subscribe to newsletter</label>
+                    </div>
+                    <div class="form-text">When you send email campaigns, include clients who opted in here. A unique unsubscribe token is stored for each subscriber.</div>
+                </div>
+            <?php endif; ?>
 
             <?php if ($hasClientType): ?>
                 <div class="col-12 col-lg-4">

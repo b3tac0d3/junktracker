@@ -8,6 +8,7 @@ $toDate = trim((string) ($toDate ?? date('Y-m-d')));
 $statusOptions = is_array($statusOptions ?? null) ? $statusOptions : [];
 $purchases = is_array($purchases ?? null) ? $purchases : [];
 $summary = is_array($summary ?? null) ? $summary : [];
+$reporting = is_array($reporting ?? null) ? $reporting : [];
 $pagination = is_array($pagination ?? null) ? $pagination : pagination_meta(1, 25, count($purchases), count($purchases));
 $perPage = (int) ($pagination['per_page'] ?? 25);
 
@@ -79,6 +80,33 @@ $notePreview = static function (?string $value): string {
             <div class="record-field">
                 <span class="record-label">Cancelled</span>
                 <span class="record-value"><?= e((string) ((int) ($summary['cancelled'] ?? 0))) ?></span>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="card index-card mb-3">
+    <div class="card-body">
+        <div class="record-row-fields record-row-fields-5">
+            <div class="record-field">
+                <span class="record-label">Potential</span>
+                <span class="record-value">$<?= e(number_format((float) ($reporting['potential'] ?? 0), 2)) ?></span>
+            </div>
+            <div class="record-field">
+                <span class="record-label">Gross MTD</span>
+                <span class="record-value">$<?= e(number_format((float) ($reporting['gross_mtd'] ?? 0), 2)) ?></span>
+            </div>
+            <div class="record-field">
+                <span class="record-label">Net MTD</span>
+                <span class="record-value">$<?= e(number_format((float) ($reporting['net_mtd'] ?? 0), 2)) ?></span>
+            </div>
+            <div class="record-field">
+                <span class="record-label">Gross YTD</span>
+                <span class="record-value">$<?= e(number_format((float) ($reporting['gross_ytd'] ?? 0), 2)) ?></span>
+            </div>
+            <div class="record-field">
+                <span class="record-label">Net YTD</span>
+                <span class="record-value">$<?= e(number_format((float) ($reporting['net_ytd'] ?? 0), 2)) ?></span>
             </div>
         </div>
     </div>

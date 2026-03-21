@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Models\Client;
+use App\Models\ClientBoloProfile;
 use App\Models\ClientContact;
 use App\Models\FormSelectValue;
 use App\Models\SchemaInspector;
@@ -60,6 +61,7 @@ final class ClientsController extends Controller
             'form' => $this->defaultForm(),
             'errors' => [],
             'hasClientType' => SchemaInspector::hasColumn('clients', 'client_type'),
+            'hasNewsletter' => SchemaInspector::hasColumn('clients', 'newsletter_subscribed'),
             'clientTypeOptions' => FormSelectValue::optionsForSection($businessId, 'client_type'),
         ]);
     }
@@ -84,12 +86,13 @@ final class ClientsController extends Controller
                 'form' => $form,
                 'errors' => $errors,
                 'hasClientType' => SchemaInspector::hasColumn('clients', 'client_type'),
+                'hasNewsletter' => SchemaInspector::hasColumn('clients', 'newsletter_subscribed'),
                 'clientTypeOptions' => FormSelectValue::optionsForSection($businessId, 'client_type'),
             ]);
             return;
         }
 
-        $clientId = Client::create($businessId, $this->payloadForSave($form, true), auth_user_id() ?? 0);
+        $clientId = Client::create($businessId, $this->payloadForSave($form, true, null), auth_user_id() ?? 0);
         flash('success', 'Client created.');
         redirect('/clients/' . (string) $clientId);
     }
@@ -120,6 +123,7 @@ final class ClientsController extends Controller
             'form' => $this->formFromModel($client),
             'errors' => [],
             'hasClientType' => SchemaInspector::hasColumn('clients', 'client_type'),
+            'hasNewsletter' => SchemaInspector::hasColumn('clients', 'newsletter_subscribed'),
             'clientTypeOptions' => FormSelectValue::optionsForSection($businessId, 'client_type'),
             'clientId' => $clientId,
         ]);
@@ -159,13 +163,14 @@ final class ClientsController extends Controller
                 'form' => $form,
                 'errors' => $errors,
                 'hasClientType' => SchemaInspector::hasColumn('clients', 'client_type'),
+                'hasNewsletter' => SchemaInspector::hasColumn('clients', 'newsletter_subscribed'),
                 'clientTypeOptions' => FormSelectValue::optionsForSection($businessId, 'client_type'),
                 'clientId' => $clientId,
             ]);
             return;
         }
 
-        Client::update($businessId, $clientId, $this->payloadForSave($form, false), auth_user_id() ?? 0);
+        Client::update($businessId, $clientId, $this->payloadForSave($form, false, $client), auth_user_id() ?? 0);
         flash('success', 'Client updated.');
         redirect('/clients/' . (string) $clientId);
     }
@@ -195,6 +200,7 @@ final class ClientsController extends Controller
         $sales = Client::salesHistory($businessId, $clientId, 50);
         $purchases = Client::purchaseHistory($businessId, $clientId, 50);
         $contacts = ClientContact::forClient($businessId, $clientId, 50);
+        $bolo = ClientBoloProfile::isAvailable() ? ClientBoloProfile::findForClient($businessId, $clientId) : null;
 
         $this->render('clients/show', [
             'pageTitle' => 'Client',
@@ -205,6 +211,10 @@ final class ClientsController extends Controller
             'sales' => $sales,
             'purchases' => $purchases,
             'contacts' => $contacts,
+            'bolo' => $bolo,
+            'hasNewsletter' => SchemaInspector::hasColumn('clients', 'newsletter_subscribed'),
+            'hasBolo' => ClientBoloProfile::isAvailable(),
+            'boloHasActiveFlag' => ClientBoloProfile::hasActiveFlag(),
         ]);
     }
 
@@ -329,6 +339,159 @@ final class ClientsController extends Controller
         redirect('/clients/' . (string) $clientId);
     }
 
+    public function editBolo(array $params): void
+    {
+        require_business_role(['general_user', 'admin']);
+
+        $clientId = (int) ($params['id'] ?? 0);
+        if ($clientId <= 0) {
+            http_response_code(404);
+            $this->render('errors/404', ['pageTitle' => 'Not Found']);
+            return;
+        }
+
+        $businessId = current_business_id();
+        $client = Client::findForBusiness($businessId, $clientId);
+        if ($client === null) {
+            http_response_code(404);
+            $this->render('errors/404', ['pageTitle' => 'Not Found']);
+            return;
+        }
+
+        if (!ClientBoloProfile::isAvailable()) {
+            flash('error', 'BOLO profile tables are missing. Run the latest database migration.');
+            redirect('/clients/' . (string) $clientId);
+        }
+
+        $bolo = ClientBoloProfile::findForClient($businessId, $clientId);
+        $form = $this->boloFormFromData($bolo);
+        $boloIsActive = true;
+        if ($bolo !== null && ClientBoloProfile::hasActiveFlag()) {
+            $boloIsActive = (int) (($bolo['profile'] ?? [])['is_active'] ?? 1) === 1;
+        }
+
+        $this->render('clients/bolo_form', [
+            'pageTitle' => 'BOLO Profile',
+            'client' => $client,
+            'clientId' => $clientId,
+            'actionUrl' => url('/clients/' . (string) $clientId . '/bolo'),
+            'form' => $form,
+            'errors' => [],
+            'boloHasActiveFlag' => ClientBoloProfile::hasActiveFlag(),
+            'boloIsActive' => $boloIsActive,
+        ]);
+    }
+
+    public function updateBolo(array $params): void
+    {
+        require_business_role(['general_user', 'admin']);
+
+        $clientId = (int) ($params['id'] ?? 0);
+        if ($clientId <= 0) {
+            http_response_code(404);
+            $this->render('errors/404', ['pageTitle' => 'Not Found']);
+            return;
+        }
+
+        if (!verify_csrf($_POST['csrf_token'] ?? null)) {
+            flash('error', 'Session expired. Please try again.');
+            redirect('/clients/' . (string) $clientId . '/bolo/edit');
+        }
+
+        $businessId = current_business_id();
+        $client = Client::findForBusiness($businessId, $clientId);
+        if ($client === null) {
+            http_response_code(404);
+            $this->render('errors/404', ['pageTitle' => 'Not Found']);
+            return;
+        }
+
+        if (!ClientBoloProfile::isAvailable()) {
+            flash('error', 'BOLO profile tables are missing. Run the latest database migration.');
+            redirect('/clients/' . (string) $clientId);
+        }
+
+        $form = $this->boloFormFromPost($_POST);
+        $lines = $this->parseBoloItemLines((string) ($form['items_text'] ?? ''));
+        ClientBoloProfile::save(
+            $businessId,
+            $clientId,
+            (string) ($form['notes'] ?? ''),
+            $lines
+        );
+
+        flash('success', 'BOLO profile saved.');
+        redirect('/clients/' . (string) $clientId);
+    }
+
+    public function deactivateBolo(array $params): void
+    {
+        require_business_role(['general_user', 'admin']);
+
+        $clientId = (int) ($params['id'] ?? 0);
+        if ($clientId <= 0) {
+            http_response_code(404);
+            $this->render('errors/404', ['pageTitle' => 'Not Found']);
+            return;
+        }
+
+        if (!verify_csrf($_POST['csrf_token'] ?? null)) {
+            flash('error', 'Session expired. Please try again.');
+            redirect('/clients/' . (string) $clientId);
+        }
+
+        $businessId = current_business_id();
+        $client = Client::findForBusiness($businessId, $clientId);
+        if ($client === null) {
+            http_response_code(404);
+            $this->render('errors/404', ['pageTitle' => 'Not Found']);
+            return;
+        }
+
+        if (!ClientBoloProfile::hasActiveFlag()) {
+            flash('error', 'BOLO active flag is missing. Run the latest database migration.');
+            redirect('/clients/' . (string) $clientId);
+        }
+
+        ClientBoloProfile::setProfileActive($businessId, $clientId, false);
+        flash('success', 'BOLO profile deactivated. It will not appear in the BOLO list or search until reactivated.');
+        redirect('/clients/' . (string) $clientId);
+    }
+
+    public function reactivateBolo(array $params): void
+    {
+        require_business_role(['general_user', 'admin']);
+
+        $clientId = (int) ($params['id'] ?? 0);
+        if ($clientId <= 0) {
+            http_response_code(404);
+            $this->render('errors/404', ['pageTitle' => 'Not Found']);
+            return;
+        }
+
+        if (!verify_csrf($_POST['csrf_token'] ?? null)) {
+            flash('error', 'Session expired. Please try again.');
+            redirect('/clients/' . (string) $clientId);
+        }
+
+        $businessId = current_business_id();
+        $client = Client::findForBusiness($businessId, $clientId);
+        if ($client === null) {
+            http_response_code(404);
+            $this->render('errors/404', ['pageTitle' => 'Not Found']);
+            return;
+        }
+
+        if (!ClientBoloProfile::hasActiveFlag()) {
+            flash('error', 'BOLO active flag is missing. Run the latest database migration.');
+            redirect('/clients/' . (string) $clientId);
+        }
+
+        ClientBoloProfile::setProfileActive($businessId, $clientId, true);
+        flash('success', 'BOLO profile reactivated.');
+        redirect('/clients/' . (string) $clientId);
+    }
+
     private function defaultForm(): array
     {
         return [
@@ -347,6 +510,7 @@ final class ClientsController extends Controller
             'postal_code' => '',
             'client_type' => 'client',
             'primary_note' => '',
+            'newsletter_subscribed' => '0',
         ];
     }
 
@@ -368,6 +532,7 @@ final class ClientsController extends Controller
             'postal_code' => trim((string) ($client['postal_code'] ?? '')),
             'client_type' => trim((string) ($client['client_type'] ?? 'client')),
             'primary_note' => trim((string) ($client['primary_note'] ?? '')),
+            'newsletter_subscribed' => ((int) ($client['newsletter_subscribed'] ?? 0)) === 1 ? '1' : '0',
         ];
     }
 
@@ -400,6 +565,7 @@ final class ClientsController extends Controller
             'postal_code' => trim((string) ($input['postal_code'] ?? '')),
             'client_type' => $clientType,
             'primary_note' => trim((string) ($input['primary_note'] ?? '')),
+            'newsletter_subscribed' => isset($input['newsletter_subscribed']) ? '1' : '0',
         ];
     }
 
@@ -427,7 +593,10 @@ final class ClientsController extends Controller
         return $errors;
     }
 
-    private function payloadForSave(array $form, bool $forCreate): array
+    /**
+     * @param array<string, mixed>|null $existingClient Row from Client::findForBusiness when editing
+     */
+    private function payloadForSave(array $form, bool $forCreate, ?array $existingClient): array
     {
         $payload = [
             'first_name' => $form['first_name'],
@@ -452,7 +621,78 @@ final class ClientsController extends Controller
             $payload['status'] = 'active';
         }
 
+        if (SchemaInspector::hasColumn('clients', 'newsletter_subscribed')) {
+            $sub = ((string) ($form['newsletter_subscribed'] ?? '0')) === '1' ? 1 : 0;
+            $payload['newsletter_subscribed'] = $sub;
+            if (SchemaInspector::hasColumn('clients', 'newsletter_unsubscribe_token') && $sub === 1) {
+                $prev = '';
+                if ($existingClient !== null) {
+                    $prev = trim((string) ($existingClient['newsletter_unsubscribe_token'] ?? ''));
+                }
+                if ($prev === '') {
+                    $payload['newsletter_unsubscribe_token'] = bin2hex(random_bytes(32));
+                }
+            }
+        }
+
         return $payload;
+    }
+
+    /**
+     * @param array{profile: array<string, mixed>, lines: list<array<string, mixed>>}|null $bolo
+     * @return array{notes: string, items_text: string}
+     */
+    private function boloFormFromData(?array $bolo): array
+    {
+        if ($bolo === null) {
+            return [
+                'notes' => '',
+                'items_text' => '',
+            ];
+        }
+
+        $profile = $bolo['profile'] ?? [];
+        $lines = $bolo['lines'] ?? [];
+        $parts = [];
+        foreach ($lines as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $parts[] = (string) ($row['item_text'] ?? '');
+        }
+
+        return [
+            'notes' => trim((string) ($profile['notes'] ?? '')),
+            'items_text' => implode("\n", array_filter(array_map('trim', $parts), static fn (string $s): bool => $s !== '')),
+        ];
+    }
+
+    /**
+     * @return array{notes: string, items_text: string}
+     */
+    private function boloFormFromPost(array $input): array
+    {
+        return [
+            'notes' => trim((string) ($input['notes'] ?? '')),
+            'items_text' => (string) ($input['items_text'] ?? ''),
+        ];
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function parseBoloItemLines(string $raw): array
+    {
+        $parts = preg_split('/\r\n|\r|\n/', $raw) ?: [];
+        $out = [];
+        foreach ($parts as $line) {
+            $t = trim((string) $line);
+            if ($t !== '') {
+                $out[] = $t;
+            }
+        }
+
+        return $out;
     }
 
     private function defaultContactForm(): array

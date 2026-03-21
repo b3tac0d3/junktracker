@@ -14,6 +14,7 @@ $expenses = is_array($results['expenses'] ?? null) ? $results['expenses'] : [];
 $timeEntries = is_array($results['time_entries'] ?? null) ? $results['time_entries'] : [];
 $businesses = is_array($results['businesses'] ?? null) ? $results['businesses'] : [];
 $siteAdminUsers = is_array($results['site_admin_users'] ?? null) ? $results['site_admin_users'] : [];
+$boloMatches = is_array($results['bolo_matches'] ?? null) ? $results['bolo_matches'] : [];
 
 $displayName = static function (array $row, string $fallback): string {
     $full = trim(((string) ($row['first_name'] ?? '')) . ' ' . ((string) ($row['last_name'] ?? '')));
@@ -52,6 +53,21 @@ $date = static function (mixed $value): string {
     return date('m/d/Y', $time);
 };
 
+$matchSnippet = static function (string $text): string {
+    $t = trim($text);
+    if ($t === '') {
+        return '—';
+    }
+    if (function_exists('mb_strlen') && mb_strlen($t) > 220) {
+        return mb_substr($t, 0, 217) . '…';
+    }
+    if (strlen($t) > 220) {
+        return substr($t, 0, 217) . '…';
+    }
+
+    return $t;
+};
+
 $totalMatches = 0;
 foreach ($totals as $value) {
     $totalMatches += max(0, (int) $value);
@@ -80,7 +96,7 @@ $queryEncoded = rawurlencode($query);
                     class="form-control"
                     name="global_q"
                     value="<?= e($query) ?>"
-                    placeholder="Search clients, jobs, tasks, sales, billing, expenses..."
+                    placeholder="Search clients (including BOLO), jobs, tasks, sales, billing, expenses..."
                     autocomplete="off"
                 />
             </div>
@@ -519,6 +535,49 @@ $queryEncoded = rawurlencode($query);
                                                 <div class="record-field">
                                                     <span class="record-label">Duration</span>
                                                     <span class="record-value"><?= e(((int) ($entry['duration_minutes'] ?? 0)) > 0 ? ((string) ((int) ($entry['duration_minutes'] ?? 0)) . ' min') : '—') ?></span>
+                                                </div>
+                                            </div>
+                                        </a>
+                                    </article>
+                                <?php endforeach; ?>
+                            </div>
+                        <?php endif; ?>
+                    </div>
+                </section>
+            </div>
+
+            <div class="col-12">
+                <section class="card index-card">
+                    <div class="card-header index-card-header d-flex align-items-center justify-content-between">
+                        <strong><i class="fas fa-binoculars me-2"></i>BOLO matches</strong>
+                        <a class="small fw-semibold text-decoration-none" href="<?= e(url('/bolo?q=' . $queryEncoded)) ?>">Open BOLO list</a>
+                    </div>
+                    <div class="card-body p-2 p-lg-3">
+                        <?php if ($boloMatches === []): ?>
+                            <div class="record-empty">No matching BOLO line items or notes.</div>
+                        <?php else: ?>
+                            <div class="record-list-simple">
+                                <?php foreach ($boloMatches as $hit): ?>
+                                    <?php if (!is_array($hit)) {
+                                        continue;
+                                    } ?>
+                                    <?php
+                                    $hitClientId = (int) ($hit['client_id'] ?? 0);
+                                    $mtype = strtolower(trim((string) ($hit['match_type'] ?? '')));
+                                    $matchLabel = $mtype === 'note' ? 'BOLO note' : 'Line item';
+                                    $matchText = $matchSnippet((string) ($hit['match_text'] ?? ''));
+                                    ?>
+                                    <article class="record-row-simple">
+                                        <a class="record-row-link" href="<?= e(url('/clients/' . (string) $hitClientId)) ?>">
+                                            <div class="record-row-main">
+                                                <h3 class="record-title-simple"><?= e($displayName($hit, 'Client #' . $hitClientId)) ?></h3>
+                                                <div class="record-subline small muted"><?= e($matchLabel) ?></div>
+                                            </div>
+                                            <div class="mt-1 small"><?= e($matchText) ?></div>
+                                            <div class="record-row-fields record-row-fields-compact mt-2">
+                                                <div class="record-field">
+                                                    <span class="record-label">Client ID</span>
+                                                    <span class="record-value"><?= e((string) $hitClientId) ?></span>
                                                 </div>
                                             </div>
                                         </a>

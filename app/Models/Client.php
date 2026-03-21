@@ -43,6 +43,8 @@ final class Client
         ];
         $orderBy = $sortMap[$sortBy] ?? $sortMap['name'];
 
+        $boloMatch = self::boloSearchExistsSql();
+
         $sql = "SELECT
                     c.id,
                     c.first_name,
@@ -60,6 +62,7 @@ final class Client
                     OR CONCAT_WS(' ', COALESCE(c.first_name, ''), COALESCE(c.last_name, ''), COALESCE({$companySql}, '')) LIKE :query_like_1
                     OR COALESCE({$phoneSql}, '') LIKE :query_like_2
                     OR COALESCE({$citySql}, '') LIKE :query_like_3
+                    {$boloMatch}
                   )
                 ORDER BY {$orderBy}
                 LIMIT :row_limit
@@ -74,6 +77,10 @@ final class Client
         $stmt->bindValue(':query_like_1', $queryLike);
         $stmt->bindValue(':query_like_2', $queryLike);
         $stmt->bindValue(':query_like_3', $queryLike);
+        if ($boloMatch !== '') {
+            $stmt->bindValue(':query_like_4', $queryLike);
+            $stmt->bindValue(':query_like_5', $queryLike);
+        }
         $stmt->bindValue(':row_limit', max(1, min($limit, 1000)), \PDO::PARAM_INT);
         $stmt->bindValue(':row_offset', max(0, $offset), \PDO::PARAM_INT);
         $stmt->execute();
@@ -93,6 +100,8 @@ final class Client
         $businessWhere = self::hasColumn('clients', 'business_id') ? 'c.business_id = :business_id' : '1 = 1';
         $deletedWhere = self::hasColumn('clients', 'deleted_at') ? 'c.deleted_at IS NULL' : '1 = 1';
 
+        $boloMatch = self::boloSearchExistsSql();
+
         $sql = "SELECT COUNT(*)
                 FROM clients c
                 WHERE {$businessWhere}
@@ -102,6 +111,7 @@ final class Client
                     OR CONCAT_WS(' ', COALESCE(c.first_name, ''), COALESCE(c.last_name, ''), COALESCE({$companySql}, '')) LIKE :query_like_1
                     OR COALESCE({$phoneSql}, '') LIKE :query_like_2
                     OR COALESCE({$citySql}, '') LIKE :query_like_3
+                    {$boloMatch}
                   )";
 
         $stmt = $pdo->prepare($sql);
@@ -113,9 +123,44 @@ final class Client
         $stmt->bindValue(':query_like_1', $queryLike);
         $stmt->bindValue(':query_like_2', $queryLike);
         $stmt->bindValue(':query_like_3', $queryLike);
+        if ($boloMatch !== '') {
+            $stmt->bindValue(':query_like_4', $queryLike);
+            $stmt->bindValue(':query_like_5', $queryLike);
+        }
         $stmt->execute();
 
         return (int) $stmt->fetchColumn();
+    }
+
+    /**
+     * Extra OR-clause for client directory / global search: match active BOLO profile notes or line items.
+     * Uses unique placeholders :query_like_4 and :query_like_5 (native PDO cannot repeat names).
+     */
+    private static function boloSearchExistsSql(): string
+    {
+        if (!self::hasTable('client_bolo_profiles') || !self::hasTable('client_bolo_lines')) {
+            return '';
+        }
+
+        $activeClause = self::hasColumn('client_bolo_profiles', 'is_active')
+            ? 'p.is_active = 1'
+            : '1 = 1';
+
+        return " OR EXISTS (
+            SELECT 1
+            FROM client_bolo_profiles p
+            WHERE p.client_id = c.id
+              AND p.business_id = c.business_id
+              AND {$activeClause}
+              AND (
+                  COALESCE(p.notes, '') LIKE :query_like_4
+                  OR EXISTS (
+                      SELECT 1 FROM client_bolo_lines l
+                      WHERE l.bolo_profile_id = p.id
+                        AND l.item_text LIKE :query_like_5
+                  )
+              )
+        )";
     }
 
     public static function searchOptions(int $businessId, string $query, int $limit = 8): array
@@ -184,6 +229,8 @@ final class Client
         $companySql = self::hasColumn('clients', 'company_name') ? 'c.company_name' : 'NULL';
         $phoneSql = self::hasColumn('clients', 'phone') ? 'c.phone' : 'NULL';
         $emailSql = self::hasColumn('clients', 'email') ? 'c.email' : 'NULL';
+        $newsletterSubSql = self::hasColumn('clients', 'newsletter_subscribed') ? 'c.newsletter_subscribed' : '0';
+        $newsletterTokenSql = self::hasColumn('clients', 'newsletter_unsubscribe_token') ? 'c.newsletter_unsubscribe_token' : 'NULL';
         $secondaryPhoneColumn = self::secondaryPhoneColumn();
         $secondaryPhoneSql = $secondaryPhoneColumn !== null ? 'c.' . $secondaryPhoneColumn : 'NULL';
         $canTextColumn = self::primaryCanTextColumn();
@@ -211,6 +258,8 @@ final class Client
                     c.last_name,
                     {$companySql} AS company_name,
                     {$emailSql} AS email,
+                    {$newsletterSubSql} AS newsletter_subscribed,
+                    {$newsletterTokenSql} AS newsletter_unsubscribe_token,
                     {$phoneSql} AS phone,
                     {$secondaryPhoneSql} AS secondary_phone,
                     {$canTextSql} AS can_text,
@@ -566,6 +615,8 @@ final class Client
         $optional = [
             'company_name',
             'email',
+            'newsletter_subscribed',
+            'newsletter_unsubscribe_token',
             'phone',
             'address_line1',
             'address_line2',
@@ -590,7 +641,7 @@ final class Client
             $values[] = ':' . $column;
 
             $value = $data[$column] ?? null;
-            if (in_array($column, ['can_text', 'secondary_can_text'], true)) {
+            if (in_array($column, ['can_text', 'secondary_can_text', 'newsletter_subscribed'], true)) {
                 $params[$column] = ((int) $value) === 1 ? 1 : 0;
             } else {
                 $params[$column] = is_string($value) ? trim($value) : $value;
@@ -666,6 +717,8 @@ final class Client
         $optional = [
             'company_name',
             'email',
+            'newsletter_subscribed',
+            'newsletter_unsubscribe_token',
             'phone',
             'address_line1',
             'address_line2',
@@ -688,7 +741,7 @@ final class Client
 
             $sets[] = $column . ' = :' . $column;
             $value = $data[$column] ?? null;
-            if (in_array($column, ['can_text', 'secondary_can_text'], true)) {
+            if (in_array($column, ['can_text', 'secondary_can_text', 'newsletter_subscribed'], true)) {
                 $params[$column] = ((int) $value) === 1 ? 1 : 0;
             } else {
                 $params[$column] = is_string($value) ? trim($value) : $value;

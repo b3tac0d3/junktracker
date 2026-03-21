@@ -10,6 +10,7 @@ use App\Controllers\AdminFormSelectValuesController;
 use App\Controllers\AdminInvoiceItemTypesController;
 use App\Controllers\AdminUsersController;
 use App\Controllers\BillingController;
+use App\Controllers\BoloController;
 use App\Controllers\ClientsController;
 use App\Controllers\ExpensesController;
 use App\Controllers\HomeController;
@@ -57,6 +58,8 @@ $router->post('/site-admin/businesses/{id}/toggle-active', [SiteAdminController:
 $router->post('/site-admin/switch-business', [SiteAdminController::class, 'switchBusiness']);
 $router->post('/site-admin/exit-workspace', [SiteAdminController::class, 'exitWorkspace']);
 
+$router->get('/bolo', [BoloController::class, 'index']);
+
 $router->get('/clients', [ClientsController::class, 'index']);
 $router->get('/clients/create', [ClientsController::class, 'create']);
 $router->post('/clients', [ClientsController::class, 'store']);
@@ -65,6 +68,10 @@ $router->post('/clients/{id}/update', [ClientsController::class, 'update']);
 $router->post('/clients/{id}/deactivate', [ClientsController::class, 'deactivate']);
 $router->get('/clients/{id}/contacts/create', [ClientsController::class, 'createContact']);
 $router->post('/clients/{id}/contacts', [ClientsController::class, 'storeContact']);
+$router->get('/clients/{id}/bolo/edit', [ClientsController::class, 'editBolo']);
+$router->post('/clients/{id}/bolo/deactivate', [ClientsController::class, 'deactivateBolo']);
+$router->post('/clients/{id}/bolo/reactivate', [ClientsController::class, 'reactivateBolo']);
+$router->post('/clients/{id}/bolo', [ClientsController::class, 'updateBolo']);
 $router->get('/clients/{id}', [ClientsController::class, 'show']);
 
 $router->get('/expenses', [ExpensesController::class, 'index']);

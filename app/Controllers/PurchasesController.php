@@ -49,6 +49,7 @@ final class PurchasesController extends Controller
 
         $purchases = Purchase::indexList($businessId, $search, $status, $fromDate, $toDate, $perPage, $offset, $sortBy, $sortDir);
         $summary = Purchase::statusSummary($businessId);
+        $reporting = Purchase::filteredSummary($businessId, $search, $status, $fromDate, $toDate);
         $pagination = pagination_meta($page, $perPage, $totalRows, count($purchases));
 
         $this->render('purchases/index', [
@@ -62,6 +63,7 @@ final class PurchasesController extends Controller
             'statusOptions' => $statusOptions,
             'purchases' => $purchases,
             'summary' => $summary,
+            'reporting' => $reporting,
             'pagination' => $pagination,
         ]);
     }

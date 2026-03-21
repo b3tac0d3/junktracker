@@ -47,7 +47,7 @@ $globalSearchQuery = trim((string) ($_GET['global_q'] ?? ''));
                 <li class="nav-item d-none d-md-block me-2">
                     <form class="form-inline" method="get" action="<?= e(url('/search')) ?>">
                         <div class="input-group">
-                            <input class="form-control" type="text" name="global_q" value="<?= e($globalSearchQuery) ?>" placeholder="Search everything..." aria-label="Search" autocomplete="off" />
+                            <input class="form-control" type="text" name="global_q" value="<?= e($globalSearchQuery) ?>" placeholder="Clients, BOLO, jobs, sales..." aria-label="Search" autocomplete="off" />
                             <button class="btn btn-primary" type="submit"><i class="fas fa-search"></i></button>
                         </div>
                     </form>
@@ -138,6 +138,9 @@ $globalSearchQuery = trim((string) ($_GET['global_q'] ?? ''));
                                         <a class="nav-link" href="<?= e(url('/time-tracking/punch-board')) ?>"><div class="sb-nav-link-icon"><i class="fas fa-user-clock"></i></div>Punch Board</a>
                                     </nav>
                                 </div>
+                                <?php if (\App\Models\ClientBoloProfile::isAvailable()): ?>
+                                    <a class="nav-link" href="<?= e(url('/bolo')) ?>"><div class="sb-nav-link-icon"><i class="fas fa-binoculars"></i></div>BOLO</a>
+                                <?php endif; ?>
                                 <a class="nav-link" href="<?= e(url('/reports')) ?>"><div class="sb-nav-link-icon"><i class="fas fa-chart-line"></i></div>Reports</a>
                             <?php endif; ?>
 

@@ -6,6 +6,14 @@ $jobs = is_array($jobs ?? null) ? $jobs : [];
 $sales = is_array($sales ?? null) ? $sales : [];
 $purchases = is_array($purchases ?? null) ? $purchases : [];
 $contacts = is_array($contacts ?? null) ? $contacts : [];
+$bolo = is_array($bolo ?? null) ? $bolo : null;
+$hasNewsletter = (bool) ($hasNewsletter ?? false);
+$hasBolo = (bool) ($hasBolo ?? false);
+$boloHasActiveFlag = (bool) ($boloHasActiveFlag ?? false);
+$boloProfileActive = true;
+if ($bolo !== null && $boloHasActiveFlag) {
+    $boloProfileActive = (int) (($bolo['profile'] ?? [])['is_active'] ?? 1) === 1;
+}
 
 $formatDateValue = static function (?string $value): string {
     if (function_exists('format_date')) {
@@ -99,6 +107,13 @@ $isInactive = $clientStatus === 'inactive' || (array_key_exists('is_active', $cl
                         <i class="fas fa-phone-volume me-2"></i>Add Contact
                     </a>
                 </li>
+                <?php if ($hasBolo): ?>
+                    <li>
+                        <a class="dropdown-item" href="<?= e(url('/clients/' . (string) ((int) ($client['id'] ?? 0)) . '/bolo/edit')) ?>">
+                            <i class="fas fa-binoculars me-2"></i>Edit BOLO profile
+                        </a>
+                    </li>
+                <?php endif; ?>
                 <li><hr class="dropdown-divider"></li>
                 <li>
                     <form method="post" action="<?= e(url('/clients/' . (string) ((int) ($client['id'] ?? 0)) . '/deactivate')) ?>" onsubmit="return confirm('Deactivate this client?');">
@@ -150,6 +165,16 @@ $isInactive = $clientStatus === 'inactive' || (array_key_exists('is_active', $cl
                 <span class="record-label">Email</span>
                 <span class="record-value"><?= e(trim((string) ($client['email'] ?? '')) ?: '—') ?></span>
             </div>
+            <?php if ($hasNewsletter): ?>
+                <?php
+                $newsletterRaw = $client['newsletter_subscribed'] ?? null;
+                $newsletterOn = $newsletterRaw !== null && (int) $newsletterRaw === 1;
+                ?>
+                <div class="record-field">
+                    <span class="record-label">Newsletter</span>
+                    <span class="record-value"><?= $newsletterOn ? 'Subscribed' : 'Not subscribed' ?></span>
+                </div>
+            <?php endif; ?>
             <div class="record-field">
                 <span class="record-label">Full Address</span>
                 <span class="record-value record-value-stack">
@@ -166,6 +191,75 @@ $isInactive = $clientStatus === 'inactive' || (array_key_exists('is_active', $cl
         </div>
     </div>
 </section>
+
+<?php if ($hasBolo): ?>
+    <section class="card index-card mb-3">
+        <div class="card-header index-card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+            <div class="d-flex flex-wrap align-items-center gap-2">
+                <strong><i class="fas fa-binoculars me-2"></i>BOLO (buyer) profile</strong>
+                <?php if ($bolo !== null && $boloHasActiveFlag): ?>
+                    <?php if ($boloProfileActive): ?>
+                        <span class="badge text-bg-success">Active</span>
+                    <?php else: ?>
+                        <span class="badge text-bg-secondary">Inactive</span>
+                    <?php endif; ?>
+                <?php endif; ?>
+            </div>
+            <div class="d-flex flex-wrap gap-2">
+                <a class="btn btn-sm btn-outline-secondary" href="<?= e(url('/bolo')) ?>">BOLO list</a>
+                <a class="btn btn-sm btn-outline-primary" href="<?= e(url('/clients/' . (string) ((int) ($client['id'] ?? 0)) . '/bolo/edit')) ?>">Edit</a>
+            </div>
+        </div>
+        <div class="card-body">
+            <?php if ($bolo !== null && $boloHasActiveFlag): ?>
+                <div class="d-flex flex-wrap gap-2 mb-3">
+                    <?php if ($boloProfileActive): ?>
+                        <form method="post" action="<?= e(url('/clients/' . (string) ((int) ($client['id'] ?? 0)) . '/bolo/deactivate')) ?>" onsubmit="return confirm('Deactivate this BOLO profile? It will stay on file but will not appear in the BOLO list or search.');">
+                            <?= csrf_field() ?>
+                            <button class="btn btn-sm btn-outline-warning" type="submit">Deactivate BOLO profile</button>
+                        </form>
+                    <?php else: ?>
+                        <form method="post" action="<?= e(url('/clients/' . (string) ((int) ($client['id'] ?? 0)) . '/bolo/reactivate')) ?>">
+                            <?= csrf_field() ?>
+                            <button class="btn btn-sm btn-outline-success" type="submit">Reactivate BOLO profile</button>
+                        </form>
+                    <?php endif; ?>
+                </div>
+            <?php endif; ?>
+            <?php if ($bolo === null): ?>
+                <div class="record-empty mb-0">No BOLO profile yet. Add line items and notes for what this client buys.</div>
+            <?php else: ?>
+                <?php
+                $boloNotes = trim((string) (($bolo['profile'] ?? [])['notes'] ?? ''));
+                $boloLines = is_array($bolo['lines'] ?? null) ? $bolo['lines'] : [];
+                ?>
+                <?php if ($boloLines === [] && $boloNotes === ''): ?>
+                    <div class="record-empty mb-0">BOLO profile is empty. Edit to add items or notes.</div>
+                <?php else: ?>
+                    <?php if ($boloLines !== []): ?>
+                        <div class="record-field mb-3">
+                            <span class="record-label">Line items</span>
+                            <div class="record-value">
+                                <ul class="mb-0 ps-3">
+                                    <?php foreach ($boloLines as $line): ?>
+                                        <?php if (!is_array($line)) {
+                                            continue;
+                                        } ?>
+                                        <li><?= e(trim((string) ($line['item_text'] ?? ''))) ?></li>
+                                    <?php endforeach; ?>
+                                </ul>
+                            </div>
+                        </div>
+                    <?php endif; ?>
+                    <div class="record-field mb-0">
+                        <span class="record-label">BOLO notes</span>
+                        <span class="record-value"><?= e($boloNotes !== '' ? $boloNotes : '—') ?></span>
+                    </div>
+                <?php endif; ?>
+            <?php endif; ?>
+        </div>
+    </section>
+<?php endif; ?>
 
 <section class="card index-card mb-3">
     <div class="card-header index-card-header">
