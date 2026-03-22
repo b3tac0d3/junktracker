@@ -19,6 +19,8 @@ $globalSearchQuery = trim((string) ($_GET['global_q'] ?? ''));
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
     <meta name="robots" content="noindex, nofollow" />
     <title><?= e($pageTitle) ?> - JunkTracker</title>
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+    <link rel="preconnect" href="https://use.fontawesome.com" crossorigin />
     <link href="<?= e(asset('css/styles.css')) ?>" rel="stylesheet" />
     <link href="<?= e(asset('css/jt-theme.css')) ?>" rel="stylesheet" />
     <script src="https://use.fontawesome.com/releases/v6.3.0/js/all.js" crossorigin="anonymous"></script>

@@ -64,7 +64,16 @@ function absolute_url(string $path = ''): string
 
 function asset(string $path = ''): string
 {
-    return url('assets/' . ltrim($path, '/'));
+    $base = url('assets/' . ltrim($path, '/'));
+    $ver = (string) config('app.version', '');
+    $ver = preg_replace('/[^a-zA-Z0-9._-]+/', '', $ver) ?? '';
+    if ($ver === '') {
+        return $base;
+    }
+
+    $sep = str_contains($base, '?') ? '&' : '?';
+
+    return $base . $sep . 'v=' . rawurlencode($ver);
 }
 
 function redirect(string $path): never
