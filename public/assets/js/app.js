@@ -1,5 +1,5 @@
 window.addEventListener('DOMContentLoaded', () => {
-    const alerts = document.querySelectorAll('.alert');
+    const alerts = document.querySelectorAll('.alert:not(.alert-persistent)');
     alerts.forEach((el) => {
         setTimeout(() => {
             el.style.transition = 'opacity 0.25s ease';
@@ -172,7 +172,20 @@ window.addEventListener('DOMContentLoaded', () => {
             list.appendChild(li);
         });
 
-        alertEl.appendChild(title);
+        const headerRow = document.createElement('div');
+        headerRow.className = 'd-flex justify-content-between align-items-start gap-2';
+        headerRow.appendChild(title);
+        const dismissBtn = document.createElement('button');
+        dismissBtn.type = 'button';
+        dismissBtn.className = 'btn-close';
+        dismissBtn.setAttribute('aria-label', 'Dismiss duplicate warning');
+        dismissBtn.addEventListener('click', () => {
+            alertEl.classList.add('d-none');
+            alertEl.innerHTML = '';
+        });
+        headerRow.appendChild(dismissBtn);
+
+        alertEl.appendChild(headerRow);
         alertEl.appendChild(list);
         alertEl.classList.remove('d-none');
     };

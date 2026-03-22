@@ -37,7 +37,7 @@ if ($selectedState !== '' && !array_key_exists($selectedState, $stateOptions)) {
         <strong><i class="fas fa-user-plus me-2"></i><?= e($mode === 'edit' ? 'Update Client' : 'Create Client') ?></strong>
     </div>
     <div class="card-body">
-        <div id="client-duplicate-alert" class="alert alert-warning d-none" role="status" aria-live="polite"></div>
+        <div id="client-duplicate-alert" class="alert alert-warning alert-persistent alert-dismissible d-none" role="status" aria-live="polite"></div>
         <form
             id="client-form"
             method="post"
