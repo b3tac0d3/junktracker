@@ -6,6 +6,7 @@ $actionUrl = (string) ($actionUrl ?? url('/clients'));
 $hasClientType = (bool) ($hasClientType ?? false);
 $hasNewsletter = (bool) ($hasNewsletter ?? false);
 $clientTypeOptions = is_array($clientTypeOptions ?? null) ? $clientTypeOptions : ['client', 'company', 'realtor', 'other'];
+$clientId = (int) ($clientId ?? 0);
 
 $fieldError = static function (string $field) use ($errors): string {
     return isset($errors[$field]) ? (string) $errors[$field] : '';
@@ -36,7 +37,16 @@ if ($selectedState !== '' && !array_key_exists($selectedState, $stateOptions)) {
         <strong><i class="fas fa-user-plus me-2"></i><?= e($mode === 'edit' ? 'Update Client' : 'Create Client') ?></strong>
     </div>
     <div class="card-body">
-        <form method="post" action="<?= e($actionUrl) ?>" class="row g-3">
+        <div id="client-duplicate-alert" class="alert alert-warning d-none" role="status" aria-live="polite"></div>
+        <form
+            id="client-form"
+            method="post"
+            action="<?= e($actionUrl) ?>"
+            class="row g-3"
+            data-check-url="<?= e(url('/clients/check-duplicates')) ?>"
+            data-clients-base="<?= e(url('/clients')) ?>"
+            data-client-id="<?= (string) $clientId ?>"
+        >
             <?= csrf_field() ?>
 
             <div class="col-12 col-lg-4">

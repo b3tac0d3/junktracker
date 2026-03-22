@@ -298,16 +298,50 @@ final class Client
         return 'Client #' . (string) ((int) ($client['id'] ?? 0));
     }
 
-    public static function findPotentialDuplicate(int $businessId, array $candidate): ?array
+    /**
+     * @param array<string, mixed> $candidate
+     * @return array{first_name: string, last_name: string, company_name: string, phone_digits: string, email: string}
+     */
+    private static function normalizedDuplicateCandidateFields(array $candidate): array
     {
-        if (!self::hasTable('clients')) {
-            return null;
-        }
-
         $firstName = self::normalizeIdentity((string) ($candidate['first_name'] ?? ''));
         $lastName = self::normalizeIdentity((string) ($candidate['last_name'] ?? ''));
         $companyName = self::normalizeIdentity((string) ($candidate['company_name'] ?? ''));
         $phoneDigits = self::normalizePhone((string) ($candidate['phone'] ?? ''));
+        if ($phoneDigits !== '' && strlen($phoneDigits) < 7) {
+            $phoneDigits = '';
+        }
+        $emailNorm = strtolower(trim((string) ($candidate['email'] ?? '')));
+        if ($emailNorm !== '' && filter_var($emailNorm, FILTER_VALIDATE_EMAIL) === false) {
+            $emailNorm = '';
+        }
+
+        return [
+            'first_name' => $firstName,
+            'last_name' => $lastName,
+            'company_name' => $companyName,
+            'phone_digits' => $phoneDigits,
+            'email' => $emailNorm,
+        ];
+    }
+
+    /**
+     * Possible duplicate rows for the client form (name, company, phone, email).
+     *
+     * @return list<array{id: int, display_name: string, reasons: list<string>}>
+     */
+    public static function findDuplicateMatches(int $businessId, array $candidate, ?int $excludeClientId = null): array
+    {
+        if (!self::hasTable('clients')) {
+            return [];
+        }
+
+        $n = self::normalizedDuplicateCandidateFields($candidate);
+        $firstName = $n['first_name'];
+        $lastName = $n['last_name'];
+        $companyName = $n['company_name'];
+        $phoneDigits = $n['phone_digits'];
+        $emailNorm = $n['email'];
 
         $or = [];
         $params = [];
@@ -324,9 +358,170 @@ final class Client
         }
 
         if ($phoneDigits !== '' && self::hasColumn('clients', 'phone')) {
-            $phoneExpr = "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(c.phone, ''), '-', ''), '(', ''), ')', ''), ' ', ''), '.', ''), '+', '')";
-            $or[] = $phoneExpr . ' = :dup_phone';
+            $digitsExpr = "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(%s, ''), '-', ''), '(', ''), ')', ''), ' ', ''), '.', ''), '+', '')";
+            $primaryExpr = sprintf($digitsExpr, 'c.phone');
+            $phoneOr = '(' . $primaryExpr . ' = :dup_phone';
+            if (self::hasColumn('clients', 'secondary_phone')) {
+                $secondaryExpr = sprintf($digitsExpr, 'c.secondary_phone');
+                $phoneOr .= ' OR ' . $secondaryExpr . ' = :dup_phone';
+            }
+            $phoneOr .= ')';
+            $or[] = $phoneOr;
             $params['dup_phone'] = $phoneDigits;
+        }
+
+        if ($emailNorm !== '' && self::hasColumn('clients', 'email')) {
+            $or[] = "LOWER(TRIM(COALESCE(c.email, ''))) = :dup_email";
+            $params['dup_email'] = $emailNorm;
+        }
+
+        if ($or === []) {
+            return [];
+        }
+
+        $businessWhere = self::hasColumn('clients', 'business_id') ? 'c.business_id = :business_id' : '1 = 1';
+        $deletedWhere = self::hasColumn('clients', 'deleted_at') ? 'c.deleted_at IS NULL' : '1 = 1';
+        $excludeSql = ($excludeClientId !== null && $excludeClientId > 0) ? ' AND c.id <> :exclude_id' : '';
+
+        $sql = 'SELECT DISTINCT c.id
+                FROM clients c
+                WHERE ' . $businessWhere . '
+                  AND ' . $deletedWhere . $excludeSql . '
+                  AND (' . implode(' OR ', $or) . ')
+                ORDER BY c.id DESC
+                LIMIT 50';
+
+        $stmt = Database::connection()->prepare($sql);
+        if (self::hasColumn('clients', 'business_id')) {
+            $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
+        }
+        if ($excludeClientId !== null && $excludeClientId > 0) {
+            $stmt->bindValue(':exclude_id', $excludeClientId, \PDO::PARAM_INT);
+        }
+        foreach ($params as $key => $value) {
+            $stmt->bindValue(':' . $key, $value);
+        }
+        $stmt->execute();
+
+        $rows = $stmt->fetchAll();
+        if (!is_array($rows) || $rows === []) {
+            return [];
+        }
+
+        $out = [];
+        foreach ($rows as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $id = (int) ($row['id'] ?? 0);
+            if ($id <= 0) {
+                continue;
+            }
+            $existing = self::findForBusiness($businessId, $id);
+            if ($existing === null) {
+                continue;
+            }
+
+            $reasons = self::duplicateReasonsAgainstCandidate($candidate, $existing);
+            if ($reasons === []) {
+                continue;
+            }
+
+            $out[] = [
+                'id' => $id,
+                'display_name' => self::displayName($existing),
+                'reasons' => $reasons,
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param array<string, mixed> $candidate
+     * @param array<string, mixed> $existing
+     * @return list<string>
+     */
+    private static function duplicateReasonsAgainstCandidate(array $candidate, array $existing): array
+    {
+        $n = self::normalizedDuplicateCandidateFields($candidate);
+        $firstName = $n['first_name'];
+        $lastName = $n['last_name'];
+        $companyName = $n['company_name'];
+        $phoneDigits = $n['phone_digits'];
+        $emailNorm = $n['email'];
+
+        $existingFirst = self::normalizeIdentity((string) ($existing['first_name'] ?? ''));
+        $existingLast = self::normalizeIdentity((string) ($existing['last_name'] ?? ''));
+        $existingCompany = self::normalizeIdentity((string) ($existing['company_name'] ?? ''));
+        $existingPrimary = self::normalizePhone((string) ($existing['phone'] ?? ''));
+        $existingSecondary = self::normalizePhone((string) ($existing['secondary_phone'] ?? ''));
+        $existingEmail = strtolower(trim((string) ($existing['email'] ?? '')));
+
+        $reasons = [];
+
+        if ($firstName !== '' && $lastName !== '' && $existingFirst === $firstName && $existingLast === $lastName) {
+            $reasons[] = 'name';
+        }
+
+        if ($companyName !== '' && $existingCompany !== '' && $existingCompany === $companyName) {
+            $reasons[] = 'company';
+        }
+
+        if ($phoneDigits !== '' && (($existingPrimary !== '' && $existingPrimary === $phoneDigits) || ($existingSecondary !== '' && $existingSecondary === $phoneDigits))) {
+            $reasons[] = 'phone';
+        }
+
+        if ($emailNorm !== '' && $existingEmail !== '' && $emailNorm === $existingEmail) {
+            $reasons[] = 'email';
+        }
+
+        return $reasons;
+    }
+
+    public static function findPotentialDuplicate(int $businessId, array $candidate): ?array
+    {
+        if (!self::hasTable('clients')) {
+            return null;
+        }
+
+        $n = self::normalizedDuplicateCandidateFields($candidate);
+        $firstName = $n['first_name'];
+        $lastName = $n['last_name'];
+        $companyName = $n['company_name'];
+        $phoneDigits = $n['phone_digits'];
+        $emailNorm = $n['email'];
+
+        $or = [];
+        $params = [];
+
+        if ($firstName !== '' && $lastName !== '') {
+            $or[] = '(LOWER(TRIM(COALESCE(c.first_name, \'\'))) = :dup_first_name AND LOWER(TRIM(COALESCE(c.last_name, \'\'))) = :dup_last_name)';
+            $params['dup_first_name'] = $firstName;
+            $params['dup_last_name'] = $lastName;
+        }
+
+        if ($companyName !== '' && self::hasColumn('clients', 'company_name')) {
+            $or[] = "LOWER(TRIM(COALESCE(c.company_name, ''))) = :dup_company_name";
+            $params['dup_company_name'] = $companyName;
+        }
+
+        if ($phoneDigits !== '' && self::hasColumn('clients', 'phone')) {
+            $digitsExpr = "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(%s, ''), '-', ''), '(', ''), ')', ''), ' ', ''), '.', ''), '+', '')";
+            $primaryExpr = sprintf($digitsExpr, 'c.phone');
+            $phoneOr = '(' . $primaryExpr . ' = :dup_phone';
+            if (self::hasColumn('clients', 'secondary_phone')) {
+                $secondaryExpr = sprintf($digitsExpr, 'c.secondary_phone');
+                $phoneOr .= ' OR ' . $secondaryExpr . ' = :dup_phone';
+            }
+            $phoneOr .= ')';
+            $or[] = $phoneOr;
+            $params['dup_phone'] = $phoneDigits;
+        }
+
+        if ($emailNorm !== '' && self::hasColumn('clients', 'email')) {
+            $or[] = "LOWER(TRIM(COALESCE(c.email, ''))) = :dup_email";
+            $params['dup_email'] = $emailNorm;
         }
 
         if ($or === []) {
@@ -374,11 +569,18 @@ final class Client
             $existingFirst = self::normalizeIdentity((string) ($existing['first_name'] ?? ''));
             $existingLast = self::normalizeIdentity((string) ($existing['last_name'] ?? ''));
             $existingCompany = self::normalizeIdentity((string) ($existing['company_name'] ?? ''));
-            $existingPhone = self::normalizePhone((string) ($existing['phone'] ?? ''));
+            $existingPrimary = self::normalizePhone((string) ($existing['phone'] ?? ''));
+            $existingSecondary = self::normalizePhone((string) ($existing['secondary_phone'] ?? ''));
+            $existingEmail = strtolower(trim((string) ($existing['email'] ?? '')));
 
             $nameMatch = ($firstName !== '' && $lastName !== '' && $existingFirst === $firstName && $existingLast === $lastName);
             $companyMatch = ($companyName !== '' && $existingCompany !== '' && $existingCompany === $companyName);
-            $phoneMatch = ($phoneDigits !== '' && $existingPhone !== '' && $existingPhone === $phoneDigits);
+            $phoneMatch = ($phoneDigits !== '' && (($existingPrimary !== '' && $existingPrimary === $phoneDigits) || ($existingSecondary !== '' && $existingSecondary === $phoneDigits)));
+            $emailMatch = ($emailNorm !== '' && $existingEmail !== '' && $emailNorm === $existingEmail);
+
+            if ($emailMatch) {
+                return $existing;
+            }
 
             if (($nameMatch || $companyMatch) && ($phoneDigits === '' || $phoneMatch)) {
                 return $existing;

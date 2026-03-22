@@ -63,7 +63,25 @@ final class ClientsController extends Controller
             'hasClientType' => SchemaInspector::hasColumn('clients', 'client_type'),
             'hasNewsletter' => SchemaInspector::hasColumn('clients', 'newsletter_subscribed'),
             'clientTypeOptions' => FormSelectValue::optionsForSection($businessId, 'client_type'),
+            'clientId' => 0,
         ]);
+    }
+
+    public function checkDuplicates(): void
+    {
+        require_business_role(['general_user', 'admin']);
+
+        $businessId = current_business_id();
+        $candidate = [
+            'first_name' => trim((string) ($_GET['first_name'] ?? '')),
+            'last_name' => trim((string) ($_GET['last_name'] ?? '')),
+            'company_name' => trim((string) ($_GET['company_name'] ?? '')),
+            'email' => trim((string) ($_GET['email'] ?? '')),
+            'phone' => trim((string) ($_GET['phone'] ?? '')),
+        ];
+        $exclude = (int) ($_GET['exclude_id'] ?? 0);
+        $matches = Client::findDuplicateMatches($businessId, $candidate, $exclude > 0 ? $exclude : null);
+        $this->json(['ok' => true, 'matches' => $matches]);
     }
 
     public function store(): void
@@ -88,6 +106,7 @@ final class ClientsController extends Controller
                 'hasClientType' => SchemaInspector::hasColumn('clients', 'client_type'),
                 'hasNewsletter' => SchemaInspector::hasColumn('clients', 'newsletter_subscribed'),
                 'clientTypeOptions' => FormSelectValue::optionsForSection($businessId, 'client_type'),
+                'clientId' => 0,
             ]);
             return;
         }
@@ -490,6 +509,14 @@ final class ClientsController extends Controller
         ClientBoloProfile::setProfileActive($businessId, $clientId, true);
         flash('success', 'BOLO profile reactivated.');
         redirect('/clients/' . (string) $clientId);
+    }
+
+    private function json(array $payload, int $status = 200): never
+    {
+        http_response_code($status);
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        exit;
     }
 
     private function defaultForm(): array

@@ -62,6 +62,7 @@ $router->get('/bolo', [BoloController::class, 'index']);
 
 $router->get('/clients', [ClientsController::class, 'index']);
 $router->get('/clients/create', [ClientsController::class, 'create']);
+$router->get('/clients/check-duplicates', [ClientsController::class, 'checkDuplicates']);
 $router->post('/clients', [ClientsController::class, 'store']);
 $router->get('/clients/{id}/edit', [ClientsController::class, 'edit']);
 $router->post('/clients/{id}/update', [ClientsController::class, 'update']);
