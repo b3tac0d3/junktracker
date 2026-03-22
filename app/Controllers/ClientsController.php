@@ -20,23 +20,27 @@ final class ClientsController extends Controller
         $search = trim((string) ($_GET['q'] ?? ''));
         $sortBy = strtolower(trim((string) ($_GET['sort_by'] ?? 'name')));
         $sortDir = strtolower(trim((string) ($_GET['sort_dir'] ?? 'asc')));
+        $activeFilter = strtolower(trim((string) ($_GET['active'] ?? 'active')));
         if (!in_array($sortBy, ['name', 'id'], true)) {
             $sortBy = 'name';
         }
         if (!in_array($sortDir, ['asc', 'desc'], true)) {
             $sortDir = 'asc';
         }
+        if (!in_array($activeFilter, ['active', 'inactive', 'all'], true)) {
+            $activeFilter = 'active';
+        }
         $businessId = current_business_id();
         $perPage = pagination_per_page($_GET['per_page'] ?? null);
         $page = pagination_current_page($_GET['page'] ?? null);
-        $totalRows = Client::indexCount($businessId, $search);
+        $totalRows = Client::indexCount($businessId, $search, $activeFilter);
         $totalPages = pagination_total_pages($totalRows, $perPage);
         if ($page > $totalPages) {
             $page = $totalPages;
         }
         $offset = pagination_offset($page, $perPage);
 
-        $clients = Client::indexList($businessId, $search, $perPage, $offset, $sortBy, $sortDir);
+        $clients = Client::indexList($businessId, $search, $perPage, $offset, $sortBy, $sortDir, $activeFilter);
         $pagination = pagination_meta($page, $perPage, $totalRows, count($clients));
 
         $this->render('clients/index', [
@@ -44,6 +48,7 @@ final class ClientsController extends Controller
             'search' => $search,
             'sortBy' => $sortBy,
             'sortDir' => $sortDir,
+            'activeFilter' => $activeFilter,
             'clients' => $clients,
             'pagination' => $pagination,
         ]);

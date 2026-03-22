@@ -2,6 +2,10 @@
 $search = trim((string) ($search ?? ''));
 $sortBy = strtolower(trim((string) ($sortBy ?? 'name')));
 $sortDir = strtolower(trim((string) ($sortDir ?? 'asc')));
+$activeFilter = strtolower(trim((string) ($activeFilter ?? 'active')));
+if (!in_array($activeFilter, ['active', 'inactive', 'all'], true)) {
+    $activeFilter = 'active';
+}
 $clients = is_array($clients ?? null) ? $clients : [];
 $pagination = is_array($pagination ?? null) ? $pagination : pagination_meta(1, 25, count($clients), count($clients));
 $perPage = (int) ($pagination['per_page'] ?? 25);
@@ -39,7 +43,7 @@ $clientDisplayName = static function (array $row): string {
         <form method="get" action="<?= e(url('/clients')) ?>" class="row g-3 align-items-end">
             <input type="hidden" name="page" value="1">
             <input type="hidden" name="per_page" value="<?= e((string) $perPage) ?>">
-            <div class="col-12 col-lg-9">
+            <div class="col-12">
                 <label class="form-label fw-semibold" for="clients-search">Search</label>
                 <input
                     id="clients-search"
@@ -50,21 +54,29 @@ $clientDisplayName = static function (array $row): string {
                     autocomplete="off"
                 />
             </div>
-            <div class="col-12 col-md-6 col-lg-2">
+            <div class="col-12 col-md-6 col-lg-3">
                 <label class="form-label fw-semibold" for="clients-sort-by">Sort By</label>
                 <select id="clients-sort-by" class="form-select" name="sort_by">
                     <option value="name" <?= $sortBy === 'name' ? 'selected' : '' ?>>Name</option>
                     <option value="id" <?= $sortBy === 'id' ? 'selected' : '' ?>>ID</option>
                 </select>
             </div>
-            <div class="col-12 col-md-6 col-lg-1">
+            <div class="col-12 col-md-6 col-lg-3">
                 <label class="form-label fw-semibold" for="clients-sort-dir">Sort Order</label>
                 <select id="clients-sort-dir" class="form-select" name="sort_dir">
                     <option value="asc" <?= $sortDir === 'asc' ? 'selected' : '' ?>>Ascending</option>
                     <option value="desc" <?= $sortDir === 'desc' ? 'selected' : '' ?>>Descending</option>
                 </select>
             </div>
-            <div class="col-12 col-lg-3 d-grid d-lg-flex gap-2">
+            <div class="col-12 col-md-6 col-lg-3">
+                <label class="form-label fw-semibold" for="clients-active">Active Status</label>
+                <select id="clients-active" class="form-select" name="active">
+                    <option value="active" <?= $activeFilter === 'active' ? 'selected' : '' ?>>Active</option>
+                    <option value="inactive" <?= $activeFilter === 'inactive' ? 'selected' : '' ?>>Inactive</option>
+                    <option value="all" <?= $activeFilter === 'all' ? 'selected' : '' ?>>All</option>
+                </select>
+            </div>
+            <div class="col-12 col-lg-3 d-grid d-md-flex gap-2">
                 <button class="btn btn-primary flex-fill" type="submit">Apply</button>
                 <a class="btn btn-outline-secondary flex-fill" href="<?= e(url('/clients')) ?>">Clear</a>
             </div>

@@ -8,15 +8,47 @@ use Core\Database;
 
 final class Client
 {
+    /**
+     * Matches directory row logic: inactive if status is "inactive" or is_active = 0 when present.
+     */
+    private static function activeFilterWhereSql(string $filter): string
+    {
+        $filter = strtolower(trim($filter));
+        if (!in_array($filter, ['active', 'inactive', 'all'], true)) {
+            $filter = 'active';
+        }
+        if ($filter === 'all') {
+            return '';
+        }
+
+        $inactiveOr = [];
+        if (self::hasColumn('clients', 'is_active')) {
+            $inactiveOr[] = 'c.is_active = 0';
+        }
+        if (self::hasColumn('clients', 'status')) {
+            $inactiveOr[] = "LOWER(TRIM(COALESCE(c.status, ''))) = 'inactive'";
+        }
+
+        if ($inactiveOr === []) {
+            return $filter === 'inactive' ? ' AND 1 = 0' : '';
+        }
+
+        $inactiveExpr = '(' . implode(' OR ', $inactiveOr) . ')';
+
+        return $filter === 'inactive'
+            ? ' AND ' . $inactiveExpr
+            : ' AND NOT (' . $inactiveExpr . ')';
+    }
+
     public static function indexList(
         int $businessId,
         string $search = '',
         int $limit = 25,
         int $offset = 0,
         string $sortBy = 'name',
-        string $sortDir = 'asc'
-    ): array
-    {
+        string $sortDir = 'asc',
+        string $activeFilter = 'active'
+    ): array {
         $pdo = Database::connection();
         $query = trim($search);
 
@@ -27,6 +59,7 @@ final class Client
         $activeSql = self::hasColumn('clients', 'is_active') ? 'c.is_active' : '1';
         $businessWhere = self::hasColumn('clients', 'business_id') ? 'c.business_id = :business_id' : '1 = 1';
         $deletedWhere = self::hasColumn('clients', 'deleted_at') ? 'c.deleted_at IS NULL' : '1 = 1';
+        $activeWhere = self::activeFilterWhereSql($activeFilter);
 
         $sortBy = strtolower(trim($sortBy));
         $sortDir = strtolower(trim($sortDir)) === 'desc' ? 'DESC' : 'ASC';
@@ -51,6 +84,7 @@ final class Client
                 FROM clients c
                 WHERE {$businessWhere}
                   AND {$deletedWhere}
+                  {$activeWhere}
                   AND (
                     :query = ''
                     OR CONCAT_WS(' ', COALESCE(c.first_name, ''), COALESCE(c.last_name, ''), COALESCE({$companySql}, '')) LIKE :query_like_1
@@ -83,7 +117,7 @@ final class Client
         return is_array($rows) ? $rows : [];
     }
 
-    public static function indexCount(int $businessId, string $search = ''): int
+    public static function indexCount(int $businessId, string $search = '', string $activeFilter = 'active'): int
     {
         $pdo = Database::connection();
         $query = trim($search);
@@ -93,6 +127,7 @@ final class Client
         $citySql = self::hasColumn('clients', 'city') ? 'c.city' : 'NULL';
         $businessWhere = self::hasColumn('clients', 'business_id') ? 'c.business_id = :business_id' : '1 = 1';
         $deletedWhere = self::hasColumn('clients', 'deleted_at') ? 'c.deleted_at IS NULL' : '1 = 1';
+        $activeWhere = self::activeFilterWhereSql($activeFilter);
 
         $boloMatch = self::boloSearchExistsSql();
 
@@ -100,6 +135,7 @@ final class Client
                 FROM clients c
                 WHERE {$businessWhere}
                   AND {$deletedWhere}
+                  {$activeWhere}
                   AND (
                     :query = ''
                     OR CONCAT_WS(' ', COALESCE(c.first_name, ''), COALESCE(c.last_name, ''), COALESCE({$companySql}, '')) LIKE :query_like_1
