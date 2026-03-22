@@ -74,6 +74,7 @@ $pageTitle = 'Events';
 </div>
 
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.css" />
+<link rel="stylesheet" href="<?= e(asset('css/jt-calendar.css')) ?>" />
 <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
 <script>
 window.addEventListener('DOMContentLoaded', () => {
