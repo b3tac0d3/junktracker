@@ -3,7 +3,12 @@
 declare(strict_types=1);
 
 $localOverride = __DIR__ . '/database.local.php';
-if (is_file($localOverride)) {
+$isLocalHost = false;
+if (!empty($_SERVER['HTTP_HOST'])) {
+    $host = (string) $_SERVER['HTTP_HOST'];
+    $isLocalHost = str_contains($host, 'localhost') || str_contains($host, '127.0.0.1');
+}
+if ($isLocalHost && is_file($localOverride)) {
     /** @var array<string, mixed> $override */
     $override = require $localOverride;
     return $override;
