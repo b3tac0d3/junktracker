@@ -396,14 +396,16 @@ final class Client
         if ($phoneDigits !== '' && self::hasColumn('clients', 'phone')) {
             $digitsExpr = "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(%s, ''), '-', ''), '(', ''), ')', ''), ' ', ''), '.', ''), '+', '')";
             $primaryExpr = sprintf($digitsExpr, 'c.phone');
-            $phoneOr = '(' . $primaryExpr . ' = :dup_phone';
+            // Native PDO (EMULATE_PREPARES false) does not allow the same named placeholder twice; use distinct names.
+            $phoneOr = '(' . $primaryExpr . ' = :dup_phone_primary';
+            $params['dup_phone_primary'] = $phoneDigits;
             if (self::hasColumn('clients', 'secondary_phone')) {
                 $secondaryExpr = sprintf($digitsExpr, 'c.secondary_phone');
-                $phoneOr .= ' OR ' . $secondaryExpr . ' = :dup_phone';
+                $phoneOr .= ' OR ' . $secondaryExpr . ' = :dup_phone_secondary';
+                $params['dup_phone_secondary'] = $phoneDigits;
             }
             $phoneOr .= ')';
             $or[] = $phoneOr;
-            $params['dup_phone'] = $phoneDigits;
         }
 
         if ($emailNorm !== '' && self::hasColumn('clients', 'email')) {
@@ -545,14 +547,15 @@ final class Client
         if ($phoneDigits !== '' && self::hasColumn('clients', 'phone')) {
             $digitsExpr = "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(%s, ''), '-', ''), '(', ''), ')', ''), ' ', ''), '.', ''), '+', '')";
             $primaryExpr = sprintf($digitsExpr, 'c.phone');
-            $phoneOr = '(' . $primaryExpr . ' = :dup_phone';
+            $phoneOr = '(' . $primaryExpr . ' = :dup_phone_primary';
+            $params['dup_phone_primary'] = $phoneDigits;
             if (self::hasColumn('clients', 'secondary_phone')) {
                 $secondaryExpr = sprintf($digitsExpr, 'c.secondary_phone');
-                $phoneOr .= ' OR ' . $secondaryExpr . ' = :dup_phone';
+                $phoneOr .= ' OR ' . $secondaryExpr . ' = :dup_phone_secondary';
+                $params['dup_phone_secondary'] = $phoneDigits;
             }
             $phoneOr .= ')';
             $or[] = $phoneOr;
-            $params['dup_phone'] = $phoneDigits;
         }
 
         if ($emailNorm !== '' && self::hasColumn('clients', 'email')) {
