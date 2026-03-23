@@ -4,7 +4,7 @@ $status = strtolower(trim((string) ($status ?? 'dispatch')));
 $fromDate = trim((string) ($fromDate ?? date('Y-01-01')));
 $toDate = trim((string) ($toDate ?? date('Y-12-31')));
 $sortBy = strtolower(trim((string) ($sortBy ?? 'date')));
-$sortDir = strtolower(trim((string) ($sortDir ?? 'desc')));
+$sortDir = strtolower(trim((string) ($sortDir ?? 'asc')));
 $jobs = is_array($jobs ?? null) ? $jobs : [];
 $filteredSummary = is_array($filteredSummary ?? null) ? $filteredSummary : [];
 $pagination = is_array($pagination ?? null) ? $pagination : pagination_meta(1, 25, count($jobs), count($jobs));
@@ -105,8 +105,8 @@ foreach ($statusOptionsRaw as $statusOptionRaw) {
                 <div class="col-12 col-sm-6 col-lg-2">
                     <label class="form-label fw-semibold" for="jobs-sort-dir">Order</label>
                     <select id="jobs-sort-dir" class="form-select" name="sort_dir">
-                        <option value="desc" <?= $sortDir === 'desc' ? 'selected' : '' ?>>Descending</option>
                         <option value="asc" <?= $sortDir === 'asc' ? 'selected' : '' ?>>Ascending</option>
+                        <option value="desc" <?= $sortDir === 'desc' ? 'selected' : '' ?>>Descending</option>
                     </select>
                 </div>
                 <div class="col-12 col-lg-2 d-grid d-sm-flex gap-2">

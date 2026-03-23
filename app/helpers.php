@@ -512,3 +512,51 @@ function pagination_meta(int $page, int $perPage, int $totalRows, int $currentCo
         'to' => $to,
     ];
 }
+
+function business_logo_public_path(string $relativePath): string
+{
+    return base_path('public/' . ltrim(str_replace('\\', '/', $relativePath), '/'));
+}
+
+/**
+ * Public URL for a business logo stored under public/, or null if missing.
+ *
+ * @param array<string, mixed>|null $business
+ */
+function business_logo_url(?array $business): ?string
+{
+    if (!is_array($business)) {
+        return null;
+    }
+    $path = trim((string) ($business['logo_path'] ?? ''));
+    if ($path === '') {
+        return null;
+    }
+    $full = business_logo_public_path($path);
+    if (!is_file($full)) {
+        return null;
+    }
+
+    return url($path);
+}
+
+/**
+ * Absolute URL for embedding in email or external links (requires app.url in config).
+ *
+ * @param array<string, mixed>|null $business
+ */
+function business_logo_absolute_url(?array $business): ?string
+{
+    if (!is_array($business)) {
+        return null;
+    }
+    $rel = trim((string) ($business['logo_path'] ?? ''));
+    if ($rel === '') {
+        return null;
+    }
+    if (!is_file(business_logo_public_path($rel))) {
+        return null;
+    }
+
+    return absolute_url($rel);
+}

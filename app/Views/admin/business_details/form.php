@@ -2,6 +2,8 @@
 $form = is_array($form ?? null) ? $form : [];
 $errors = is_array($errors ?? null) ? $errors : [];
 $actionUrl = (string) ($actionUrl ?? url('/admin/business-details/update'));
+$logoUrl = isset($logoUrl) ? $logoUrl : null;
+$logoUrl = is_string($logoUrl) && $logoUrl !== '' ? $logoUrl : null;
 
 $fieldError = static function (string $field) use ($errors): string {
     return isset($errors[$field]) ? (string) $errors[$field] : '';
@@ -27,8 +29,26 @@ $hasError = static function (string $field) use ($errors): bool {
         <strong><i class="fas fa-building me-2"></i>Business Profile</strong>
     </div>
     <div class="card-body">
-        <form method="post" action="<?= e($actionUrl) ?>" class="row g-3">
+        <form method="post" action="<?= e($actionUrl) ?>" enctype="multipart/form-data" class="row g-3">
             <?= csrf_field() ?>
+
+            <div class="col-12">
+                <hr class="my-1" />
+                <h3 class="h5 mb-2">Company logo</h3>
+                <p class="small text-muted mb-2">Shown on estimates and invoices (print and future client-facing sends). PNG or JPG recommended; max 2&nbsp;MB.</p>
+                <?php if ($logoUrl !== null): ?>
+                    <div class="d-flex flex-wrap align-items-center gap-3 mb-2">
+                        <img src="<?= e($logoUrl) ?>" alt="Current logo" class="border rounded bg-white p-2" style="max-height: 96px; max-width: 240px; object-fit: contain;" />
+                        <div class="form-check">
+                            <input type="checkbox" class="form-check-input" name="remove_logo" value="1" id="business-remove-logo" />
+                            <label class="form-check-label" for="business-remove-logo">Remove logo</label>
+                        </div>
+                    </div>
+                <?php endif; ?>
+                <label class="form-label fw-semibold" for="business-logo"><?= $logoUrl !== null ? 'Replace logo' : 'Upload logo' ?></label>
+                <input id="business-logo" type="file" name="logo" class="form-control <?= isset($errors['logo']) ? 'is-invalid' : '' ?>" accept="image/png,image/jpeg,image/gif,image/webp" />
+                <?php if (isset($errors['logo'])): ?><div class="invalid-feedback d-block"><?= e((string) $errors['logo']) ?></div><?php endif; ?>
+            </div>
 
             <div class="col-12 col-lg-6">
                 <label class="form-label fw-semibold" for="business-name">Company Name</label>

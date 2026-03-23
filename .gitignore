@@ -1,6 +1,8 @@
 .DS_Store
 .vscode/
 .release_tmp/
+public/uploads/business_logos/*
+!public/uploads/business_logos/.gitkeep
 storage/
 config/database.local.php
 config/app.local.php

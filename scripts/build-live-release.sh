@@ -5,14 +5,16 @@
 #   .../htdocs/junktracker_live_releases/<name>/upload
 # Override root: JUNKTRACKER_LIVE_RELEASE_ROOT=/path/to/parent
 #
-# Full tree (major drops) — dest can be a path to the upload folder, or a short
-# name (no slashes) that becomes <live_releases_root>/<name>/upload:
+# Default: changed files only (patch / delta drop) since a git ref — use this unless
+# you explicitly need the full codebase on the server.
+#   ./scripts/build-live-release.sh junktracker_beta_1.3.6 v1.3.5
+#   ./scripts/build-live-release.sh /custom/path/to/upload v1.3.5
+# Optional keyword "delta" (same behavior):
+#   ./scripts/build-live-release.sh delta junktracker_beta_1.3.6 v1.3.5
+#
+# Full tree (only when you need a complete upload mirror):
 #   ./scripts/build-live-release.sh full junktracker_beta_1.3.6
 #   ./scripts/build-live-release.sh full /custom/path/to/upload
-#
-# Changed files only since a git ref (patch drops):
-#   ./scripts/build-live-release.sh delta junktracker_beta_1.3.6 v1.3.5
-#   ./scripts/build-live-release.sh delta /custom/path/to/upload v1.3.5
 #
 # Committed work only; uncommitted changes are not included unless you commit or
 # pass a different ref range.
@@ -35,11 +37,43 @@ resolve_dest() {
   fi
 }
 
-MODE="${1:?usage: $0 full|delta <dest> [base_ref]}"
-DEST="${2:?usage: $0 $MODE <dest> [base_ref]}"
-BASE_REF="${3:-}"
+usage() {
+  echo "usage: $0 <dest> <base_git_ref>     # delta (changed files only; default)" >&2
+  echo "       $0 delta <dest> <base_git_ref>  # same as above" >&2
+  echo "       $0 full <dest>                # full codebase (rsync entire tree)" >&2
+  echo "dest: path to upload folder, or short name (no slashes) under junktracker_live_releases" >&2
+  exit 1
+}
 
-DEST="$(resolve_dest "$DEST")"
+MODE=""
+DEST_RAW=""
+BASE_REF=""
+
+if [[ "${1:-}" == "full" ]]; then
+  MODE="full"
+  DEST_RAW="${2:-}"
+  if [[ -z "$DEST_RAW" ]]; then
+    usage
+  fi
+elif [[ "${1:-}" == "delta" ]]; then
+  MODE="delta"
+  DEST_RAW="${2:-}"
+  BASE_REF="${3:-}"
+  if [[ -z "$DEST_RAW" || -z "$BASE_REF" ]]; then
+    usage
+  fi
+elif [[ -n "${1:-}" ]]; then
+  MODE="delta"
+  DEST_RAW="${1:-}"
+  BASE_REF="${2:-}"
+  if [[ -z "$BASE_REF" ]]; then
+    usage
+  fi
+else
+  usage
+fi
+
+DEST="$(resolve_dest "$DEST_RAW")"
 
 RSYNC_EXCLUDES=(
   --exclude='.git/'
@@ -74,7 +108,7 @@ delta_release() {
   local dest="$1"
   local base="$2"
   if [[ -z "$base" ]]; then
-    echo "delta mode requires a base ref (e.g. tag v1.3.2): $0 delta <dest> <base_ref>" >&2
+    echo "Delta mode requires a base ref (e.g. tag v1.3.5): $0 <dest> <base_ref>" >&2
     exit 1
   fi
 
@@ -119,7 +153,7 @@ case "$MODE" in
     delta_release "$DEST" "$BASE_REF"
     ;;
   *)
-    echo "First argument must be 'full' or 'delta'." >&2
+    echo "Internal error: unknown mode." >&2
     exit 1
     ;;
 esac

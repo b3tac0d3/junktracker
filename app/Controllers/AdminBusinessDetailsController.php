@@ -32,6 +32,7 @@ final class AdminBusinessDetailsController extends Controller
             'actionUrl' => url('/admin/business-details/update'),
             'form' => $this->formFromBusiness($business),
             'errors' => [],
+            'logoUrl' => business_logo_url($business),
         ]);
     }
 
@@ -66,8 +67,40 @@ final class AdminBusinessDetailsController extends Controller
                 'actionUrl' => url('/admin/business-details/update'),
                 'form' => $form,
                 'errors' => $errors,
+                'logoUrl' => business_logo_url($business),
             ]);
             return;
+        }
+
+        $removeLogo = isset($_POST['remove_logo']) && (string) $_POST['remove_logo'] === '1';
+        $logoFile = $_FILES['logo'] ?? null;
+        $hasNewLogo = is_array($logoFile) && (($logoFile['error'] ?? \UPLOAD_ERR_NO_FILE) !== \UPLOAD_ERR_NO_FILE);
+
+        $patchLogoPath = false;
+        $logoPathValue = null;
+
+        if ($removeLogo) {
+            $this->deleteAllBusinessLogoFiles($businessId);
+            $patchLogoPath = true;
+            $logoPathValue = null;
+        } elseif ($hasNewLogo) {
+            $logoResult = $this->processLogoUpload($businessId, $logoFile);
+            if ($logoResult['error'] !== null) {
+                $errors = ['logo' => $logoResult['error']];
+                $this->render('admin/business_details/form', [
+                    'pageTitle' => 'Business Details',
+                    'actionUrl' => url('/admin/business-details/update'),
+                    'form' => $form,
+                    'errors' => $errors,
+                    'logoUrl' => business_logo_url($business),
+                ]);
+
+                return;
+            }
+            if ($logoResult['path'] !== null) {
+                $patchLogoPath = true;
+                $logoPathValue = $logoResult['path'];
+            }
         }
 
         if ($form['mailing_same_as_physical'] === '1') {
@@ -78,7 +111,7 @@ final class AdminBusinessDetailsController extends Controller
             $form['mailing_postal_code'] = $form['postal_code'];
         }
 
-        Business::updateDetails($businessId, [
+        $details = [
             'name' => $form['name'],
             'legal_name' => $form['legal_name'],
             'phone' => $form['phone'],
@@ -98,7 +131,12 @@ final class AdminBusinessDetailsController extends Controller
             'mailing_postal_code' => $form['mailing_postal_code'],
             'estimate_number_start' => $form['estimate_number_start'],
             'invoice_number_start' => $form['invoice_number_start'],
-        ], (int) (auth_user_id() ?? 0));
+        ];
+        if ($patchLogoPath) {
+            $details['logo_path'] = $logoPathValue;
+        }
+
+        Business::updateDetails($businessId, $details, (int) (auth_user_id() ?? 0));
 
         flash('success', 'Business details updated.');
         redirect('/admin/business-details');
@@ -188,5 +226,68 @@ final class AdminBusinessDetailsController extends Controller
         }
 
         return $errors;
+    }
+
+    /**
+     * @param array<string, mixed> $upload
+     *
+     * @return array{path: ?string, error: ?string}
+     */
+    private function processLogoUpload(int $businessId, array $upload): array
+    {
+        $err = (int) ($upload['error'] ?? \UPLOAD_ERR_NO_FILE);
+        if ($err === \UPLOAD_ERR_NO_FILE) {
+            return ['path' => null, 'error' => null];
+        }
+        if ($err !== \UPLOAD_ERR_OK) {
+            return ['path' => null, 'error' => 'Upload failed. Try again.'];
+        }
+        if (($upload['size'] ?? 0) > 2097152) {
+            return ['path' => null, 'error' => 'Logo must be 2 MB or smaller.'];
+        }
+        $tmp = (string) ($upload['tmp_name'] ?? '');
+        if ($tmp === '' || !is_uploaded_file($tmp)) {
+            return ['path' => null, 'error' => 'Invalid upload.'];
+        }
+
+        $finfo = new \finfo(\FILEINFO_MIME_TYPE);
+        $mime = $finfo->file($tmp);
+        $map = [
+            'image/jpeg' => 'jpg',
+            'image/png' => 'png',
+            'image/gif' => 'gif',
+            'image/webp' => 'webp',
+        ];
+        if ($mime === false || !isset($map[$mime])) {
+            return ['path' => null, 'error' => 'Use PNG, JPG, GIF, or WebP.'];
+        }
+        $ext = $map[$mime];
+
+        $dir = base_path('public/uploads/business_logos');
+        if (!is_dir($dir)) {
+            mkdir($dir, 0755, true);
+        }
+
+        $this->deleteAllBusinessLogoFiles($businessId);
+
+        $dest = $dir . '/' . $businessId . '.' . $ext;
+        if (!move_uploaded_file($tmp, $dest)) {
+            return ['path' => null, 'error' => 'Could not save logo.'];
+        }
+
+        $relative = 'uploads/business_logos/' . $businessId . '.' . $ext;
+
+        return ['path' => $relative, 'error' => null];
+    }
+
+    private function deleteAllBusinessLogoFiles(int $businessId): void
+    {
+        $dir = base_path('public/uploads/business_logos');
+        foreach (['jpg', 'png', 'gif', 'webp'] as $e) {
+            $p = $dir . '/' . $businessId . '.' . $e;
+            if (is_file($p)) {
+                @unlink($p);
+            }
+        }
     }
 }

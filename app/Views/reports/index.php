@@ -41,7 +41,7 @@ $formatDate = static function (?string $value): string {
     </div>
 </div>
 
-<section class="card index-card mb-3">
+<section class="card index-card mb-3 reports-card-period">
     <div class="card-header index-card-header">
         <strong><i class="fas fa-filter me-2"></i>Time Period</strong>
     </div>
@@ -63,7 +63,7 @@ $formatDate = static function (?string $value): string {
     </div>
     </section>
 
-<section class="card index-card mb-3">
+<section class="card index-card mb-3 reports-card-totals">
     <div class="card-header index-card-header">
         <strong><i class="fas fa-chart-column me-2"></i>Totals</strong>
     </div>
@@ -71,23 +71,23 @@ $formatDate = static function (?string $value): string {
         <div class="record-row-fields record-row-fields-5">
             <div class="record-field">
                 <span class="record-label">Overall Gross</span>
-                <span class="record-value"><?= e($formatMoney($overall['gross'] ?? 0)) ?></span>
+                <span class="record-value"><span class="jt-report-in"><?= e($formatMoney($overall['gross'] ?? 0)) ?></span></span>
             </div>
             <div class="record-field">
                 <span class="record-label">Overall Net</span>
-                <span class="record-value"><?= e($formatMoney($overall['net'] ?? 0)) ?></span>
+                <span class="record-value"><span class="jt-report-in"><?= e($formatMoney($overall['net'] ?? 0)) ?></span></span>
             </div>
             <div class="record-field">
-                <span class="record-label">Net - Purchases</span>
-                <span class="record-value"><?= e($formatMoney($overall['net_minus_purchases'] ?? 0)) ?></span>
+                <span class="record-label">Net − Purchases</span>
+                <span class="record-value"><span class="jt-report-net"><?= e($formatMoney($overall['net_minus_purchases'] ?? 0)) ?></span></span>
             </div>
             <div class="record-field">
                 <span class="record-label">Expense Total</span>
-                <span class="record-value"><?= e($formatMoney($expenses['total'] ?? 0)) ?></span>
+                <span class="record-value"><span class="jt-report-out"><?= e($formatMoney($expenses['total'] ?? 0)) ?></span></span>
             </div>
             <div class="record-field">
                 <span class="record-label">Purchase Total</span>
-                <span class="record-value"><?= e($formatMoney($purchases['total'] ?? 0)) ?></span>
+                <span class="record-value"><span class="jt-report-out"><?= e($formatMoney($purchases['total'] ?? 0)) ?></span></span>
             </div>
         </div>
     </div>
@@ -95,26 +95,26 @@ $formatDate = static function (?string $value): string {
 
 <div class="row g-3 mb-3">
     <div class="col-12 col-xl-6">
-        <section class="card index-card h-100">
+        <section class="card index-card h-100 reports-card-service">
             <div class="card-header index-card-header"><strong><i class="fas fa-file-invoice-dollar me-2"></i>Service (Invoices)</strong></div>
             <div class="card-body">
                 <div class="record-row-fields record-row-fields-2">
-                    <div class="record-field"><span class="record-label">Count</span><span class="record-value"><?= e((string) ((int) ($service['count'] ?? 0))) ?></span></div>
-                    <div class="record-field"><span class="record-label">Gross</span><span class="record-value"><?= e($formatMoney($service['gross'] ?? 0)) ?></span></div>
-                    <div class="record-field"><span class="record-label">Job Expenses</span><span class="record-value"><?= e($formatMoney($service['job_expenses'] ?? 0)) ?></span></div>
-                    <div class="record-field"><span class="record-label">Net</span><span class="record-value"><?= e($formatMoney($service['net'] ?? 0)) ?></span></div>
+                    <div class="record-field"><span class="record-label">Count</span><span class="record-value"><span class="jt-report-count"><?= e((string) ((int) ($service['count'] ?? 0))) ?></span></span></div>
+                    <div class="record-field"><span class="record-label">Gross</span><span class="record-value"><span class="jt-report-in"><?= e($formatMoney($service['gross'] ?? 0)) ?></span></span></div>
+                    <div class="record-field"><span class="record-label">Job Expenses</span><span class="record-value"><span class="jt-report-out"><?= e($formatMoney($service['job_expenses'] ?? 0)) ?></span></span></div>
+                    <div class="record-field"><span class="record-label">Net</span><span class="record-value"><span class="jt-report-in"><?= e($formatMoney($service['net'] ?? 0)) ?></span></span></div>
                 </div>
             </div>
         </section>
     </div>
     <div class="col-12 col-xl-6">
-        <section class="card index-card h-100">
+        <section class="card index-card h-100 reports-card-sales">
             <div class="card-header index-card-header"><strong><i class="fas fa-sack-dollar me-2"></i>Sales</strong></div>
             <div class="card-body">
                 <div class="record-row-fields record-row-fields-3 mb-3">
-                    <div class="record-field"><span class="record-label">Count</span><span class="record-value"><?= e((string) ((int) ($sales['count'] ?? 0))) ?></span></div>
-                    <div class="record-field"><span class="record-label">Gross</span><span class="record-value"><?= e($formatMoney($sales['gross'] ?? 0)) ?></span></div>
-                    <div class="record-field"><span class="record-label">Net</span><span class="record-value"><?= e($formatMoney($sales['net'] ?? 0)) ?></span></div>
+                    <div class="record-field"><span class="record-label">Count</span><span class="record-value"><span class="jt-report-count"><?= e((string) ((int) ($sales['count'] ?? 0))) ?></span></span></div>
+                    <div class="record-field"><span class="record-label">Gross</span><span class="record-value"><span class="jt-report-in"><?= e($formatMoney($sales['gross'] ?? 0)) ?></span></span></div>
+                    <div class="record-field"><span class="record-label">Net</span><span class="record-value"><span class="jt-report-in"><?= e($formatMoney($sales['net'] ?? 0)) ?></span></span></div>
                 </div>
                 <?php
                 $saleTypeLabel = static function (string $value): string {
@@ -141,7 +141,13 @@ $formatDate = static function (?string $value): string {
                             <?php $typeSummary = is_array($typeSummary) ? $typeSummary : ['count' => 0, 'gross' => 0.0, 'net' => 0.0]; ?>
                             <div class="simple-list-row">
                                 <span class="simple-list-title"><?= e($saleTypeLabel((string) $typeKey)) ?></span>
-                                <span class="simple-list-meta">Gross <?= e($formatMoney($typeSummary['gross'] ?? 0)) ?> · Net <?= e($formatMoney($typeSummary['net'] ?? 0)) ?> · <?= e((string) ((int) ($typeSummary['count'] ?? 0))) ?> sale(s)</span>
+                                <span class="simple-list-meta">
+                                    <span class="jt-report-muted">Gross</span> <span class="jt-report-in"><?= e($formatMoney($typeSummary['gross'] ?? 0)) ?></span>
+                                    <span class="jt-report-muted">·</span>
+                                    <span class="jt-report-muted">Net</span> <span class="jt-report-in"><?= e($formatMoney($typeSummary['net'] ?? 0)) ?></span>
+                                    <span class="jt-report-muted">·</span>
+                                    <span class="jt-report-count"><?= e((string) ((int) ($typeSummary['count'] ?? 0))) ?> sale(s)</span>
+                                </span>
                             </div>
                         <?php endforeach; ?>
                     </div>
@@ -150,14 +156,14 @@ $formatDate = static function (?string $value): string {
         </section>
     </div>
     <div class="col-12 col-xl-6">
-        <section class="card index-card h-100">
+        <section class="card index-card h-100 reports-card-expenses">
             <div class="card-header index-card-header"><strong><i class="fas fa-receipt me-2"></i>Expenses</strong></div>
             <div class="card-body">
                 <div class="record-row-fields record-row-fields-4 mb-3">
-                    <div class="record-field"><span class="record-label">Count</span><span class="record-value"><?= e((string) ((int) ($expenses['count'] ?? 0))) ?></span></div>
-                    <div class="record-field"><span class="record-label">Job Expenses</span><span class="record-value"><?= e($formatMoney($expenses['job_total'] ?? 0)) ?></span></div>
-                    <div class="record-field"><span class="record-label">General Expenses</span><span class="record-value"><?= e($formatMoney($expenses['general_total'] ?? 0)) ?></span></div>
-                    <div class="record-field"><span class="record-label">Total</span><span class="record-value"><?= e($formatMoney($expenses['total'] ?? 0)) ?></span></div>
+                    <div class="record-field"><span class="record-label">Count</span><span class="record-value"><span class="jt-report-count"><?= e((string) ((int) ($expenses['count'] ?? 0))) ?></span></span></div>
+                    <div class="record-field"><span class="record-label">Job Expenses</span><span class="record-value"><span class="jt-report-out"><?= e($formatMoney($expenses['job_total'] ?? 0)) ?></span></span></div>
+                    <div class="record-field"><span class="record-label">General Expenses</span><span class="record-value"><span class="jt-report-out"><?= e($formatMoney($expenses['general_total'] ?? 0)) ?></span></span></div>
+                    <div class="record-field"><span class="record-label">Total</span><span class="record-value"><span class="jt-report-out"><?= e($formatMoney($expenses['total'] ?? 0)) ?></span></span></div>
                 </div>
 
                 <?php if ($expensesByCategory === []): ?>
@@ -172,7 +178,11 @@ $formatDate = static function (?string $value): string {
                             ?>
                             <div class="simple-list-row">
                                 <span class="simple-list-title"><?= e($category) ?></span>
-                                <span class="simple-list-meta"><?= e((string) $count) ?> record(s) · <?= e($formatMoney($total)) ?></span>
+                                <span class="simple-list-meta">
+                                    <span class="jt-report-count"><?= e((string) $count) ?> record(s)</span>
+                                    <span class="jt-report-muted">·</span>
+                                    <span class="jt-report-out"><?= e($formatMoney($total)) ?></span>
+                                </span>
                             </div>
                         <?php endforeach; ?>
                     </div>
@@ -181,12 +191,12 @@ $formatDate = static function (?string $value): string {
         </section>
     </div>
     <div class="col-12 col-xl-6">
-        <section class="card index-card h-100">
+        <section class="card index-card h-100 reports-card-purchasing">
             <div class="card-header index-card-header"><strong><i class="fas fa-cart-arrow-down me-2"></i>Purchasing</strong></div>
             <div class="card-body">
                 <div class="record-row-fields record-row-fields-2">
-                    <div class="record-field"><span class="record-label">Count</span><span class="record-value"><?= e((string) ((int) ($purchases['count'] ?? 0))) ?></span></div>
-                    <div class="record-field"><span class="record-label">Total Cost</span><span class="record-value"><?= e($formatMoney($purchases['total'] ?? 0)) ?></span></div>
+                    <div class="record-field"><span class="record-label">Count</span><span class="record-value"><span class="jt-report-count"><?= e((string) ((int) ($purchases['count'] ?? 0))) ?></span></span></div>
+                    <div class="record-field"><span class="record-label">Total Cost</span><span class="record-value"><span class="jt-report-out"><?= e($formatMoney($purchases['total'] ?? 0)) ?></span></span></div>
                 </div>
             </div>
         </section>
@@ -195,7 +205,7 @@ $formatDate = static function (?string $value): string {
 
 <div class="row g-3">
     <div class="col-12 col-xl-6">
-        <section class="card index-card h-100">
+        <section class="card index-card h-100 reports-card-jobs">
             <div class="card-header index-card-header d-flex align-items-center justify-content-between">
                 <strong><i class="fas fa-briefcase me-2"></i>Jobs (Within Range)</strong>
                 <a class="small text-decoration-none fw-semibold" href="<?= e(url('/jobs')) ?>">Open Jobs</a>
@@ -225,7 +235,7 @@ $formatDate = static function (?string $value): string {
         </section>
     </div>
     <div class="col-12 col-xl-6">
-        <section class="card index-card h-100">
+        <section class="card index-card h-100 reports-card-sales-list">
             <div class="card-header index-card-header d-flex align-items-center justify-content-between">
                 <strong><i class="fas fa-cash-register me-2"></i>Sales (Within Range)</strong>
                 <a class="small text-decoration-none fw-semibold" href="<?= e(url('/sales')) ?>">Open Sales</a>
@@ -247,7 +257,12 @@ $formatDate = static function (?string $value): string {
                             ?>
                             <a class="simple-list-row simple-list-row-link" href="<?= e(url('/sales/' . (string) $saleId)) ?>">
                                 <span class="simple-list-title"><?= e($name) ?></span>
-                                <span class="simple-list-meta"><?= e($typeLabel) ?> · <?= e($date) ?> · Gross <?= e($gross) ?> · Net <?= e($net) ?></span>
+                                <span class="simple-list-meta">
+                                    <span class="jt-report-muted"><?= e($typeLabel) ?> · <?= e($date) ?> ·</span>
+                                    <span class="jt-report-muted">Gross</span> <span class="jt-report-in"><?= e($gross) ?></span>
+                                    <span class="jt-report-muted">·</span>
+                                    <span class="jt-report-muted">Net</span> <span class="jt-report-in"><?= e($net) ?></span>
+                                </span>
                             </a>
                         <?php endforeach; ?>
                     </div>
@@ -256,7 +271,7 @@ $formatDate = static function (?string $value): string {
         </section>
     </div>
     <div class="col-12 col-xl-6">
-        <section class="card index-card h-100">
+        <section class="card index-card h-100 reports-card-purchases-list">
             <div class="card-header index-card-header d-flex align-items-center justify-content-between">
                 <strong><i class="fas fa-cart-arrow-down me-2"></i>Purchases (Within Range)</strong>
                 <a class="small text-decoration-none fw-semibold" href="<?= e(url('/purchases')) ?>">Open Purchases</a>
@@ -278,7 +293,10 @@ $formatDate = static function (?string $value): string {
                             ?>
                             <a class="simple-list-row simple-list-row-link" href="<?= e(url('/purchases/' . (string) $purchaseId)) ?>">
                                 <span class="simple-list-title"><?= e($title) ?></span>
-                                <span class="simple-list-meta"><?= e($client) ?> · <?= e($statusLabel) ?> · <?= e($purchaseDate) ?> · <?= e($price) ?></span>
+                                <span class="simple-list-meta">
+                                    <span class="jt-report-muted"><?= e($client) ?> · <?= e($statusLabel) ?> · <?= e($purchaseDate) ?> ·</span>
+                                    <span class="jt-report-out"><?= e($price) ?></span>
+                                </span>
                             </a>
                         <?php endforeach; ?>
                     </div>

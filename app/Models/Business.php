@@ -137,6 +137,7 @@ final class Business
         $mailingCountrySql = SchemaInspector::hasColumn('businesses', 'mailing_country') ? 'mailing_country' : 'NULL';
         $estimateStartSql = SchemaInspector::hasColumn('businesses', 'estimate_number_start') ? 'estimate_number_start' : 'NULL';
         $invoiceStartSql = SchemaInspector::hasColumn('businesses', 'invoice_number_start') ? 'invoice_number_start' : 'NULL';
+        $logoPathSql = SchemaInspector::hasColumn('businesses', 'logo_path') ? 'logo_path' : 'NULL';
 
         $stmt = Database::connection()->prepare(
             "SELECT
@@ -163,6 +164,7 @@ final class Business
                 {$mailingCountrySql} AS mailing_country,
                 {$estimateStartSql} AS estimate_number_start,
                 {$invoiceStartSql} AS invoice_number_start,
+                {$logoPathSql} AS logo_path,
                 is_active
              FROM businesses
              WHERE id = :id
@@ -241,6 +243,7 @@ final class Business
             'mailing_country' => 'mailing_country',
             'estimate_number_start' => 'estimate_number_start',
             'invoice_number_start' => 'invoice_number_start',
+            'logo_path' => 'logo_path',
         ];
 
         foreach ($columnMap as $key => $column) {

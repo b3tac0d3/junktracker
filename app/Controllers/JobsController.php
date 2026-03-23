@@ -25,13 +25,13 @@ final class JobsController extends Controller
         $fromDate = trim((string) ($_GET['from_date'] ?? date('Y-01-01')));
         $toDate = trim((string) ($_GET['to_date'] ?? date('Y-12-31')));
         $sortBy = strtolower(trim((string) ($_GET['sort_by'] ?? 'date')));
-        $sortDir = strtolower(trim((string) ($_GET['sort_dir'] ?? 'desc')));
+        $sortDir = strtolower(trim((string) ($_GET['sort_dir'] ?? 'asc')));
         $allowedSortBy = ['date', 'id', 'client_name'];
         if (!in_array($sortBy, $allowedSortBy, true)) {
             $sortBy = 'date';
         }
         if (!in_array($sortDir, ['asc', 'desc'], true)) {
-            $sortDir = 'desc';
+            $sortDir = 'asc';
         }
         if (!$this->isValidDateFilter($fromDate)) {
             $fromDate = date('Y-01-01');

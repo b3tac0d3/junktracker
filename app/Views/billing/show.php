@@ -61,6 +61,8 @@ $businessContact = trim((string) ($business['primary_contact_name'] ?? ''));
 $businessWebsite = trim((string) ($business['website_url'] ?? ''));
 $businessEin = trim((string) ($business['ein_number'] ?? ''));
 
+$businessLogoUrl = business_logo_url($business);
+
 $businessAddress = [];
 foreach ([
     trim((string) ($business['address_line1'] ?? '')),
@@ -163,6 +165,11 @@ $currentStatus = strtolower(trim((string) ($invoice['status'] ?? '')));
         display: none !important;
     }
 
+    .jt-business-logo {
+        max-height: 72px !important;
+        max-width: 200px !important;
+    }
+
     .print-card {
         border: 0 !important;
         box-shadow: none !important;
@@ -242,16 +249,23 @@ $currentStatus = strtolower(trim((string) ($invoice['status'] ?? '')));
 
         <div class="row g-3 mb-3">
             <div class="col-12 col-lg-6">
-                <div class="record-label">Business</div>
-                <div class="record-value fw-semibold"><?= e($businessDisplayName) ?></div>
-                <?php foreach ($businessAddress as $line): ?>
-                    <div class="small text-muted"><?= e($line) ?></div>
-                <?php endforeach; ?>
-                <div class="d-flex flex-wrap gap-2 mt-1">
-                    <?php if ($businessPhone !== ''): ?><span class="small text-muted">Phone: <?= e($businessPhone) ?></span><?php endif; ?>
-                    <?php if ($businessContact !== ''): ?><span class="small text-muted">Contact: <?= e($businessContact) ?></span><?php endif; ?>
-                    <?php if ($businessWebsite !== ''): ?><span class="small text-muted">Web: <?= e($businessWebsite) ?></span><?php endif; ?>
-                    <?php if ($businessEin !== ''): ?><span class="small text-muted">EIN: <?= e($businessEin) ?></span><?php endif; ?>
+                <div class="d-flex flex-wrap gap-3 align-items-start">
+                    <?php if ($businessLogoUrl !== null): ?>
+                        <img src="<?= e($businessLogoUrl) ?>" alt="" class="jt-business-logo flex-shrink-0 rounded border bg-white" style="max-height: 96px; max-width: 220px; object-fit: contain;" />
+                    <?php endif; ?>
+                    <div class="flex-grow-1 min-w-0">
+                        <div class="record-label">Business</div>
+                        <div class="record-value fw-semibold"><?= e($businessDisplayName) ?></div>
+                        <?php foreach ($businessAddress as $line): ?>
+                            <div class="small text-muted"><?= e($line) ?></div>
+                        <?php endforeach; ?>
+                        <div class="d-flex flex-wrap gap-2 mt-1">
+                            <?php if ($businessPhone !== ''): ?><span class="small text-muted">Phone: <?= e($businessPhone) ?></span><?php endif; ?>
+                            <?php if ($businessContact !== ''): ?><span class="small text-muted">Contact: <?= e($businessContact) ?></span><?php endif; ?>
+                            <?php if ($businessWebsite !== ''): ?><span class="small text-muted">Web: <?= e($businessWebsite) ?></span><?php endif; ?>
+                            <?php if ($businessEin !== ''): ?><span class="small text-muted">EIN: <?= e($businessEin) ?></span><?php endif; ?>
+                        </div>
+                    </div>
                 </div>
             </div>
             <div class="col-12 col-lg-6">
