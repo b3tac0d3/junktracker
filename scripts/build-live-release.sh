@@ -1,23 +1,45 @@
 #!/usr/bin/env bash
 # Build a JunkTracker live upload bundle from the repo root.
 #
-# Full tree (default for major drops):
-#   ./scripts/build-live-release.sh full /path/to/release/upload
+# Live bundles default to the sibling folder (next to this repo):
+#   .../htdocs/junktracker_live_releases/<name>/upload
+# Override root: JUNKTRACKER_LIVE_RELEASE_ROOT=/path/to/parent
 #
-# Changed files only since a git ref (interim / patch drops):
-#   ./scripts/build-live-release.sh delta v1.3.2 /path/to/release/upload
+# Full tree (major drops) — dest can be a path to the upload folder, or a short
+# name (no slashes) that becomes <live_releases_root>/<name>/upload:
+#   ./scripts/build-live-release.sh full junktracker_beta_1.3.6
+#   ./scripts/build-live-release.sh full /custom/path/to/upload
+#
+# Changed files only since a git ref (patch drops):
+#   ./scripts/build-live-release.sh delta junktracker_beta_1.3.6 v1.3.5
+#   ./scripts/build-live-release.sh delta /custom/path/to/upload v1.3.5
 #
 # Committed work only; uncommitted changes are not included unless you commit or
-# pass a different ref range (see GIT_RANGE below).
+# pass a different ref range.
 
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
+RELEASE_ROOT="${JUNKTRACKER_LIVE_RELEASE_ROOT:-$ROOT/../junktracker_live_releases}"
+
+resolve_dest() {
+  local d="$1"
+  if [[ "$d" == /* ]] || [[ "$d" == */* ]]; then
+    printf '%s\n' "$d"
+  elif [[ "$d" == . || "$d" == .. ]]; then
+    printf '%s\n' "$d"
+  else
+    printf '%s/%s/upload\n' "${RELEASE_ROOT%/}" "$d"
+  fi
+}
+
 MODE="${1:?usage: $0 full|delta <dest> [base_ref]}"
 DEST="${2:?usage: $0 $MODE <dest> [base_ref]}"
 BASE_REF="${3:-}"
+
+DEST="$(resolve_dest "$DEST")"
 
 RSYNC_EXCLUDES=(
   --exclude='.git/'

@@ -1,5 +1,6 @@
 .DS_Store
 .vscode/
+.release_tmp/
 storage/
 config/database.local.php
 config/app.local.php

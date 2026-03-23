@@ -1,2 +1,0 @@
-ALTER TABLE jobs
-    ADD COLUMN job_type VARCHAR(100) NULL AFTER title;

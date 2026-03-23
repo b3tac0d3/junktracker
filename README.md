@@ -32,6 +32,8 @@ Run in this order:
 
 Live release rule:
 
+- Build bundles with `scripts/build-live-release.sh` (see script header for usage).
+- Default output location is **`htdocs/junktracker_live_releases/<release_name>/upload`** (sibling of this repo). Set `JUNKTRACKER_LIVE_RELEASE_ROOT` to use a different parent folder.
 - Release bundles should include only **new/current migrations** needed for that release.
 - Do not re-copy older migrations that were already shipped in previous live releases.
 
