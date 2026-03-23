@@ -1,0 +1,45 @@
+/**
+ * Calendar-only overrides. Loaded AFTER FullCalendar's global CSS on the Events page
+ * so Bootstrap + FullCalendar defaults do not win over jt-theme.css (which loads in <head>).
+ */
+
+/* FullCalendar uses <a> for nav; override Bootstrap link color/underline */
+.jt-calendar .fc a.fc-daygrid-day-number,
+.jt-calendar .fc .fc-daygrid-day-number,
+.jt-calendar .fc .fc-daygrid-day-top a {
+  color: #334155 !important;
+  text-decoration: none !important;
+  font-weight: 700;
+}
+
+.jt-calendar .fc .fc-day-other a.fc-daygrid-day-number,
+.jt-calendar .fc .fc-day-other .fc-daygrid-day-number {
+  color: #94a3b8 !important;
+}
+
+.jt-calendar .fc a.fc-col-header-cell-cushion,
+.jt-calendar .fc .fc-col-header-cell-cushion,
+.jt-calendar .fc th.fc-col-header-cell a {
+  color: #64748b !important;
+  text-decoration: none !important;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-size: 0.78rem;
+}
+
+.jt-calendar .fc a.fc-col-header-cell-cushion:hover,
+.jt-calendar .fc a.fc-daygrid-day-number:hover,
+.jt-calendar .fc th.fc-col-header-cell a:hover {
+  text-decoration: none !important;
+}
+
+.jt-calendar .fc a.fc-event,
+.jt-calendar .fc .fc-event {
+  text-decoration: none !important;
+}
+
+.jt-calendar .fc .fc-event {
+  border-radius: 10px;
+  padding: 2px 4px;
+}
