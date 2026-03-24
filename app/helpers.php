@@ -62,6 +62,12 @@ function absolute_url(string $path = ''): string
     return $base . '/' . ltrim($path, '/');
 }
 
+/** Public client portal URL (magic token). */
+function portal_url(string $token): string
+{
+    return url('/portal/' . rawurlencode($token));
+}
+
 function asset(string $path = ''): string
 {
     $base = url('assets/' . ltrim($path, '/'));
@@ -559,4 +565,62 @@ function business_logo_absolute_url(?array $business): ?string
     }
 
     return absolute_url($rel);
+}
+
+/** Max idle time in seconds before "Remember me" sessions are ended (24 hours). */
+function remember_me_idle_seconds(): int
+{
+    return 86400;
+}
+
+/**
+ * Enforce 24h idle timeout for remembered sessions; refresh activity + cookie when active.
+ */
+function enforce_remember_me_idle_timeout(): void
+{
+    if (session_status() !== PHP_SESSION_ACTIVE) {
+        return;
+    }
+    if (empty($_SESSION['remember_me']) || auth_user() === null) {
+        return;
+    }
+
+    $seconds = remember_me_idle_seconds();
+    $last = (int) ($_SESSION['last_activity'] ?? 0);
+    if ($last > 0 && (time() - $last) > $seconds) {
+        unset($_SESSION['user'], $_SESSION['remember_me'], $_SESSION['last_activity'], $_SESSION['active_business_id']);
+        refresh_session_cookie_lifetime(0);
+        flash('error', 'You were logged out after 24 hours of inactivity.');
+
+        return;
+    }
+
+    $_SESSION['last_activity'] = time();
+    refresh_session_cookie_lifetime($seconds);
+}
+
+/**
+ * Refresh the PHP session cookie lifetime. Use 0 for a browser-session cookie.
+ */
+function refresh_session_cookie_lifetime(int $lifetimeSeconds): void
+{
+    if (session_status() !== PHP_SESSION_ACTIVE) {
+        return;
+    }
+
+    $params = session_get_cookie_params();
+    $expires = $lifetimeSeconds > 0 ? time() + $lifetimeSeconds : 0;
+
+    $options = [
+        'expires' => $expires,
+        'path' => $params['path'] !== '' ? $params['path'] : '/',
+        'domain' => $params['domain'] !== '' ? $params['domain'] : '',
+        'secure' => (bool) $params['secure'],
+        'httponly' => (bool) $params['httponly'],
+    ];
+    if (PHP_VERSION_ID >= 70300) {
+        $options['samesite'] = $params['samesite'] ?? 'Lax';
+    }
+
+    setcookie(session_name(), session_id(), $options);
 }

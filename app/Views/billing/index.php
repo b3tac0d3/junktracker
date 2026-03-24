@@ -47,6 +47,10 @@ $statusLabel = static function (?string $value) use ($statusLabelMap): string {
         <h1>Billing</h1>
         <p class="muted">View billing records</p>
     </div>
+    <div class="d-flex flex-wrap gap-2">
+        <a class="btn btn-outline-secondary" href="<?= e(url('/billing/deposits')) ?>">Bank deposits</a>
+        <a class="btn btn-outline-secondary" href="<?= e(url('/admin/export.csv')) ?>">Export CSV</a>
+    </div>
 </div>
 
 <section class="card index-card mb-3">

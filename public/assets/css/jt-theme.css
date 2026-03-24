@@ -283,6 +283,24 @@ h1, h2, h3 {
   box-shadow: 0 0 0 .25rem var(--jt-focus) !important;
 }
 
+.auth-card .auth-remember {
+  margin-top: .55rem;
+  display: flex;
+  align-items: flex-start;
+  gap: .5rem;
+}
+
+.auth-card .auth-remember .form-check-input {
+  width: auto;
+  margin-top: .35rem;
+  flex-shrink: 0;
+}
+
+.auth-card .auth-remember .form-check-label {
+  font-weight: 500;
+  margin-top: 0;
+}
+
 .btn-primary {
   background: var(--jt-primary);
   border-color: var(--jt-primary);

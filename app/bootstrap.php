@@ -10,7 +10,12 @@ if ((string) config('app.env', 'production') === 'local' && function_exists('opc
 
 session_name((string) config('app.session_name', 'junktracker_session'));
 if (session_status() !== PHP_SESSION_ACTIVE) {
+    ini_set('session.gc_maxlifetime', (string) remember_me_idle_seconds());
     session_start();
+}
+
+if (session_status() === PHP_SESSION_ACTIVE) {
+    enforce_remember_me_idle_timeout();
 }
 
 date_default_timezone_set((string) config('app.timezone', 'America/New_York'));

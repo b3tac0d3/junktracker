@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Controllers;
 
+use App\Models\AuditLog;
 use App\Models\Client;
 use App\Models\Expense;
 use App\Models\FormSelectValue;
@@ -451,6 +452,43 @@ final class JobsController extends Controller
                 'sales' => $sales,
             ],
         ]);
+    }
+
+    public function saveCloseout(array $params): void
+    {
+        require_business_role(['general_user', 'admin']);
+
+        $jobId = (int) ($params['id'] ?? 0);
+        if ($jobId <= 0 || !verify_csrf($_POST['csrf_token'] ?? null)) {
+            flash('error', 'Session expired. Try again.');
+            redirect('/jobs');
+        }
+
+        $businessId = current_business_id();
+        $job = Job::findForBusiness($businessId, $jobId);
+        if ($job === null) {
+            flash('error', 'Job not found.');
+            redirect('/jobs');
+        }
+
+        $actor = (int) (auth_user_id() ?? 0);
+        $markComplete = isset($_POST['mark_closeout_complete']);
+        $completedAt = $markComplete ? date('Y-m-d H:i:s') : null;
+
+        $ok = Job::saveCloseout($businessId, $jobId, [
+            'closeout_truck_loaded' => isset($_POST['closeout_truck_loaded']),
+            'closeout_site_clean' => isset($_POST['closeout_site_clean']),
+            'closeout_signature_name' => (string) ($_POST['closeout_signature_name'] ?? ''),
+            'closeout_completed_at' => $completedAt,
+        ], $actor);
+
+        if ($ok) {
+            AuditLog::write('job_closeout_saved', 'jobs', $jobId, $businessId, $actor, []);
+            flash('success', 'Close-out saved.');
+        } else {
+            flash('error', 'Could not save close-out (run latest migrations?).');
+        }
+        redirect('/jobs/' . (string) $jobId);
     }
 
     public function addEmployee(array $params): void

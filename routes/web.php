@@ -9,7 +9,11 @@ use App\Controllers\AdminEmployeesController;
 use App\Controllers\AdminFormSelectValuesController;
 use App\Controllers\AdminInvoiceItemTypesController;
 use App\Controllers\AdminUsersController;
+use App\Controllers\AdminExportController;
 use App\Controllers\BillingController;
+use App\Controllers\ClientPortalController;
+use App\Controllers\CronController;
+use App\Controllers\DepositsController;
 use App\Controllers\BoloController;
 use App\Controllers\ClientsController;
 use App\Controllers\ExpensesController;
@@ -109,6 +113,7 @@ $router->post('/jobs/{id}/employees', [JobsController::class, 'storeEmployee']);
 $router->post('/jobs/{id}/employees/bulk-punch', [JobsController::class, 'bulkPunchEmployees']);
 $router->post('/jobs/{id}/employees/{employeeId}/punch-in', [JobsController::class, 'punchInEmployee']);
 $router->post('/jobs/{id}/employees/{employeeId}/punch-out', [JobsController::class, 'punchOutEmployee']);
+$router->post('/jobs/{id}/closeout', [JobsController::class, 'saveCloseout']);
 $router->get('/jobs/{id}', [JobsController::class, 'show']);
 
 $router->get('/tasks', [TasksController::class, 'index']);
@@ -139,17 +144,31 @@ $router->get('/time-tracking/{id}', [TimeTrackingController::class, 'show']);
 $router->get('/billing', [BillingController::class, 'index']);
 $router->get('/billing/create', [BillingController::class, 'create']);
 $router->post('/billing', [BillingController::class, 'store']);
+$router->get('/billing/deposits', [DepositsController::class, 'index']);
+$router->get('/billing/deposits/create', [DepositsController::class, 'create']);
+$router->post('/billing/deposits', [DepositsController::class, 'store']);
+$router->get('/billing/deposits/{id}', [DepositsController::class, 'show']);
+$router->post('/billing/deposits/{id}/link-payment', [DepositsController::class, 'linkPayment']);
+$router->post('/billing/deposits/{id}/unlink-payment', [DepositsController::class, 'unlinkPayment']);
 $router->get('/billing/payments/create', [BillingController::class, 'createPayment']);
 $router->post('/billing/payments', [BillingController::class, 'storePayment']);
 $router->get('/billing/payments/{id}/edit', [BillingController::class, 'editPayment']);
 $router->post('/billing/payments/{id}/update', [BillingController::class, 'updatePayment']);
 $router->post('/billing/payments/{id}/delete', [BillingController::class, 'deletePayment']);
 $router->get('/billing/payments/{id}', [BillingController::class, 'showPayment']);
+$router->get('/billing/{id}/document', [BillingController::class, 'document']);
+$router->post('/billing/{id}/send-email', [BillingController::class, 'sendEmail']);
+$router->post('/billing/{id}/portal-link', [BillingController::class, 'issuePortalLink']);
 $router->get('/billing/{id}/edit', [BillingController::class, 'edit']);
 $router->post('/billing/{id}/update', [BillingController::class, 'update']);
 $router->post('/billing/{id}/quick-status', [BillingController::class, 'quickStatus']);
 $router->post('/billing/{id}/delete', [BillingController::class, 'delete']);
 $router->get('/billing/{id}', [BillingController::class, 'show']);
+
+$router->get('/portal/{token}', [ClientPortalController::class, 'show']);
+$router->post('/portal/{token}/approve', [ClientPortalController::class, 'approveEstimate']);
+
+$router->get('/cron/daily-digest', [CronController::class, 'dailyDigest']);
 
 $router->get('/sales', [SalesController::class, 'index']);
 $router->get('/sales/create', [SalesController::class, 'create']);
@@ -173,6 +192,8 @@ $router->get('/purchases/{id}/edit', [PurchasesController::class, 'edit']);
 $router->post('/purchases/{id}/update', [PurchasesController::class, 'update']);
 $router->post('/purchases/{id}/delete', [PurchasesController::class, 'delete']);
 $router->get('/purchases/{id}', [PurchasesController::class, 'show']);
+
+$router->get('/admin/export.csv', [AdminExportController::class, 'csv']);
 
 $router->get('/admin', [AdminController::class, 'index']);
 $router->get('/admin/business-details', [AdminBusinessDetailsController::class, 'edit']);

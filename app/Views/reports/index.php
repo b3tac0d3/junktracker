@@ -15,6 +15,7 @@ $salesList = is_array($lists['sales'] ?? null) ? $lists['sales'] : [];
 $purchasesList = is_array($lists['purchases'] ?? null) ? $lists['purchases'] : [];
 $expensesByCategory = is_array($expenses['by_category'] ?? null) ? $expenses['by_category'] : [];
 $salesByType = is_array($sales['by_type'] ?? null) ? $sales['by_type'] : [];
+$marginByJob = is_array($report['margin_by_job'] ?? null) ? $report['margin_by_job'] : [];
 
 $formatMoney = static function ($value): string {
     return '$' . number_format((float) $value, 2);
@@ -92,6 +93,41 @@ $formatDate = static function (?string $value): string {
         </div>
     </div>
 </section>
+
+<?php if ($marginByJob !== []): ?>
+<section class="card index-card mb-3 reports-card-margin">
+    <div class="card-header index-card-header">
+        <strong><i class="fas fa-scale-balanced me-2"></i>Margin by job (sales net − purchase COGS)</strong>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-sm mb-0 align-middle">
+                <thead>
+                    <tr>
+                        <th>Job</th>
+                        <th class="text-end">Sales net</th>
+                        <th class="text-end">Purchase COGS</th>
+                        <th class="text-end">Margin</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($marginByJob as $row): ?>
+                        <?php if (!is_array($row)) { continue; } ?>
+                        <tr>
+                            <td>
+                                <a href="<?= e(url('/jobs/' . (string) ((int) ($row['job_id'] ?? 0)))) ?>"><?= e((string) ($row['title'] ?? '')) ?></a>
+                            </td>
+                            <td class="text-end"><span class="jt-report-in"><?= e($formatMoney($row['sales_net'] ?? 0)) ?></span></td>
+                            <td class="text-end"><span class="jt-report-out"><?= e($formatMoney($row['purchase_cogs'] ?? 0)) ?></span></td>
+                            <td class="text-end"><span class="jt-report-net"><?= e($formatMoney($row['margin'] ?? 0)) ?></span></td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</section>
+<?php endif; ?>
 
 <div class="row g-3 mb-3">
     <div class="col-12 col-xl-6">

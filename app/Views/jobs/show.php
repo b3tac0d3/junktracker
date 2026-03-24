@@ -202,6 +202,47 @@ $formatDuration = static function (int $minutes): string {
     </div>
 </section>
 
+<?php if (array_key_exists('closeout_truck_loaded', $job)): ?>
+<section class="card index-card mb-3">
+    <div class="card-header index-card-header">
+        <strong><i class="fas fa-clipboard-check me-2"></i>Job close-out</strong>
+    </div>
+    <div class="card-body">
+        <form method="post" action="<?= e(url('/jobs/' . (string) $jobId . '/closeout')) ?>" class="row g-3 align-items-end">
+            <?= csrf_field() ?>
+            <div class="col-12 col-md-4">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" name="closeout_truck_loaded" value="1" id="closeout_truck_loaded" <?= ((int) ($job['closeout_truck_loaded'] ?? 0)) === 1 ? 'checked' : '' ?>>
+                    <label class="form-check-label" for="closeout_truck_loaded">Truck loaded</label>
+                </div>
+            </div>
+            <div class="col-12 col-md-4">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" name="closeout_site_clean" value="1" id="closeout_site_clean" <?= ((int) ($job['closeout_site_clean'] ?? 0)) === 1 ? 'checked' : '' ?>>
+                    <label class="form-check-label" for="closeout_site_clean">Site clean</label>
+                </div>
+            </div>
+            <div class="col-12 col-md-4">
+                <label class="form-label" for="closeout_signature_name">Signature / name</label>
+                <input class="form-control" type="text" name="closeout_signature_name" id="closeout_signature_name" value="<?= e((string) ($job['closeout_signature_name'] ?? '')) ?>" maxlength="190" placeholder="Optional">
+            </div>
+            <div class="col-12">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" name="mark_closeout_complete" value="1" id="mark_closeout_complete" <?= trim((string) ($job['closeout_completed_at'] ?? '')) !== '' ? 'checked' : '' ?>>
+                    <label class="form-check-label" for="mark_closeout_complete">Mark close-out complete (sets timestamp)</label>
+                </div>
+            </div>
+            <div class="col-12">
+                <button type="submit" class="btn btn-primary">Save close-out</button>
+                <?php if (trim((string) ($job['closeout_completed_at'] ?? '')) !== ''): ?>
+                    <span class="small text-muted ms-2">Completed: <?= e($formatDocDate((string) ($job['closeout_completed_at'] ?? ''))) ?></span>
+                <?php endif; ?>
+            </div>
+        </form>
+    </div>
+</section>
+<?php endif; ?>
+
 <section class="card index-card mb-3">
     <div class="card-header index-card-header">
         <strong><i class="fas fa-chart-line me-2"></i>Financial Snapshot</strong>

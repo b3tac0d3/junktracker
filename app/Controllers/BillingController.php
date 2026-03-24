@@ -4,11 +4,15 @@ declare(strict_types=1);
 
 namespace App\Controllers;
 
+use App\Models\AuditLog;
 use App\Models\Business;
+use App\Models\Client;
+use App\Models\ClientPortalAccess;
 use App\Models\FormSelectValue;
 use App\Models\InvoiceItemType;
 use App\Models\Invoice;
 use Core\Controller;
+use Core\Mailer;
 
 final class BillingController extends Controller
 {
@@ -182,6 +186,7 @@ final class BillingController extends Controller
         $actorUserId = (int) (auth_user_id() ?? 0);
         $invoiceId = Invoice::create($businessId, $this->payloadForSave($form), $actorUserId);
         Invoice::replaceLineItems($businessId, $invoiceId, $form['items'], $actorUserId);
+        AuditLog::write('invoice_created', 'invoices', $invoiceId, $businessId, $actorUserId, ['type' => $form['type']]);
         if ($form['type'] === 'invoice') {
             $syncJobId = (int) ($form['job_id'] ?? 0);
             if ($this->hasInlinePayment($form)) {
@@ -299,6 +304,7 @@ final class BillingController extends Controller
                 Invoice::syncInvoicePaymentStatusesForJob($businessId, $currentJobId, $actorUserId);
             }
         }
+        AuditLog::write('invoice_updated', 'invoices', $invoiceId, $businessId, $actorUserId, ['type' => $form['type']]);
         flash('success', ucfirst($form['type']) . ' updated.');
         redirect('/billing/' . (string) $invoiceId . $backSuffix);
     }
@@ -338,6 +344,174 @@ final class BillingController extends Controller
         ]);
     }
 
+    public function document(array $params): void
+    {
+        require_business_role(['general_user', 'admin']);
+
+        $invoiceId = (int) ($params['id'] ?? 0);
+        if ($invoiceId <= 0) {
+            http_response_code(404);
+            $this->render('errors/404', ['pageTitle' => 'Not Found']);
+            return;
+        }
+
+        $businessId = current_business_id();
+        $invoice = Invoice::findForBusiness($businessId, $invoiceId);
+        if ($invoice === null) {
+            http_response_code(404);
+            $this->render('errors/404', ['pageTitle' => 'Not Found']);
+            return;
+        }
+
+        $items = Invoice::lineItems($businessId, $invoiceId);
+        $payments = Invoice::payments($businessId, $invoiceId);
+        $business = Business::findById($businessId) ?? [];
+        $docType = strtolower(trim((string) ($invoice['type'] ?? 'invoice'))) === 'estimate' ? 'estimate' : 'invoice';
+
+        $safeName = preg_replace('/[^a-zA-Z0-9_-]+/', '-', (string) ($business['name'] ?? 'junktracker')) ?? 'junktracker';
+        $filename = $safeName . '-' . $docType . '-' . (trim((string) ($invoice['invoice_number'] ?? '')) !== '' ? trim((string) $invoice['invoice_number']) : (string) $invoiceId) . '.html';
+
+        if (!empty($_GET['download'])) {
+            header('Content-Type: text/html; charset=UTF-8');
+            header('Content-Disposition: attachment; filename="' . $filename . '"');
+        }
+
+        $this->renderDocument('billing/document', [
+            'pageTitle' => $docType === 'estimate' ? 'Estimate' : 'Invoice',
+            'invoice' => $invoice,
+            'items' => $items,
+            'payments' => $payments,
+            'business' => $business,
+            'hidePaymentsDetail' => false,
+        ]);
+    }
+
+    public function sendEmail(array $params): void
+    {
+        require_business_role(['general_user', 'admin']);
+
+        $invoiceId = (int) ($params['id'] ?? 0);
+        if ($invoiceId <= 0 || !verify_csrf($_POST['csrf_token'] ?? null)) {
+            flash('error', 'Session expired. Please try again.');
+            redirect('/billing');
+        }
+
+        $kind = strtolower(trim((string) ($_POST['kind'] ?? 'invoice')));
+        if (!in_array($kind, ['estimate', 'invoice', 'payment_receipt'], true)) {
+            $kind = 'invoice';
+        }
+
+        $businessId = current_business_id();
+        $invoice = Invoice::findForBusiness($businessId, $invoiceId);
+        if ($invoice === null) {
+            flash('error', 'Record not found.');
+            redirect('/billing');
+        }
+
+        $clientId = (int) ($invoice['client_id'] ?? 0);
+        $client = $clientId > 0 ? Client::findForBusiness($businessId, $clientId) : null;
+        $to = strtolower(trim((string) ($client['email'] ?? '')));
+        if ($to === '' || filter_var($to, FILTER_VALIDATE_EMAIL) === false) {
+            flash('error', 'Client does not have a valid email on file.');
+            redirect('/billing/' . (string) $invoiceId);
+        }
+
+        $business = Business::findById($businessId);
+        $bizName = trim((string) ($business['name'] ?? 'JunkTracker')) ?: 'JunkTracker';
+        $docUrl = absolute_url('/billing/' . (string) $invoiceId . '/document');
+        $portalHtml = '';
+        $portalPlain = '';
+
+        if ($kind !== 'payment_receipt' && ClientPortalAccess::isAvailable()) {
+            $raw = ClientPortalAccess::issueForInvoice($businessId, $invoiceId, 90);
+            if ($raw !== '') {
+                $portalUrl = absolute_url('/portal/' . rawurlencode($raw));
+                $portalHtml = '<p>Client view (no login): <a href="' . e($portalUrl) . '">' . e($portalUrl) . '</a></p>';
+                $portalPlain = "\n\nClient view: " . $portalUrl;
+            }
+        }
+
+        if ($kind === 'payment_receipt') {
+            $paymentId = (int) ($_POST['payment_id'] ?? 0);
+            $payment = $paymentId > 0 ? Invoice::findPaymentForBusiness($businessId, $paymentId) : null;
+            if ($payment === null || (int) ($payment['invoice_id'] ?? 0) !== $invoiceId) {
+                flash('error', 'Choose a valid payment to send a receipt.');
+                redirect('/billing/' . (string) $invoiceId);
+            }
+            $subject = (string) config('mail.payment_receipt_subject', 'Payment receipt');
+            $amt = number_format((float) ($payment['amount'] ?? 0), 2);
+            $html = '<p>Hello,</p><p>Thank you. We recorded a payment of <strong>$' . e($amt) . '</strong> for invoice '
+                . e((string) ($invoice['invoice_number'] ?? (string) $invoiceId)) . ' from <strong>' . e($bizName) . '</strong>.</p>'
+                . '<p>— ' . e($bizName) . '</p>';
+            $plain = "Payment receipt: \$$amt for invoice " . (string) ($invoice['invoice_number'] ?? $invoiceId) . " from $bizName.";
+            Mailer::sendHtml($to, $subject, $html, $plain);
+            AuditLog::write('payment_receipt_email', 'payments', $paymentId, $businessId, (int) (auth_user_id() ?? 0), ['invoice_id' => $invoiceId, 'to' => $to]);
+            flash('success', 'Payment receipt sent.');
+            redirect('/billing/' . (string) $invoiceId);
+        }
+
+        $docType = strtolower(trim((string) ($invoice['type'] ?? 'invoice'))) === 'estimate' ? 'estimate' : 'invoice';
+        if ($kind === 'estimate' && $docType !== 'estimate') {
+            flash('error', 'This record is not an estimate.');
+            redirect('/billing/' . (string) $invoiceId);
+        }
+        if ($kind === 'invoice' && $docType !== 'invoice') {
+            flash('error', 'This record is not an invoice.');
+            redirect('/billing/' . (string) $invoiceId);
+        }
+
+        $subject = $docType === 'estimate'
+            ? (string) config('mail.estimate_sent_subject', 'Your estimate')
+            : (string) config('mail.invoice_sent_subject', 'Your invoice');
+        $label = $docType === 'estimate' ? 'estimate' : 'invoice';
+        $html = '<p>Hello,</p><p>Please find your <strong>' . e($label) . '</strong> from <strong>' . e($bizName)
+            . '</strong> (#' . e((string) $invoiceId) . ').</p>'
+            . '<p><a href="' . e($docUrl) . '">Open document</a></p>'
+            . $portalHtml
+            . '<p>— ' . e($bizName) . '</p>';
+        $plain = "Your $label from $bizName. Open: $docUrl" . $portalPlain;
+
+        Mailer::sendHtml($to, $subject, $html, $plain);
+        AuditLog::write($docType === 'estimate' ? 'estimate_email_sent' : 'invoice_email_sent', 'invoices', $invoiceId, $businessId, (int) (auth_user_id() ?? 0), ['to' => $to]);
+
+        flash('success', ucfirst($label) . ' email sent.');
+        redirect('/billing/' . (string) $invoiceId);
+    }
+
+    public function issuePortalLink(array $params): void
+    {
+        require_business_role(['general_user', 'admin']);
+
+        $invoiceId = (int) ($params['id'] ?? 0);
+        if ($invoiceId <= 0 || !verify_csrf($_POST['csrf_token'] ?? null)) {
+            flash('error', 'Session expired. Please try again.');
+            redirect('/billing');
+        }
+
+        $businessId = current_business_id();
+        if (!ClientPortalAccess::isAvailable()) {
+            flash('error', 'Client portal is not available (run latest migrations).');
+            redirect('/billing/' . (string) $invoiceId);
+        }
+
+        $invoice = Invoice::findForBusiness($businessId, $invoiceId);
+        if ($invoice === null) {
+            flash('error', 'Record not found.');
+            redirect('/billing');
+        }
+
+        $raw = ClientPortalAccess::issueForInvoice($businessId, $invoiceId, 90);
+        if ($raw === '') {
+            flash('error', 'Could not create portal link.');
+            redirect('/billing/' . (string) $invoiceId);
+        }
+
+        $link = portal_url($raw);
+        flash('success', 'Client portal link (copy): ' . $link);
+        AuditLog::write('client_portal_link_issued', 'invoices', $invoiceId, $businessId, (int) (auth_user_id() ?? 0), []);
+        redirect('/billing/' . (string) $invoiceId);
+    }
+
     public function delete(array $params): void
     {
         require_business_role(['general_user', 'admin']);
@@ -374,6 +548,7 @@ final class BillingController extends Controller
         }
 
         if ($deleted) {
+            AuditLog::write('invoice_deleted', 'invoices', $invoiceId, $businessId, $actorUserId, []);
             flash('success', 'Record deleted.');
         } else {
             flash('error', 'Unable to delete record.');
@@ -434,6 +609,7 @@ final class BillingController extends Controller
         }
 
         if ($updated) {
+            AuditLog::write('invoice_status_changed', 'invoices', $invoiceId, $businessId, $actorUserId, ['status' => $status]);
             flash('success', 'Status updated.');
         } else {
             flash('error', 'Unable to update status.');
@@ -532,6 +708,7 @@ final class BillingController extends Controller
         if ($syncJobId > 0) {
             Invoice::syncInvoicePaymentStatusesForJob($businessId, $syncJobId, $actorUserId);
         }
+        AuditLog::write('payment_created', 'payments', $paymentId, $businessId, $actorUserId, ['invoice_id' => (int) ($form['invoice_id'] ?? 0)]);
         flash('success', 'Payment added.');
 
         $redirect = '/billing/payments/' . (string) $paymentId;
@@ -623,6 +800,7 @@ final class BillingController extends Controller
         }
 
         if ($deleted) {
+            AuditLog::write('payment_deleted', 'payments', $paymentId, $businessId, $actorUserId, ['invoice_id' => $invoiceId]);
             flash('success', 'Payment deleted.');
         } else {
             flash('error', 'Unable to delete payment.');
@@ -743,6 +921,7 @@ final class BillingController extends Controller
         if ($newJobId > 0 && $newJobId !== $oldJobId) {
             Invoice::syncInvoicePaymentStatusesForJob($businessId, $newJobId, $actorUserId);
         }
+        AuditLog::write('payment_updated', 'payments', $paymentId, $businessId, $actorUserId, ['invoice_id' => (int) ($form['invoice_id'] ?? 0)]);
         flash('success', 'Payment updated.');
 
         $redirect = '/billing/payments/' . (string) $paymentId;

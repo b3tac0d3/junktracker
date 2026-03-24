@@ -123,6 +123,7 @@ final class AuthController extends Controller
 
         $email = trim((string) ($_POST['email'] ?? ''));
         $password = (string) ($_POST['password'] ?? '');
+        $rememberMe = isset($_POST['remember_me']) && (string) $_POST['remember_me'] === '1';
 
         if ($email === '' || $password === '') {
             flash('error', 'Email and password are required.');
@@ -179,7 +180,18 @@ final class AuthController extends Controller
             unset($_SESSION['active_business_id']);
         }
 
+        session_regenerate_id(true);
+
         $_SESSION['user'] = $sessionUser;
+
+        if ($rememberMe) {
+            $_SESSION['remember_me'] = true;
+            $_SESSION['last_activity'] = time();
+            refresh_session_cookie_lifetime(remember_me_idle_seconds());
+        } else {
+            unset($_SESSION['remember_me'], $_SESSION['last_activity']);
+            refresh_session_cookie_lifetime(0);
+        }
 
         if (!empty($sessionUser['must_change_password']) || !empty($sessionUser['invitation_pending'])) {
             flash('error', 'Temporary password detected. Set a new password before continuing.');

@@ -10,4 +10,8 @@ return [
     'from_name' => 'JunkTracker',
     'invite_subject' => 'Your JunkTracker invite',
     'reset_subject' => 'Your JunkTracker password reset link',
+    'estimate_sent_subject' => 'Your estimate from JunkTracker',
+    'invoice_sent_subject' => 'Your invoice from JunkTracker',
+    'payment_receipt_subject' => 'Payment receipt',
+    'daily_digest_subject' => 'JunkTracker daily digest',
 ];

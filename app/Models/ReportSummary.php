@@ -34,7 +34,85 @@ final class ReportSummary
                 'sales' => self::salesList($businessId, $fromDate, $toDate),
                 'purchases' => self::purchasesList($businessId, $fromDate, $toDate),
             ],
+            'margin_by_job' => self::marginByJob($businessId, $fromDate, $toDate),
         ];
+    }
+
+    /**
+     * @return list<array{job_id:int, title:string, sales_net:float, purchase_cogs:float, margin:float}>
+     */
+    public static function marginByJob(int $businessId, string $fromDate, string $toDate): array
+    {
+        if (!SchemaInspector::hasTable('sales') || !SchemaInspector::hasTable('jobs')) {
+            return [];
+        }
+        if (!SchemaInspector::hasColumn('sales', 'job_id')) {
+            return [];
+        }
+
+        $dateSql = self::dateSql('sales', 's', ['sale_date', 'created_at']);
+        if ($dateSql === null) {
+            return [];
+        }
+
+        $netSql = SchemaInspector::hasColumn('sales', 'net_amount')
+            ? 'COALESCE(s.net_amount, 0)'
+            : (SchemaInspector::hasColumn('sales', 'gross_amount') ? 'COALESCE(s.gross_amount, 0)' : '0');
+
+        $purchaseJoin = '';
+        $cogsExpr = '0';
+        if (SchemaInspector::hasTable('purchases') && SchemaInspector::hasColumn('sales', 'purchase_id') && SchemaInspector::hasColumn('purchases', 'purchase_price')) {
+            $purchaseJoin = 'LEFT JOIN purchases p ON p.id = s.purchase_id AND p.business_id = s.business_id AND p.deleted_at IS NULL';
+            $cogsExpr = 'COALESCE(p.purchase_price, 0)';
+        }
+
+        $titleSql = SchemaInspector::hasColumn('jobs', 'title')
+            ? "COALESCE(NULLIF(TRIM(j.title), ''), CONCAT('Job #', j.id))"
+            : "CONCAT('Job #', j.id)";
+
+        $sql = "SELECT
+                    j.id AS job_id,
+                    {$titleSql} AS title,
+                    COALESCE(SUM({$netSql}), 0) AS sales_net,
+                    COALESCE(SUM({$cogsExpr}), 0) AS purchase_cogs
+                FROM sales s
+                INNER JOIN jobs j ON j.id = s.job_id AND j.business_id = s.business_id
+                {$purchaseJoin}
+                WHERE " . implode(' AND ', self::baseWhere('sales', 's', $businessId)) . "
+                  AND j.deleted_at IS NULL
+                  AND DATE({$dateSql}) BETWEEN :from_date AND :to_date
+                GROUP BY j.id, j.title
+                HAVING ABS(COALESCE(SUM({$netSql}), 0)) > 0.0001 OR ABS(COALESCE(SUM({$cogsExpr}), 0)) > 0.0001
+                ORDER BY (COALESCE(SUM({$netSql}), 0) - COALESCE(SUM({$cogsExpr}), 0)) DESC
+                LIMIT 50";
+
+        $stmt = Database::connection()->prepare($sql);
+        $params = self::baseParams('sales', $businessId);
+        $params['from_date'] = $fromDate;
+        $params['to_date'] = $toDate;
+        $stmt->execute($params);
+        $rows = $stmt->fetchAll();
+        if (!is_array($rows)) {
+            return [];
+        }
+
+        $out = [];
+        foreach ($rows as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $sn = (float) ($row['sales_net'] ?? 0);
+            $cogs = (float) ($row['purchase_cogs'] ?? 0);
+            $out[] = [
+                'job_id' => (int) ($row['job_id'] ?? 0),
+                'title' => trim((string) ($row['title'] ?? '')) ?: '—',
+                'sales_net' => round($sn, 2),
+                'purchase_cogs' => round($cogs, 2),
+                'margin' => round($sn - $cogs, 2),
+            ];
+        }
+
+        return $out;
     }
 
     private static function salesSummary(int $businessId, string $fromDate, string $toDate): array

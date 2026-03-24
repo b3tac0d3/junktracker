@@ -47,6 +47,13 @@ if ($selectedEmployeeName === '' && $selectedEmployeeId > 0 && isset($employeeMa
 }
 
 $selectedJobId = (int) ($form['job_id'] ?? 0);
+$jobSelRaw = trim((string) ($form['job_selection'] ?? ''));
+if ($jobSelRaw !== 'shop_time' && $jobSelRaw !== 'general_labor' && $jobSelRaw !== '') {
+    $parsedFromSelection = (int) $jobSelRaw;
+    if ($parsedFromSelection > 0 && (string) $parsedFromSelection === $jobSelRaw) {
+        $selectedJobId = $parsedFromSelection;
+    }
+}
 $selectedJobTitle = trim((string) ($form['job_title'] ?? ''));
 $jobSelectOptions = [
     ['value' => '', 'label' => 'Select active job or non-job type'],
@@ -72,7 +79,22 @@ foreach ($punchBoardJobs as $jobOption) {
         'label' => $label,
     ];
 }
-$selectedJobSelection = $selectedJobId > 0 ? (string) $selectedJobId : trim((string) ($form['job_selection'] ?? ''));
+
+$selectedJobSelection = $selectedJobId > 0 ? (string) $selectedJobId : $jobSelRaw;
+$hasJobOption = false;
+foreach ($jobSelectOptions as $jobOpt) {
+    if ((string) ($jobOpt['value'] ?? '') === $selectedJobSelection) {
+        $hasJobOption = true;
+        break;
+    }
+}
+if (!$hasJobOption && $selectedJobId > 0) {
+    $fallbackLabel = $selectedJobTitle !== '' ? $selectedJobTitle : ('Job #' . (string) $selectedJobId);
+    $jobSelectOptions[] = [
+        'value' => (string) $selectedJobId,
+        'label' => $fallbackLabel,
+    ];
+}
 ?>
 
 <div class="page-header d-flex flex-wrap align-items-end justify-content-between gap-2">

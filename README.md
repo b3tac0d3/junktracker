@@ -29,6 +29,7 @@ Run in this order:
 5. `database/migrations/2026-02-27_v3_phase_b_clients_profile_fields.sql`
 6. `database/migrations/2026-02-27_v3_phase_b_client_contact_flags.sql`
 7. `database/migrations/2026-02-27_v3_phase_b_client_phone_flags.sql`
+8. `database/migrations/2026-03-21_v3_roadmap_features.sql` (client portal tokens, job close-out columns, bank deposits)
 
 Live release rule:
 
@@ -48,7 +49,8 @@ Live release rule:
 - Runtime schema mutation is removed; schema is migration-driven.
 - UI is intentionally minimal for clean Phase A iteration.
 
-## Future plan ideas
+## Roadmap
 
-- Subcontracted jobs tracking: support jobs fulfilled by third-party providers (details and workflow TBD).
-- Inventory lot purchasing: track purchases like estates, storage units, and mixed lots as resale inventory expenses (details and workflow TBD).
+See **[docs/roadmap.md](docs/roadmap.md)** for the full prioritized themes (client-facing PDF/portal/email, field workflow, money & reconciliation, admin/quality, technical deploy hygiene). Older one-line ideas (subcontracted jobs, inventory lots) are folded into that doc under **Money & reconciliation**.
+
+Deploy steps: **[docs/deploy-checklist.md](docs/deploy-checklist.md)**.

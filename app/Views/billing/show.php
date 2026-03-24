@@ -195,6 +195,39 @@ $currentStatus = strtolower(trim((string) ($invoice['status'] ?? '')));
             </button>
             <ul class="dropdown-menu dropdown-menu-end">
                 <li><button type="button" class="dropdown-item" onclick="window.print()"><i class="fas fa-print me-2"></i>Print</button></li>
+                <li><a class="dropdown-item" target="_blank" rel="noopener" href="<?= e(url('/billing/' . (string) $recordId . '/document')) ?>"><i class="fas fa-file-alt me-2"></i>Print-ready view</a></li>
+                <li><a class="dropdown-item" href="<?= e(url('/billing/' . (string) $recordId . '/document?download=1')) ?>"><i class="fas fa-download me-2"></i>Download HTML pack</a></li>
+                <li>
+                    <form method="post" action="<?= e(url('/billing/' . (string) $recordId . '/send-email')) ?>" class="m-0" onsubmit="return confirm('Send email to the client on file?');">
+                        <?= csrf_field() ?>
+                        <input type="hidden" name="kind" value="<?= e($docType === 'estimate' ? 'estimate' : 'invoice') ?>">
+                        <button type="submit" class="dropdown-item"><i class="fas fa-envelope me-2"></i>Email to client</button>
+                    </form>
+                </li>
+                <li>
+                    <form method="post" action="<?= e(url('/billing/' . (string) $recordId . '/portal-link')) ?>" class="m-0">
+                        <?= csrf_field() ?>
+                        <button type="submit" class="dropdown-item"><i class="fas fa-link me-2"></i>Create client portal link</button>
+                    </form>
+                </li>
+                <?php if ($docType === 'invoice' && $payments !== []): ?>
+                    <?php foreach ($payments as $_p): ?>
+                        <?php
+                        $_pid = (int) (is_array($_p) ? ($_p['id'] ?? 0) : 0);
+                        if ($_pid <= 0) {
+                            continue;
+                        }
+                        ?>
+                        <li>
+                            <form method="post" action="<?= e(url('/billing/' . (string) $recordId . '/send-email')) ?>" class="m-0">
+                                <?= csrf_field() ?>
+                                <input type="hidden" name="kind" value="payment_receipt">
+                                <input type="hidden" name="payment_id" value="<?= e((string) $_pid) ?>">
+                                <button type="submit" class="dropdown-item"><i class="fas fa-receipt me-2"></i>Email payment receipt #<?= e((string) $_pid) ?></button>
+                            </form>
+                        </li>
+                    <?php endforeach; ?>
+                <?php endif; ?>
                 <?php if ($docType === 'estimate'): ?>
                     <?php
                     $convertToInvoiceUrl = url('/billing/create') . '?type=invoice&from_estimate_id=' . (string) $recordId;

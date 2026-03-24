@@ -216,4 +216,41 @@ final class BusinessMembership
         $row = $stmt->fetch();
         return is_array($row) ? $row : null;
     }
+
+    /**
+     * @return list<string>
+     */
+    public static function digestEmailsForBusiness(int $businessId): array
+    {
+        $stmt = Database::connection()->prepare(
+            'SELECT DISTINCT LOWER(TRIM(u.email)) AS email
+             FROM business_user_memberships m
+             INNER JOIN users u ON u.id = m.user_id
+             WHERE m.business_id = :business_id
+               AND m.deleted_at IS NULL
+               AND COALESCE(m.is_active, 1) = 1
+               AND m.role IN (\'admin\', \'general_user\')
+               AND u.deleted_at IS NULL
+               AND COALESCE(u.is_active, 1) = 1
+               AND TRIM(u.email) <> \'\''
+        );
+        $stmt->execute(['business_id' => $businessId]);
+        $rows = $stmt->fetchAll();
+        if (!is_array($rows)) {
+            return [];
+        }
+
+        $out = [];
+        foreach ($rows as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $e = strtolower(trim((string) ($row['email'] ?? '')));
+            if ($e !== '' && filter_var($e, FILTER_VALIDATE_EMAIL) !== false) {
+                $out[] = $e;
+            }
+        }
+
+        return array_values(array_unique($out));
+    }
 }

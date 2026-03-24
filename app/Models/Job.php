@@ -437,6 +437,15 @@ final class Job
             $jobTypeSql = 'NULL';
         }
 
+        $closeoutExtra = '';
+        if (SchemaInspector::hasColumn('jobs', 'closeout_truck_loaded')) {
+            $closeoutExtra = ',
+                    j.closeout_truck_loaded AS closeout_truck_loaded,
+                    j.closeout_site_clean AS closeout_site_clean,
+                    j.closeout_signature_name AS closeout_signature_name,
+                    j.closeout_completed_at AS closeout_completed_at';
+        }
+
         $sql = "SELECT
                     j.id,
                     {$titleSql} AS title,
@@ -455,6 +464,7 @@ final class Job
                     {$notesSql} AS notes,
                     {$clientIdSql} AS client_id,
                     {$clientNameSql} AS client_name
+                    {$closeoutExtra}
                 FROM jobs j
                 {$joinSql}
                 WHERE " . implode(' AND ', $where) . '
@@ -808,6 +818,42 @@ final class Job
         }
 
         return $stmt->execute($params);
+    }
+
+    public static function saveCloseout(int $businessId, int $jobId, array $data, int $actorUserId): bool
+    {
+        if (!SchemaInspector::hasColumn('jobs', 'closeout_truck_loaded')) {
+            return false;
+        }
+
+        $truck = !empty($data['closeout_truck_loaded']) ? 1 : 0;
+        $clean = !empty($data['closeout_site_clean']) ? 1 : 0;
+        $sig = trim((string) ($data['closeout_signature_name'] ?? ''));
+        $sig = $sig !== '' ? substr($sig, 0, 190) : null;
+        $done = !empty($data['closeout_completed_at']) ? $data['closeout_completed_at'] : null;
+
+        $sql = 'UPDATE jobs SET
+                    closeout_truck_loaded = :t1,
+                    closeout_site_clean = :t2,
+                    closeout_signature_name = :sig,
+                    closeout_completed_at = :done,
+                    updated_by = :updated_by,
+                    updated_at = NOW()
+                WHERE id = :job_id
+                  AND business_id = :business_id
+                  AND deleted_at IS NULL';
+
+        $stmt = Database::connection()->prepare($sql);
+
+        return $stmt->execute([
+            't1' => $truck,
+            't2' => $clean,
+            'sig' => $sig,
+            'done' => $done,
+            'updated_by' => $actorUserId > 0 ? $actorUserId : null,
+            'job_id' => $jobId,
+            'business_id' => $businessId,
+        ]);
     }
 
     public static function deactivate(int $businessId, int $jobId, int $actorUserId): bool

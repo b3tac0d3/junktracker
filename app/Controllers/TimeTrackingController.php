@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Models\Employee;
+use App\Models\AuditLog;
 use App\Models\Job;
 use App\Models\TimeEntry;
 use Core\Controller;
@@ -183,6 +184,7 @@ final class TimeTrackingController extends Controller
 
         $errors = $this->validateForm($form, $businessId, $canManageEmployees, $selfEmployee);
         if ($errors !== []) {
+            $form = $this->enrichFormJobFieldsFromSelection($form, $businessId);
             $this->render('time_tracking/form', [
                 'pageTitle' => 'Add Time Entry',
                 'mode' => 'create',
@@ -311,6 +313,7 @@ final class TimeTrackingController extends Controller
 
         $errors = $this->validateForm($form, $businessId, $canManageEmployees, $selfEmployee, $entryId);
         if ($errors !== []) {
+            $form = $this->enrichFormJobFieldsFromSelection($form, $businessId);
             $this->render('time_tracking/form', [
                 'pageTitle' => 'Edit Time Entry',
                 'mode' => 'edit',
@@ -332,6 +335,7 @@ final class TimeTrackingController extends Controller
         if ($jobId > 0) {
             Job::assignEmployee($businessId, (int) $jobId, (int) ($payload['employee_id'] ?? 0), auth_user_id() ?? 0);
         }
+        AuditLog::write('time_entry_updated', 'time_entries', $entryId, $businessId, (int) (auth_user_id() ?? 0), ['job_id' => $jobId]);
         flash('success', 'Time entry updated.');
         redirect('/time-tracking/' . (string) $entryId);
     }
@@ -398,6 +402,7 @@ final class TimeTrackingController extends Controller
 
         $deleted = TimeEntry::softDelete($businessId, $entryId, auth_user_id() ?? 0, $scopeEmployeeId);
         if ($deleted) {
+            AuditLog::write('time_entry_deleted', 'time_entries', $entryId, $businessId, (int) (auth_user_id() ?? 0), []);
             flash('success', 'Time entry deleted.');
             redirect('/time-tracking');
         }
@@ -607,6 +612,27 @@ final class TimeTrackingController extends Controller
             'clock_out_lng' => trim((string) ($input['clock_out_lng'] ?? '')),
             'notes' => trim((string) ($input['notes'] ?? '')),
         ];
+    }
+
+    private function enrichFormJobFieldsFromSelection(array $form, int $businessId): array
+    {
+        $sel = trim((string) ($form['job_selection'] ?? ''));
+        if ($sel === '' || in_array($sel, ['shop_time', 'general_labor'], true)) {
+            return $form;
+        }
+        $jid = (int) $sel;
+        if ($jid <= 0 || (string) $jid !== $sel) {
+            return $form;
+        }
+        if (trim((string) ($form['job_id'] ?? '')) === '') {
+            $form['job_id'] = (string) $jid;
+        }
+        if (trim((string) ($form['job_title'] ?? '')) === '') {
+            $label = TimeEntry::jobLabelForBusiness($businessId, $jid);
+            $form['job_title'] = $label !== null ? (string) $label : '';
+        }
+
+        return $form;
     }
 
     private function validateForm(array $form, int $businessId, bool $canManageEmployees, ?array $selfEmployee, ?int $excludeEntryId = null): array
