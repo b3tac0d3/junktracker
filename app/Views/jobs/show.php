@@ -248,58 +248,63 @@ $formatDuration = static function (int $minutes): string {
         <strong><i class="fas fa-chart-line me-2"></i>Financial Snapshot</strong>
     </div>
     <div class="card-body">
-        <div class="record-row-fields record-row-fields-5 record-row-fields-mobile-2">
-            <div class="record-field">
-                <span class="record-label">Job Gross</span>
-                <span class="record-value">$<?= e(number_format((float) ($financial['job_gross'] ?? ($financial['invoice_gross'] ?? ($financial['raw_gross'] ?? 0))), 2)) ?></span>
+        <div class="jt-financial-snapshot">
+            <div class="jt-fin-snapshot-row">
+                <div class="record-field">
+                    <span class="record-label">Job Gross</span>
+                    <span class="record-value">$<?= e(number_format((float) ($financial['job_gross'] ?? ($financial['invoice_gross'] ?? ($financial['raw_gross'] ?? 0))), 2)) ?></span>
+                </div>
+                <div class="record-field">
+                    <span class="record-label">Sales Gross</span>
+                    <span class="record-value">$<?= e(number_format((float) ($financial['sales_gross'] ?? 0), 2)) ?></span>
+                </div>
+                <div class="record-field">
+                    <span class="record-label">Total Gross</span>
+                    <span class="record-value">$<?= e(number_format((float) ($financial['total_gross'] ?? ($financial['gross'] ?? 0)), 2)) ?></span>
+                </div>
+                <div class="record-field">
+                    <span class="record-label">Payments</span>
+                    <span class="record-value">$<?= e(number_format((float) ($financial['payments'] ?? 0), 2)) ?></span>
+                </div>
+                <div class="record-field">
+                    <span class="record-label">Tips</span>
+                    <span class="record-value">$<?= e(number_format((float) ($financial['tips'] ?? 0), 2)) ?></span>
+                </div>
             </div>
-            <div class="record-field">
-                <span class="record-label">Sales Gross</span>
-                <span class="record-value">$<?= e(number_format((float) ($financial['sales_gross'] ?? 0), 2)) ?></span>
+            <div class="jt-fin-snapshot-row">
+                <div class="record-field">
+                    <span class="record-label">Labor</span>
+                    <span class="record-value">$<?= e(number_format((float) ($financial['labor_cost'] ?? ($financial['labor'] ?? 0)), 2)) ?></span>
+                </div>
+                <div class="record-field">
+                    <span class="record-label">Expenses</span>
+                    <span class="record-value">$<?= e(number_format((float) ($financial['expenses'] ?? 0), 2)) ?></span>
+                </div>
+                <div class="record-field">
+                    <span class="record-label">Adjustments</span>
+                    <span class="record-value">$<?= e(number_format((float) ($financial['adjustments'] ?? 0), 2)) ?></span>
+                </div>
+                <div class="record-field">
+                    <span class="record-label">Sales Net</span>
+                    <span class="record-value">$<?= e(number_format((float) ($financial['sales_net'] ?? 0), 2)) ?></span>
+                </div>
+                <div class="jt-fin-snapshot-spacer" aria-hidden="true"></div>
             </div>
-            <div class="record-field">
-                <span class="record-label">Total Gross (Job + Sales)</span>
-                <span class="record-value">$<?= e(number_format((float) ($financial['total_gross'] ?? ($financial['gross'] ?? 0)), 2)) ?></span>
-            </div>
-            <div class="record-field">
-                <span class="record-label">Payments</span>
-                <span class="record-value">$<?= e(number_format((float) ($financial['payments'] ?? 0), 2)) ?></span>
-            </div>
-            <div class="record-field">
-                <span class="record-label">Tips (over invoice)</span>
-                <span class="record-value">$<?= e(number_format((float) ($financial['tips'] ?? 0), 2)) ?></span>
-            </div>
-        </div>
-        <div class="record-row-fields record-row-fields-4 record-row-fields-mobile-2 mt-3">
-            <div class="record-field">
-                <span class="record-label">Labor</span>
-                <span class="record-value">$<?= e(number_format((float) ($financial['labor_cost'] ?? ($financial['labor'] ?? 0)), 2)) ?></span>
-            </div>
-            <div class="record-field">
-                <span class="record-label">Expenses</span>
-                <span class="record-value">$<?= e(number_format((float) ($financial['expenses'] ?? 0), 2)) ?></span>
-            </div>
-            <div class="record-field">
-                <span class="record-label">Adjustments</span>
-                <span class="record-value">$<?= e(number_format((float) ($financial['adjustments'] ?? 0), 2)) ?></span>
-            </div>
-            <div class="record-field">
-                <span class="record-label">Sales Net</span>
-                <span class="record-value">$<?= e(number_format((float) ($financial['sales_net'] ?? 0), 2)) ?></span>
-            </div>
-        </div>
-        <div class="record-row-fields record-row-fields-3 mt-3">
-            <div class="record-field">
-                <span class="record-label">Job Net (Without Sales)</span>
-                <span class="record-value">$<?= e(number_format((float) ($financial['job_net'] ?? 0), 2)) ?></span>
-            </div>
-            <div class="record-field">
-                <span class="record-label">Total Net</span>
-                <span class="record-value">$<?= e(number_format((float) ($financial['total_net'] ?? ($financial['net'] ?? 0)), 2)) ?></span>
-            </div>
-            <div class="record-field">
-                <span class="record-label">Balance due</span>
-                <span class="record-value">$<?= e(number_format((float) ($financial['balance'] ?? 0), 2)) ?></span>
+            <div class="jt-fin-snapshot-row">
+                <div class="record-field">
+                    <span class="record-label">Job Net</span>
+                    <span class="record-value">$<?= e(number_format((float) ($financial['job_net'] ?? 0), 2)) ?></span>
+                </div>
+                <div class="record-field">
+                    <span class="record-label">Total Net</span>
+                    <span class="record-value">$<?= e(number_format((float) ($financial['total_net'] ?? ($financial['net'] ?? 0)), 2)) ?></span>
+                </div>
+                <div class="record-field">
+                    <span class="record-label">Balance Due</span>
+                    <span class="record-value">$<?= e(number_format((float) ($financial['balance'] ?? 0), 2)) ?></span>
+                </div>
+                <div class="jt-fin-snapshot-spacer" aria-hidden="true"></div>
+                <div class="jt-fin-snapshot-spacer" aria-hidden="true"></div>
             </div>
         </div>
         <hr class="my-4">

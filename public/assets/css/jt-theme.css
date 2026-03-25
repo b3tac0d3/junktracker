@@ -779,6 +779,52 @@ a.admin-nav-tile:focus {
   grid-template-columns: repeat(6, minmax(0, 1fr));
 }
 
+/* Job page — Financial Snapshot: aligned 5-column rows */
+.jt-financial-snapshot {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.jt-fin-snapshot-row {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.65rem 0.75rem;
+  padding: 0.75rem 0;
+  border-top: 1px solid var(--jt-border);
+  align-items: start;
+}
+
+.jt-fin-snapshot-row:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.jt-financial-snapshot .record-field {
+  min-width: 0;
+}
+
+.jt-fin-snapshot-spacer {
+  min-height: 0;
+  pointer-events: none;
+}
+
+@media (max-width: 991.98px) {
+  .jt-fin-snapshot-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .jt-fin-snapshot-spacer {
+    display: none;
+  }
+}
+
+@media (max-width: 575.98px) {
+  .jt-fin-snapshot-row {
+    grid-template-columns: 1fr;
+  }
+}
+
 .client-autosuggest-wrap {
   position: relative;
   z-index: 20;
