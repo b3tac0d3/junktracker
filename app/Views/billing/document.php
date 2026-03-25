@@ -85,7 +85,8 @@ foreach ($payments as $payment) {
 }
 $totalPayments = round($totalPayments, 2);
 $invoiceTotal = (float) ($invoice['total'] ?? 0);
-$balance = round($invoiceTotal - $totalPayments, 2);
+$tipAmount = round(max(0.0, $totalPayments - $invoiceTotal), 2);
+$balanceDue = round(max(0.0, $invoiceTotal - $totalPayments), 2);
 
 $formatDate = static function (?string $value): string {
     $raw = trim((string) $value);
@@ -227,9 +228,15 @@ $formatDate = static function (?string $value): string {
                 <dt>Payments</dt>
                 <dd>$<?= e(number_format($totalPayments, 2)) ?></dd>
             </dl>
+            <?php if ($tipAmount > 0.0): ?>
+                <dl class="jt-doc-totals-row">
+                    <dt>Tip (over invoice)</dt>
+                    <dd>$<?= e(number_format($tipAmount, 2)) ?></dd>
+                </dl>
+            <?php endif; ?>
             <dl class="jt-doc-totals-row jt-doc-totals-row--grand">
                 <dt>Balance due</dt>
-                <dd>$<?= e(number_format($balance, 2)) ?></dd>
+                <dd>$<?= e(number_format($balanceDue, 2)) ?></dd>
             </dl>
         <?php endif; ?>
     </div>

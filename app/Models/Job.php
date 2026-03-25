@@ -581,6 +581,9 @@ final class Job
         $jobOnlyNet = ($jobOnlyGross - $laborCost + $adjustments) - $expenses;
         $totalNet = $jobOnlyNet + $salesNet;
 
+        $tips = max(0.0, $payments - $invoiceGross);
+        $balanceDue = max(0.0, $invoiceGross - $payments);
+
         return [
             'raw_gross' => $invoiceGross,
             'invoice_gross' => $invoiceGross,
@@ -593,12 +596,13 @@ final class Job
             'total_net' => $totalNet,
             'gross' => $grossWithSales,
             'payments' => $payments,
+            'tips' => $tips,
             'expenses' => $expenses,
             'labor' => $laborCost,
             'labor_cost' => $laborCost,
             'adjustments' => $adjustments,
             'net' => $totalNet,
-            'balance' => $invoiceGross - $payments,
+            'balance' => $balanceDue,
         ];
     }
 

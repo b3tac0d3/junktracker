@@ -248,7 +248,7 @@ $formatDuration = static function (int $minutes): string {
         <strong><i class="fas fa-chart-line me-2"></i>Financial Snapshot</strong>
     </div>
     <div class="card-body">
-        <div class="record-row-fields record-row-fields-4 record-row-fields-mobile-2">
+        <div class="record-row-fields record-row-fields-5 record-row-fields-mobile-2">
             <div class="record-field">
                 <span class="record-label">Job Gross</span>
                 <span class="record-value">$<?= e(number_format((float) ($financial['job_gross'] ?? ($financial['invoice_gross'] ?? ($financial['raw_gross'] ?? 0))), 2)) ?></span>
@@ -264,6 +264,10 @@ $formatDuration = static function (int $minutes): string {
             <div class="record-field">
                 <span class="record-label">Payments</span>
                 <span class="record-value">$<?= e(number_format((float) ($financial['payments'] ?? 0), 2)) ?></span>
+            </div>
+            <div class="record-field">
+                <span class="record-label">Tips (over invoice)</span>
+                <span class="record-value">$<?= e(number_format((float) ($financial['tips'] ?? 0), 2)) ?></span>
             </div>
         </div>
         <div class="record-row-fields record-row-fields-4 record-row-fields-mobile-2 mt-3">
@@ -294,7 +298,7 @@ $formatDuration = static function (int $minutes): string {
                 <span class="record-value">$<?= e(number_format((float) ($financial['total_net'] ?? ($financial['net'] ?? 0)), 2)) ?></span>
             </div>
             <div class="record-field">
-                <span class="record-label">Balance</span>
+                <span class="record-label">Balance due</span>
                 <span class="record-value">$<?= e(number_format((float) ($financial['balance'] ?? 0), 2)) ?></span>
             </div>
         </div>

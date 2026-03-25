@@ -93,7 +93,8 @@ foreach ($payments as $payment) {
 }
 $totalPayments = round($totalPayments, 2);
 $invoiceTotal = (float) ($invoice['total'] ?? 0);
-$balance = round($invoiceTotal - $totalPayments, 2);
+$tipAmount = round(max(0.0, $totalPayments - $invoiceTotal), 2);
+$balanceDue = round(max(0.0, $invoiceTotal - $totalPayments), 2);
 
 $formatDate = static function (?string $value): string {
     $raw = trim((string) $value);
@@ -358,7 +359,7 @@ $currentStatus = strtolower(trim((string) ($invoice['status'] ?? '')));
             </table>
         </div>
 
-        <div class="record-row-fields record-row-fields-mobile-2 <?= $docType === 'invoice' ? 'record-row-fields-5' : 'record-row-fields-3' ?> mb-3">
+        <div class="record-row-fields record-row-fields-mobile-2 <?= $docType === 'invoice' ? ($tipAmount > 0.0 ? 'record-row-fields-6' : 'record-row-fields-5') : 'record-row-fields-3' ?> mb-3">
             <div class="record-field text-md-end">
                 <span class="record-label">Sub-total</span>
                 <span class="record-value fw-bold">$<?= e(number_format((float) ($invoice['subtotal'] ?? 0), 2)) ?></span>
@@ -377,9 +378,15 @@ $currentStatus = strtolower(trim((string) ($invoice['status'] ?? '')));
                     <span class="record-label">Total Payments</span>
                     <span class="record-value fw-bold">$<?= e(number_format($totalPayments, 2)) ?></span>
                 </div>
+                <?php if ($tipAmount > 0.0): ?>
+                    <div class="record-field text-md-end">
+                        <span class="record-label">Tip (over invoice)</span>
+                        <span class="record-value fw-bold">$<?= e(number_format($tipAmount, 2)) ?></span>
+                    </div>
+                <?php endif; ?>
                 <div class="record-field text-md-end">
-                    <span class="record-label">Balance</span>
-                    <span class="record-value fw-bold">$<?= e(number_format($balance, 2)) ?></span>
+                    <span class="record-label">Balance due</span>
+                    <span class="record-value fw-bold">$<?= e(number_format($balanceDue, 2)) ?></span>
                 </div>
             <?php endif; ?>
         </div>

@@ -775,6 +775,10 @@ a.admin-nav-tile:focus {
   grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
+.record-row-fields-6 {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
 .client-autosuggest-wrap {
   position: relative;
   z-index: 20;
@@ -1315,7 +1319,8 @@ a.admin-nav-tile:focus {
 
   .record-row-fields-3,
   .record-row-fields-4,
-  .record-row-fields-5 {
+  .record-row-fields-5,
+  .record-row-fields-6 {
     grid-template-columns: 1fr;
   }
 
