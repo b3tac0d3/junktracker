@@ -266,10 +266,7 @@ $formatDuration = static function (int $minutes): string {
                     <span class="record-label">Payments</span>
                     <span class="record-value">$<?= e(number_format((float) ($financial['payments'] ?? 0), 2)) ?></span>
                 </div>
-                <div class="record-field">
-                    <span class="record-label">Tips</span>
-                    <span class="record-value">$<?= e(number_format((float) ($financial['tips'] ?? 0), 2)) ?></span>
-                </div>
+                <div class="jt-fin-snapshot-spacer" aria-hidden="true"></div>
             </div>
             <div class="jt-fin-snapshot-row">
                 <div class="record-field">
@@ -285,8 +282,8 @@ $formatDuration = static function (int $minutes): string {
                     <span class="record-value">$<?= e(number_format((float) ($financial['adjustments'] ?? 0), 2)) ?></span>
                 </div>
                 <div class="record-field">
-                    <span class="record-label">Sales Net</span>
-                    <span class="record-value">$<?= e(number_format((float) ($financial['sales_net'] ?? 0), 2)) ?></span>
+                    <span class="record-label">Tips</span>
+                    <span class="record-value">$<?= e(number_format((float) ($financial['tips'] ?? 0), 2)) ?></span>
                 </div>
                 <div class="jt-fin-snapshot-spacer" aria-hidden="true"></div>
             </div>
@@ -303,7 +300,10 @@ $formatDuration = static function (int $minutes): string {
                     <span class="record-label">Balance Due</span>
                     <span class="record-value">$<?= e(number_format((float) ($financial['balance'] ?? 0), 2)) ?></span>
                 </div>
-                <div class="jt-fin-snapshot-spacer" aria-hidden="true"></div>
+                <div class="record-field">
+                    <span class="record-label">Sales Net</span>
+                    <span class="record-value">$<?= e(number_format((float) ($financial['sales_net'] ?? 0), 2)) ?></span>
+                </div>
                 <div class="jt-fin-snapshot-spacer" aria-hidden="true"></div>
             </div>
         </div>
