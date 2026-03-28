@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 return [
     'name' => 'JunkTracker',
-    'version' => '1.3.9.2 (beta)',
+    'version' => '1.3.9.3 (beta)',
     'env' => 'local',
     'url' => 'http://localhost/junktracker',
     'timezone' => 'America/New_York',
@@ -16,6 +16,11 @@ return [
     'session_gc_maxlifetime' => 259200,
     'default_business_id' => 1,
     'debug' => true,
+    /**
+     * Short-lived server cache (APCu, else storage/cache) for nav notifications + dashboard summary.
+     * Set to 0 to disable. Max 3600.
+     */
+    'cache_ttl_seconds' => 60,
     /** Shared secret for /cron/daily-digest?key= — leave empty to disable remote calls */
     'cron_key' => (string) (getenv('JUNKTRACKER_CRON_KEY') ?: ''),
 ];

@@ -4,13 +4,22 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use Core\AppCache;
 use Core\Database;
 
 final class DashboardSummary
 {
     public static function byBusiness(int $businessId, int $ownerUserId): array
     {
-        return [
+        $cacheKey = 'dash:' . $businessId . ':' . $ownerUserId;
+        if (AppCache::enabled()) {
+            $cached = AppCache::get($cacheKey);
+            if (is_array($cached) && isset($cached['sales'], $cached['service'], $cached['lists'])) {
+                return $cached;
+            }
+        }
+
+        $payload = [
             'sales' => self::salesSummary($businessId),
             'service' => self::serviceSummary($businessId),
             'expenses' => self::expensesSummary($businessId),
@@ -27,6 +36,11 @@ final class DashboardSummary
                 'upcoming_deliveries' => self::upcomingDeliveries($businessId),
             ],
         ];
+        if (AppCache::enabled()) {
+            AppCache::set($cacheKey, $payload);
+        }
+
+        return $payload;
     }
 
     private static function expensesSummary(int $businessId): array

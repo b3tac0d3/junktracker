@@ -1,5 +1,12 @@
 RewriteEngine On
 
+# Cache static assets (URLs from asset() include ?v= so new deploys get fresh files)
+<IfModule mod_headers.c>
+    <FilesMatch "\.(css|js|mjs|map|woff2?|ttf|eot|svg|png|jpe?g|gif|ico|webp)$">
+        Header set Cache-Control "public, max-age=2592000"
+    </FilesMatch>
+</IfModule>
+
 RewriteCond %{REQUEST_FILENAME} -f [OR]
 RewriteCond %{REQUEST_FILENAME} -d
 RewriteRule ^ - [L]

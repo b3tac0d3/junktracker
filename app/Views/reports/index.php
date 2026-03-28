@@ -35,8 +35,8 @@ $formatDate = static function (?string $value): string {
 
 $reportChartData = [
     'gross' => round((float) ($overall['gross'] ?? 0), 2),
-    'net' => round((float) ($overall['net'] ?? 0), 2),
     'expenses' => round((float) ($expenses['total'] ?? 0), 2),
+    'profit' => round((float) ($overall['net'] ?? 0), 2),
 ];
 ?>
 
@@ -100,24 +100,62 @@ $reportChartData = [
     </div>
 </section>
 
-<section class="card index-card mb-3 reports-card-chart">
-    <div class="card-header index-card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
-        <strong class="mb-0"><i class="fas fa-chart-simple me-2 jt-report-icon--chart" aria-hidden="true"></i>Period overview</strong>
-        <div class="d-flex align-items-center gap-2 ms-md-auto">
-            <label class="small text-muted mb-0 fw-semibold text-nowrap" for="jtReportsChartType">Chart type</label>
-            <select id="jtReportsChartType" class="form-select form-select-sm jt-report-chart-type-select" aria-label="Chart type">
-                <option value="bar" selected>Bar</option>
-                <option value="pie">Pie</option>
-            </select>
-        </div>
+<div class="row g-3 mb-3">
+    <div class="col-12 col-lg-6">
+        <section class="card index-card h-100 reports-card-chart">
+            <div class="card-header index-card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+                <strong class="mb-0"><i class="fas fa-chart-simple me-2 jt-report-icon--chart" aria-hidden="true"></i>Period overview</strong>
+                <div class="d-flex align-items-center gap-2 ms-md-auto">
+                    <label class="small text-muted mb-0 fw-semibold text-nowrap" for="jtReportsChartType">Chart type</label>
+                    <select id="jtReportsChartType" class="form-select form-select-sm jt-report-chart-type-select" aria-label="Chart type">
+                        <option value="bar" selected>Bar</option>
+                        <option value="pie">Pie</option>
+                    </select>
+                </div>
+            </div>
+            <div class="card-body">
+                <p class="small text-muted mb-3 mb-md-2">Gross (sales + invoiced service), total expenses, and profit (net after general expenses) for <?= e($formatDate($fromDate)) ?>–<?= e($formatDate($toDate)) ?>.</p>
+                <div class="jt-report-chart-holder">
+                    <canvas id="jtReportsChart" aria-label="Chart of gross, expenses, and profit" role="img"></canvas>
+                </div>
+            </div>
+        </section>
     </div>
-    <div class="card-body">
-        <p class="small text-muted mb-3 mb-md-2">Gross (sales + invoiced service), net profit (after general expenses), and total expenses for <?= e($formatDate($fromDate)) ?>–<?= e($formatDate($toDate)) ?>.</p>
-        <div class="jt-report-chart-holder">
-            <canvas id="jtReportsChart" aria-label="Chart of gross, net profit, and expenses" role="img"></canvas>
-        </div>
+    <div class="col-12 col-lg-6">
+        <section class="card index-card h-100 reports-card-purchases-list">
+            <div class="card-header index-card-header d-flex align-items-center justify-content-between">
+                <strong><i class="fas fa-cart-arrow-down me-2 jt-report-icon--purchases-list" aria-hidden="true"></i>Purchases (Within Range)</strong>
+                <a class="small text-decoration-none fw-semibold" href="<?= e(url('/purchases')) ?>">Open Purchases</a>
+            </div>
+            <div class="card-body">
+                <?php if ($purchasesList === []): ?>
+                    <div class="record-empty">No purchases in this date range.</div>
+                <?php else: ?>
+                    <div class="simple-list-table">
+                        <?php foreach ($purchasesList as $purchase): ?>
+                            <?php
+                            $purchaseId = (int) ($purchase['id'] ?? 0);
+                            $title = trim((string) ($purchase['title'] ?? '')) ?: ('Purchase #' . (string) $purchaseId);
+                            $client = trim((string) ($purchase['client_name'] ?? '')) ?: '—';
+                            $status = trim((string) ($purchase['status'] ?? ''));
+                            $statusLabel = $status !== '' ? ucfirst(str_replace('_', ' ', $status)) : '—';
+                            $purchaseDate = $formatDate((string) ($purchase['purchase_date'] ?? ''));
+                            $price = $formatMoney((float) ($purchase['purchase_price'] ?? 0));
+                            ?>
+                            <a class="simple-list-row simple-list-row-link" href="<?= e(url('/purchases/' . (string) $purchaseId)) ?>">
+                                <span class="simple-list-title"><?= e($title) ?></span>
+                                <span class="simple-list-meta">
+                                    <span class="jt-report-muted"><?= e($client) ?> · <?= e($statusLabel) ?> · <?= e($purchaseDate) ?> ·</span>
+                                    <span class="jt-report-out"><?= e($price) ?></span>
+                                </span>
+                            </a>
+                        <?php endforeach; ?>
+                    </div>
+                <?php endif; ?>
+            </div>
+        </section>
     </div>
-</section>
+</div>
 
 <?php if ($marginByJob !== []): ?>
 <section class="card index-card mb-3 reports-card-margin">
@@ -331,40 +369,6 @@ $reportChartData = [
             </div>
         </section>
     </div>
-    <div class="col-12 col-xl-6">
-        <section class="card index-card h-100 reports-card-purchases-list">
-            <div class="card-header index-card-header d-flex align-items-center justify-content-between">
-                <strong><i class="fas fa-cart-arrow-down me-2 jt-report-icon--purchases-list" aria-hidden="true"></i>Purchases (Within Range)</strong>
-                <a class="small text-decoration-none fw-semibold" href="<?= e(url('/purchases')) ?>">Open Purchases</a>
-            </div>
-            <div class="card-body">
-                <?php if ($purchasesList === []): ?>
-                    <div class="record-empty">No purchases in this date range.</div>
-                <?php else: ?>
-                    <div class="simple-list-table">
-                        <?php foreach ($purchasesList as $purchase): ?>
-                            <?php
-                            $purchaseId = (int) ($purchase['id'] ?? 0);
-                            $title = trim((string) ($purchase['title'] ?? '')) ?: ('Purchase #' . (string) $purchaseId);
-                            $client = trim((string) ($purchase['client_name'] ?? '')) ?: '—';
-                            $status = trim((string) ($purchase['status'] ?? ''));
-                            $statusLabel = $status !== '' ? ucfirst(str_replace('_', ' ', $status)) : '—';
-                            $purchaseDate = $formatDate((string) ($purchase['purchase_date'] ?? ''));
-                            $price = $formatMoney((float) ($purchase['purchase_price'] ?? 0));
-                            ?>
-                            <a class="simple-list-row simple-list-row-link" href="<?= e(url('/purchases/' . (string) $purchaseId)) ?>">
-                                <span class="simple-list-title"><?= e($title) ?></span>
-                                <span class="simple-list-meta">
-                                    <span class="jt-report-muted"><?= e($client) ?> · <?= e($statusLabel) ?> · <?= e($purchaseDate) ?> ·</span>
-                                    <span class="jt-report-out"><?= e($price) ?></span>
-                                </span>
-                            </a>
-                        <?php endforeach; ?>
-                    </div>
-                <?php endif; ?>
-            </div>
-        </section>
-    </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" crossorigin="anonymous"></script>
@@ -378,22 +382,22 @@ $reportChartData = [
     const ctx = canvas.getContext('2d');
     const data = <?= json_encode($reportChartData, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE) ?>;
     const fmt = new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    const labels = ['Gross', 'Net profit', 'Expenses'];
-    const values = [data.gross, data.net, data.expenses];
+    const labels = ['Gross', 'Expenses', 'Profit'];
+    const values = [data.gross, data.expenses, data.profit];
     const rs = getComputedStyle(document.documentElement);
     const cv = function (name) {
         return rs.getPropertyValue(name).trim();
     };
-    /* Same palette as dashboard KPIs (CSS variables in jt-theme.css) */
+    /* Gross → sales blue, Expenses → magenta, Profit → olive (jt-theme.css) */
     const colors = [
         cv('--jt-chart-reports-gross-fill'),
-        cv('--jt-chart-reports-net-fill'),
         cv('--jt-chart-reports-expenses-fill'),
+        cv('--jt-chart-reports-net-fill'),
     ];
     const borders = [
         cv('--jt-chart-reports-gross-stroke'),
-        cv('--jt-chart-reports-net-stroke'),
         cv('--jt-chart-reports-expenses-stroke'),
+        cv('--jt-chart-reports-net-stroke'),
     ];
 
     let chart = null;
@@ -467,7 +471,7 @@ $reportChartData = [
             chart = null;
         }
         chart = new Chart(ctx, buildConfig(type));
-        canvas.setAttribute('aria-label', type.charAt(0).toUpperCase() + type.slice(1) + ' chart of gross, net profit, and expenses');
+        canvas.setAttribute('aria-label', type.charAt(0).toUpperCase() + type.slice(1) + ' chart of gross, expenses, and profit');
     }
 
     if (typeSelect) {

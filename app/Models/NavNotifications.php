@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use Core\AppCache;
 use Core\Database;
 
 /**
@@ -28,6 +29,13 @@ final class NavNotifications
 
         $businessId = current_business_id();
         $userId = (int) (auth_user_id() ?? 0);
+        $cacheKey = 'nav:' . $businessId . ':' . $userId;
+        if (AppCache::enabled()) {
+            $cached = AppCache::get($cacheKey);
+            if (is_array($cached) && array_key_exists('items', $cached) && array_key_exists('total', $cached)) {
+                return $cached;
+            }
+        }
 
         $items = [];
         $items = array_merge($items, self::myOverdueTasks($businessId, $userId));
@@ -46,10 +54,15 @@ final class NavNotifications
             $items = array_slice($items, 0, $max);
         }
 
-        return [
+        $payload = [
             'items' => $items,
             'total' => $totalCount,
         ];
+        if (AppCache::enabled()) {
+            AppCache::set($cacheKey, $payload);
+        }
+
+        return $payload;
     }
 
     /**
