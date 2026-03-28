@@ -23,6 +23,7 @@ final class DashboardSummary
                 'purchase_prospects' => self::purchaseProspects($businessId),
                 'my_tasks_due' => self::myTasksDue($businessId, $ownerUserId),
                 'recent_sales' => self::recentSales($businessId),
+                'upcoming_deliveries' => self::upcomingDeliveries($businessId),
             ],
         ];
     }
@@ -384,6 +385,47 @@ final class DashboardSummary
         $stmt->execute();
 
         $rows = $stmt->fetchAll();
+        return is_array($rows) ? $rows : [];
+    }
+
+    private static function upcomingDeliveries(int $businessId, int $limit = 12): array
+    {
+        if (!SchemaInspector::hasTable('client_deliveries')) {
+            return [];
+        }
+
+        $windowEnd = date('Y-m-d H:i:s', strtotime('+14 days 23:59:59'));
+
+        $sql = 'SELECT
+                    d.id,
+                    d.scheduled_at,
+                    d.end_at,
+                    d.status,
+                    d.address_line1,
+                    d.city,
+                    d.state,
+                    COALESCE(NULLIF(TRIM(CONCAT_WS(" ", c.first_name, c.last_name)), ""), NULLIF(c.company_name, ""), CONCAT("Client #", c.id)) AS client_name
+                FROM client_deliveries d
+                INNER JOIN clients c ON c.id = d.client_id
+                    AND c.business_id = d.business_id
+                    AND c.deleted_at IS NULL
+                WHERE d.business_id = :business_id
+                  AND d.deleted_at IS NULL
+                  AND LOWER(d.status) = :delivery_status
+                  AND d.scheduled_at >= NOW()
+                  AND d.scheduled_at <= :window_end
+                ORDER BY d.scheduled_at ASC, d.id ASC
+                LIMIT :row_limit';
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
+        $stmt->bindValue(':delivery_status', 'scheduled');
+        $stmt->bindValue(':window_end', $windowEnd);
+        $stmt->bindValue(':row_limit', max(1, min($limit, 30)), \PDO::PARAM_INT);
+        $stmt->execute();
+
+        $rows = $stmt->fetchAll();
+
         return is_array($rows) ? $rows : [];
     }
 

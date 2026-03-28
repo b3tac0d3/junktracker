@@ -10,7 +10,11 @@ if ((string) config('app.env', 'production') === 'local' && function_exists('opc
 
 session_name((string) config('app.session_name', 'junktracker_session'));
 if (session_status() !== PHP_SESSION_ACTIVE) {
-    ini_set('session.gc_maxlifetime', (string) remember_me_idle_seconds());
+    $gcMax = (int) config('app.session_gc_maxlifetime', remember_me_idle_seconds());
+    if ($gcMax < 60) {
+        $gcMax = remember_me_idle_seconds();
+    }
+    @ini_set('session.gc_maxlifetime', (string) $gcMax);
     session_start();
 }
 

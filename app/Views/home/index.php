@@ -20,6 +20,7 @@ $prospects = is_array($lists['prospects'] ?? null) ? $lists['prospects'] : [];
 $purchaseProspects = is_array($lists['purchase_prospects'] ?? null) ? $lists['purchase_prospects'] : [];
 $myTasksDue = is_array($lists['my_tasks_due'] ?? null) ? $lists['my_tasks_due'] : [];
 $recentSales = is_array($lists['recent_sales'] ?? null) ? $lists['recent_sales'] : [];
+$upcomingDeliveries = is_array($lists['upcoming_deliveries'] ?? null) ? $lists['upcoming_deliveries'] : [];
 $selfEmployee = is_array($selfEmployee ?? null) ? $selfEmployee : null;
 $selfOpenEntry = is_array($selfOpenEntry ?? null) ? $selfOpenEntry : null;
 $canViewPunchBoard = (bool) ($canViewPunchBoard ?? false);
@@ -100,10 +101,49 @@ $employeeDisplayName = static function (array $row): string {
     </a>
 </div>
 
+<section class="card index-card shadow-sm mb-3" style="margin-top: 1em">
+    <div class="card-header index-card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+        <div>
+            <strong class="fs-5"><i class="fas fa-truck me-2 text-info"></i>Client deliveries</strong>
+            <div class="small text-muted">Scheduled in the next 14 days</div>
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+            <a class="btn btn-sm btn-outline-primary" href="<?= e(url('/deliveries/create')) ?>"><i class="fas fa-plus me-1 text-primary"></i>Add delivery</a>
+            <a class="btn btn-sm btn-outline-secondary" href="<?= e(url('/deliveries')) ?>">View all</a>
+        </div>
+    </div>
+    <div class="card-body">
+        <?php if ($upcomingDeliveries === []): ?>
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
+                <div class="text-muted">No upcoming deliveries on the calendar. Add a client, then schedule a delivery.</div>
+                <a class="btn btn-outline-primary btn-sm" href="<?= e(url('/clients/create')) ?>"><i class="fas fa-user-plus me-1 text-primary"></i>Add client</a>
+            </div>
+        <?php else: ?>
+            <div class="simple-list-table">
+                <?php foreach ($upcomingDeliveries as $d): ?>
+                    <?php
+                    $did = (int) ($d['id'] ?? 0);
+                    $dn = trim((string) ($d['client_name'] ?? '')) ?: 'Client';
+                    $ds = $formatDate((string) ($d['scheduled_at'] ?? ''));
+                    $daddr = trim((string) ($d['address_line1'] ?? ''));
+                    $dcity = trim((string) ($d['city'] ?? ''));
+                    $dst = trim((string) ($d['state'] ?? ''));
+                    $dmeta = $daddr !== '' ? $daddr : ($dcity !== '' || $dst !== '' ? trim($dcity . ', ' . $dst) : '');
+                    ?>
+                    <a class="simple-list-row simple-list-row-link" href="<?= e(url('/deliveries/' . (string) $did)) ?>">
+                        <span class="simple-list-title"><?= e($dn) ?></span>
+                        <span class="simple-list-meta"><?= e($ds . ($dmeta !== '' ? ' · ' . $dmeta : '')) ?></span>
+                    </a>
+                <?php endforeach; ?>
+            </div>
+        <?php endif; ?>
+    </div>
+</section>
+
 <div class="dashboard-panels mt-3">
     <section class="card index-card">
         <div class="card-header index-card-header d-flex align-items-center justify-content-between">
-            <strong><i class="fas fa-user-clock me-2"></i>My Punch Status</strong>
+            <strong><i class="fas fa-user-clock me-2 text-primary"></i>My Punch Status</strong>
             <a class="small text-decoration-none fw-semibold" href="<?= e(url('/time-tracking/punch-board')) ?>">Open Punch Board</a>
         </div>
         <div class="card-body">
@@ -152,7 +192,7 @@ $employeeDisplayName = static function (array $row): string {
     <?php if ($canViewPunchBoard): ?>
         <section class="card index-card">
             <div class="card-header index-card-header d-flex align-items-center justify-content-between">
-                <strong><i class="fas fa-users me-2"></i>Currently Punched In</strong>
+                <strong><i class="fas fa-users me-2 text-success"></i>Currently Punched In</strong>
                 <a class="small text-decoration-none fw-semibold" href="<?= e(url('/time-tracking/punch-board')) ?>">Open Punch Board</a>
             </div>
             <div class="card-body">
@@ -186,7 +226,7 @@ $employeeDisplayName = static function (array $row): string {
 
     <section class="card index-card">
         <div class="card-header index-card-header d-flex align-items-center justify-content-between">
-            <strong><i class="fas fa-clipboard-list me-2"></i>Dispatch Queue</strong>
+            <strong><i class="fas fa-clipboard-list me-2 text-warning"></i>Dispatch Queue</strong>
             <a class="small text-decoration-none fw-semibold" href="<?= e(url('/jobs?status=dispatch')) ?>">Open Jobs</a>
         </div>
         <div class="card-body">
@@ -214,7 +254,7 @@ $employeeDisplayName = static function (array $row): string {
 
     <section class="card index-card">
         <div class="card-header index-card-header d-flex align-items-center justify-content-between">
-            <strong><i class="fas fa-bullseye me-2"></i>Job Prospects</strong>
+            <strong><i class="fas fa-bullseye me-2 text-danger"></i>Job Prospects</strong>
             <a class="small text-decoration-none fw-semibold" href="<?= e(url('/jobs?status=prospect')) ?>">Open Job Prospects</a>
         </div>
         <div class="card-body">
@@ -241,7 +281,7 @@ $employeeDisplayName = static function (array $row): string {
 
     <section class="card index-card">
         <div class="card-header index-card-header d-flex align-items-center justify-content-between">
-            <strong><i class="fas fa-cart-shopping me-2"></i>Purchase Prospects</strong>
+            <strong><i class="fas fa-cart-shopping me-2 jt-dashboard-icon--purchase" aria-hidden="true"></i>Purchase Prospects</strong>
             <a class="small text-decoration-none fw-semibold" href="<?= e(url('/purchases')) ?>">Open Purchases</a>
         </div>
         <div class="card-body">
@@ -273,7 +313,7 @@ $employeeDisplayName = static function (array $row): string {
 
     <section class="card index-card">
         <div class="card-header index-card-header d-flex align-items-center justify-content-between">
-            <strong><i class="fas fa-list-check me-2"></i>My Tasks Due</strong>
+            <strong><i class="fas fa-list-check me-2 jt-dashboard-icon--tasks" aria-hidden="true"></i>My Tasks Due</strong>
             <a class="small text-decoration-none fw-semibold" href="<?= e(url('/tasks?status=open')) ?>">Open Tasks</a>
         </div>
         <div class="card-body">
@@ -303,7 +343,7 @@ $employeeDisplayName = static function (array $row): string {
 
     <section class="card index-card">
         <div class="card-header index-card-header d-flex align-items-center justify-content-between">
-            <strong><i class="fas fa-sack-dollar me-2"></i>Recent Sales (MTD)</strong>
+            <strong><i class="fas fa-sack-dollar me-2 text-success"></i>Recent Sales (MTD)</strong>
             <a class="small text-decoration-none fw-semibold" href="<?= e(url('/sales')) ?>">Open Sales</a>
         </div>
         <div class="card-body">

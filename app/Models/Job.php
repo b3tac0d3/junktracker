@@ -217,16 +217,7 @@ final class Job
         } elseif (SchemaInspector::hasColumn('jobs', 'potential_amount')) {
             $potentialExpr = 'COALESCE(j.potential_amount, 0)';
         }
-        $grossExpr = SchemaInspector::hasColumn('jobs', 'gross_amount')
-            ? 'COALESCE(j.gross_amount, 0)'
-            : (SchemaInspector::hasColumn('jobs', 'job_gross')
-                ? 'COALESCE(j.job_gross, 0)'
-                : '0');
-        $netExpr = SchemaInspector::hasColumn('jobs', 'net_amount')
-            ? 'COALESCE(j.net_amount, 0)'
-            : (SchemaInspector::hasColumn('jobs', 'job_net')
-                ? 'COALESCE(j.job_net, 0)'
-                : '0');
+        [$grossExpr, $netExpr] = self::filteredSummaryGrossNetExprs();
 
         $joinClient = SchemaInspector::hasTable('clients') && SchemaInspector::hasColumn('jobs', 'client_id');
         $joinSql = '';
@@ -300,6 +291,179 @@ final class Job
             'gross_ytd' => (float) ($row['gross_ytd'] ?? 0),
             'net_ytd' => (float) ($row['net_ytd'] ?? 0),
         ];
+    }
+
+    /**
+     * Per-job gross/net SQL (outer alias `j`) matching financialSummary(): invoice + sales gross;
+     * net = (invoice gross − labor + adjustments − expenses) + sales net.
+     */
+    private static function filteredSummaryGrossNetExprs(): array
+    {
+        $legacyGross = SchemaInspector::hasColumn('jobs', 'gross_amount')
+            ? 'COALESCE(j.gross_amount, 0)'
+            : (SchemaInspector::hasColumn('jobs', 'job_gross')
+                ? 'COALESCE(j.job_gross, 0)'
+                : '0');
+        $legacyNet = SchemaInspector::hasColumn('jobs', 'net_amount')
+            ? 'COALESCE(j.net_amount, 0)'
+            : (SchemaInspector::hasColumn('jobs', 'job_net')
+                ? 'COALESCE(j.job_net, 0)'
+                : '0');
+
+        $inv = self::sqlScalarInvoiceGrossForJobJ();
+        $sg = self::sqlScalarSalesGrossForJobJ();
+        $sn = self::sqlScalarSalesNetForJobJ();
+        $lab = self::sqlScalarLaborCostForJobJ();
+        $exp = self::sqlScalarExpensesForJobJ();
+        $adj = self::sqlScalarAdjustmentsForJobJ();
+
+        $canDerive = ($inv !== '0' || $sg !== '0' || $sn !== '0' || $lab !== '0' || $exp !== '0' || $adj !== '0');
+
+        if (!$canDerive) {
+            return [$legacyGross, $legacyNet];
+        }
+
+        $grossExpr = '(' . $inv . ' + ' . $sg . ')';
+        $netExpr = '((' . $inv . ' - ' . $lab . ' + ' . $adj . ' - ' . $exp . ') + ' . $sn . ')';
+
+        return [$grossExpr, $netExpr];
+    }
+
+    private static function sqlScalarInvoiceGrossForJobJ(): string
+    {
+        if (!SchemaInspector::hasTable('invoices') || !SchemaInspector::hasColumn('invoices', 'job_id')) {
+            return '0';
+        }
+        $totalExpr = SchemaInspector::hasColumn('invoices', 'total')
+            ? 'i.total'
+            : (SchemaInspector::hasColumn('invoices', 'subtotal') ? 'i.subtotal' : '0');
+        $where = ['i.job_id = j.id'];
+        if (SchemaInspector::hasColumn('invoices', 'business_id')) {
+            $where[] = 'i.business_id = j.business_id';
+        }
+        if (SchemaInspector::hasColumn('invoices', 'deleted_at')) {
+            $where[] = 'i.deleted_at IS NULL';
+        }
+        if (SchemaInspector::hasColumn('invoices', 'status')) {
+            $where[] = "i.status <> 'cancelled'";
+        }
+        if (SchemaInspector::hasColumn('invoices', 'type')) {
+            $where[] = "(LOWER(i.type) = 'invoice' OR i.type IS NULL OR TRIM(i.type) = '')";
+        }
+
+        return '(SELECT COALESCE(SUM(' . $totalExpr . '), 0) FROM invoices i WHERE ' . implode(' AND ', $where) . ')';
+    }
+
+    private static function sqlScalarSalesGrossForJobJ(): string
+    {
+        if (!SchemaInspector::hasTable('sales') || !SchemaInspector::hasColumn('sales', 'job_id')) {
+            return '0';
+        }
+        $grossCol = SchemaInspector::hasColumn('sales', 'gross_amount')
+            ? 's.gross_amount'
+            : (SchemaInspector::hasColumn('sales', 'amount') ? 's.amount' : '0');
+        $where = ['s.job_id = j.id'];
+        if (SchemaInspector::hasColumn('sales', 'business_id')) {
+            $where[] = 's.business_id = j.business_id';
+        }
+        if (SchemaInspector::hasColumn('sales', 'deleted_at')) {
+            $where[] = 's.deleted_at IS NULL';
+        }
+
+        return '(SELECT COALESCE(SUM(COALESCE(' . $grossCol . ', 0)), 0) FROM sales s WHERE ' . implode(' AND ', $where) . ')';
+    }
+
+    private static function sqlScalarSalesNetForJobJ(): string
+    {
+        if (!SchemaInspector::hasTable('sales') || !SchemaInspector::hasColumn('sales', 'job_id')) {
+            return '0';
+        }
+        $netCol = SchemaInspector::hasColumn('sales', 'net_amount')
+            ? 's.net_amount'
+            : (SchemaInspector::hasColumn('sales', 'gross_amount')
+                ? 's.gross_amount'
+                : (SchemaInspector::hasColumn('sales', 'amount') ? 's.amount' : '0'));
+        $where = ['s.job_id = j.id'];
+        if (SchemaInspector::hasColumn('sales', 'business_id')) {
+            $where[] = 's.business_id = j.business_id';
+        }
+        if (SchemaInspector::hasColumn('sales', 'deleted_at')) {
+            $where[] = 's.deleted_at IS NULL';
+        }
+
+        return '(SELECT COALESCE(SUM(COALESCE(' . $netCol . ', 0)), 0) FROM sales s WHERE ' . implode(' AND ', $where) . ')';
+    }
+
+    private static function sqlScalarLaborCostForJobJ(): string
+    {
+        if (!SchemaInspector::hasTable('employee_time_entries') || !SchemaInspector::hasColumn('employee_time_entries', 'job_id')) {
+            return '0';
+        }
+        if (!SchemaInspector::hasColumn('employee_time_entries', 'clock_in_at')) {
+            return '0';
+        }
+        $clockInSql = 't.clock_in_at';
+        $clockOutSql = SchemaInspector::hasColumn('employee_time_entries', 'clock_out_at') ? 't.clock_out_at' : 'NULL';
+        $durationExpr = SchemaInspector::hasColumn('employee_time_entries', 'duration_minutes')
+            ? "CASE
+                    WHEN t.duration_minutes IS NOT NULL AND t.duration_minutes > 0 THEN t.duration_minutes
+                    WHEN {$clockOutSql} IS NOT NULL THEN GREATEST(TIMESTAMPDIFF(MINUTE, {$clockInSql}, {$clockOutSql}), 0)
+                    ELSE GREATEST(TIMESTAMPDIFF(MINUTE, {$clockInSql}, NOW()), 0)
+                END"
+            : "CASE
+                    WHEN {$clockOutSql} IS NOT NULL THEN GREATEST(TIMESTAMPDIFF(MINUTE, {$clockInSql}, {$clockOutSql}), 0)
+                    ELSE GREATEST(TIMESTAMPDIFF(MINUTE, {$clockInSql}, NOW()), 0)
+                END";
+        $joinSql = '';
+        $hourlyRateSql = '0';
+        if (SchemaInspector::hasTable('employees')) {
+            $joinSql .= ' LEFT JOIN employees e ON e.id = t.employee_id';
+            if (SchemaInspector::hasColumn('employees', 'business_id') && SchemaInspector::hasColumn('employee_time_entries', 'business_id')) {
+                $joinSql .= ' AND e.business_id = t.business_id';
+            }
+            $hourlyRateSql = SchemaInspector::hasColumn('employees', 'hourly_rate') ? 'COALESCE(e.hourly_rate, 0)' : '0';
+        }
+        $where = ['t.job_id = j.id'];
+        if (SchemaInspector::hasColumn('employee_time_entries', 'business_id')) {
+            $where[] = 't.business_id = j.business_id';
+        }
+        if (SchemaInspector::hasColumn('employee_time_entries', 'deleted_at')) {
+            $where[] = 't.deleted_at IS NULL';
+        }
+
+        return '(SELECT COALESCE(SUM((' . $durationExpr . ' / 60) * ' . $hourlyRateSql . '), 0) FROM employee_time_entries t' . $joinSql . ' WHERE ' . implode(' AND ', $where) . ')';
+    }
+
+    private static function sqlScalarExpensesForJobJ(): string
+    {
+        if (!SchemaInspector::hasTable('expenses') || !SchemaInspector::hasColumn('expenses', 'job_id') || !SchemaInspector::hasColumn('expenses', 'amount')) {
+            return '0';
+        }
+        $where = ['e.job_id = j.id'];
+        if (SchemaInspector::hasColumn('expenses', 'business_id')) {
+            $where[] = 'e.business_id = j.business_id';
+        }
+        if (SchemaInspector::hasColumn('expenses', 'deleted_at')) {
+            $where[] = 'e.deleted_at IS NULL';
+        }
+
+        return '(SELECT COALESCE(SUM(e.amount), 0) FROM expenses e WHERE ' . implode(' AND ', $where) . ')';
+    }
+
+    private static function sqlScalarAdjustmentsForJobJ(): string
+    {
+        if (!SchemaInspector::hasTable('job_adjustments') || !SchemaInspector::hasColumn('job_adjustments', 'amount')) {
+            return '0';
+        }
+        $where = ['a.job_id = j.id'];
+        if (SchemaInspector::hasColumn('job_adjustments', 'business_id')) {
+            $where[] = 'a.business_id = j.business_id';
+        }
+        if (SchemaInspector::hasColumn('job_adjustments', 'deleted_at')) {
+            $where[] = 'a.deleted_at IS NULL';
+        }
+
+        return '(SELECT COALESCE(SUM(a.amount), 0) FROM job_adjustments a WHERE ' . implode(' AND ', $where) . ')';
     }
 
     public static function indexCount(
@@ -824,6 +988,37 @@ final class Job
         return $stmt->execute($params);
     }
 
+    public static function updateStatus(int $businessId, int $jobId, string $status, int $actorUserId): bool
+    {
+        if (!SchemaInspector::hasTable('jobs') || !SchemaInspector::hasColumn('jobs', 'status')) {
+            return false;
+        }
+
+        $status = strtolower(trim($status));
+        if ($status === '') {
+            return false;
+        }
+
+        $deletedWhere = SchemaInspector::hasColumn('jobs', 'deleted_at') ? 'AND deleted_at IS NULL' : '';
+        $sql = 'UPDATE jobs SET
+                    status = :status,
+                    updated_by = :updated_by,
+                    updated_at = NOW()
+                WHERE id = :job_id
+                  AND business_id = :business_id
+                  ' . $deletedWhere;
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->bindValue(':status', $status);
+        $uid = $actorUserId > 0 ? $actorUserId : null;
+        $stmt->bindValue(':updated_by', $uid, $uid === null ? \PDO::PARAM_NULL : \PDO::PARAM_INT);
+        $stmt->bindValue(':job_id', $jobId, \PDO::PARAM_INT);
+        $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
+        $stmt->execute();
+
+        return $stmt->rowCount() > 0;
+    }
+
     public static function saveCloseout(int $businessId, int $jobId, array $data, int $actorUserId): bool
     {
         if (!SchemaInspector::hasColumn('jobs', 'closeout_truck_loaded')) {
@@ -944,7 +1139,7 @@ final class Job
                     {$createdSql} AS created_at
                 FROM expenses e
                 WHERE " . implode(' AND ', $where) . "
-                ORDER BY COALESCE({$dateSql}, {$createdSql}) DESC, e.id DESC
+                ORDER BY e.id ASC
                 LIMIT :row_limit";
 
         $stmt = Database::connection()->prepare($sql);

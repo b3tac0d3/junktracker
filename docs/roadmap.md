@@ -27,4 +27,5 @@ Prioritized themes and feature ideas. Order within each section is not strict; p
 
 ## Technical (low ceremony, high payoff)
 
+- **Google Calendar sync** — phased plan and Phase 1 setup (OAuth, keys): see [google-calendar-sync.md](./google-calendar-sync.md).
 - **Delta live bundles + version tags** — keep current practice; add a one-line **deploy checklist** in-repo (migration order, `public/uploads` permissions) so production deploys stay boring.

@@ -62,7 +62,7 @@ if ($ownerNameValue === '') {
 <div class="page-header d-flex flex-wrap align-items-end justify-content-between gap-2">
     <div>
         <h1><?= e($mode === 'edit' ? 'Edit Task' : 'Add Task') ?></h1>
-        <p class="muted">Simple task form</p>
+        <p class="muted">Task details, due date, and assignment</p>
     </div>
     <div>
         <a class="btn btn-outline-secondary" href="<?= e(url('/tasks')) ?>">Back to Tasks</a>

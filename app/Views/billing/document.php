@@ -196,8 +196,8 @@ $formatDate = static function (?string $value): string {
                                 <td><?= e($name !== '' ? $name : '—') ?></td>
                                 <td><?= e($note !== '' ? $note : '—') ?></td>
                                 <td class="text-end"><?= e(number_format((float) ($item['quantity'] ?? 0), 2)) ?></td>
-                                <td class="text-end">$<?= e(number_format((float) ($item['unit_price'] ?? 0), 2)) ?></td>
-                                <td class="text-end">$<?= e(number_format((float) ($item['line_total'] ?? 0), 2)) ?></td>
+                                <td class="text-end"><?= e(format_money_usd((float) ($item['unit_price'] ?? 0))) ?></td>
+                                <td class="text-end"><?= e(format_money_usd((float) ($item['line_total'] ?? 0))) ?></td>
                                 <td class="text-center"><?= ((int) ($item['taxable'] ?? 0)) === 1 ? 'Y' : '—' ?></td>
                             </tr>
                         <?php endforeach; ?>
@@ -210,33 +210,33 @@ $formatDate = static function (?string $value): string {
     <div class="jt-doc-totals">
         <dl class="jt-doc-totals-row">
             <dt>Subtotal</dt>
-            <dd>$<?= e(number_format((float) ($invoice['subtotal'] ?? 0), 2)) ?></dd>
+            <dd><?= e(format_money_usd((float) ($invoice['subtotal'] ?? 0))) ?></dd>
         </dl>
         <dl class="jt-doc-totals-row">
             <dt>Tax</dt>
             <dd>
-                $<?= e(number_format((float) ($invoice['tax_amount'] ?? 0), 2)) ?>
+                <?= e(format_money_usd((float) ($invoice['tax_amount'] ?? 0))) ?>
                 <div class="jt-doc-totals-sub"><?= e(number_format((float) ($invoice['tax_rate'] ?? 0), 2)) ?>% rate</div>
             </dd>
         </dl>
         <dl class="jt-doc-totals-row jt-doc-totals-row--grand">
             <dt>Total</dt>
-            <dd>$<?= e(number_format((float) ($invoice['total'] ?? 0), 2)) ?></dd>
+            <dd><?= e(format_money_usd((float) ($invoice['total'] ?? 0))) ?></dd>
         </dl>
         <?php if ($docType === 'invoice'): ?>
             <dl class="jt-doc-totals-row">
                 <dt>Payments</dt>
-                <dd>$<?= e(number_format($totalPayments, 2)) ?></dd>
+                <dd><?= e(format_money_usd($totalPayments)) ?></dd>
             </dl>
             <?php if ($tipAmount > 0.0): ?>
                 <dl class="jt-doc-totals-row">
                     <dt>Tip (over invoice)</dt>
-                    <dd>$<?= e(number_format($tipAmount, 2)) ?></dd>
+                    <dd><?= e(format_money_usd($tipAmount)) ?></dd>
                 </dl>
             <?php endif; ?>
             <dl class="jt-doc-totals-row jt-doc-totals-row--grand">
                 <dt>Balance due</dt>
-                <dd>$<?= e(number_format($balanceDue, 2)) ?></dd>
+                <dd><?= e(format_money_usd($balanceDue)) ?></dd>
             </dl>
         <?php endif; ?>
     </div>
@@ -283,7 +283,7 @@ $formatDate = static function (?string $value): string {
                             · <?= e($paymentDateLabel) ?>
                             · <?= e($methodLabel) ?>
                             <?php if ($reference !== ''): ?> · Ref <?= e($reference) ?><?php endif; ?>
-                            · $<?= e(number_format((float) ($payment['amount'] ?? 0), 2)) ?>
+                            · <?= e(format_money_usd((float) ($payment['amount'] ?? 0))) ?>
                         </li>
                     <?php endforeach; ?>
                 </ul>

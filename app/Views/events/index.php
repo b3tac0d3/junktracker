@@ -63,6 +63,10 @@ $pageTitle = 'Events';
                                     <input class="form-check-input" type="checkbox" id="jt-src-jobs" checked />
                                     <span class="small">Jobs</span>
                                 </label>
+                                <label class="form-check d-flex align-items-center gap-2 m-0">
+                                    <input class="form-check-input" type="checkbox" id="jt-src-deliveries" checked />
+                                    <span class="small">Deliveries</span>
+                                </label>
                             </div>
                         </div>
                     </div>
@@ -94,6 +98,7 @@ window.addEventListener('DOMContentLoaded', () => {
     if (document.getElementById('jt-src-events')?.checked) sources.push('events');
     if (document.getElementById('jt-src-tasks')?.checked) sources.push('tasks');
     if (document.getElementById('jt-src-jobs')?.checked) sources.push('jobs');
+    if (document.getElementById('jt-src-deliveries')?.checked) sources.push('deliveries');
     return sources.join(',');
   };
 

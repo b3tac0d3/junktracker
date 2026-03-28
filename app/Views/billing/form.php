@@ -177,7 +177,7 @@ $cancelUrl = $fromJob
 <div class="page-header d-flex flex-wrap align-items-end justify-content-between gap-2">
     <div>
         <h1><?= e(($mode === 'edit' ? 'Edit ' : 'Add ') . ($documentType === 'estimate' ? 'Estimate' : 'Invoice')) ?></h1>
-        <p class="muted"><?= e($documentType === 'estimate' ? 'Estimate form' : 'Invoice form') ?></p>
+        <p class="muted"><?= e($documentType === 'estimate' ? 'Scope, line items, and terms' : 'Line items, tax, and payment terms') ?></p>
     </div>
     <div>
         <a class="btn btn-outline-secondary" href="<?= e($headerBackUrl) ?>"><?= e($headerBackLabel) ?></a>
@@ -326,15 +326,15 @@ $cancelUrl = $fromJob
                 </div>
                 <div class="col-12 col-lg-3">
                     <label class="form-label fw-semibold">Sub-total</label>
-                    <div id="billing-subtotal" class="fw-bold py-2">$<?= e(number_format((float) ($form['subtotal'] ?? '0'), 2)) ?></div>
+                    <div id="billing-subtotal" class="fw-bold py-2"><?= e(format_money_usd((float) ($form['subtotal'] ?? '0'))) ?></div>
                 </div>
                 <div class="col-12 col-lg-3">
                     <label class="form-label fw-semibold">Tax</label>
-                    <div id="billing-tax-amount" class="fw-bold py-2">$<?= e(number_format((float) ($form['tax_amount'] ?? '0'), 2)) ?></div>
+                    <div id="billing-tax-amount" class="fw-bold py-2"><?= e(format_money_usd((float) ($form['tax_amount'] ?? '0'))) ?></div>
                 </div>
                 <div class="col-12 col-lg-3">
                     <label class="form-label fw-semibold">Total</label>
-                    <div id="billing-total" class="fw-bold py-2">$<?= e(number_format((float) ($form['total'] ?? '0'), 2)) ?></div>
+                    <div id="billing-total" class="fw-bold py-2"><?= e(format_money_usd((float) ($form['total'] ?? '0'))) ?></div>
                 </div>
             </div>
         </div>
@@ -486,8 +486,11 @@ window.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    const money = (value) => {
-        return (Math.round((value + Number.EPSILON) * 100) / 100).toFixed(2);
+    const formatCurrency = (value) => {
+        const n = Math.round((value + Number.EPSILON) * 100) / 100;
+        const neg = n < 0;
+        const abs = Math.abs(n);
+        return (neg ? '-' : '') + '$' + abs.toFixed(2);
     };
     const normalizeItemName = (value) => String(value || '').trim().toLowerCase();
     const hasConfiguredItemTypes = Array.isArray(itemTypeNames) && itemTypeNames.length > 0;
@@ -553,24 +556,24 @@ window.addEventListener('DOMContentLoaded', () => {
             const rateInput = row.querySelector('.line-item-rate');
             const amountDisplay = row.querySelector('.line-item-amount');
             const taxableInput = row.querySelector('.line-item-taxable');
-            const qty = Math.max(0, toNumber(qtyInput ? qtyInput.value : 0));
-            const rate = Math.max(0, toNumber(rateInput ? rateInput.value : 0));
+            const qty = toNumber(qtyInput ? qtyInput.value : 0);
+            const rate = toNumber(rateInput ? rateInput.value : 0);
             const amount = qty * rate;
             subtotal += amount;
             if (taxableInput && taxableInput.checked) {
                 taxableSubtotal += amount;
             }
             if (amountDisplay) {
-                amountDisplay.textContent = '$' + money(amount);
+                amountDisplay.textContent = formatCurrency(amount);
             }
         });
 
         const taxRate = Math.max(0, toNumber(taxRateInput.value));
         const taxAmount = taxableSubtotal * (taxRate / 100);
         const total = subtotal + taxAmount;
-        subtotalInput.textContent = '$' + money(subtotal);
-        taxAmountInput.textContent = '$' + money(taxAmount);
-        totalInput.textContent = '$' + money(total);
+        subtotalInput.textContent = formatCurrency(subtotal);
+        taxAmountInput.textContent = formatCurrency(taxAmount);
+        totalInput.textContent = formatCurrency(total);
     };
 
     const applyItemTypeDefaults = (row) => {

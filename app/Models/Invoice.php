@@ -496,8 +496,8 @@ final class Invoice
                 continue;
             }
 
-            $qty = max(0.0, (float) ($item['quantity'] ?? 0));
-            $rate = max(0.0, (float) ($item['rate'] ?? 0));
+            $qty = (float) ($item['quantity'] ?? 0);
+            $rate = (float) ($item['rate'] ?? 0);
             $lineTotal = round($qty * $rate, 2);
 
             $insertStmt->execute([

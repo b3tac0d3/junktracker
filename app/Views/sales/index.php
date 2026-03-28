@@ -29,7 +29,7 @@ $formatSaleDate = static function (?string $value): string {
 <div class="page-header d-flex flex-wrap align-items-end justify-content-between gap-2">
     <div>
         <h1>Sales</h1>
-        <p class="muted">Simple sales index</p>
+        <p class="muted">Sales history and margin summary</p>
     </div>
     <div>
         <a class="btn btn-primary" href="<?= e(url('/sales/create')) ?>"><i class="fas fa-plus me-2"></i>Add Sale</a>

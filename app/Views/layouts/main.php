@@ -10,6 +10,7 @@ $isPunchOnlyWorkspace = !$publicPage && !$isGlobalSiteAdminContext && $workspace
 $canAccessBusinessAdmin = !$isGlobalSiteAdminContext && (is_site_admin() || $workspaceRole === 'admin');
 $canManageUsers = is_site_admin() || (!$isGlobalSiteAdminContext && $workspaceRole === 'admin');
 $globalSearchQuery = trim((string) ($_GET['global_q'] ?? ''));
+$navNotifications = is_array($navNotifications ?? null) ? $navNotifications : ['items' => [], 'total' => 0];
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -55,6 +56,70 @@ $globalSearchQuery = trim((string) ($_GET['global_q'] ?? ''));
                     </form>
                 </li>
             <?php endif; ?>
+            <?php if (!$isGlobalSiteAdminContext && !$isPunchOnlyWorkspace): ?>
+                <?php
+                $notifTotal = (int) ($navNotifications['total'] ?? 0);
+                $notifItems = is_array($navNotifications['items'] ?? null) ? $navNotifications['items'] : [];
+                ?>
+                <li class="nav-item dropdown">
+                    <a
+                        class="nav-link position-relative"
+                        id="notificationsDropdown"
+                        href="#"
+                        role="button"
+                        data-bs-toggle="dropdown"
+                        aria-expanded="false"
+                        title="Notifications"
+                    >
+                        <span class="jt-notifications-anchor">
+                            <i class="fas fa-bell fa-fw" aria-hidden="true"></i>
+                            <?php if ($notifTotal > 0): ?>
+                                <span class="jt-notifications-badge"><?= $notifTotal > 99 ? '99+' : (string) $notifTotal ?></span>
+                            <?php endif; ?>
+                        </span>
+                    </a>
+                    <ul class="dropdown-menu dropdown-menu-end jt-notifications-menu py-0 shadow" aria-labelledby="notificationsDropdown">
+                        <li class="px-3 py-2 border-bottom bg-light">
+                            <span class="fw-bold small">Notifications</span>
+                            <div class="text-muted small">Past due and items needing attention</div>
+                        </li>
+                        <?php if ($notifItems === []): ?>
+                            <li class="px-3 py-4 text-muted small text-center">You’re all caught up.</li>
+                        <?php else: ?>
+                            <?php foreach ($notifItems as $n): ?>
+                                <?php
+                                if (!is_array($n)) {
+                                    continue;
+                                }
+                                $nh = trim((string) ($n['href'] ?? ''));
+                                $nb = trim((string) ($n['badge'] ?? 'info'));
+                                if (!in_array($nb, ['danger', 'warning', 'info', 'secondary', 'success', 'primary'], true)) {
+                                    $nb = 'info';
+                                }
+                                $nic = trim((string) ($n['icon'] ?? 'fa-circle-info'));
+                                if ($nic !== '' && !str_starts_with($nic, 'fa-')) {
+                                    $nic = 'fa-' . $nic;
+                                }
+                                ?>
+                                <li>
+                                    <a class="dropdown-item jt-notification-item py-2 px-3" href="<?= e($nh !== '' ? $nh : url('/')) ?>">
+                                        <div class="d-flex gap-2 align-items-start">
+                                            <span class="text-<?= e($nb) ?> mt-1"><i class="fas <?= e($nic !== '' ? $nic : 'fa-circle') ?> fa-fw"></i></span>
+                                            <span class="flex-grow-1">
+                                                <span class="d-block small fw-semibold"><?= e((string) ($n['label'] ?? '')) ?></span>
+                                                <span class="d-block small text-muted"><?= e((string) ($n['meta'] ?? '')) ?></span>
+                                            </span>
+                                        </div>
+                                    </a>
+                                </li>
+                            <?php endforeach; ?>
+                            <?php if ($notifTotal > count($notifItems)): ?>
+                                <li class="px-3 py-2 border-top text-center small text-muted">Showing <?= (int) count($notifItems) ?> of <?= (int) $notifTotal ?></li>
+                            <?php endif; ?>
+                        <?php endif; ?>
+                    </ul>
+                </li>
+            <?php endif; ?>
             <?php if (is_site_admin() && !$isPunchOnlyWorkspace): ?>
                 <li class="nav-item">
                     <a class="nav-link" href="<?= e(url('/site-admin/businesses')) ?>" title="Site Admin"><i class="fas fa-building-shield fa-fw"></i></a>
@@ -68,6 +133,7 @@ $globalSearchQuery = trim((string) ($_GET['global_q'] ?? ''));
                     <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="quickAddDropdown">
                         <li><a class="dropdown-item" href="<?= e(url('/jobs/create')) ?>"><i class="fas fa-briefcase me-2"></i>Add Job</a></li>
                         <li><a class="dropdown-item" href="<?= e(url('/clients/create')) ?>"><i class="fas fa-users me-2"></i>Add Client</a></li>
+                        <li><a class="dropdown-item" href="<?= e(url('/deliveries/create')) ?>"><i class="fas fa-truck me-2"></i>Add Delivery</a></li>
                         <li><a class="dropdown-item" href="<?= e(url('/tasks')) ?>"><i class="fas fa-list-check me-2"></i>Add Task</a></li>
                         <li><a class="dropdown-item" href="<?= e(url('/sales/create')) ?>"><i class="fas fa-sack-dollar me-2"></i>Add Sale</a></li>
                         <li><a class="dropdown-item" href="<?= e(url('/purchases/create')) ?>"><i class="fas fa-cart-arrow-down me-2"></i>Add Purchase</a></li>
@@ -122,6 +188,7 @@ $globalSearchQuery = trim((string) ($_GET['global_q'] ?? ''));
                             <?php if (!$isGlobalSiteAdminContext): ?>
                                 <div class="sb-sidenav-menu-heading">Core</div>
                                 <a class="nav-link" href="<?= e(url('/clients')) ?>"><div class="sb-nav-link-icon"><i class="fas fa-users"></i></div>Clients</a>
+                                <a class="nav-link" href="<?= e(url('/deliveries')) ?>"><div class="sb-nav-link-icon"><i class="fas fa-truck"></i></div>Deliveries</a>
                                 <a class="nav-link" href="<?= e(url('/jobs')) ?>"><div class="sb-nav-link-icon"><i class="fas fa-briefcase"></i></div>Jobs</a>
                                 <a class="nav-link" href="<?= e(url('/sales')) ?>"><div class="sb-nav-link-icon"><i class="fas fa-sack-dollar"></i></div>Sales</a>
                                 <a class="nav-link" href="<?= e(url('/purchases')) ?>"><div class="sb-nav-link-icon"><i class="fas fa-cart-arrow-down"></i></div>Purchases</a>

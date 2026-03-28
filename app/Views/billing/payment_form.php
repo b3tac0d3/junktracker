@@ -25,7 +25,7 @@ $selectedInvoiceId = (int) ($form['invoice_id'] ?? 0);
 <div class="page-header d-flex flex-wrap align-items-end justify-content-between gap-2">
     <div>
         <h1><?= e($mode === 'edit' ? 'Edit Payment' : 'Add Payment') ?></h1>
-        <p class="muted">Simple payment form</p>
+        <p class="muted">Apply payment to invoice</p>
     </div>
     <div>
         <a class="btn btn-outline-secondary" href="<?= e($backUrl) ?>"><?= e($backLabel) ?></a>

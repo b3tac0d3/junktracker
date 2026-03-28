@@ -1,4 +1,5 @@
 .DS_Store
+.cursor/
 .vscode/
 .release_tmp/
 public/uploads/business_logos/*

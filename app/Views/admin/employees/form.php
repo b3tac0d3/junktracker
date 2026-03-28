@@ -50,7 +50,7 @@ if ($linkedUserName === '' && $linkedUserId > 0 && isset($userNameMap[$linkedUse
 <div class="page-header d-flex flex-wrap align-items-end justify-content-between gap-2">
     <div>
         <h1><?= e($mode === 'edit' ? 'Edit Employee' : 'Add Employee') ?></h1>
-        <p class="muted">Simple employee form</p>
+        <p class="muted">Employment and pay profile</p>
     </div>
     <div>
         <a class="btn btn-outline-secondary" href="<?= e(url('/admin/employees')) ?>">Back to Employees</a>

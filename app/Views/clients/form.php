@@ -25,7 +25,7 @@ if ($selectedState !== '' && !array_key_exists($selectedState, $stateOptions)) {
 <div class="page-header d-flex flex-wrap align-items-end justify-content-between gap-2">
     <div>
         <h1><?= e($mode === 'edit' ? 'Edit Client' : 'Add Client') ?></h1>
-        <p class="muted">Simple client form</p>
+        <p class="muted">Contact details and client classification</p>
     </div>
     <div>
         <a class="btn btn-outline-secondary" href="<?= e(url('/clients')) ?>">Back to Clients</a>
@@ -60,27 +60,6 @@ if ($selectedState !== '' && !array_key_exists($selectedState, $stateOptions)) {
                 <input id="client-last-name" name="last_name" class="form-control" value="<?= e((string) ($form['last_name'] ?? '')) ?>" maxlength="90" />
             </div>
 
-            <div class="col-12 col-lg-4">
-                <label class="form-label fw-semibold" for="client-company-name">Company Name</label>
-                <input id="client-company-name" name="company_name" class="form-control" value="<?= e((string) ($form['company_name'] ?? '')) ?>" maxlength="150" />
-            </div>
-
-            <div class="col-12 col-lg-4">
-                <label class="form-label fw-semibold" for="client-email">Email</label>
-                <input id="client-email" name="email" type="email" class="form-control <?= $hasError('email') ? 'is-invalid' : '' ?>" value="<?= e((string) ($form['email'] ?? '')) ?>" maxlength="190" />
-                <?php if ($hasError('email')): ?><div class="invalid-feedback d-block"><?= e($fieldError('email')) ?></div><?php endif; ?>
-            </div>
-
-            <?php if ($hasNewsletter): ?>
-                <div class="col-12 col-lg-8">
-                    <div class="form-check mt-2">
-                        <input class="form-check-input" type="checkbox" id="client-newsletter" name="newsletter_subscribed" value="1" <?= ((string) ($form['newsletter_subscribed'] ?? '0')) === '1' ? 'checked' : '' ?> />
-                        <label class="form-check-label fw-semibold" for="client-newsletter">Subscribe to newsletter</label>
-                    </div>
-                    <div class="form-text">When you send email campaigns, include clients who opted in here. A unique unsubscribe token is stored for each subscriber.</div>
-                </div>
-            <?php endif; ?>
-
             <?php if ($hasClientType): ?>
                 <div class="col-12 col-lg-4">
                     <label class="form-label fw-semibold" for="client-type">Client Type</label>
@@ -99,6 +78,36 @@ if ($selectedState !== '' && !array_key_exists($selectedState, $stateOptions)) {
                     <?php if ($hasError('client_type')): ?><div class="invalid-feedback d-block"><?= e($fieldError('client_type')) ?></div><?php endif; ?>
                 </div>
             <?php else: ?>
+                <div class="col-12 col-lg-4">
+                    <label class="form-label fw-semibold" for="client-company-name">Company Name</label>
+                    <input id="client-company-name" name="company_name" class="form-control" value="<?= e((string) ($form['company_name'] ?? '')) ?>" maxlength="150" />
+                </div>
+            <?php endif; ?>
+
+            <div class="col-12 col-lg-4">
+                <label class="form-label fw-semibold" for="client-email">Email</label>
+                <input id="client-email" name="email" type="email" class="form-control <?= $hasError('email') ? 'is-invalid' : '' ?>" value="<?= e((string) ($form['email'] ?? '')) ?>" maxlength="190" />
+                <?php if ($hasError('email')): ?><div class="invalid-feedback d-block"><?= e($fieldError('email')) ?></div><?php endif; ?>
+            </div>
+
+            <?php if ($hasClientType): ?>
+                <div class="col-12 col-lg-8">
+                    <label class="form-label fw-semibold" for="client-company-name">Company Name</label>
+                    <input id="client-company-name" name="company_name" class="form-control" value="<?= e((string) ($form['company_name'] ?? '')) ?>" maxlength="150" />
+                </div>
+            <?php endif; ?>
+
+            <?php if ($hasNewsletter): ?>
+                <div class="col-12 col-lg-8">
+                    <div class="form-check mt-2">
+                        <input class="form-check-input" type="checkbox" id="client-newsletter" name="newsletter_subscribed" value="1" <?= ((string) ($form['newsletter_subscribed'] ?? '0')) === '1' ? 'checked' : '' ?> />
+                        <label class="form-check-label fw-semibold" for="client-newsletter">Subscribe to newsletter</label>
+                    </div>
+                    <div class="form-text">When you send email campaigns, include clients who opted in here. A unique unsubscribe token is stored for each subscriber.</div>
+                </div>
+            <?php endif; ?>
+
+            <?php if (!$hasClientType): ?>
                 <input type="hidden" name="client_type" value="<?= e((string) ($form['client_type'] ?? 'client')) ?>" />
             <?php endif; ?>
 

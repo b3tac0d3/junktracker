@@ -23,7 +23,7 @@ $statusLabel = static function (string $value): string {
 <div class="page-header d-flex flex-wrap align-items-end justify-content-between gap-2">
     <div>
         <h1><?= e($mode === 'edit' ? 'Edit Purchase Order' : 'Add Purchase Order') ?></h1>
-        <p class="muted">Simple purchase intake workflow.</p>
+        <p class="muted">Purchase order, seller, and terms</p>
     </div>
     <div>
         <a class="btn btn-outline-secondary" href="<?= e($mode === 'edit' && isset($purchaseId) ? url('/purchases/' . (string) ((int) $purchaseId)) : url('/purchases')) ?>">Back to Purchases</a>

@@ -23,7 +23,7 @@ final class EventFeed
 
         $sources = self::parseCsv((string) ($filters['sources'] ?? ''));
         if ($sources === []) {
-            $sources = ['tasks', 'jobs', 'events'];
+            $sources = ['tasks', 'jobs', 'events', 'deliveries'];
         }
         $types = self::parseCsv((string) ($filters['types'] ?? ''));
         $q = trim((string) ($filters['q'] ?? ''));
@@ -37,6 +37,99 @@ final class EventFeed
         }
         if (in_array('events', $sources, true)) {
             $events = array_merge($events, self::customEvents($businessId, $start, $end, $types, $q));
+        }
+        if (in_array('deliveries', $sources, true)) {
+            $events = array_merge($events, self::deliveryEvents($businessId, $start, $end, $q));
+        }
+
+        return $events;
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private static function deliveryEvents(int $businessId, string $start, string $end, string $q): array
+    {
+        if (!SchemaInspector::hasTable('client_deliveries')) {
+            return [];
+        }
+
+        $searchWhere = $q !== ''
+            ? 'AND (
+                COALESCE(NULLIF(TRIM(CONCAT_WS(" ", c.first_name, c.last_name)), ""), NULLIF(c.company_name, ""), CONCAT("Client #", c.id)) LIKE :q
+                OR COALESCE(d.address_line1, "") LIKE :q
+                OR COALESCE(d.notes, "") LIKE :q
+            )'
+            : '';
+
+        $sql = "SELECT
+                    d.id,
+                    d.scheduled_at,
+                    d.end_at,
+                    LOWER(d.status) AS status_key,
+                    COALESCE(NULLIF(TRIM(CONCAT_WS(' ', c.first_name, c.last_name)), ''), NULLIF(c.company_name, ''), CONCAT('Client #', c.id)) AS client_name
+                FROM client_deliveries d
+                INNER JOIN clients c ON c.id = d.client_id
+                    AND c.business_id = d.business_id
+                    AND c.deleted_at IS NULL
+                WHERE d.business_id = :business_id
+                  AND d.deleted_at IS NULL
+                  AND d.scheduled_at IS NOT NULL
+                  AND d.scheduled_at >= :start_at
+                  AND d.scheduled_at < :end_at
+                  {$searchWhere}
+                ORDER BY d.scheduled_at ASC, d.id ASC
+                LIMIT 2000";
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
+        $stmt->bindValue(':start_at', $start);
+        $stmt->bindValue(':end_at', $end);
+        if ($q !== '') {
+            $stmt->bindValue(':q', '%' . $q . '%');
+        }
+        $stmt->execute();
+
+        $rows = $stmt->fetchAll();
+        if (!is_array($rows)) {
+            return [];
+        }
+
+        $events = [];
+        foreach ($rows as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+
+            $id = (int) ($row['id'] ?? 0);
+            $startAt = trim((string) ($row['scheduled_at'] ?? ''));
+            if ($id <= 0 || $startAt === '') {
+                continue;
+            }
+
+            $status = (string) ($row['status_key'] ?? 'scheduled');
+            $color = match ($status) {
+                'completed' => '#64748b',
+                'cancelled' => '#991b1b',
+                default => '#0d9488',
+            };
+
+            $clientName = trim((string) ($row['client_name'] ?? ''));
+            $title = $clientName !== '' ? 'Delivery: ' . $clientName : 'Delivery #' . (string) $id;
+
+            $endAt = trim((string) ($row['end_at'] ?? ''));
+
+            $events[] = [
+                'id' => 'delivery:' . $id,
+                'title' => $title,
+                'start' => self::toIso($startAt),
+                'end' => $endAt !== '' ? self::toIso($endAt) : null,
+                'allDay' => false,
+                'backgroundColor' => $color,
+                'borderColor' => $color,
+                'url' => url('/deliveries/' . (string) $id),
+                'editable' => false,
+            ];
         }
 
         return $events;

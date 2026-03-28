@@ -71,15 +71,28 @@ function portal_url(string $token): string
 function asset(string $path = ''): string
 {
     $base = url('assets/' . ltrim($path, '/'));
+    $rel = ltrim($path, '/');
     $ver = (string) config('app.version', '');
     $ver = preg_replace('/[^a-zA-Z0-9._-]+/', '', $ver) ?? '';
-    if ($ver === '') {
+
+    $params = [];
+    if ($ver !== '') {
+        $params['v'] = $ver;
+    }
+
+    // Local: bust browser cache when the file changes (edits to CSS/JS otherwise keep the same ?v= URL).
+    if ($rel !== '' && (string) config('app.env', 'production') === 'local') {
+        $fullPath = base_path('public/assets/' . $rel);
+        if (is_file($fullPath)) {
+            $params['t'] = (string) filemtime($fullPath);
+        }
+    }
+
+    if ($params === []) {
         return $base;
     }
 
-    $sep = str_contains($base, '?') ? '&' : '?';
-
-    return $base . $sep . 'v=' . rawurlencode($ver);
+    return $base . '?' . http_build_query($params);
 }
 
 function redirect(string $path): never
@@ -304,6 +317,14 @@ function format_date(?string $value): string
     }
 
     return date('m/d/Y', $timestamp);
+}
+
+/** USD for display; negatives render as -$75.00 (minus before the dollar sign). */
+function format_money_usd(float $amount): string
+{
+    $sign = $amount < 0 ? '-' : '';
+
+    return $sign . '$' . number_format(abs($amount), 2, '.', '');
 }
 
 function format_phone(?string $value): string
@@ -567,14 +588,14 @@ function business_logo_absolute_url(?array $business): ?string
     return absolute_url($rel);
 }
 
-/** Max idle time in seconds before "Remember me" sessions are ended (24 hours). */
+/** Max idle time in seconds before "Remember me" sessions are ended (72 hours). */
 function remember_me_idle_seconds(): int
 {
-    return 86400;
+    return 72 * 3600;
 }
 
 /**
- * Enforce 24h idle timeout for remembered sessions; refresh activity + cookie when active.
+ * Enforce idle timeout for remembered sessions; refresh activity + cookie when active.
  */
 function enforce_remember_me_idle_timeout(): void
 {
@@ -590,7 +611,7 @@ function enforce_remember_me_idle_timeout(): void
     if ($last > 0 && (time() - $last) > $seconds) {
         unset($_SESSION['user'], $_SESSION['remember_me'], $_SESSION['last_activity'], $_SESSION['active_business_id']);
         refresh_session_cookie_lifetime(0);
-        flash('error', 'You were logged out after 24 hours of inactivity.');
+        flash('error', 'You were logged out after 72 hours of inactivity.');
 
         return;
     }

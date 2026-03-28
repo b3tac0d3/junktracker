@@ -436,6 +436,13 @@ final class JobsController extends Controller
             $assignedEmployees[$index]['is_open_for_this_job'] = ((int) ($openEntry['job_id'] ?? 0)) === $jobId && ((int) ($openEntry['is_non_job'] ?? 0)) !== 1;
         }
 
+        $jobStatusOptions = $this->jobStatusOptions($businessId);
+        $jobStatusForSelect = $jobStatusOptions;
+        $currentStatus = strtolower(trim((string) ($job['status'] ?? 'pending')));
+        if ($currentStatus !== '' && !in_array($currentStatus, $jobStatusForSelect, true)) {
+            $jobStatusForSelect = array_values(array_unique(array_merge([$currentStatus], $jobStatusForSelect)));
+        }
+
         $this->render('jobs/show', [
             'pageTitle' => 'Job',
             'job' => $job,
@@ -445,6 +452,7 @@ final class JobsController extends Controller
             'expenses' => $expenses,
             'adjustments' => $adjustments,
             'assignedEmployees' => $assignedEmployees,
+            'jobStatusOptions' => $jobStatusForSelect,
             'documents' => [
                 'estimates' => $estimates,
                 'invoices' => $invoices,
@@ -452,6 +460,50 @@ final class JobsController extends Controller
                 'sales' => $sales,
             ],
         ]);
+    }
+
+    public function quickStatus(array $params): void
+    {
+        require_business_role(['general_user', 'admin']);
+
+        $jobId = (int) ($params['id'] ?? 0);
+        if ($jobId <= 0) {
+            flash('error', 'Job not found.');
+            redirect('/jobs');
+        }
+
+        if (!verify_csrf($_POST['csrf_token'] ?? null)) {
+            flash('error', 'Session expired. Please try again.');
+            redirect('/jobs/' . (string) $jobId);
+        }
+
+        $businessId = current_business_id();
+        $job = Job::findForBusiness($businessId, $jobId);
+        if ($job === null) {
+            flash('error', 'Job not found.');
+            redirect('/jobs');
+        }
+
+        $status = strtolower(trim((string) ($_POST['status'] ?? '')));
+        $allowed = $this->jobStatusOptions($businessId);
+        if (!in_array($status, $allowed, true)) {
+            flash('error', 'Choose a valid status.');
+            redirect('/jobs/' . (string) $jobId);
+        }
+
+        $current = strtolower(trim((string) ($job['status'] ?? '')));
+        if ($status === $current) {
+            redirect('/jobs/' . (string) $jobId);
+        }
+
+        $actor = (int) (auth_user_id() ?? 0);
+        if (Job::updateStatus($businessId, $jobId, $status, $actor)) {
+            flash('success', 'Job status updated.');
+        } else {
+            flash('error', 'Could not update status.');
+        }
+
+        redirect('/jobs/' . (string) $jobId);
     }
 
     public function saveCloseout(array $params): void

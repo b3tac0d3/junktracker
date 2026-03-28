@@ -1455,11 +1455,11 @@ final class BillingController extends Controller
             } elseif (!isset($allowedItemTypeNames[mb_strtolower($name)])) {
                 $itemErrors[] = 'Line ' . (string) $row . ': choose an item from the saved invoice item type list.';
             }
-            if ($qtyRaw === '' || !is_numeric($qtyRaw) || (float) $qtyRaw < 0) {
-                $itemErrors[] = 'Line ' . (string) $row . ': quantity must be zero or greater.';
+            if ($qtyRaw === '' || !is_numeric($qtyRaw)) {
+                $itemErrors[] = 'Line ' . (string) $row . ': quantity must be a number.';
             }
-            if ($rateRaw === '' || !is_numeric($rateRaw) || (float) $rateRaw < 0) {
-                $itemErrors[] = 'Line ' . (string) $row . ': rate must be zero or greater.';
+            if ($rateRaw === '' || !is_numeric($rateRaw)) {
+                $itemErrors[] = 'Line ' . (string) $row . ': rate must be a number.';
             }
         }
         if (!isset($errors['items'])) {
@@ -1516,8 +1516,8 @@ final class BillingController extends Controller
             if ($name === '') {
                 continue;
             }
-            $qty = max(0.0, (float) ($item['quantity'] ?? 0));
-            $rate = max(0.0, (float) ($item['rate'] ?? 0));
+            $qty = (float) ($item['quantity'] ?? 0);
+            $rate = (float) ($item['rate'] ?? 0);
             $lineTotal = round($qty * $rate, 2);
             $subtotal += $lineTotal;
             if (((string) ($item['taxable'] ?? '0')) === '1') {

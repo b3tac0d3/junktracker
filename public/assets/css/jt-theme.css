@@ -239,6 +239,53 @@ h1, h2, h3 {
   }
 }
 
+/* Dashboard home: header icons that should read as accent color (not same as title text) */
+.dashboard-panels .index-card-header strong .jt-dashboard-icon--purchase {
+  color: #ea580c;
+}
+
+.dashboard-panels .index-card-header strong .jt-dashboard-icon--tasks {
+  color: #7c3aed;
+}
+
+/* Top nav: notifications dropdown */
+.jt-notifications-menu {
+  min-width: 20rem;
+  max-width: 28rem;
+  max-height: min(70vh, 420px);
+  overflow-y: auto;
+}
+
+.jt-notification-item:hover,
+.jt-notification-item:focus {
+  background: #f1f5ff;
+}
+
+/* Bell icon + count: anchor badge to the icon, not the whole nav hit area */
+.jt-notifications-anchor {
+  position: relative;
+  display: inline-block;
+  line-height: 1;
+  vertical-align: middle;
+}
+
+/* Compact pill on the bell: small type, tight offset (avoid large negative top/right). */
+.jt-notifications-badge {
+  position: absolute;
+  top: -0.3rem;
+  right: -0.3rem;
+  min-width: 0.85rem;
+  padding: 0.02em 0.1em;
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1;
+  color: #fff;
+  text-align: center;
+  background: #dc3545;
+  border-radius: 999px;
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.35);
+}
+
 .list {
   display: grid;
   gap: .65rem;
@@ -456,7 +503,7 @@ main .card.index-card-overflow-visible .card-body {
 }
 
 .reports-shell .index-card .record-row-fields .record-field .record-label {
-  color: #6495ed; /* cornflowerblue — match app-wide record labels */
+  color: #6495ed; /* cornflowerblue - match app-wide record labels */
 }
 
 /* Reports: semantic number colors */
@@ -483,6 +530,47 @@ main .card.index-card-overflow-visible .card-body {
 .reports-shell .jt-report-muted {
   color: #64748b;
   font-weight: 500;
+}
+
+/* Reports: header icons (accent color like dashboard card headers) */
+.reports-shell .index-card-header strong .jt-report-icon--period {
+  color: #0ea5e9;
+}
+
+.reports-shell .index-card-header strong .jt-report-icon--totals {
+  color: #2563eb;
+}
+
+.reports-shell .index-card-header strong .jt-report-icon--margin {
+  color: #0d9488;
+}
+
+.reports-shell .index-card-header strong .jt-report-icon--service {
+  color: #1d4ed8;
+}
+
+.reports-shell .index-card-header strong .jt-report-icon--sales {
+  color: #15803d;
+}
+
+.reports-shell .index-card-header strong .jt-report-icon--expenses {
+  color: #b91c1c;
+}
+
+.reports-shell .index-card-header strong .jt-report-icon--purchasing {
+  color: #ea580c;
+}
+
+.reports-shell .index-card-header strong .jt-report-icon--jobs {
+  color: #4f46e5;
+}
+
+.reports-shell .index-card-header strong .jt-report-icon--sales-list {
+  color: #16a34a;
+}
+
+.reports-shell .index-card-header strong .jt-report-icon--purchases-list {
+  color: #ea580c;
 }
 
 .reports-shell .simple-list-meta .jt-report-in,
@@ -710,7 +798,7 @@ a.admin-nav-tile:focus {
 }
 
 .time-log-meta-list li + li::before {
-  content: '·';
+  content: '\00B7';
   color: var(--jt-muted);
   margin-right: .4rem;
 }
@@ -779,7 +867,7 @@ a.admin-nav-tile:focus {
   grid-template-columns: repeat(6, minmax(0, 1fr));
 }
 
-/* Job page — Financial Snapshot: aligned 5-column rows */
+/* Job page - Financial Snapshot: aligned 5-column rows */
 .jt-financial-snapshot {
   display: flex;
   flex-direction: column;

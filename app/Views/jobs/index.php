@@ -29,7 +29,7 @@ foreach ($statusOptionsRaw as $statusOptionRaw) {
 <div class="page-header d-flex flex-wrap align-items-end justify-content-between gap-2">
     <div>
         <h1>Jobs</h1>
-        <p class="muted">Simple job index</p>
+        <p class="muted">Search and manage jobs by status</p>
     </div>
     <div>
         <a class="btn btn-primary" href="<?= e(url('/jobs/create')) ?>"><i class="fas fa-plus me-2"></i>Add Job</a>

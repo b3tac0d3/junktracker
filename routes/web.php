@@ -13,6 +13,7 @@ use App\Controllers\AdminExportController;
 use App\Controllers\BillingController;
 use App\Controllers\ClientPortalController;
 use App\Controllers\CronController;
+use App\Controllers\DeliveriesController;
 use App\Controllers\DepositsController;
 use App\Controllers\BoloController;
 use App\Controllers\ClientsController;
@@ -79,6 +80,14 @@ $router->post('/clients/{id}/bolo/reactivate', [ClientsController::class, 'react
 $router->post('/clients/{id}/bolo', [ClientsController::class, 'updateBolo']);
 $router->get('/clients/{id}', [ClientsController::class, 'show']);
 
+$router->get('/deliveries', [DeliveriesController::class, 'index']);
+$router->get('/deliveries/create', [DeliveriesController::class, 'create']);
+$router->post('/deliveries', [DeliveriesController::class, 'store']);
+$router->get('/deliveries/{id}/edit', [DeliveriesController::class, 'edit']);
+$router->post('/deliveries/{id}/update', [DeliveriesController::class, 'update']);
+$router->post('/deliveries/{id}/delete', [DeliveriesController::class, 'delete']);
+$router->get('/deliveries/{id}', [DeliveriesController::class, 'show']);
+
 $router->get('/expenses', [ExpensesController::class, 'index']);
 $router->get('/expenses/create', [ExpensesController::class, 'create']);
 $router->post('/expenses', [ExpensesController::class, 'store']);
@@ -114,6 +123,7 @@ $router->post('/jobs/{id}/employees/bulk-punch', [JobsController::class, 'bulkPu
 $router->post('/jobs/{id}/employees/{employeeId}/punch-in', [JobsController::class, 'punchInEmployee']);
 $router->post('/jobs/{id}/employees/{employeeId}/punch-out', [JobsController::class, 'punchOutEmployee']);
 $router->post('/jobs/{id}/closeout', [JobsController::class, 'saveCloseout']);
+$router->post('/jobs/{id}/quick-status', [JobsController::class, 'quickStatus']);
 $router->get('/jobs/{id}', [JobsController::class, 'show']);
 
 $router->get('/tasks', [TasksController::class, 'index']);

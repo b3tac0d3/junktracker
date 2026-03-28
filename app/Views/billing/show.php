@@ -349,8 +349,8 @@ $currentStatus = strtolower(trim((string) ($invoice['status'] ?? '')));
                                 <td><?= e($name !== '' ? $name : '—') ?></td>
                                 <td><?= e($note !== '' ? $note : '—') ?></td>
                                 <td class="text-end"><?= e(number_format((float) ($item['quantity'] ?? 0), 2)) ?></td>
-                                <td class="text-end">$<?= e(number_format((float) ($item['unit_price'] ?? 0), 2)) ?></td>
-                                <td class="text-end">$<?= e(number_format((float) ($item['line_total'] ?? 0), 2)) ?></td>
+                                <td class="text-end"><?= e(format_money_usd((float) ($item['unit_price'] ?? 0))) ?></td>
+                                <td class="text-end"><?= e(format_money_usd((float) ($item['line_total'] ?? 0))) ?></td>
                                 <td class="text-center"><?= ((int) ($item['taxable'] ?? 0)) === 1 ? 'Yes' : 'No' ?></td>
                             </tr>
                         <?php endforeach; ?>
@@ -362,31 +362,31 @@ $currentStatus = strtolower(trim((string) ($invoice['status'] ?? '')));
         <div class="record-row-fields record-row-fields-mobile-2 <?= $docType === 'invoice' ? ($tipAmount > 0.0 ? 'record-row-fields-6' : 'record-row-fields-5') : 'record-row-fields-3' ?> mb-3">
             <div class="record-field text-md-end">
                 <span class="record-label">Sub-total</span>
-                <span class="record-value fw-bold">$<?= e(number_format((float) ($invoice['subtotal'] ?? 0), 2)) ?></span>
+                <span class="record-value fw-bold"><?= e(format_money_usd((float) ($invoice['subtotal'] ?? 0))) ?></span>
             </div>
             <div class="record-field text-md-end">
                 <span class="record-label">Tax</span>
-                <span class="record-value fw-bold">$<?= e(number_format((float) ($invoice['tax_amount'] ?? 0), 2)) ?></span>
+                <span class="record-value fw-bold"><?= e(format_money_usd((float) ($invoice['tax_amount'] ?? 0))) ?></span>
                 <span class="small text-muted">Rate: <?= e(number_format((float) ($invoice['tax_rate'] ?? 0), 2)) ?>%</span>
             </div>
             <div class="record-field text-md-end">
                 <span class="record-label">Total</span>
-                <span class="record-value fw-bold">$<?= e(number_format((float) ($invoice['total'] ?? 0), 2)) ?></span>
+                <span class="record-value fw-bold"><?= e(format_money_usd((float) ($invoice['total'] ?? 0))) ?></span>
             </div>
             <?php if ($docType === 'invoice'): ?>
                 <div class="record-field text-md-end">
                     <span class="record-label">Total Payments</span>
-                    <span class="record-value fw-bold">$<?= e(number_format($totalPayments, 2)) ?></span>
+                    <span class="record-value fw-bold"><?= e(format_money_usd($totalPayments)) ?></span>
                 </div>
                 <?php if ($tipAmount > 0.0): ?>
                     <div class="record-field text-md-end">
                         <span class="record-label">Tip (over invoice)</span>
-                        <span class="record-value fw-bold">$<?= e(number_format($tipAmount, 2)) ?></span>
+                        <span class="record-value fw-bold"><?= e(format_money_usd($tipAmount)) ?></span>
                     </div>
                 <?php endif; ?>
                 <div class="record-field text-md-end">
                     <span class="record-label">Balance due</span>
-                    <span class="record-value fw-bold">$<?= e(number_format($balanceDue, 2)) ?></span>
+                    <span class="record-value fw-bold"><?= e(format_money_usd($balanceDue)) ?></span>
                 </div>
             <?php endif; ?>
         </div>
@@ -434,7 +434,7 @@ $currentStatus = strtolower(trim((string) ($invoice['status'] ?? '')));
                             ?>
                             <li class="mb-1">
                                 <a class="fw-bold text-decoration-none" href="<?= e($paymentLink) ?>">Payment #<?= e((string) $paymentId) ?></a>
-                                <span class="small muted">· <?= e($paymentDateLabel) ?> · <?= e($methodLabel) ?><?php if ($reference !== ''): ?> · Ref: <?= e($reference) ?><?php endif; ?> · $<?= e(number_format((float) ($payment['amount'] ?? 0), 2)) ?></span>
+                                <span class="small muted">· <?= e($paymentDateLabel) ?> · <?= e($methodLabel) ?><?php if ($reference !== ''): ?> · Ref: <?= e($reference) ?><?php endif; ?> · <?= e(format_money_usd((float) ($payment['amount'] ?? 0))) ?></span>
                             </li>
                         <?php endforeach; ?>
                     </ul>

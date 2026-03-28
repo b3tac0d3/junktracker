@@ -17,7 +17,7 @@ $hasError = static function (string $field) use ($errors): bool {
 <div class="page-header d-flex flex-wrap align-items-end justify-content-between gap-2">
     <div>
         <h1><?= e($mode === 'edit' ? 'Edit Sale' : 'Add Sale') ?></h1>
-        <p class="muted">Simple sales form</p>
+        <p class="muted">Sale amount, inventory, and proceeds</p>
     </div>
     <div>
         <a class="btn btn-outline-secondary" href="<?= e(url('/sales')) ?>">Back to Sales</a>

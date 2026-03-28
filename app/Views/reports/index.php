@@ -44,7 +44,7 @@ $formatDate = static function (?string $value): string {
 
 <section class="card index-card mb-3 reports-card-period">
     <div class="card-header index-card-header">
-        <strong><i class="fas fa-filter me-2"></i>Time Period</strong>
+        <strong><i class="fas fa-filter me-2 jt-report-icon--period" aria-hidden="true"></i>Time Period</strong>
     </div>
     <div class="card-body">
         <form method="get" action="<?= e(url('/reports')) ?>" class="row g-3 align-items-end">
@@ -66,7 +66,7 @@ $formatDate = static function (?string $value): string {
 
 <section class="card index-card mb-3 reports-card-totals">
     <div class="card-header index-card-header">
-        <strong><i class="fas fa-chart-column me-2"></i>Totals</strong>
+        <strong><i class="fas fa-chart-column me-2 jt-report-icon--totals" aria-hidden="true"></i>Totals</strong>
     </div>
     <div class="card-body">
         <div class="record-row-fields record-row-fields-5">
@@ -97,7 +97,7 @@ $formatDate = static function (?string $value): string {
 <?php if ($marginByJob !== []): ?>
 <section class="card index-card mb-3 reports-card-margin">
     <div class="card-header index-card-header">
-        <strong><i class="fas fa-scale-balanced me-2"></i>Margin by job (sales net − purchase COGS)</strong>
+        <strong><i class="fas fa-scale-balanced me-2 jt-report-icon--margin" aria-hidden="true"></i>Margin by job (sales net − purchase COGS)</strong>
     </div>
     <div class="card-body p-0">
         <div class="table-responsive">
@@ -132,7 +132,7 @@ $formatDate = static function (?string $value): string {
 <div class="row g-3 mb-3">
     <div class="col-12 col-xl-6">
         <section class="card index-card h-100 reports-card-service">
-            <div class="card-header index-card-header"><strong><i class="fas fa-file-invoice-dollar me-2"></i>Service (Invoices)</strong></div>
+            <div class="card-header index-card-header"><strong><i class="fas fa-file-invoice-dollar me-2 jt-report-icon--service" aria-hidden="true"></i>Service (Invoices)</strong></div>
             <div class="card-body">
                 <div class="record-row-fields record-row-fields-2">
                     <div class="record-field"><span class="record-label">Count</span><span class="record-value"><span class="jt-report-count"><?= e((string) ((int) ($service['count'] ?? 0))) ?></span></span></div>
@@ -145,7 +145,7 @@ $formatDate = static function (?string $value): string {
     </div>
     <div class="col-12 col-xl-6">
         <section class="card index-card h-100 reports-card-sales">
-            <div class="card-header index-card-header"><strong><i class="fas fa-sack-dollar me-2"></i>Sales</strong></div>
+            <div class="card-header index-card-header"><strong><i class="fas fa-sack-dollar me-2 jt-report-icon--sales" aria-hidden="true"></i>Sales</strong></div>
             <div class="card-body">
                 <div class="record-row-fields record-row-fields-3 mb-3">
                     <div class="record-field"><span class="record-label">Count</span><span class="record-value"><span class="jt-report-count"><?= e((string) ((int) ($sales['count'] ?? 0))) ?></span></span></div>
@@ -193,7 +193,7 @@ $formatDate = static function (?string $value): string {
     </div>
     <div class="col-12 col-xl-6">
         <section class="card index-card h-100 reports-card-expenses">
-            <div class="card-header index-card-header"><strong><i class="fas fa-receipt me-2"></i>Expenses</strong></div>
+            <div class="card-header index-card-header"><strong><i class="fas fa-receipt me-2 jt-report-icon--expenses" aria-hidden="true"></i>Expenses</strong></div>
             <div class="card-body">
                 <div class="record-row-fields record-row-fields-4 mb-3">
                     <div class="record-field"><span class="record-label">Count</span><span class="record-value"><span class="jt-report-count"><?= e((string) ((int) ($expenses['count'] ?? 0))) ?></span></span></div>
@@ -228,7 +228,7 @@ $formatDate = static function (?string $value): string {
     </div>
     <div class="col-12 col-xl-6">
         <section class="card index-card h-100 reports-card-purchasing">
-            <div class="card-header index-card-header"><strong><i class="fas fa-cart-arrow-down me-2"></i>Purchasing</strong></div>
+            <div class="card-header index-card-header"><strong><i class="fas fa-cart-arrow-down me-2 jt-report-icon--purchasing" aria-hidden="true"></i>Purchasing</strong></div>
             <div class="card-body">
                 <div class="record-row-fields record-row-fields-2">
                     <div class="record-field"><span class="record-label">Count</span><span class="record-value"><span class="jt-report-count"><?= e((string) ((int) ($purchases['count'] ?? 0))) ?></span></span></div>
@@ -243,7 +243,7 @@ $formatDate = static function (?string $value): string {
     <div class="col-12 col-xl-6">
         <section class="card index-card h-100 reports-card-jobs">
             <div class="card-header index-card-header d-flex align-items-center justify-content-between">
-                <strong><i class="fas fa-briefcase me-2"></i>Jobs (Within Range)</strong>
+                <strong><i class="fas fa-briefcase me-2 jt-report-icon--jobs" aria-hidden="true"></i>Jobs (Within Range)</strong>
                 <a class="small text-decoration-none fw-semibold" href="<?= e(url('/jobs')) ?>">Open Jobs</a>
             </div>
             <div class="card-body">
@@ -273,7 +273,7 @@ $formatDate = static function (?string $value): string {
     <div class="col-12 col-xl-6">
         <section class="card index-card h-100 reports-card-sales-list">
             <div class="card-header index-card-header d-flex align-items-center justify-content-between">
-                <strong><i class="fas fa-cash-register me-2"></i>Sales (Within Range)</strong>
+                <strong><i class="fas fa-cash-register me-2 jt-report-icon--sales-list" aria-hidden="true"></i>Sales (Within Range)</strong>
                 <a class="small text-decoration-none fw-semibold" href="<?= e(url('/sales')) ?>">Open Sales</a>
             </div>
             <div class="card-body">
@@ -309,7 +309,7 @@ $formatDate = static function (?string $value): string {
     <div class="col-12 col-xl-6">
         <section class="card index-card h-100 reports-card-purchases-list">
             <div class="card-header index-card-header d-flex align-items-center justify-content-between">
-                <strong><i class="fas fa-cart-arrow-down me-2"></i>Purchases (Within Range)</strong>
+                <strong><i class="fas fa-cart-arrow-down me-2 jt-report-icon--purchases-list" aria-hidden="true"></i>Purchases (Within Range)</strong>
                 <a class="small text-decoration-none fw-semibold" href="<?= e(url('/purchases')) ?>">Open Purchases</a>
             </div>
             <div class="card-body">

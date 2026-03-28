@@ -11,6 +11,7 @@
                 <input class="form-check-input" type="checkbox" name="remember_me" value="1" id="remember_me">
                 <label class="form-check-label" for="remember_me">Remember me</label>
             </div>
+            <p class="small text-muted mb-0 mt-1">Stay signed in for up to 72 hours without activity. Unchecked uses a shorter browser session.</p>
             <button class="btn btn-primary mt-3" type="submit">Sign In</button>
         </form>
     </div>

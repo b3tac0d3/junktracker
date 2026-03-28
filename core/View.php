@@ -14,7 +14,27 @@ final class View
             return;
         }
 
+        if ($template === 'layouts/main') {
+            $data = self::mergeNavNotifications($data);
+        }
+
         extract($data, EXTR_SKIP);
         require $viewPath;
+    }
+
+    /**
+     * @param array<string, mixed> $data
+     * @return array<string, mixed>
+     */
+    private static function mergeNavNotifications(array $data): array
+    {
+        if (!empty($data['publicPage'])) {
+            return $data;
+        }
+        if (!array_key_exists('navNotifications', $data)) {
+            $data['navNotifications'] = \App\Models\NavNotifications::summary();
+        }
+
+        return $data;
     }
 }

@@ -47,6 +47,11 @@ $employeeAddUrl = url('/jobs/' . (string) $jobId . '/employees/add');
 $bulkPunchUrl = url('/jobs/' . (string) $jobId . '/employees/bulk-punch');
 $jobStatus = strtolower(trim((string) ($job['status'] ?? 'pending')));
 $isInactive = $jobStatus === 'inactive' || (array_key_exists('is_active', $job) && (int) ($job['is_active'] ?? 1) === 0);
+$jobStatusOptions = is_array($jobStatusOptions ?? null) ? $jobStatusOptions : ['prospect', 'pending', 'active', 'complete', 'cancelled'];
+
+$statusLabel = static function (string $value): string {
+    return ucwords(str_replace('_', ' ', strtolower(trim($value))));
+};
 
 $formatDocDate = static function (?string $value): string {
     $raw = trim((string) $value);
@@ -85,11 +90,12 @@ $formatDuration = static function (int $minutes): string {
 };
 ?>
 
-<div class="page-header d-flex flex-wrap align-items-end justify-content-between gap-2">
-    <div>
-        <h1><?= e($title) ?></h1>
-    </div>
-    <div class="d-flex gap-2">
+<div class="page-header">
+    <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
+        <div class="d-flex flex-wrap align-items-center gap-3">
+            <h1 class="mb-0"><?= e($title) ?></h1>
+        </div>
+        <div class="d-flex flex-wrap gap-2 align-items-center">
         <?php if ($isInactive): ?>
             <span class="badge text-bg-secondary align-self-center">Deactivated</span>
         <?php endif; ?>
@@ -119,19 +125,38 @@ $formatDuration = static function (int $minutes): string {
             </ul>
         </div>
         <a class="btn btn-outline-secondary" href="<?= e(url('/jobs')) ?>">Back to Jobs</a>
+        </div>
     </div>
 </div>
 
 <section class="card index-card mb-3">
-    <div class="card-header index-card-header">
-        <strong><i class="fas fa-briefcase me-2"></i>Job Details</strong>
+    <div class="card-header index-card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+        <strong class="mb-0"><i class="fas fa-briefcase me-2"></i>Job Details</strong>
+        <?php if ($jobStatusOptions !== []): ?>
+            <form method="post" action="<?= e(url('/jobs/' . (string) $jobId . '/quick-status')) ?>" class="d-flex flex-wrap align-items-center gap-2">
+                <?= csrf_field() ?>
+                <label class="small text-muted mb-0 fw-semibold" for="job-quick-status">Status</label>
+                <select
+                    id="job-quick-status"
+                    name="status"
+                    class="form-select form-select-sm"
+                    style="width: auto; min-width: 10rem;"
+                    aria-label="Job status"
+                    onchange="this.form.submit()"
+                >
+                    <?php foreach ($jobStatusOptions as $opt): ?>
+                        <?php $opt = strtolower(trim((string) $opt)); ?>
+                        <?php if ($opt === '') {
+                            continue;
+                        } ?>
+                        <option value="<?= e($opt) ?>" <?= $jobStatus === $opt ? 'selected' : '' ?>><?= e($statusLabel($opt)) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </form>
+        <?php endif; ?>
     </div>
     <div class="card-body">
-        <div class="record-row-fields record-row-fields-3">
-            <div class="record-field">
-                <span class="record-label">Status</span>
-                <span class="record-value text-capitalize"><?= e((string) ($job['status'] ?? 'pending')) ?></span>
-            </div>
+        <div class="record-row-fields">
             <div class="record-field">
                 <span class="record-label">Job Type</span>
                 <span class="record-value"><?= e(trim((string) ($job['job_type'] ?? '')) ?: '—') ?></span>
