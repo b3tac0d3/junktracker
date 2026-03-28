@@ -308,6 +308,24 @@ final class NavNotifications
             : '1=1';
         $delWhere = SchemaInspector::hasColumn('invoices', 'deleted_at') ? 'i.deleted_at IS NULL' : '1=1';
 
+        $statusWhere = '';
+        if (SchemaInspector::hasColumn('invoices', 'status')) {
+            $statusWhere = "AND LOWER(TRIM(COALESCE(i.status, ''))) NOT IN ('paid','paid_in_full','cancelled','draft','declined')";
+        }
+
+        $unpaidWhere = '';
+        if (SchemaInspector::hasTable('payments') && SchemaInspector::hasColumn('payments', 'amount')) {
+            $amountCol = SchemaInspector::hasColumn('payments', 'amount') ? 'p.amount' : '0';
+            $payDel = SchemaInspector::hasColumn('payments', 'deleted_at') ? 'p.deleted_at IS NULL' : '1=1';
+            $payBiz = SchemaInspector::hasColumn('payments', 'business_id') ? 'p.business_id = i.business_id' : '1=1';
+            $unpaidWhere = "AND (
+                GREATEST(0, COALESCE({$totalSql}, 0) - COALESCE((
+                    SELECT SUM({$amountCol}) FROM payments p
+                    WHERE p.invoice_id = i.id AND {$payDel} AND {$payBiz}
+                ), 0)) > 0.009
+            )";
+        }
+
         $sql = "SELECT i.id, {$numberSql} AS inv_no, {$totalSql} AS inv_total, i.due_date
                 FROM invoices i
                 WHERE i.business_id = :business_id
@@ -315,7 +333,8 @@ final class NavNotifications
                   AND {$typeWhere}
                   AND i.due_date IS NOT NULL
                   AND DATE(i.due_date) < CURDATE()
-                  AND i.status NOT IN ('paid','paid_in_full','cancelled','draft','declined')
+                  {$statusWhere}
+                  {$unpaidWhere}
                 ORDER BY i.due_date ASC
                 LIMIT 8";
 
