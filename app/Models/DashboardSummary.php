@@ -17,6 +17,7 @@ final class DashboardSummary
             'purchases' => self::purchasesSummary($businessId),
             'jobs' => self::jobsSummary($businessId),
             'tasks' => self::tasksSummary($businessId, $ownerUserId),
+            'three_month_chart' => self::lastThreeMonthsChart($businessId),
             'lists' => [
                 'dispatch_jobs' => self::dispatchJobs($businessId),
                 'prospects' => self::prospectJobs($businessId),
@@ -620,5 +621,125 @@ final class DashboardSummary
 
         $rows = $stmt->fetchAll();
         return is_array($rows) ? $rows : [];
+    }
+
+    /**
+     * Last three calendar months (oldest → newest): sales gross, service (invoice) gross, expenses total, net profit.
+     * Net matches reports: sales net + service net − general expenses; service net = invoice gross − job expenses in month.
+     *
+     * @return array{months: list<array{label: string, sales_gross: float, service_gross: float, expenses_total: float, net_profit: float}>}
+     */
+    public static function lastThreeMonthsChart(int $businessId): array
+    {
+        $months = [];
+        $start = new \DateTimeImmutable('first day of this month');
+        for ($i = 2; $i >= 0; $i--) {
+            $dt = $start->modify('-' . $i . ' months');
+            $from = $dt->format('Y-m-01');
+            $to = $dt->format('Y-m-t');
+            $label = $dt->format('M Y');
+            $salesGross = self::monthlySalesGross($businessId, $from, $to);
+            $salesNet = self::monthlySalesNet($businessId, $from, $to);
+            $serviceGross = self::monthlyServiceInvoiceGross($businessId, $from, $to);
+            $jobExp = self::expensesTotalBetween($businessId, $from, $to, true);
+            $generalExp = self::expensesTotalBetween($businessId, $from, $to, false);
+            $serviceNet = round($serviceGross - $jobExp, 2);
+            $expensesTotal = round($jobExp + $generalExp, 2);
+            $netProfit = round($salesNet + $serviceNet - $generalExp, 2);
+            $months[] = [
+                'label' => $label,
+                'sales_gross' => round($salesGross, 2),
+                'service_gross' => round($serviceGross, 2),
+                'expenses_total' => $expensesTotal,
+                'net_profit' => $netProfit,
+            ];
+        }
+
+        return ['months' => $months];
+    }
+
+    private static function monthlySalesGross(int $businessId, string $from, string $to): float
+    {
+        if (!SchemaInspector::hasTable('sales')) {
+            return 0.0;
+        }
+        $grossSql = SchemaInspector::hasColumn('sales', 'gross_amount')
+            ? 'COALESCE(s.gross_amount, 0)'
+            : (SchemaInspector::hasColumn('sales', 'amount') ? 'COALESCE(s.amount, 0)' : '0');
+        $dateSql = SchemaInspector::hasColumn('sales', 'sale_date') ? 'DATE(s.sale_date)' : 'DATE(s.created_at)';
+        $where = [
+            SchemaInspector::hasColumn('sales', 'business_id') ? 's.business_id = :business_id' : '1=1',
+            SchemaInspector::hasColumn('sales', 'deleted_at') ? 's.deleted_at IS NULL' : '1=1',
+            "{$dateSql} BETWEEN :from_date AND :to_date",
+        ];
+        $sql = "SELECT COALESCE(SUM({$grossSql}), 0) AS gross_total FROM sales s WHERE " . implode(' AND ', $where);
+        $stmt = Database::connection()->prepare($sql);
+        if (SchemaInspector::hasColumn('sales', 'business_id')) {
+            $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
+        }
+        $stmt->bindValue(':from_date', $from, \PDO::PARAM_STR);
+        $stmt->bindValue(':to_date', $to, \PDO::PARAM_STR);
+        $stmt->execute();
+        $row = $stmt->fetch();
+
+        return (float) ($row['gross_total'] ?? 0);
+    }
+
+    private static function monthlySalesNet(int $businessId, string $from, string $to): float
+    {
+        if (!SchemaInspector::hasTable('sales')) {
+            return 0.0;
+        }
+        $grossSql = SchemaInspector::hasColumn('sales', 'gross_amount')
+            ? 'COALESCE(s.gross_amount, 0)'
+            : (SchemaInspector::hasColumn('sales', 'amount') ? 'COALESCE(s.amount, 0)' : '0');
+        $netSql = SchemaInspector::hasColumn('sales', 'net_amount') ? 'COALESCE(s.net_amount, 0)' : $grossSql;
+        $dateSql = SchemaInspector::hasColumn('sales', 'sale_date') ? 'DATE(s.sale_date)' : 'DATE(s.created_at)';
+        $where = [
+            SchemaInspector::hasColumn('sales', 'business_id') ? 's.business_id = :business_id' : '1=1',
+            SchemaInspector::hasColumn('sales', 'deleted_at') ? 's.deleted_at IS NULL' : '1=1',
+            "{$dateSql} BETWEEN :from_date AND :to_date",
+        ];
+        $sql = "SELECT COALESCE(SUM({$netSql}), 0) AS net_total FROM sales s WHERE " . implode(' AND ', $where);
+        $stmt = Database::connection()->prepare($sql);
+        if (SchemaInspector::hasColumn('sales', 'business_id')) {
+            $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
+        }
+        $stmt->bindValue(':from_date', $from, \PDO::PARAM_STR);
+        $stmt->bindValue(':to_date', $to, \PDO::PARAM_STR);
+        $stmt->execute();
+        $row = $stmt->fetch();
+
+        return (float) ($row['net_total'] ?? 0);
+    }
+
+    private static function monthlyServiceInvoiceGross(int $businessId, string $from, string $to): float
+    {
+        if (!SchemaInspector::hasTable('invoices')) {
+            return 0.0;
+        }
+        $totalSql = SchemaInspector::hasColumn('invoices', 'total')
+            ? 'COALESCE(i.total, 0)'
+            : (SchemaInspector::hasColumn('invoices', 'subtotal') ? 'COALESCE(i.subtotal, 0)' : '0');
+        $dateSql = SchemaInspector::hasColumn('invoices', 'issue_date') ? 'DATE(i.issue_date)' : 'DATE(i.created_at)';
+        $where = [
+            SchemaInspector::hasColumn('invoices', 'business_id') ? 'i.business_id = :business_id' : '1=1',
+            SchemaInspector::hasColumn('invoices', 'deleted_at') ? 'i.deleted_at IS NULL' : '1=1',
+            "{$dateSql} BETWEEN :from_date AND :to_date",
+        ];
+        if (SchemaInspector::hasColumn('invoices', 'type')) {
+            $where[] = "(LOWER(COALESCE(NULLIF(TRIM(i.type), ''), 'invoice')) = 'invoice')";
+        }
+        $sql = "SELECT COALESCE(SUM({$totalSql}), 0) AS gross_total FROM invoices i WHERE " . implode(' AND ', $where);
+        $stmt = Database::connection()->prepare($sql);
+        if (SchemaInspector::hasColumn('invoices', 'business_id')) {
+            $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
+        }
+        $stmt->bindValue(':from_date', $from, \PDO::PARAM_STR);
+        $stmt->bindValue(':to_date', $to, \PDO::PARAM_STR);
+        $stmt->execute();
+        $row = $stmt->fetch();
+
+        return (float) ($row['gross_total'] ?? 0);
     }
 }

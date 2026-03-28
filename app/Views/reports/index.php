@@ -32,6 +32,12 @@ $formatDate = static function (?string $value): string {
     }
     return date('m/d/Y', $ts);
 };
+
+$reportChartData = [
+    'gross' => round((float) ($overall['gross'] ?? 0), 2),
+    'net' => round((float) ($overall['net'] ?? 0), 2),
+    'expenses' => round((float) ($expenses['total'] ?? 0), 2),
+];
 ?>
 
 <div class="reports-shell">
@@ -90,6 +96,25 @@ $formatDate = static function (?string $value): string {
                 <span class="record-label">Purchase Total</span>
                 <span class="record-value"><span class="jt-report-out"><?= e($formatMoney($purchases['total'] ?? 0)) ?></span></span>
             </div>
+        </div>
+    </div>
+</section>
+
+<section class="card index-card mb-3 reports-card-chart">
+    <div class="card-header index-card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+        <strong class="mb-0"><i class="fas fa-chart-simple me-2 jt-report-icon--chart" aria-hidden="true"></i>Period overview</strong>
+        <div class="d-flex align-items-center gap-2 ms-md-auto">
+            <label class="small text-muted mb-0 fw-semibold text-nowrap" for="jtReportsChartType">Chart type</label>
+            <select id="jtReportsChartType" class="form-select form-select-sm jt-report-chart-type-select" aria-label="Chart type">
+                <option value="bar" selected>Bar</option>
+                <option value="pie">Pie</option>
+            </select>
+        </div>
+    </div>
+    <div class="card-body">
+        <p class="small text-muted mb-3 mb-md-2">Gross (sales + invoiced service), net profit (after general expenses), and total expenses for <?= e($formatDate($fromDate)) ?>–<?= e($formatDate($toDate)) ?>.</p>
+        <div class="jt-report-chart-holder">
+            <canvas id="jtReportsChart" aria-label="Chart of gross, net profit, and expenses" role="img"></canvas>
         </div>
     </div>
 </section>
@@ -341,4 +366,101 @@ $formatDate = static function (?string $value): string {
         </section>
     </div>
 </div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" crossorigin="anonymous"></script>
+<script>
+(function () {
+    const canvas = document.getElementById('jtReportsChart');
+    const typeSelect = document.getElementById('jtReportsChartType');
+    if (!canvas || typeof Chart === 'undefined') {
+        return;
+    }
+    const ctx = canvas.getContext('2d');
+    const data = <?= json_encode($reportChartData, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE) ?>;
+    const fmt = new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const labels = ['Gross', 'Net profit', 'Expenses'];
+    const values = [data.gross, data.net, data.expenses];
+    /* Soft fills + brighter edges (Gross / Net profit / Expenses) */
+    const colors = ['#93c5fd', '#86efac', '#fca5a5'];
+    const borders = ['#60a5fa', '#4ade80', '#f87171'];
+
+    let chart = null;
+
+    function buildConfig(type) {
+        const dataset = {
+            label: 'Amount',
+            data: values,
+            backgroundColor: colors,
+            borderColor: borders,
+            borderWidth: 1,
+        };
+
+        const options = {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                tooltip: {
+                    callbacks: {
+                        label: function (ctx) {
+                            if (type === 'pie') {
+                                const v = ctx.raw;
+                                const lbl = ctx.label ? ctx.label + ': ' : '';
+                                return lbl + fmt.format(v);
+                            }
+                            return fmt.format(ctx.raw);
+                        },
+                    },
+                },
+            },
+        };
+
+        if (type === 'pie') {
+            options.plugins.legend = {
+                display: true,
+                position: 'bottom',
+            };
+        } else {
+            options.plugins.legend = { display: false };
+            options.scales = {
+                y: {
+                    suggestedMin: Math.min(0, ...values) * 1.05,
+                    suggestedMax: Math.max(0, ...values) * 1.05,
+                    ticks: {
+                        callback: function (v) {
+                            return '$' + Number(v).toLocaleString(undefined, { maximumFractionDigits: 0 });
+                        },
+                    },
+                },
+                x: {
+                    grid: { display: false },
+                },
+            };
+        }
+
+        return {
+            type: type,
+            data: {
+                labels: labels,
+                datasets: [dataset],
+            },
+            options: options,
+        };
+    }
+
+    function render() {
+        const type = typeSelect && typeSelect.value ? typeSelect.value : 'bar';
+        if (chart) {
+            chart.destroy();
+            chart = null;
+        }
+        chart = new Chart(ctx, buildConfig(type));
+        canvas.setAttribute('aria-label', type.charAt(0).toUpperCase() + type.slice(1) + ' chart of gross, net profit, and expenses');
+    }
+
+    if (typeSelect) {
+        typeSelect.addEventListener('change', render);
+    }
+    render();
+})();
+</script>
 </div>

@@ -4,14 +4,14 @@ declare(strict_types=1);
 
 return [
     'name' => 'JunkTracker',
-    'version' => '1.3.8 (beta)',
+    'version' => '1.3.9 (beta)',
     'env' => 'local',
     'url' => 'http://localhost/junktracker',
     'timezone' => 'America/New_York',
     'session_name' => 'junktracker_session',
     /**
-     * PHP session file lifetime (seconds). Should be >= remember-me idle (72h). If the host ignores ini_set,
-     * set session.gc_maxlifetime in php.ini to this value (259200).
+     * PHP session file lifetime (seconds). The app raises this to at least remember-me persistence (~10y).
+     * If the host ignores ini_set, set session.gc_maxlifetime in php.ini accordingly.
      */
     'session_gc_maxlifetime' => 259200,
     'default_business_id' => 1,

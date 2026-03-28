@@ -120,11 +120,6 @@ $navNotifications = is_array($navNotifications ?? null) ? $navNotifications : ['
                     </ul>
                 </li>
             <?php endif; ?>
-            <?php if (is_site_admin() && !$isPunchOnlyWorkspace): ?>
-                <li class="nav-item">
-                    <a class="nav-link" href="<?= e(url('/site-admin/businesses')) ?>" title="Site Admin"><i class="fas fa-building-shield fa-fw"></i></a>
-                </li>
-            <?php endif; ?>
             <?php if (!$isGlobalSiteAdminContext && !$isPunchOnlyWorkspace): ?>
                 <li class="nav-item dropdown">
                     <a class="nav-link dropdown-toggle nav-quick-add-link" id="quickAddDropdown" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false" title="Add">
@@ -153,7 +148,7 @@ $navNotifications = is_array($navNotifications ?? null) ? $navNotifications : ['
                         <li><a class="dropdown-item" href="<?= e(url('/admin/users')) ?>">Manage Users</a></li>
                     <?php endif; ?>
                     <?php if (is_site_admin() && !$isPunchOnlyWorkspace): ?>
-                        <li><a class="dropdown-item" href="<?= e(url('/site-admin/businesses')) ?>">Switch Workspace</a></li>
+                        <li><a class="dropdown-item" href="<?= e(url('/site-admin/businesses')) ?>">Site Admin Dashboard</a></li>
                     <?php endif; ?>
                     <li><hr class="dropdown-divider" /></li>
                     <li>

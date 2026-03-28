@@ -10,16 +10,18 @@ if ((string) config('app.env', 'production') === 'local' && function_exists('opc
 
 session_name((string) config('app.session_name', 'junktracker_session'));
 if (session_status() !== PHP_SESSION_ACTIVE) {
-    $gcMax = (int) config('app.session_gc_maxlifetime', remember_me_idle_seconds());
+    $persistent = remember_me_persistent_seconds();
+    $gcMax = (int) config('app.session_gc_maxlifetime', $persistent);
     if ($gcMax < 60) {
-        $gcMax = remember_me_idle_seconds();
+        $gcMax = $persistent;
     }
+    $gcMax = max($gcMax, $persistent);
     @ini_set('session.gc_maxlifetime', (string) $gcMax);
     session_start();
 }
 
 if (session_status() === PHP_SESSION_ACTIVE) {
-    enforce_remember_me_idle_timeout();
+    maintain_remember_me_session();
 }
 
 date_default_timezone_set((string) config('app.timezone', 'America/New_York'));

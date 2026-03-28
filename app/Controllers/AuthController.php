@@ -186,10 +186,9 @@ final class AuthController extends Controller
 
         if ($rememberMe) {
             $_SESSION['remember_me'] = true;
-            $_SESSION['last_activity'] = time();
-            refresh_session_cookie_lifetime(remember_me_idle_seconds());
+            refresh_session_cookie_lifetime(remember_me_persistent_seconds());
         } else {
-            unset($_SESSION['remember_me'], $_SESSION['last_activity']);
+            unset($_SESSION['remember_me']);
             refresh_session_cookie_lifetime(0);
         }
 

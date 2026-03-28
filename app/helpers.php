@@ -588,16 +588,19 @@ function business_logo_absolute_url(?array $business): ?string
     return absolute_url($rel);
 }
 
-/** Max idle time in seconds before "Remember me" sessions are ended (72 hours). */
-function remember_me_idle_seconds(): int
+/**
+ * Session cookie expiry + server GC floor for "Remember me" (effectively until logout).
+ * Sliding window: cookie is refreshed on each request so it does not expire while in use.
+ */
+function remember_me_persistent_seconds(): int
 {
-    return 72 * 3600;
+    return 10 * 365 * 24 * 3600;
 }
 
 /**
- * Enforce idle timeout for remembered sessions; refresh activity + cookie when active.
+ * Keep remembered sessions alive: extend cookie on each request; no idle timeout.
  */
-function enforce_remember_me_idle_timeout(): void
+function maintain_remember_me_session(): void
 {
     if (session_status() !== PHP_SESSION_ACTIVE) {
         return;
@@ -606,18 +609,7 @@ function enforce_remember_me_idle_timeout(): void
         return;
     }
 
-    $seconds = remember_me_idle_seconds();
-    $last = (int) ($_SESSION['last_activity'] ?? 0);
-    if ($last > 0 && (time() - $last) > $seconds) {
-        unset($_SESSION['user'], $_SESSION['remember_me'], $_SESSION['last_activity'], $_SESSION['active_business_id']);
-        refresh_session_cookie_lifetime(0);
-        flash('error', 'You were logged out after 72 hours of inactivity.');
-
-        return;
-    }
-
-    $_SESSION['last_activity'] = time();
-    refresh_session_cookie_lifetime($seconds);
+    refresh_session_cookie_lifetime(remember_me_persistent_seconds());
 }
 
 /**

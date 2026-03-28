@@ -225,6 +225,19 @@ h1, h2, h3 {
   }
 }
 
+.dashboard-trend-chart .jt-dashboard-chart-holder {
+  position: relative;
+  margin-top: 0.5rem;
+  height: 280px;
+  max-width: 100%;
+}
+
+@media (min-width: 992px) {
+  .dashboard-trend-chart .jt-dashboard-chart-holder {
+    height: 320px;
+  }
+}
+
 /* removed legacy KPI gradient block (overridden above) */
 
 .dashboard-panels {
@@ -267,6 +280,14 @@ h1, h2, h3 {
   display: inline-block;
   line-height: 1;
   vertical-align: middle;
+}
+
+/* Top bar: bell glyph reads smaller than fa-circle-plus / fa-user — match visual weight */
+.sb-topnav #notificationsDropdown .jt-notifications-anchor {
+  font-size: 1.2rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 /* Compact pill on the bell: small type, tight offset (avoid large negative top/right). */
@@ -506,24 +527,24 @@ main .card.index-card-overflow-visible .card-body {
   color: #6495ed; /* cornflowerblue - match app-wide record labels */
 }
 
-/* Reports: semantic number colors */
+/* Reports: semantic number colors (soft, slightly bright) */
 .reports-shell .jt-report-in {
-  color: #15803d;
+  color: #2d9a65;
   font-weight: 800;
 }
 
 .reports-shell .jt-report-out {
-  color: #b91c1c;
+  color: #dc5c5c;
   font-weight: 800;
 }
 
 .reports-shell .jt-report-net {
-  color: #1d4ed8;
+  color: #3b82f6;
   font-weight: 800;
 }
 
 .reports-shell .jt-report-count {
-  color: #2563eb;
+  color: #4f8aea;
   font-weight: 700;
 }
 
@@ -534,43 +555,60 @@ main .card.index-card-overflow-visible .card-body {
 
 /* Reports: header icons (accent color like dashboard card headers) */
 .reports-shell .index-card-header strong .jt-report-icon--period {
-  color: #0ea5e9;
+  color: #38bdf8;
 }
 
 .reports-shell .index-card-header strong .jt-report-icon--totals {
-  color: #2563eb;
+  color: #60a5fa;
 }
 
 .reports-shell .index-card-header strong .jt-report-icon--margin {
-  color: #0d9488;
+  color: #2dd4bf;
 }
 
 .reports-shell .index-card-header strong .jt-report-icon--service {
-  color: #1d4ed8;
+  color: #60a5fa;
 }
 
 .reports-shell .index-card-header strong .jt-report-icon--sales {
-  color: #15803d;
+  color: #4ade80;
 }
 
 .reports-shell .index-card-header strong .jt-report-icon--expenses {
-  color: #b91c1c;
+  color: #fb7185;
 }
 
 .reports-shell .index-card-header strong .jt-report-icon--purchasing {
-  color: #ea580c;
+  color: #fb923c;
 }
 
 .reports-shell .index-card-header strong .jt-report-icon--jobs {
-  color: #4f46e5;
+  color: #818cf8;
 }
 
 .reports-shell .index-card-header strong .jt-report-icon--sales-list {
-  color: #16a34a;
+  color: #4ade80;
 }
 
 .reports-shell .index-card-header strong .jt-report-icon--purchases-list {
-  color: #ea580c;
+  color: #fb923c;
+}
+
+.reports-shell .index-card-header strong .jt-report-icon--chart {
+  color: #818cf8;
+}
+
+.reports-shell .jt-report-chart-holder {
+  position: relative;
+  width: 100%;
+  height: min(22rem, 52vh);
+  min-height: 14rem;
+}
+
+.reports-shell .jt-report-chart-type-select {
+  width: auto;
+  min-width: 9.5rem;
+  max-width: 100%;
 }
 
 .reports-shell .simple-list-meta .jt-report-in,

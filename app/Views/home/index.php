@@ -21,6 +21,25 @@ $purchaseProspects = is_array($lists['purchase_prospects'] ?? null) ? $lists['pu
 $myTasksDue = is_array($lists['my_tasks_due'] ?? null) ? $lists['my_tasks_due'] : [];
 $recentSales = is_array($lists['recent_sales'] ?? null) ? $lists['recent_sales'] : [];
 $upcomingDeliveries = is_array($lists['upcoming_deliveries'] ?? null) ? $lists['upcoming_deliveries'] : [];
+$threeMonthChart = is_array($summary['three_month_chart'] ?? null) ? $summary['three_month_chart'] : ['months' => []];
+$chartMonths = is_array($threeMonthChart['months'] ?? null) ? $threeMonthChart['months'] : [];
+$dashboardChartPayload = [
+    'labels' => [],
+    'sales_gross' => [],
+    'service_gross' => [],
+    'expenses_total' => [],
+    'net_profit' => [],
+];
+foreach ($chartMonths as $m) {
+    if (!is_array($m)) {
+        continue;
+    }
+    $dashboardChartPayload['labels'][] = (string) ($m['label'] ?? '');
+    $dashboardChartPayload['sales_gross'][] = round((float) ($m['sales_gross'] ?? 0), 2);
+    $dashboardChartPayload['service_gross'][] = round((float) ($m['service_gross'] ?? 0), 2);
+    $dashboardChartPayload['expenses_total'][] = round((float) ($m['expenses_total'] ?? 0), 2);
+    $dashboardChartPayload['net_profit'][] = round((float) ($m['net_profit'] ?? 0), 2);
+}
 $selfEmployee = is_array($selfEmployee ?? null) ? $selfEmployee : null;
 $selfOpenEntry = is_array($selfOpenEntry ?? null) ? $selfOpenEntry : null;
 $canViewPunchBoard = (bool) ($canViewPunchBoard ?? false);
@@ -100,6 +119,21 @@ $employeeDisplayName = static function (array $row): string {
         <small>Net YTD less expenses</small>
     </a>
 </div>
+
+<section class="card index-card shadow-sm mb-3 dashboard-trend-chart">
+    <div class="card-header index-card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+        <div>
+            <strong class="fs-5"><i class="fas fa-chart-column me-2 text-primary"></i>Last 3 months</strong>
+            <div class="small text-muted">Sales gross, service gross, expenses, and net profit by calendar month (same logic as Reports).</div>
+        </div>
+        <a class="btn btn-sm btn-outline-secondary" href="<?= e(url('/reports')) ?>">Full reports</a>
+    </div>
+    <div class="card-body">
+        <div class="jt-dashboard-chart-holder">
+            <canvas id="jtDashboardChart" aria-label="Bar chart of last three months" role="img"></canvas>
+        </div>
+    </div>
+</section>
 
 <section class="card index-card shadow-sm mb-3" style="margin-top: 1em">
     <div class="card-header index-card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
@@ -370,3 +404,89 @@ $employeeDisplayName = static function (array $row): string {
         </div>
     </section>
 </div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" crossorigin="anonymous"></script>
+<script>
+(function () {
+    const canvas = document.getElementById('jtDashboardChart');
+    if (!canvas || typeof Chart === 'undefined') {
+        return;
+    }
+    const payload = <?= json_encode($dashboardChartPayload, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE) ?>;
+    const fmt = new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const labels = payload.labels && payload.labels.length ? payload.labels : ['—', '—', '—'];
+    const ds = function (key) {
+        return Array.isArray(payload[key]) && payload[key].length ? payload[key] : [0, 0, 0];
+    };
+    new Chart(canvas.getContext('2d'), {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'Sales gross',
+                    data: ds('sales_gross'),
+                    backgroundColor: '#93c5fd',
+                    borderColor: '#60a5fa',
+                    borderWidth: 1,
+                },
+                {
+                    label: 'Service gross',
+                    data: ds('service_gross'),
+                    backgroundColor: '#86efac',
+                    borderColor: '#4ade80',
+                    borderWidth: 1,
+                },
+                {
+                    label: 'Expenses',
+                    data: ds('expenses_total'),
+                    backgroundColor: '#fca5a5',
+                    borderColor: '#f87171',
+                    borderWidth: 1,
+                },
+                {
+                    label: 'Net profit',
+                    data: ds('net_profit'),
+                    backgroundColor: '#c4b5fd',
+                    borderColor: '#a78bfa',
+                    borderWidth: 1,
+                },
+            ],
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: {
+                    display: true,
+                    position: 'bottom',
+                    labels: { boxWidth: 14, padding: 12 },
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function (ctx) {
+                            return ctx.dataset.label + ': ' + fmt.format(ctx.raw);
+                        },
+                    },
+                },
+            },
+            scales: {
+                y: {
+                    border: { display: false },
+                    grid: { color: 'rgba(148, 163, 184, 0.35)' },
+                    ticks: {
+                        callback: function (v) {
+                            return '$' + Number(v).toLocaleString(undefined, { maximumFractionDigits: 0 });
+                        },
+                    },
+                },
+                x: {
+                    grid: { display: false },
+                    border: { display: false },
+                },
+            },
+        },
+    });
+})();
+</script>
