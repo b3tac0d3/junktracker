@@ -15,6 +15,35 @@
   --jt-primary: #2563eb;
   --jt-primary-2: #22c55e;
 
+  /**
+   * KPI strip + semantic accents (dashboard cards, icons, charts).
+   * Order: Sales → Service → Total income → Purchases → Expenses → Profit YTD
+   */
+  --jt-kpi-sales: #1d4ed8;
+  --jt-kpi-service: #15803d;
+  --jt-kpi-income: #0f766e;
+  --jt-kpi-purchases: #c2410c;
+  --jt-kpi-expenses: #9d174d;
+  --jt-kpi-profit: #4d7c0f;
+
+  /* Grouped bar charts (lighter fill, KPI-hue stroke) */
+  --jt-chart-sales-fill: #60a5fa;
+  --jt-chart-sales-stroke: #1d4ed8;
+  --jt-chart-service-fill: #4ade80;
+  --jt-chart-service-stroke: #15803d;
+  --jt-chart-expenses-fill: #f472b6;
+  --jt-chart-expenses-stroke: #9d174d;
+  --jt-chart-profit-fill: #a3e635;
+  --jt-chart-profit-stroke: #4d7c0f;
+
+  /* Reports summary chart: Gross / Net profit / Expenses (explicit hex so JS getPropertyValue works everywhere) */
+  --jt-chart-reports-gross-fill: #60a5fa;
+  --jt-chart-reports-gross-stroke: #1d4ed8;
+  --jt-chart-reports-net-fill: #a3e635;
+  --jt-chart-reports-net-stroke: #4d7c0f;
+  --jt-chart-reports-expenses-fill: #f472b6;
+  --jt-chart-reports-expenses-stroke: #9d174d;
+
   /* UI rhythm */
   --jt-radius: 14px;
   --jt-radius-sm: 10px;
@@ -129,12 +158,12 @@ h1, h2, h3 {
   box-shadow: 0 10px 22px rgba(15, 23, 42, 0.45);
 }
 
-.kpi-card:nth-child(1) { background-color: #1d4ed8; } /* blue */
-.kpi-card:nth-child(2) { background-color: #15803d; } /* green */
-.kpi-card:nth-child(3) { background-color: #0f766e; } /* teal */
-.kpi-card:nth-child(4) { background-color: #c2410c; } /* orange */
-.kpi-card:nth-child(5) { background-color: #9d174d; } /* magenta */
-.kpi-card:nth-child(6) { background-color: #4d7c0f; } /* lime green */
+.kpi-card:nth-child(1) { background-color: var(--jt-kpi-sales); }
+.kpi-card:nth-child(2) { background-color: var(--jt-kpi-service); }
+.kpi-card:nth-child(3) { background-color: var(--jt-kpi-income); }
+.kpi-card:nth-child(4) { background-color: var(--jt-kpi-purchases); }
+.kpi-card:nth-child(5) { background-color: var(--jt-kpi-expenses); }
+.kpi-card:nth-child(6) { background-color: var(--jt-kpi-profit); }
 
 .kpi-card span {
   font-size: .8rem;
@@ -252,13 +281,39 @@ h1, h2, h3 {
   }
 }
 
-/* Dashboard home: header icons that should read as accent color (not same as title text) */
-.dashboard-panels .index-card-header strong .jt-dashboard-icon--purchase {
-  color: #ea580c;
+/* Dashboard: section header icons (match KPI semantic colors) */
+.jt-dashboard-icon--sales {
+  color: var(--jt-kpi-sales) !important;
 }
 
-.dashboard-panels .index-card-header strong .jt-dashboard-icon--tasks {
-  color: #7c3aed;
+.jt-dashboard-icon--service {
+  color: var(--jt-kpi-service) !important;
+}
+
+.jt-dashboard-icon--income {
+  color: var(--jt-kpi-income) !important;
+}
+
+.jt-dashboard-icon--purchases {
+  color: var(--jt-kpi-purchases) !important;
+}
+
+.jt-dashboard-icon--expenses {
+  color: var(--jt-kpi-expenses) !important;
+}
+
+.jt-dashboard-icon--profit {
+  color: var(--jt-kpi-profit) !important;
+}
+
+.dashboard-panels .index-card-header strong .jt-dashboard-icon--purchase,
+.dashboard-panels .index-card-header strong .jt-dashboard-icon--purchases {
+  color: var(--jt-kpi-purchases) !important;
+}
+
+.dashboard-panels .index-card-header strong .jt-dashboard-icon--tasks,
+.dashboard-panels .index-card-header strong .jt-dashboard-icon--profit {
+  color: var(--jt-kpi-profit) !important;
 }
 
 /* Top nav: notifications dropdown */
@@ -524,27 +579,27 @@ main .card.index-card-overflow-visible .card-body {
 }
 
 .reports-shell .index-card .record-row-fields .record-field .record-label {
-  color: #6495ed; /* cornflowerblue - match app-wide record labels */
+  color: color-mix(in srgb, var(--jt-kpi-sales) 78%, white);
 }
 
-/* Reports: semantic number colors (soft, slightly bright) */
+/* Reports: semantic number colors (align with KPI palette) */
 .reports-shell .jt-report-in {
-  color: #2d9a65;
+  color: var(--jt-kpi-service);
   font-weight: 800;
 }
 
 .reports-shell .jt-report-out {
-  color: #dc5c5c;
+  color: var(--jt-kpi-expenses);
   font-weight: 800;
 }
 
 .reports-shell .jt-report-net {
-  color: #3b82f6;
+  color: var(--jt-kpi-sales);
   font-weight: 800;
 }
 
 .reports-shell .jt-report-count {
-  color: #4f8aea;
+  color: var(--jt-kpi-income);
   font-weight: 700;
 }
 
@@ -553,49 +608,49 @@ main .card.index-card-overflow-visible .card-body {
   font-weight: 500;
 }
 
-/* Reports: header icons (accent color like dashboard card headers) */
+/* Reports: header icons (same semantic palette as dashboard KPIs) */
 .reports-shell .index-card-header strong .jt-report-icon--period {
-  color: #38bdf8;
+  color: var(--jt-kpi-income);
 }
 
 .reports-shell .index-card-header strong .jt-report-icon--totals {
-  color: #60a5fa;
+  color: var(--jt-kpi-sales);
 }
 
 .reports-shell .index-card-header strong .jt-report-icon--margin {
-  color: #2dd4bf;
+  color: var(--jt-kpi-profit);
 }
 
 .reports-shell .index-card-header strong .jt-report-icon--service {
-  color: #60a5fa;
+  color: var(--jt-kpi-service);
 }
 
 .reports-shell .index-card-header strong .jt-report-icon--sales {
-  color: #4ade80;
+  color: var(--jt-kpi-sales);
 }
 
 .reports-shell .index-card-header strong .jt-report-icon--expenses {
-  color: #fb7185;
+  color: var(--jt-kpi-expenses);
 }
 
 .reports-shell .index-card-header strong .jt-report-icon--purchasing {
-  color: #fb923c;
+  color: var(--jt-kpi-purchases);
 }
 
 .reports-shell .index-card-header strong .jt-report-icon--jobs {
-  color: #818cf8;
+  color: var(--jt-kpi-income);
 }
 
 .reports-shell .index-card-header strong .jt-report-icon--sales-list {
-  color: #4ade80;
+  color: var(--jt-kpi-sales);
 }
 
 .reports-shell .index-card-header strong .jt-report-icon--purchases-list {
-  color: #fb923c;
+  color: var(--jt-kpi-purchases);
 }
 
 .reports-shell .index-card-header strong .jt-report-icon--chart {
-  color: #818cf8;
+  color: var(--jt-kpi-sales);
 }
 
 .reports-shell .jt-report-chart-holder {
@@ -856,12 +911,12 @@ a.admin-nav-tile:focus {
   font-size: .74rem;
   letter-spacing: .05em;
   text-transform: uppercase;
-  color: #6495ed; /* cornflowerblue */
+  color: color-mix(in srgb, var(--jt-kpi-sales) 78%, white);
   font-weight: 700;
 }
 
 .form-label {
-  color: #6495ed; /* cornflowerblue */
+  color: color-mix(in srgb, var(--jt-kpi-sales) 78%, white);
 }
 
 .record-value {

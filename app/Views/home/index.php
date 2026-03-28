@@ -123,7 +123,7 @@ $employeeDisplayName = static function (array $row): string {
 <section class="card index-card shadow-sm mb-3 dashboard-trend-chart">
     <div class="card-header index-card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
         <div>
-            <strong class="fs-5"><i class="fas fa-chart-column me-2 text-primary"></i>Last 3 months</strong>
+            <strong class="fs-5"><i class="fas fa-chart-column me-2 jt-dashboard-icon--sales" aria-hidden="true"></i>Last 3 months</strong>
             <div class="small text-muted">Sales gross, service gross, expenses, and net profit by calendar month (same logic as Reports).</div>
         </div>
         <a class="btn btn-sm btn-outline-secondary" href="<?= e(url('/reports')) ?>">Full reports</a>
@@ -138,11 +138,11 @@ $employeeDisplayName = static function (array $row): string {
 <section class="card index-card shadow-sm mb-3" style="margin-top: 1em">
     <div class="card-header index-card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
         <div>
-            <strong class="fs-5"><i class="fas fa-truck me-2 text-info"></i>Client deliveries</strong>
+            <strong class="fs-5"><i class="fas fa-truck me-2 jt-dashboard-icon--income" aria-hidden="true"></i>Client deliveries</strong>
             <div class="small text-muted">Scheduled in the next 14 days</div>
         </div>
         <div class="d-flex flex-wrap gap-2">
-            <a class="btn btn-sm btn-outline-primary" href="<?= e(url('/deliveries/create')) ?>"><i class="fas fa-plus me-1 text-primary"></i>Add delivery</a>
+            <a class="btn btn-sm btn-outline-primary" href="<?= e(url('/deliveries/create')) ?>"><i class="fas fa-plus me-1 jt-dashboard-icon--sales" aria-hidden="true"></i>Add delivery</a>
             <a class="btn btn-sm btn-outline-secondary" href="<?= e(url('/deliveries')) ?>">View all</a>
         </div>
     </div>
@@ -150,7 +150,7 @@ $employeeDisplayName = static function (array $row): string {
         <?php if ($upcomingDeliveries === []): ?>
             <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
                 <div class="text-muted">No upcoming deliveries on the calendar. Add a client, then schedule a delivery.</div>
-                <a class="btn btn-outline-primary btn-sm" href="<?= e(url('/clients/create')) ?>"><i class="fas fa-user-plus me-1 text-primary"></i>Add client</a>
+                <a class="btn btn-outline-primary btn-sm" href="<?= e(url('/clients/create')) ?>"><i class="fas fa-user-plus me-1 jt-dashboard-icon--sales" aria-hidden="true"></i>Add client</a>
             </div>
         <?php else: ?>
             <div class="simple-list-table">
@@ -177,7 +177,7 @@ $employeeDisplayName = static function (array $row): string {
 <div class="dashboard-panels mt-3">
     <section class="card index-card">
         <div class="card-header index-card-header d-flex align-items-center justify-content-between">
-            <strong><i class="fas fa-user-clock me-2 text-primary"></i>My Punch Status</strong>
+            <strong><i class="fas fa-user-clock me-2 jt-dashboard-icon--sales" aria-hidden="true"></i>My Punch Status</strong>
             <a class="small text-decoration-none fw-semibold" href="<?= e(url('/time-tracking/punch-board')) ?>">Open Punch Board</a>
         </div>
         <div class="card-body">
@@ -226,7 +226,7 @@ $employeeDisplayName = static function (array $row): string {
     <?php if ($canViewPunchBoard): ?>
         <section class="card index-card">
             <div class="card-header index-card-header d-flex align-items-center justify-content-between">
-                <strong><i class="fas fa-users me-2 text-success"></i>Currently Punched In</strong>
+                <strong><i class="fas fa-users me-2 jt-dashboard-icon--service" aria-hidden="true"></i>Currently Punched In</strong>
                 <a class="small text-decoration-none fw-semibold" href="<?= e(url('/time-tracking/punch-board')) ?>">Open Punch Board</a>
             </div>
             <div class="card-body">
@@ -260,7 +260,7 @@ $employeeDisplayName = static function (array $row): string {
 
     <section class="card index-card">
         <div class="card-header index-card-header d-flex align-items-center justify-content-between">
-            <strong><i class="fas fa-clipboard-list me-2 text-warning"></i>Dispatch Queue</strong>
+            <strong><i class="fas fa-clipboard-list me-2 jt-dashboard-icon--purchases" aria-hidden="true"></i>Dispatch Queue</strong>
             <a class="small text-decoration-none fw-semibold" href="<?= e(url('/jobs?status=dispatch')) ?>">Open Jobs</a>
         </div>
         <div class="card-body">
@@ -288,7 +288,7 @@ $employeeDisplayName = static function (array $row): string {
 
     <section class="card index-card">
         <div class="card-header index-card-header d-flex align-items-center justify-content-between">
-            <strong><i class="fas fa-bullseye me-2 text-danger"></i>Job Prospects</strong>
+            <strong><i class="fas fa-bullseye me-2 jt-dashboard-icon--expenses" aria-hidden="true"></i>Job Prospects</strong>
             <a class="small text-decoration-none fw-semibold" href="<?= e(url('/jobs?status=prospect')) ?>">Open Job Prospects</a>
         </div>
         <div class="card-body">
@@ -315,7 +315,7 @@ $employeeDisplayName = static function (array $row): string {
 
     <section class="card index-card">
         <div class="card-header index-card-header d-flex align-items-center justify-content-between">
-            <strong><i class="fas fa-cart-shopping me-2 jt-dashboard-icon--purchase" aria-hidden="true"></i>Purchase Prospects</strong>
+            <strong><i class="fas fa-cart-shopping me-2 jt-dashboard-icon--purchases" aria-hidden="true"></i>Purchase Prospects</strong>
             <a class="small text-decoration-none fw-semibold" href="<?= e(url('/purchases')) ?>">Open Purchases</a>
         </div>
         <div class="card-body">
@@ -347,7 +347,7 @@ $employeeDisplayName = static function (array $row): string {
 
     <section class="card index-card">
         <div class="card-header index-card-header d-flex align-items-center justify-content-between">
-            <strong><i class="fas fa-list-check me-2 jt-dashboard-icon--tasks" aria-hidden="true"></i>My Tasks Due</strong>
+            <strong><i class="fas fa-list-check me-2 jt-dashboard-icon--profit" aria-hidden="true"></i>My Tasks Due</strong>
             <a class="small text-decoration-none fw-semibold" href="<?= e(url('/tasks?status=open')) ?>">Open Tasks</a>
         </div>
         <div class="card-body">
@@ -377,7 +377,7 @@ $employeeDisplayName = static function (array $row): string {
 
     <section class="card index-card">
         <div class="card-header index-card-header d-flex align-items-center justify-content-between">
-            <strong><i class="fas fa-sack-dollar me-2 text-success"></i>Recent Sales (MTD)</strong>
+            <strong><i class="fas fa-sack-dollar me-2 jt-dashboard-icon--sales" aria-hidden="true"></i>Recent Sales (MTD)</strong>
             <a class="small text-decoration-none fw-semibold" href="<?= e(url('/sales')) ?>">Open Sales</a>
         </div>
         <div class="card-body">
@@ -418,39 +418,36 @@ $employeeDisplayName = static function (array $row): string {
     const ds = function (key) {
         return Array.isArray(payload[key]) && payload[key].length ? payload[key] : [0, 0, 0];
     };
+    const rs = getComputedStyle(document.documentElement);
+    const barColors = function (fillVar, strokeVar) {
+        return {
+            backgroundColor: rs.getPropertyValue(fillVar).trim(),
+            borderColor: rs.getPropertyValue(strokeVar).trim(),
+            borderWidth: 1,
+            borderRadius: 4,
+        };
+    };
     new Chart(canvas.getContext('2d'), {
         type: 'bar',
         data: {
             labels: labels,
             datasets: [
-                {
-                    label: 'Sales gross',
-                    data: ds('sales_gross'),
-                    backgroundColor: '#93c5fd',
-                    borderColor: '#60a5fa',
-                    borderWidth: 1,
-                },
-                {
-                    label: 'Service gross',
-                    data: ds('service_gross'),
-                    backgroundColor: '#86efac',
-                    borderColor: '#4ade80',
-                    borderWidth: 1,
-                },
-                {
-                    label: 'Expenses',
-                    data: ds('expenses_total'),
-                    backgroundColor: '#fca5a5',
-                    borderColor: '#f87171',
-                    borderWidth: 1,
-                },
-                {
-                    label: 'Net profit',
-                    data: ds('net_profit'),
-                    backgroundColor: '#c4b5fd',
-                    borderColor: '#a78bfa',
-                    borderWidth: 1,
-                },
+                Object.assign(
+                    { label: 'Sales gross', data: ds('sales_gross') },
+                    barColors('--jt-chart-sales-fill', '--jt-chart-sales-stroke')
+                ),
+                Object.assign(
+                    { label: 'Service gross', data: ds('service_gross') },
+                    barColors('--jt-chart-service-fill', '--jt-chart-service-stroke')
+                ),
+                Object.assign(
+                    { label: 'Expenses', data: ds('expenses_total') },
+                    barColors('--jt-chart-expenses-fill', '--jt-chart-expenses-stroke')
+                ),
+                Object.assign(
+                    { label: 'Net profit', data: ds('net_profit') },
+                    barColors('--jt-chart-profit-fill', '--jt-chart-profit-stroke')
+                ),
             ],
         },
         options: {

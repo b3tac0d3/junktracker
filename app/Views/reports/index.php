@@ -380,9 +380,21 @@ $reportChartData = [
     const fmt = new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 });
     const labels = ['Gross', 'Net profit', 'Expenses'];
     const values = [data.gross, data.net, data.expenses];
-    /* Soft fills + brighter edges (Gross / Net profit / Expenses) */
-    const colors = ['#93c5fd', '#86efac', '#fca5a5'];
-    const borders = ['#60a5fa', '#4ade80', '#f87171'];
+    const rs = getComputedStyle(document.documentElement);
+    const cv = function (name) {
+        return rs.getPropertyValue(name).trim();
+    };
+    /* Same palette as dashboard KPIs (CSS variables in jt-theme.css) */
+    const colors = [
+        cv('--jt-chart-reports-gross-fill'),
+        cv('--jt-chart-reports-net-fill'),
+        cv('--jt-chart-reports-expenses-fill'),
+    ];
+    const borders = [
+        cv('--jt-chart-reports-gross-stroke'),
+        cv('--jt-chart-reports-net-stroke'),
+        cv('--jt-chart-reports-expenses-stroke'),
+    ];
 
     let chart = null;
 
@@ -393,6 +405,7 @@ $reportChartData = [
             backgroundColor: colors,
             borderColor: borders,
             borderWidth: 1,
+            borderRadius: 4,
         };
 
         const options = {

@@ -351,11 +351,13 @@ function format_phone(?string $value): string
 }
 
 /**
+ * Allowed "rows per page" values (shown in index pagination dropdowns).
+ *
  * @return array<int, int>
  */
 function pagination_per_page_options(): array
 {
-    return [25, 50, 100, 200];
+    return [10, 25, 50, 100, 200];
 }
 
 /**
@@ -419,6 +421,7 @@ function us_state_options(): array
     ];
 }
 
+/** Default page size when `per_page` is missing or invalid (must be in {@see pagination_per_page_options()}). */
 function pagination_per_page(mixed $value, int $default = 25): int
 {
     $perPage = (int) $value;
