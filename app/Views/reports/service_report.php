@@ -56,19 +56,19 @@ $resetHref = url('/reports/service');
             <p class="small text-muted mb-3 mb-md-2">Invoiced service: gross, job-linked expenses, and net (profit).</p>
             <div class="row g-3">
                 <div class="col-sm-6 col-lg-3">
-                    <div class="small text-muted">Invoice count</div>
+                    <div class="jt-report-summary-label small">Invoice count</div>
                     <div class="fs-5 fw-semibold"><?= (int) ($serviceTotals['count'] ?? 0) ?></div>
                 </div>
                 <div class="col-sm-6 col-lg-3">
-                    <div class="small text-muted">Gross (invoiced)</div>
+                    <div class="jt-report-summary-label small">Gross (invoiced)</div>
                     <div class="fs-5 fw-semibold"><span class="jt-report-in"><?= e($formatMoney((float) ($serviceTotals['gross'] ?? 0))) ?></span></div>
                 </div>
                 <div class="col-sm-6 col-lg-3">
-                    <div class="small text-muted">Job expenses</div>
+                    <div class="jt-report-summary-label small">Job expenses</div>
                     <div class="fs-5 fw-semibold"><span class="jt-report-out"><?= e($formatMoney((float) ($serviceTotals['job_expenses'] ?? 0))) ?></span></div>
                 </div>
                 <div class="col-sm-6 col-lg-3">
-                    <div class="small text-muted">Net (service profit)</div>
+                    <div class="jt-report-summary-label small">Net (service profit)</div>
                     <div class="fs-5 fw-semibold"><span class="jt-report-net"><?= e($formatMoney((float) ($serviceTotals['net'] ?? 0))) ?></span></div>
                 </div>
             </div>

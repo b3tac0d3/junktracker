@@ -68,27 +68,37 @@ $resetHref = url('/reports/income');
         <strong><i class="fas fa-chart-column me-2 jt-report-icon--totals" aria-hidden="true"></i>Summary</strong>
     </div>
     <div class="card-body">
-        <p class="small text-muted mb-3 mb-md-2">Gross revenue, net profit, expenses (loss), and purchase COGS for the period.</p>
+        <p class="small text-muted mb-3 mb-md-2">Period summary</p>
         <div class="row g-3">
-            <div class="col-sm-6 col-lg-4 col-xl-2">
-                <div class="small text-muted">Gross revenue</div>
-                <div class="fs-5 fw-semibold"><span class="jt-report-in"><?= e($formatMoney($overall['gross'] ?? 0)) ?></span></div>
+            <div class="col-6 col-md-4 col-xl-2">
+                <div class="jt-report-summary-metric">
+                    <div class="jt-report-summary-label small">Gross</div>
+                    <div class="fs-5 fw-semibold"><span class="jt-report-in"><?= e($formatMoney($overall['gross'] ?? 0)) ?></span></div>
+                </div>
             </div>
-            <div class="col-sm-6 col-lg-4 col-xl-2">
-                <div class="small text-muted">Net profit <span class="text-muted fw-normal">(after general expenses)</span></div>
-                <div class="fs-5 fw-semibold"><span class="jt-report-net"><?= e($formatMoney($overall['net'] ?? 0)) ?></span></div>
+            <div class="col-6 col-md-4 col-xl-2">
+                <div class="jt-report-summary-metric">
+                    <div class="jt-report-summary-label small">Overall net</div>
+                    <div class="fs-5 fw-semibold"><span class="jt-report-net"><?= e($formatMoney($overall['net'] ?? 0)) ?></span></div>
+                </div>
             </div>
-            <div class="col-sm-6 col-lg-4 col-xl-2">
-                <div class="small text-muted">Net after purchases <span class="text-muted fw-normal">(profit)</span></div>
-                <div class="fs-5 fw-semibold"><span class="jt-report-net"><?= e($formatMoney($overall['net_minus_purchases'] ?? 0)) ?></span></div>
+            <div class="col-6 col-md-4 col-xl-2">
+                <div class="jt-report-summary-metric">
+                    <div class="jt-report-summary-label small">After purchases</div>
+                    <div class="fs-5 fw-semibold"><span class="jt-report-net"><?= e($formatMoney($overall['net_minus_purchases'] ?? 0)) ?></span></div>
+                </div>
             </div>
-            <div class="col-sm-6 col-lg-4 col-xl-2">
-                <div class="small text-muted">Total expense <span class="text-muted fw-normal">(loss)</span></div>
-                <div class="fs-5 fw-semibold"><span class="jt-report-out"><?= e($formatMoney($expenses['total'] ?? 0)) ?></span></div>
+            <div class="col-6 col-md-4 col-xl-2">
+                <div class="jt-report-summary-metric">
+                    <div class="jt-report-summary-label small">Total expense</div>
+                    <div class="fs-5 fw-semibold"><span class="jt-report-out"><?= e($formatMoney($expenses['total'] ?? 0)) ?></span></div>
+                </div>
             </div>
-            <div class="col-sm-6 col-lg-4 col-xl-2">
-                <div class="small text-muted">Purchase total <span class="text-muted fw-normal">(COGS)</span></div>
-                <div class="fs-5 fw-semibold"><span class="jt-report-out"><?= e($formatMoney($purchases['total'] ?? 0)) ?></span></div>
+            <div class="col-6 col-md-4 col-xl-2">
+                <div class="jt-report-summary-metric">
+                    <div class="jt-report-summary-label small">Purchases</div>
+                    <div class="fs-5 fw-semibold"><span class="jt-report-out"><?= e($formatMoney($purchases['total'] ?? 0)) ?></span></div>
+                </div>
             </div>
         </div>
     </div>

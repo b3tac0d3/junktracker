@@ -58,23 +58,23 @@ $resetHref = url('/reports/jobs');
             <p class="small text-muted mb-3 mb-md-2">Job-linked sales in the period (same rules as margin by job on the income report).</p>
             <div class="row g-3">
                 <div class="col-sm-6 col-lg-3">
-                    <div class="small text-muted">Jobs in period</div>
+                    <div class="jt-report-summary-label small">Jobs in period</div>
                     <div class="fs-5 fw-semibold"><?= $jobsTotalCount ?></div>
                 </div>
                 <div class="col-sm-6 col-lg-3">
-                    <div class="small text-muted">Listed below</div>
+                    <div class="jt-report-summary-label small">Listed below</div>
                     <div class="fs-5 fw-semibold"><?= $jobsListedCount ?><?php if ($jobsTotalCount > $jobsListedCount): ?> <span class="small text-muted fw-normal">(list capped)</span><?php endif; ?></div>
                 </div>
                 <div class="col-sm-6 col-lg-3">
-                    <div class="small text-muted">Sales net (revenue)</div>
+                    <div class="jt-report-summary-label small">Sales net (revenue)</div>
                     <div class="fs-5 fw-semibold"><span class="jt-report-in"><?= e($formatMoney((float) ($marginTotals['sales_net'] ?? 0))) ?></span></div>
                 </div>
                 <div class="col-sm-6 col-lg-3">
-                    <div class="small text-muted">Purchase COGS</div>
+                    <div class="jt-report-summary-label small">Purchase COGS</div>
                     <div class="fs-5 fw-semibold"><span class="jt-report-out"><?= e($formatMoney((float) ($marginTotals['purchase_cogs'] ?? 0))) ?></span></div>
                 </div>
                 <div class="col-sm-6 col-lg-3">
-                    <div class="small text-muted">Margin (gross profit)</div>
+                    <div class="jt-report-summary-label small">Margin (gross profit)</div>
                     <div class="fs-5 fw-semibold"><span class="jt-report-net"><?= e($formatMoney((float) ($marginTotals['margin'] ?? 0))) ?></span></div>
                 </div>
             </div>

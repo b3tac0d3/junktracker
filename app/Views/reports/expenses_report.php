@@ -44,27 +44,37 @@ $resetHref = url('/reports/expenses');
             <a class="small text-decoration-none fw-semibold" href="<?= e(url('/expenses')) ?>">Open Expenses</a>
         </div>
         <div class="card-body">
-            <p class="small text-muted mb-3 mb-md-2">Expenses reduce profit; totals are cash out / recognized cost in the period.</p>
+            <p class="small text-muted mb-3 mb-md-2">Cash out and recognized cost in the period; totals reduce profit.</p>
             <div class="row g-3">
                 <div class="col-sm-6 col-lg-3">
-                    <div class="small text-muted">Records</div>
-                    <div class="fs-5 fw-semibold"><?= $expenseCount ?></div>
+                    <div class="jt-report-summary-metric">
+                        <div class="jt-report-summary-label small">Records</div>
+                        <div class="fs-5 fw-semibold"><?= $expenseCount ?></div>
+                    </div>
                 </div>
                 <div class="col-sm-6 col-lg-3">
-                    <div class="small text-muted">Job-linked <span class="text-muted fw-normal">(net)</span></div>
-                    <div class="fs-5 fw-semibold"><span class="jt-report-out"><?= e($formatMoney((float) ($expenseReport['job_total'] ?? 0))) ?></span></div>
+                    <div class="jt-report-summary-metric">
+                        <div class="jt-report-summary-label small">Job-linked</div>
+                        <div class="fs-5 fw-semibold"><span class="jt-report-out"><?= e($formatMoney((float) ($expenseReport['job_total'] ?? 0))) ?></span></div>
+                    </div>
                 </div>
                 <div class="col-sm-6 col-lg-3">
-                    <div class="small text-muted">General <span class="text-muted fw-normal">(net)</span></div>
-                    <div class="fs-5 fw-semibold"><span class="jt-report-out"><?= e($formatMoney((float) ($expenseReport['general_total'] ?? 0))) ?></span></div>
+                    <div class="jt-report-summary-metric">
+                        <div class="jt-report-summary-label small">General</div>
+                        <div class="fs-5 fw-semibold"><span class="jt-report-out"><?= e($formatMoney((float) ($expenseReport['general_total'] ?? 0))) ?></span></div>
+                    </div>
                 </div>
                 <div class="col-sm-6 col-lg-3">
-                    <div class="small text-muted">Total expense <span class="text-muted fw-normal">(loss)</span></div>
-                    <div class="fs-5 fw-semibold"><span class="jt-report-out"><?= e($formatMoney($expenseTotalAmt)) ?></span></div>
+                    <div class="jt-report-summary-metric">
+                        <div class="jt-report-summary-label small">Total expense</div>
+                        <div class="fs-5 fw-semibold"><span class="jt-report-out"><?= e($formatMoney($expenseTotalAmt)) ?></span></div>
+                    </div>
                 </div>
                 <div class="col-sm-6 col-lg-3">
-                    <div class="small text-muted">Avg per record</div>
-                    <div class="fs-5 fw-semibold"><span class="jt-report-out"><?= e($formatMoney($expenseAvg)) ?></span></div>
+                    <div class="jt-report-summary-metric">
+                        <div class="jt-report-summary-label small">Avg per record</div>
+                        <div class="fs-5 fw-semibold"><span class="jt-report-out"><?= e($formatMoney($expenseAvg)) ?></span></div>
+                    </div>
                 </div>
             </div>
         </div>

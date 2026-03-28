@@ -56,11 +56,11 @@ $resetHref = url('/reports/purchases');
             <p class="small text-muted mb-3 mb-md-2">Purchase cost in the period (inventory / COGS).</p>
             <div class="row g-3">
                 <div class="col-sm-6 col-lg-3">
-                    <div class="small text-muted">Purchase count</div>
+                    <div class="jt-report-summary-label small">Purchase count</div>
                     <div class="fs-5 fw-semibold"><?= (int) ($purchaseTotals['count'] ?? 0) ?></div>
                 </div>
                 <div class="col-sm-6 col-lg-3">
-                    <div class="small text-muted">Total cost</div>
+                    <div class="jt-report-summary-label small">Total cost</div>
                     <div class="fs-5 fw-semibold"><span class="jt-report-out"><?= e($formatMoney((float) ($purchaseTotals['total'] ?? 0))) ?></span></div>
                 </div>
             </div>

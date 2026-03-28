@@ -676,6 +676,22 @@ main .card.index-card-overflow-visible .card-body {
   background: linear-gradient(165deg, rgba(239, 246, 255, 0.65) 0%, #ffffff 55%);
 }
 
+/* Income summary: align values when labels wrap to different line counts */
+.reports-shell .jt-report-summary-metric {
+  display: flex;
+  flex-direction: column;
+}
+
+.reports-shell .jt-report-summary-label {
+  min-height: 2.75rem;
+  display: flex;
+  align-items: flex-end;
+  line-height: 1.25;
+  margin-bottom: 0.25rem;
+  color: cornflowerblue;
+  font-weight: 700;
+}
+
 .reports-shell .simple-list-table {
   border-color: rgba(100, 149, 237, 0.28);
   background: linear-gradient(180deg, #fbfdff 0%, #ffffff 40%);

@@ -58,19 +58,19 @@ $resetHref = url('/reports/sales');
         <div class="card-body">
             <div class="row g-3">
                 <div class="col-sm-6 col-lg-3">
-                    <div class="small text-muted">Sales count</div>
+                    <div class="jt-report-summary-label small">Sales count</div>
                     <div class="fs-5 fw-semibold"><?= (int) ($salesTotals['count'] ?? 0) ?></div>
                 </div>
                 <div class="col-sm-6 col-lg-3">
-                    <div class="small text-muted">Gross</div>
+                    <div class="jt-report-summary-label small">Gross</div>
                     <div class="fs-5 fw-semibold"><span class="jt-report-in"><?= e($formatMoney($salesGross)) ?></span></div>
                 </div>
                 <div class="col-sm-6 col-lg-3">
-                    <div class="small text-muted">Net</div>
+                    <div class="jt-report-summary-label small">Net</div>
                     <div class="fs-5 fw-semibold"><span class="jt-report-in"><?= e($formatMoney($salesNet)) ?></span></div>
                 </div>
                 <div class="col-sm-6 col-lg-3">
-                    <div class="small text-muted">Gross − net <span class="text-muted fw-normal">(fees, discounts)</span></div>
+                    <div class="jt-report-summary-label small">Gross − net <span class="fw-normal opacity-75">(fees, discounts)</span></div>
                     <div class="fs-5 fw-semibold"><span class="jt-report-out"><?= e($formatMoney($salesGrossVsNet)) ?></span></div>
                 </div>
             </div>
