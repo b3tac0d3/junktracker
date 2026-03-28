@@ -192,6 +192,18 @@ $router->post('/sales/{id}/delete', [SalesController::class, 'delete']);
 $router->get('/sales/{id}', [SalesController::class, 'show']);
 
 $router->get('/reports', [ReportsController::class, 'index']);
+$router->get('/reports/income', [ReportsController::class, 'income']);
+$router->get('/reports/jobs', [ReportsController::class, 'jobsReport']);
+$router->get('/reports/sales', [ReportsController::class, 'salesReport']);
+$router->get('/reports/purchases', [ReportsController::class, 'purchasesReport']);
+$router->get('/reports/expenses', [ReportsController::class, 'expensesReport']);
+$router->get('/reports/service', [ReportsController::class, 'serviceReport']);
+$router->get('/reports/export/income', [ReportsController::class, 'exportIncomeCsv']);
+$router->get('/reports/export/jobs', [ReportsController::class, 'exportJobsCsv']);
+$router->get('/reports/export/sales', [ReportsController::class, 'exportSalesCsv']);
+$router->get('/reports/export/purchases', [ReportsController::class, 'exportPurchasesCsv']);
+$router->get('/reports/export/expenses', [ReportsController::class, 'exportExpensesCsv']);
+$router->get('/reports/export/service', [ReportsController::class, 'exportServiceCsv']);
 
 $router->get('/purchases', [PurchasesController::class, 'index']);
 $router->get('/purchases/create', [PurchasesController::class, 'create']);

@@ -29,13 +29,135 @@ final class ReportSummary
                 'net' => round($overallNet, 2),
                 'net_minus_purchases' => round($overallNetMinusPurchases, 2),
             ],
-            'lists' => [
-                'jobs' => self::jobsList($businessId, $fromDate, $toDate),
-                'sales' => self::salesList($businessId, $fromDate, $toDate),
-                'purchases' => self::purchasesList($businessId, $fromDate, $toDate),
-            ],
             'margin_by_job' => self::marginByJob($businessId, $fromDate, $toDate),
         ];
+    }
+
+    /**
+     * Jobs with activity in the date range (same rules as the former income report list).
+     *
+     * @return list<array<string, mixed>>
+     */
+    public static function jobsInRange(int $businessId, string $fromDate, string $toDate): array
+    {
+        return self::jobsList($businessId, $fromDate, $toDate, 200);
+    }
+
+    /**
+     * Total number of jobs in the date range (the jobs list is capped separately).
+     */
+    public static function jobsCountForRange(int $businessId, string $fromDate, string $toDate): int
+    {
+        if (!SchemaInspector::hasTable('jobs')) {
+            return 0;
+        }
+
+        $dateSql = self::dateSql('jobs', 'j', ['scheduled_start_at', 'created_at']);
+        $where = self::baseWhere('jobs', 'j', $businessId);
+        if ($dateSql !== null) {
+            $where[] = "DATE({$dateSql}) BETWEEN :from_date AND :to_date";
+        }
+
+        $sql = 'SELECT COUNT(*) AS cnt FROM jobs j WHERE ' . implode(' AND ', $where);
+        $stmt = Database::connection()->prepare($sql);
+        $params = self::baseParams('jobs', $businessId);
+        if ($dateSql !== null) {
+            $params['from_date'] = $fromDate;
+            $params['to_date'] = $toDate;
+        }
+        $stmt->execute($params);
+
+        return (int) $stmt->fetchColumn();
+    }
+
+    /**
+     * Sales aggregates for the period (full totals, not limited to list rows).
+     *
+     * @return array{count:int, gross:float, net:float, by_type: array<string, array{count:int, gross:float, net:float}>}
+     */
+    public static function salesTotalsForRange(int $businessId, string $fromDate, string $toDate): array
+    {
+        return self::salesSummary($businessId, $fromDate, $toDate);
+    }
+
+    /**
+     * Purchase aggregates for the period (full totals, not limited to list rows).
+     *
+     * @return array{count:int, total:float}
+     */
+    public static function purchaseTotalsForRange(int $businessId, string $fromDate, string $toDate): array
+    {
+        return self::purchaseSummary($businessId, $fromDate, $toDate);
+    }
+
+    /**
+     * Service (invoice) aggregates for the period (full totals, not limited to list rows).
+     *
+     * @return array{count:int, gross:float, job_expenses:float, net:float}
+     */
+    public static function serviceTotalsForRange(int $businessId, string $fromDate, string $toDate): array
+    {
+        return self::serviceSummary($businessId, $fromDate, $toDate);
+    }
+
+    /**
+     * Sales in the date range (same rules as the former income report list).
+     *
+     * @return list<array<string, mixed>>
+     */
+    public static function salesInRange(int $businessId, string $fromDate, string $toDate): array
+    {
+        return self::salesList($businessId, $fromDate, $toDate, 200);
+    }
+
+    /**
+     * Purchases with a date in the range (same rules as the income report list).
+     *
+     * @return list<array<string, mixed>>
+     */
+    public static function purchasesInRange(int $businessId, string $fromDate, string $toDate): array
+    {
+        return self::purchasesList($businessId, $fromDate, $toDate, 200);
+    }
+
+    /**
+     * Expense totals and category breakdown for the range.
+     *
+     * @return array{count:int, job_total:float, general_total:float, total:float, by_category: list<array{category:string, total:float, count:int}>}
+     */
+    public static function expenseReportData(int $businessId, string $fromDate, string $toDate): array
+    {
+        if (!SchemaInspector::hasTable('expenses')) {
+            return [
+                'count' => 0,
+                'job_total' => 0.0,
+                'general_total' => 0.0,
+                'total' => 0.0,
+                'by_category' => [],
+            ];
+        }
+
+        $jobTotal = self::expensesTotal($businessId, $fromDate, $toDate, true);
+        $generalTotal = self::expensesTotal($businessId, $fromDate, $toDate, false);
+        $count = self::expensesCount($businessId, $fromDate, $toDate);
+
+        return [
+            'count' => $count,
+            'job_total' => $jobTotal,
+            'general_total' => $generalTotal,
+            'total' => round($jobTotal + $generalTotal, 2),
+            'by_category' => self::expensesByCategory($businessId, $fromDate, $toDate, 200),
+        ];
+    }
+
+    /**
+     * Service invoices with issue (or created) date in the range.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public static function invoicesInRange(int $businessId, string $fromDate, string $toDate): array
+    {
+        return self::invoicesList($businessId, $fromDate, $toDate, 200);
     }
 
     /**
@@ -113,6 +235,73 @@ final class ReportSummary
         }
 
         return $out;
+    }
+
+    /**
+     * Period totals for job-linked sales vs purchase COGS (same rules as margin by job, all jobs — no row limit).
+     *
+     * @return array{sales_net: float, purchase_cogs: float, margin: float}
+     */
+    public static function marginTotalsForRange(int $businessId, string $fromDate, string $toDate): array
+    {
+        if (!SchemaInspector::hasTable('sales') || !SchemaInspector::hasTable('jobs')) {
+            return ['sales_net' => 0.0, 'purchase_cogs' => 0.0, 'margin' => 0.0];
+        }
+        if (!SchemaInspector::hasColumn('sales', 'job_id')) {
+            return ['sales_net' => 0.0, 'purchase_cogs' => 0.0, 'margin' => 0.0];
+        }
+
+        $dateSql = self::dateSql('sales', 's', ['sale_date', 'created_at']);
+        if ($dateSql === null) {
+            return ['sales_net' => 0.0, 'purchase_cogs' => 0.0, 'margin' => 0.0];
+        }
+
+        $netSql = SchemaInspector::hasColumn('sales', 'net_amount')
+            ? 'COALESCE(s.net_amount, 0)'
+            : (SchemaInspector::hasColumn('sales', 'gross_amount') ? 'COALESCE(s.gross_amount, 0)' : '0');
+
+        $purchaseJoin = '';
+        $cogsExpr = '0';
+        if (SchemaInspector::hasTable('purchases') && SchemaInspector::hasColumn('sales', 'purchase_id') && SchemaInspector::hasColumn('purchases', 'purchase_price')) {
+            $purchaseJoin = 'LEFT JOIN purchases p ON p.id = s.purchase_id AND p.business_id = s.business_id AND p.deleted_at IS NULL';
+            $cogsExpr = 'COALESCE(p.purchase_price, 0)';
+        }
+
+        $sql = "SELECT
+                    COALESCE(SUM(job_margins.sales_net), 0) AS total_sales_net,
+                    COALESCE(SUM(job_margins.purchase_cogs), 0) AS total_purchase_cogs
+                FROM (
+                    SELECT
+                        COALESCE(SUM({$netSql}), 0) AS sales_net,
+                        COALESCE(SUM({$cogsExpr}), 0) AS purchase_cogs
+                    FROM sales s
+                    INNER JOIN jobs j ON j.id = s.job_id AND j.business_id = s.business_id
+                    {$purchaseJoin}
+                    WHERE " . implode(' AND ', self::baseWhere('sales', 's', $businessId)) . "
+                      AND j.deleted_at IS NULL
+                      AND DATE({$dateSql}) BETWEEN :from_date AND :to_date
+                    GROUP BY j.id
+                    HAVING ABS(COALESCE(SUM({$netSql}), 0)) > 0.0001 OR ABS(COALESCE(SUM({$cogsExpr}), 0)) > 0.0001
+                ) AS job_margins";
+
+        $stmt = Database::connection()->prepare($sql);
+        $params = self::baseParams('sales', $businessId);
+        $params['from_date'] = $fromDate;
+        $params['to_date'] = $toDate;
+        $stmt->execute($params);
+        $row = $stmt->fetch();
+        if (!is_array($row)) {
+            return ['sales_net' => 0.0, 'purchase_cogs' => 0.0, 'margin' => 0.0];
+        }
+
+        $sn = (float) ($row['total_sales_net'] ?? 0);
+        $cogs = (float) ($row['total_purchase_cogs'] ?? 0);
+
+        return [
+            'sales_net' => round($sn, 2),
+            'purchase_cogs' => round($cogs, 2),
+            'margin' => round($sn - $cogs, 2),
+        ];
     }
 
     private static function salesSummary(int $businessId, string $fromDate, string $toDate): array
@@ -471,6 +660,80 @@ final class ReportSummary
 
         $stmt = Database::connection()->prepare($sql);
         $params = self::baseParams('purchases', $businessId);
+        if ($dateSql !== null) {
+            $params['from_date'] = $fromDate;
+            $params['to_date'] = $toDate;
+        }
+        foreach ($params as $key => $value) {
+            $stmt->bindValue(':' . $key, $value, is_int($value) ? \PDO::PARAM_INT : \PDO::PARAM_STR);
+        }
+        $stmt->bindValue(':row_limit', max(1, min($limit, 200)), \PDO::PARAM_INT);
+        $stmt->execute();
+
+        $rows = $stmt->fetchAll();
+        return is_array($rows) ? $rows : [];
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private static function invoicesList(int $businessId, string $fromDate, string $toDate, int $limit = 200): array
+    {
+        if (!SchemaInspector::hasTable('invoices')) {
+            return [];
+        }
+
+        $numberSql = SchemaInspector::hasColumn('invoices', 'invoice_number')
+            ? 'i.invoice_number'
+            : "CONCAT('INV-', i.id)";
+        $statusSql = SchemaInspector::hasColumn('invoices', 'status') ? 'i.status' : "'draft'";
+        $totalSql = SchemaInspector::hasColumn('invoices', 'total')
+            ? 'COALESCE(i.total, 0)'
+            : (SchemaInspector::hasColumn('invoices', 'subtotal') ? 'COALESCE(i.subtotal, 0)' : '0');
+        $issueDateSql = SchemaInspector::hasColumn('invoices', 'issue_date') ? 'i.issue_date' : 'NULL';
+        $dueDateSql = SchemaInspector::hasColumn('invoices', 'due_date') ? 'i.due_date' : 'NULL';
+        $jobIdSql = SchemaInspector::hasColumn('invoices', 'job_id') ? 'i.job_id' : 'NULL';
+
+        $dateSql = self::dateSql('invoices', 'i', ['issue_date', 'created_at']);
+
+        $joinSql = '';
+        $clientNameSql = "'—'";
+        if (SchemaInspector::hasTable('clients') && SchemaInspector::hasColumn('invoices', 'client_id')) {
+            $joinSql = 'LEFT JOIN clients c ON c.id = i.client_id';
+            if (SchemaInspector::hasColumn('clients', 'business_id') && SchemaInspector::hasColumn('invoices', 'business_id')) {
+                $joinSql .= ' AND c.business_id = i.business_id';
+            }
+            if (SchemaInspector::hasColumn('clients', 'deleted_at')) {
+                $joinSql .= ' AND c.deleted_at IS NULL';
+            }
+            $clientNameSql = self::clientNameSql('c');
+        }
+
+        $where = self::baseWhere('invoices', 'i', $businessId);
+        if (SchemaInspector::hasColumn('invoices', 'type')) {
+            $where[] = "(LOWER(COALESCE(NULLIF(TRIM(i.type), ''), 'invoice')) = 'invoice')";
+        }
+        if ($dateSql !== null) {
+            $where[] = "DATE({$dateSql}) BETWEEN :from_date AND :to_date";
+        }
+
+        $sql = "SELECT
+                    i.id,
+                    {$numberSql} AS invoice_number,
+                    {$statusSql} AS status,
+                    {$totalSql} AS total,
+                    {$jobIdSql} AS job_id,
+                    {$clientNameSql} AS client_name,
+                    {$issueDateSql} AS issue_date,
+                    {$dueDateSql} AS due_date
+                FROM invoices i
+                {$joinSql}
+                WHERE " . implode(' AND ', $where) . '
+                ORDER BY i.id DESC
+                LIMIT :row_limit';
+
+        $stmt = Database::connection()->prepare($sql);
+        $params = self::baseParams('invoices', $businessId);
         if ($dateSql !== null) {
             $params['from_date'] = $fromDate;
             $params['to_date'] = $toDate;
