@@ -27,6 +27,8 @@
   --jt-kpi-profit: #4d7c0f;
 
   /* Grouped bar charts (lighter fill, KPI-hue stroke) */
+  --jt-chart-total-gross-fill: #2dd4bf;
+  --jt-chart-total-gross-stroke: #0f766e;
   --jt-chart-sales-fill: #60a5fa;
   --jt-chart-sales-stroke: #1d4ed8;
   --jt-chart-service-fill: #4ade80;

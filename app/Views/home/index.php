@@ -25,6 +25,7 @@ $threeMonthChart = is_array($summary['three_month_chart'] ?? null) ? $summary['t
 $chartMonths = is_array($threeMonthChart['months'] ?? null) ? $threeMonthChart['months'] : [];
 $dashboardChartPayload = [
     'labels' => [],
+    'total_gross' => [],
     'sales_gross' => [],
     'service_gross' => [],
     'expenses_total' => [],
@@ -35,8 +36,11 @@ foreach ($chartMonths as $m) {
         continue;
     }
     $dashboardChartPayload['labels'][] = (string) ($m['label'] ?? '');
-    $dashboardChartPayload['sales_gross'][] = round((float) ($m['sales_gross'] ?? 0), 2);
-    $dashboardChartPayload['service_gross'][] = round((float) ($m['service_gross'] ?? 0), 2);
+    $salesG = round((float) ($m['sales_gross'] ?? 0), 2);
+    $serviceG = round((float) ($m['service_gross'] ?? 0), 2);
+    $dashboardChartPayload['total_gross'][] = isset($m['total_gross']) ? round((float) $m['total_gross'], 2) : round($salesG + $serviceG, 2);
+    $dashboardChartPayload['sales_gross'][] = $salesG;
+    $dashboardChartPayload['service_gross'][] = $serviceG;
     $dashboardChartPayload['expenses_total'][] = round((float) ($m['expenses_total'] ?? 0), 2);
     $dashboardChartPayload['net_profit'][] = round((float) ($m['net_profit'] ?? 0), 2);
 }
@@ -124,7 +128,7 @@ $employeeDisplayName = static function (array $row): string {
     <div class="card-header index-card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
         <div>
             <strong class="fs-5"><i class="fas fa-chart-column me-2 jt-dashboard-icon--sales" aria-hidden="true"></i>Last 3 months</strong>
-            <div class="small text-muted">Sales gross, service gross, expenses, and net profit by calendar month (same logic as Reports).</div>
+            <div class="small text-muted">Total gross, sales gross, service gross, expenses, and net profit by calendar month (same logic as Reports).</div>
         </div>
         <a class="btn btn-sm btn-outline-secondary" href="<?= e(url('/reports')) ?>">Full reports</a>
     </div>
@@ -432,6 +436,10 @@ $employeeDisplayName = static function (array $row): string {
         data: {
             labels: labels,
             datasets: [
+                Object.assign(
+                    { label: 'Total gross', data: ds('total_gross') },
+                    barColors('--jt-chart-total-gross-fill', '--jt-chart-total-gross-stroke')
+                ),
                 Object.assign(
                     { label: 'Sales gross', data: ds('sales_gross') },
                     barColors('--jt-chart-sales-fill', '--jt-chart-sales-stroke')

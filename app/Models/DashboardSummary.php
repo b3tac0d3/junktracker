@@ -638,10 +638,10 @@ final class DashboardSummary
     }
 
     /**
-     * Last three calendar months (oldest → newest): sales gross, service (invoice) gross, expenses total, net profit.
+     * Last three calendar months (oldest → newest): total gross (sales + service), sales gross, service gross, expenses total, net profit.
      * Net matches reports: sales net + service net − general expenses; service net = invoice gross − job expenses in month.
      *
-     * @return array{months: list<array{label: string, sales_gross: float, service_gross: float, expenses_total: float, net_profit: float}>}
+     * @return array{months: list<array{label: string, total_gross: float, sales_gross: float, service_gross: float, expenses_total: float, net_profit: float}>}
      */
     public static function lastThreeMonthsChart(int $businessId): array
     {
@@ -660,8 +660,10 @@ final class DashboardSummary
             $serviceNet = round($serviceGross - $jobExp, 2);
             $expensesTotal = round($jobExp + $generalExp, 2);
             $netProfit = round($salesNet + $serviceNet - $generalExp, 2);
+            $totalGross = round($salesGross + $serviceGross, 2);
             $months[] = [
                 'label' => $label,
+                'total_gross' => $totalGross,
                 'sales_gross' => round($salesGross, 2),
                 'service_gross' => round($serviceGross, 2),
                 'expenses_total' => $expensesTotal,
