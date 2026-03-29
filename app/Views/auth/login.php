@@ -11,7 +11,7 @@
                 <input class="form-check-input" type="checkbox" name="remember_me" value="1" id="remember_me">
                 <label class="form-check-label" for="remember_me">Remember me</label>
             </div>
-            <p class="small text-muted mb-0 mt-1">Stay signed in on this device until you log out or clear site data. Unchecked ends the session when you close the browser.</p>
+            <p class="small text-muted mb-0 mt-1">Stay signed in</p>
             <button class="btn btn-primary mt-3" type="submit">Sign In</button>
         </form>
     </div>
