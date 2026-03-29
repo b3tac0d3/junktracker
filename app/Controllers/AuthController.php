@@ -227,7 +227,19 @@ final class AuthController extends Controller
         $_SESSION = [];
         if (ini_get('session.use_cookies')) {
             $params = session_get_cookie_params();
-            setcookie(session_name(), '', time() - 42000, $params['path'], $params['domain'], (bool) $params['secure'], (bool) $params['httponly']);
+            $name = session_name();
+            if (PHP_VERSION_ID >= 70300) {
+                setcookie($name, '', [
+                    'expires' => time() - 42000,
+                    'path' => session_cookie_effective_path(),
+                    'domain' => $params['domain'] !== '' ? $params['domain'] : '',
+                    'secure' => session_cookie_secure_preferred(),
+                    'httponly' => (bool) ($params['httponly'] ?? true),
+                    'samesite' => $params['samesite'] ?? 'Lax',
+                ]);
+            } else {
+                setcookie($name, '', time() - 42000, session_cookie_effective_path(), $params['domain'], session_cookie_secure_preferred(), (bool) ($params['httponly'] ?? true));
+            }
         }
         session_destroy();
 

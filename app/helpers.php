@@ -601,18 +601,71 @@ function remember_me_persistent_seconds(): int
 }
 
 /**
- * Keep remembered sessions alive: extend cookie on each request; no idle timeout.
+ * Cookie path for the front controller (e.g. /app/public/) so the session cookie matches the install URL.
+ */
+function session_cookie_base_path(): string
+{
+    $script = (string) ($_SERVER['SCRIPT_NAME'] ?? '/');
+    $dir = str_replace('\\', '/', dirname($script));
+    if ($dir === '/' || $dir === '.' || $dir === '') {
+        return '/';
+    }
+
+    return rtrim($dir, '/') . '/';
+}
+
+/**
+ * Path used when emitting Set-Cookie (falls back to SCRIPT_NAME-based path if PHP left path empty).
+ */
+function session_cookie_effective_path(): string
+{
+    if (session_status() !== PHP_SESSION_ACTIVE) {
+        return session_cookie_base_path();
+    }
+    $p = (string) (session_get_cookie_params()['path'] ?? '');
+    if ($p !== '') {
+        return $p;
+    }
+
+    return session_cookie_base_path();
+}
+
+/**
+ * Prefer Secure cookies when the app URL is https or the request is HTTPS.
+ */
+function session_cookie_secure_preferred(): bool
+{
+    if (!empty($_SERVER['HTTPS']) && strtolower((string) $_SERVER['HTTPS']) !== 'off') {
+        return true;
+    }
+    if (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && strtolower((string) $_SERVER['HTTP_X_FORWARDED_PROTO']) === 'https') {
+        return true;
+    }
+    if ((int) ($_SERVER['SERVER_PORT'] ?? 0) === 443) {
+        return true;
+    }
+    $appUrl = (string) config('app.url', '');
+    if ($appUrl !== '' && str_starts_with(strtolower($appUrl), 'https://')) {
+        return true;
+    }
+
+    return (bool) (session_get_cookie_params()['secure'] ?? false);
+}
+
+/**
+ * Keep session cookies aligned with login: long-lived for "Remember me", browser session otherwise.
+ * Re-sends Set-Cookie on each request so path/secure/samesite stay correct on shared hosts.
  */
 function maintain_remember_me_session(): void
 {
-    if (session_status() !== PHP_SESSION_ACTIVE) {
+    if (session_status() !== PHP_SESSION_ACTIVE || auth_user() === null) {
         return;
     }
-    if (empty($_SESSION['remember_me']) || auth_user() === null) {
-        return;
+    if (!empty($_SESSION['remember_me'])) {
+        refresh_session_cookie_lifetime(remember_me_persistent_seconds());
+    } else {
+        refresh_session_cookie_lifetime(0);
     }
-
-    refresh_session_cookie_lifetime(remember_me_persistent_seconds());
 }
 
 /**
@@ -629,10 +682,10 @@ function refresh_session_cookie_lifetime(int $lifetimeSeconds): void
 
     $options = [
         'expires' => $expires,
-        'path' => $params['path'] !== '' ? $params['path'] : '/',
+        'path' => session_cookie_effective_path(),
         'domain' => $params['domain'] !== '' ? $params['domain'] : '',
-        'secure' => (bool) $params['secure'],
-        'httponly' => (bool) $params['httponly'],
+        'secure' => session_cookie_secure_preferred(),
+        'httponly' => (bool) ($params['httponly'] ?? true),
     ];
     if (PHP_VERSION_ID >= 70300) {
         $options['samesite'] = $params['samesite'] ?? 'Lax';

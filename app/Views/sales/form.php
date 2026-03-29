@@ -4,7 +4,6 @@ $errors = is_array($errors ?? null) ? $errors : [];
 $mode = (string) ($mode ?? 'create');
 $actionUrl = (string) ($actionUrl ?? url('/sales'));
 $typeOptions = is_array($typeOptions ?? null) ? $typeOptions : [];
-$feeDefaults = is_array($feeDefaults ?? null) ? $feeDefaults : [];
 
 $fieldError = static function (string $field) use ($errors): string {
     return isset($errors[$field]) ? (string) $errors[$field] : '';
@@ -61,6 +60,21 @@ $hasError = static function (string $field) use ($errors): bool {
             </div>
 
             <div class="col-12 col-lg-2">
+                <label class="form-label fw-semibold" for="sale-net">Net</label>
+                <input
+                    id="sale-net"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    name="net_amount"
+                    class="form-control <?= $hasError('net_amount') ? 'is-invalid' : '' ?>"
+                    value="<?= e((string) ($form['net_amount'] ?? '')) ?>"
+                />
+                <?php if ($hasError('net_amount')): ?><div class="invalid-feedback d-block"><?= e($fieldError('net_amount')) ?></div><?php endif; ?>
+                <div class="form-text">Leave blank to use gross as net.</div>
+            </div>
+
+            <div class="col-12 col-lg-2">
                 <label class="form-label fw-semibold" for="sale-type">Type</label>
                 <select id="sale-type" name="sale_type" class="form-select <?= $hasError('sale_type') ? 'is-invalid' : '' ?>">
                     <option value="">Choose type...</option>
@@ -82,47 +96,6 @@ $hasError = static function (string $field) use ($errors): bool {
                 />
                 <?php if ($hasError('sale_date')): ?><div class="invalid-feedback d-block"><?= e($fieldError('sale_date')) ?></div><?php endif; ?>
             </div>
-
-            <div class="col-12">
-                <hr class="my-1">
-                <div class="small text-muted text-uppercase fw-semibold mb-2">Fees (deducted from gross)</div>
-            </div>
-
-            <div class="col-12 col-lg-4">
-                <label class="form-label fw-semibold" for="sale-fee-mode">Fee on this sale</label>
-                <select id="sale-fee-mode" name="sale_fee_mode" class="form-select <?= $hasError('sale_fee_mode') ? 'is-invalid' : '' ?>">
-                    <option value="default" <?= ((string) ($form['sale_fee_mode'] ?? 'default')) === 'default' ? 'selected' : '' ?>>Use default for sale type</option>
-                    <option value="none" <?= ((string) ($form['sale_fee_mode'] ?? '')) === 'none' ? 'selected' : '' ?>>No fee</option>
-                    <option value="percent" <?= ((string) ($form['sale_fee_mode'] ?? '')) === 'percent' ? 'selected' : '' ?>>Custom percentage</option>
-                    <option value="amount" <?= ((string) ($form['sale_fee_mode'] ?? '')) === 'amount' ? 'selected' : '' ?>>Custom fixed amount</option>
-                </select>
-                <?php if ($hasError('sale_fee_mode')): ?><div class="invalid-feedback d-block"><?= e($fieldError('sale_fee_mode')) ?></div><?php endif; ?>
-                <div class="form-text">Use <a href="<?= e(url('/admin/sale-fee-defaults')) ?>">Sales default fees</a> to set defaults per type.</div>
-            </div>
-
-            <div class="col-12 col-lg-3">
-                <label class="form-label fw-semibold" for="sale-fee-value">Fee value</label>
-                <input
-                    id="sale-fee-value"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    name="sale_fee_value"
-                    class="form-control <?= $hasError('sale_fee_value') ? 'is-invalid' : '' ?>"
-                    value="<?= e((string) ($form['sale_fee_value'] ?? '')) ?>"
-                    placeholder="% or $"
-                />
-                <?php if ($hasError('sale_fee_value')): ?><div class="invalid-feedback d-block"><?= e($fieldError('sale_fee_value')) ?></div><?php endif; ?>
-                <div class="form-text" id="sale-fee-value-hint">Enter a percentage or dollar amount when using a custom fee—not both.</div>
-            </div>
-
-            <div class="col-12 col-lg-3">
-                <label class="form-label fw-semibold" for="sale-net-display">Net (after fee)</label>
-                <input type="text" class="form-control" id="sale-net-display" readonly tabindex="-1" value="" />
-                <div class="form-text">Calculated when you save (gross − fee).</div>
-            </div>
-
-            <div class="w-100"></div>
 
             <div class="col-12">
                 <label class="form-label fw-semibold" for="sale-client-search">Client (Optional)</label>
@@ -200,96 +173,6 @@ $hasError = static function (string $field) use ($errors): bool {
 
 <script>
 window.addEventListener('DOMContentLoaded', () => {
-    const feeDefaults = <?= json_encode($feeDefaults, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE) ?>;
-
-    const grossInput = document.getElementById('sale-gross');
-    const typeSelect = document.getElementById('sale-type');
-    const feeMode = document.getElementById('sale-fee-mode');
-    const feeValue = document.getElementById('sale-fee-value');
-    const feeHint = document.getElementById('sale-fee-value-hint');
-    const netDisplay = document.getElementById('sale-net-display');
-
-    const parseMoney = (raw) => {
-        const n = parseFloat(String(raw || '').replace(/,/g, ''));
-        return Number.isFinite(n) ? n : 0;
-    };
-
-    const computeFee = (gross, saleType, mode, customRaw) => {
-        const g = Math.max(0, parseMoney(gross));
-        const m = String(mode || 'default').toLowerCase();
-        const st = String(saleType || '').toLowerCase().trim();
-        if (m === 'none') {
-            return 0;
-        }
-        if (m === 'percent') {
-            const p = Math.max(0, parseMoney(customRaw));
-            return Math.round(g * (p / 100) * 100) / 100;
-        }
-        if (m === 'amount') {
-            const a = Math.max(0, parseMoney(customRaw));
-            return Math.round(Math.min(a, g) * 100) / 100;
-        }
-        if (m === 'default') {
-            const d = feeDefaults && st ? feeDefaults[st] : null;
-            if (!d || !d.fee_kind) {
-                return 0;
-            }
-            if (d.fee_kind === 'percent') {
-                const p = Math.max(0, Math.min(100, parseFloat(d.fee_value)));
-                return Math.round(g * (p / 100) * 100) / 100;
-            }
-            const a = Math.max(0, parseFloat(d.fee_value));
-            return Math.round(Math.min(a, g) * 100) / 100;
-        }
-        return 0;
-    };
-
-    const refreshNetPreview = () => {
-        if (!grossInput || !feeMode || !netDisplay) {
-            return;
-        }
-        const gross = parseMoney(grossInput.value);
-        const st = typeSelect ? String(typeSelect.value || '').toLowerCase() : '';
-        const mode = String(feeMode.value || 'default');
-        const custom = feeValue ? String(feeValue.value || '') : '';
-        const fee = computeFee(gross, st, mode, custom);
-        const net = Math.max(0, Math.round((gross - fee) * 100) / 100);
-        netDisplay.value = '$' + net.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-        if (feeHint) {
-            if (mode === 'percent') {
-                feeHint.textContent = 'Enter a percentage of gross (e.g. 15 for 15%).';
-            } else if (mode === 'amount') {
-                feeHint.textContent = 'Enter a fixed dollar fee deducted from gross.';
-            } else if (mode === 'default') {
-                feeHint.textContent = 'Uses the current default for this sale type from Business Admin.';
-            } else {
-                feeHint.textContent = 'No fee deducted.';
-            }
-        }
-        if (feeValue) {
-            const customOn = mode === 'percent' || mode === 'amount';
-            feeValue.disabled = !customOn;
-        }
-    };
-
-    if (grossInput && feeMode && netDisplay) {
-        grossInput.addEventListener('input', refreshNetPreview);
-        if (typeSelect) {
-            typeSelect.addEventListener('change', refreshNetPreview);
-        }
-        feeMode.addEventListener('change', () => {
-            const m = String(feeMode.value || '');
-            if (feeValue && (m === 'default' || m === 'none')) {
-                feeValue.value = '';
-            }
-            refreshNetPreview();
-        });
-        if (feeValue) {
-            feeValue.addEventListener('input', refreshNetPreview);
-        }
-        refreshNetPreview();
-    }
-
     const initSuggest = ({
         input,
         hiddenId,

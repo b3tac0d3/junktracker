@@ -175,6 +175,7 @@ final class PurchasesController extends Controller
             'client_type' => $clientType,
             'phone' => trim((string) ($_POST['phone'] ?? '')),
             'address_line1' => trim((string) ($_POST['address_line1'] ?? '')),
+            'address_line2' => trim((string) ($_POST['address_line2'] ?? '')),
             'city' => trim((string) ($_POST['city'] ?? '')),
             'state' => trim((string) ($_POST['state'] ?? '')),
             'postal_code' => trim((string) ($_POST['postal_code'] ?? '')),

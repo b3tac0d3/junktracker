@@ -16,107 +16,6 @@ final class Sale
         return ['shop', 'ebay', 'scrap', 'b2b'];
     }
 
-    public static function hasSaleFeeColumns(): bool
-    {
-        return SchemaInspector::hasColumn('sales', 'sale_fee_mode')
-            && SchemaInspector::hasColumn('sales', 'sale_fee_value');
-    }
-
-    /**
-     * Fee deducted from gross (not negative). $feeValue used for percent/amount/custom modes; ignored for default/none.
-     */
-    public static function computeFeeAmount(
-        float $gross,
-        string $saleType,
-        string $feeMode,
-        ?float $feeValue,
-        int $businessId
-    ): float {
-        $gross = max(0, round($gross, 2));
-        $mode = strtolower(trim($feeMode));
-
-        if ($mode === 'none') {
-            return 0.0;
-        }
-        if ($mode === 'percent') {
-            $p = max(0.0, (float) ($feeValue ?? 0));
-            return round($gross * ($p / 100.0), 2);
-        }
-        if ($mode === 'amount') {
-            $a = max(0.0, (float) ($feeValue ?? 0));
-
-            return round(min($a, $gross), 2);
-        }
-        if ($mode === 'default') {
-            $def = SaleFeeDefault::findForType($businessId, $saleType);
-            if ($def === null) {
-                return 0.0;
-            }
-            if ($def['fee_kind'] === 'percent') {
-                $p = max(0.0, min(100.0, (float) $def['fee_value']));
-
-                return round($gross * ($p / 100.0), 2);
-            }
-
-            $a = max(0.0, (float) $def['fee_value']);
-
-            return round(min($a, $gross), 2);
-        }
-
-        return 0.0;
-    }
-
-    public static function computeNetFromGrossAndFee(float $gross, float $feeAmount): float
-    {
-        return max(0.0, round($gross - $feeAmount, 2));
-    }
-
-    /**
-     * After admin changes default fees, refresh net for all sales that use the default fee mode.
-     */
-    public static function recalculateNetsForBusinessDefaults(int $businessId): void
-    {
-        if (!self::hasSaleFeeColumns() || $businessId <= 0 || !SchemaInspector::hasTable('sales')) {
-            return;
-        }
-
-        $sql = 'SELECT id, gross_amount, sale_type
-                FROM sales
-                WHERE business_id = :business_id
-                  AND deleted_at IS NULL
-                  AND sale_fee_mode = :mode';
-        $stmt = Database::connection()->prepare($sql);
-        $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
-        $stmt->bindValue(':mode', 'default');
-        $stmt->execute();
-        $rows = $stmt->fetchAll();
-        if (!is_array($rows)) {
-            return;
-        }
-
-        $upd = Database::connection()->prepare(
-            'UPDATE sales SET net_amount = :net_amount, updated_at = NOW() WHERE id = :id AND business_id = :business_id LIMIT 1'
-        );
-
-        foreach ($rows as $row) {
-            if (!is_array($row)) {
-                continue;
-            }
-            $id = (int) ($row['id'] ?? 0);
-            if ($id <= 0) {
-                continue;
-            }
-            $gross = (float) ($row['gross_amount'] ?? 0);
-            $type = (string) ($row['sale_type'] ?? '');
-            $fee = self::computeFeeAmount($gross, $type, 'default', null, $businessId);
-            $net = self::computeNetFromGrossAndFee($gross, $fee);
-            $upd->bindValue(':net_amount', $net);
-            $upd->bindValue(':id', $id, \PDO::PARAM_INT);
-            $upd->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
-            $upd->execute();
-        }
-    }
-
     public static function indexList(
         int $businessId,
         string $search = '',
@@ -439,21 +338,6 @@ final class Sale
         if (SchemaInspector::hasColumn('sales', 'net_amount')) {
             $append('net_amount', ':net_amount', (float) ($payload['net_amount'] ?? 0));
         }
-        if (self::hasSaleFeeColumns()) {
-            $mode = strtolower(trim((string) ($payload['sale_fee_mode'] ?? 'default')));
-            if (!in_array($mode, ['default', 'none', 'percent', 'amount'], true)) {
-                $mode = 'default';
-            }
-            $append('sale_fee_mode', ':sale_fee_mode', $mode);
-            $fv = $payload['sale_fee_value'] ?? null;
-            $append(
-                'sale_fee_value',
-                ':sale_fee_value',
-                ($mode === 'percent' || $mode === 'amount') && $fv !== null && $fv !== ''
-                    ? round((float) $fv, 4)
-                    : null
-            );
-        }
         if (SchemaInspector::hasColumn('sales', 'notes')) {
             $append('notes', ':notes', trim((string) ($payload['notes'] ?? '')));
         }
@@ -548,9 +432,6 @@ final class Sale
         $purchaseIdSql = self::salePurchaseIdExpr();
         $createdAtSql = SchemaInspector::hasColumn('sales', 'created_at') ? 's.created_at' : 'NULL';
         $updatedAtSql = SchemaInspector::hasColumn('sales', 'updated_at') ? 's.updated_at' : 'NULL';
-        $feeModeSql = self::hasSaleFeeColumns() ? 's.sale_fee_mode' : "'default'";
-        $feeValueSql = self::hasSaleFeeColumns() ? 's.sale_fee_value' : 'NULL';
-
         $clientNameSql = 'NULL';
         $jobTitleSql = 'NULL';
         $purchaseTitleSql = 'NULL';
@@ -581,8 +462,6 @@ final class Sale
                     {$dateSql} AS sale_date,
                     {$grossSql} AS gross_amount,
                     {$netSql} AS net_amount,
-                    {$feeModeSql} AS sale_fee_mode,
-                    {$feeValueSql} AS sale_fee_value,
                     {$notesSql} AS notes,
                     {$clientIdSql} AS client_id,
                     {$clientNameSql} AS client_name,
@@ -645,21 +524,6 @@ final class Sale
         }
         if (SchemaInspector::hasColumn('sales', 'net_amount')) {
             $append('net_amount', 'net_amount', (float) ($payload['net_amount'] ?? 0));
-        }
-        if (self::hasSaleFeeColumns()) {
-            $mode = strtolower(trim((string) ($payload['sale_fee_mode'] ?? 'default')));
-            if (!in_array($mode, ['default', 'none', 'percent', 'amount'], true)) {
-                $mode = 'default';
-            }
-            $append('sale_fee_mode', 'sale_fee_mode', $mode);
-            $fv = $payload['sale_fee_value'] ?? null;
-            $append(
-                'sale_fee_value',
-                'sale_fee_value',
-                ($mode === 'percent' || $mode === 'amount') && $fv !== null && $fv !== ''
-                    ? round((float) $fv, 4)
-                    : null
-            );
         }
         if (SchemaInspector::hasColumn('sales', 'notes')) {
             $append('notes', 'notes', trim((string) ($payload['notes'] ?? '')));

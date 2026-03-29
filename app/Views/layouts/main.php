@@ -2,7 +2,7 @@
 $pageTitle = isset($pageTitle) ? (string) $pageTitle : 'JunkTracker';
 $publicPage = (bool) ($publicPage ?? false);
 $user = auth_user();
-$appVersion = (string) config('app.version', '1.5.1');
+$appVersion = (string) config('app.version', '1.5.2');
 $workspaceRole = workspace_role();
 $businessId = current_business_id();
 $isGlobalSiteAdminContext = is_site_admin() && $businessId <= 0;

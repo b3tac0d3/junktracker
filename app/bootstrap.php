@@ -16,7 +16,33 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
         $gcMax = $persistent;
     }
     $gcMax = max($gcMax, $persistent);
+    // Many hosts default session.gc_maxlifetime to 900 (15m); if ini_set is ignored, set php.ini / .user.ini (see deploy-checklist).
     @ini_set('session.gc_maxlifetime', (string) $gcMax);
+
+    // Isolate session files from other apps on the same host (often share /tmp with short GC).
+    $sessionDir = base_path('storage/sessions');
+    if (!is_dir($sessionDir)) {
+        @mkdir($sessionDir, 0750, true);
+    }
+    if (is_dir($sessionDir) && is_writable($sessionDir)) {
+        @session_save_path($sessionDir);
+    }
+
+    $cookiePath = session_cookie_base_path();
+    $secure = session_cookie_secure_preferred();
+    if (PHP_VERSION_ID >= 70300) {
+        session_set_cookie_params([
+            'lifetime' => 0,
+            'path' => $cookiePath,
+            'domain' => '',
+            'secure' => $secure,
+            'httponly' => true,
+            'samesite' => 'Lax',
+        ]);
+    } else {
+        session_set_cookie_params(0, $cookiePath, '', $secure, true);
+    }
+
     session_start();
 }
 

@@ -6,6 +6,7 @@ $actionUrl = (string) ($actionUrl ?? url('/purchases'));
 $statusOptions = is_array($statusOptions ?? null) ? $statusOptions : [];
 $clientTypeOptions = is_array($clientTypeOptions ?? null) ? $clientTypeOptions : ['client', 'company', 'realtor', 'other'];
 $searchUrl = (string) ($searchUrl ?? url('/purchases/client-search'));
+$stateOptions = us_state_options();
 
 $fieldError = static function (string $field) use ($errors): string {
     return isset($errors[$field]) ? (string) $errors[$field] : '';
@@ -204,9 +205,13 @@ $statusLabel = static function (string $value): string {
                         <label class="form-label fw-semibold" for="quick-client-phone-purchase">Phone</label>
                         <input id="quick-client-phone-purchase" name="phone" class="form-control" maxlength="40" />
                     </div>
-                    <div class="col-12 col-lg-8">
+                    <div class="col-12 col-lg-6">
                         <label class="form-label fw-semibold" for="quick-client-address-1-purchase">Address Line 1</label>
                         <input id="quick-client-address-1-purchase" name="address_line1" class="form-control" maxlength="190" />
+                    </div>
+                    <div class="col-12 col-lg-6">
+                        <label class="form-label fw-semibold" for="quick-client-address-2-purchase">Address Line 2</label>
+                        <input id="quick-client-address-2-purchase" name="address_line2" class="form-control" maxlength="190" />
                     </div>
                     <div class="col-12 col-lg-4">
                         <label class="form-label fw-semibold" for="quick-client-city-purchase">City</label>
@@ -214,7 +219,11 @@ $statusLabel = static function (string $value): string {
                     </div>
                     <div class="col-6 col-lg-4">
                         <label class="form-label fw-semibold" for="quick-client-state-purchase">State</label>
-                        <input id="quick-client-state-purchase" name="state" class="form-control" maxlength="60" />
+                        <select id="quick-client-state-purchase" name="state" class="form-select">
+                            <?php foreach ($stateOptions as $value => $label): ?>
+                                <option value="<?= e($value) ?>"><?= e($label) ?></option>
+                            <?php endforeach; ?>
+                        </select>
                     </div>
                     <div class="col-6 col-lg-4">
                         <label class="form-label fw-semibold" for="quick-client-postal-purchase">Postal Code</label>

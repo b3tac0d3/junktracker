@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Build a JunkTracker live upload bundle from the repo root.
 #
-# Live bundles default to the sibling folder (next to this repo):
-#   .../htdocs/junktracker_live_releases/<name>/upload
+# Live bundles default under the sibling folder (next to this repo):
+#   .../junktracker_live_releases/<name>/upload   — files to rsync/scp onto the web root
+#   .../junktracker_live_releases/<name>/migrations/ — SQL only (never inside upload/)
 # Override root: JUNKTRACKER_LIVE_RELEASE_ROOT=/path/to/parent
 #
 # Default: changed files only (patch / delta drop) since a git ref — use this unless
@@ -87,12 +88,26 @@ RSYNC_EXCLUDES=(
   --exclude='/README.md'
   --exclude='/README.txt'
   --exclude='storage/logs/*.log'
+  --exclude='database/migrations/'
 )
+
+# Sibling of .../upload/ — run these SQL files on the DB host; do not deploy under public_html.
+migrations_staging_dir() {
+  local upload_dest="$1"
+  printf '%s\n' "$(dirname "$upload_dest")/migrations"
+}
 
 full_release() {
   local dest="$1"
   mkdir -p "$dest"
   rsync -a --delete "${RSYNC_EXCLUDES[@]}" "$ROOT/" "$dest/"
+  local mig
+  mig="$(migrations_staging_dir "$dest")"
+  mkdir -p "$mig"
+  if [[ -d "$ROOT/database/migrations" ]]; then
+    rsync -a "$ROOT/database/migrations/" "$mig/"
+  fi
+  echo "Migrations (SQL only) -> $mig"
 }
 
 should_skip_path() {
@@ -113,6 +128,8 @@ delta_release() {
   fi
 
   mkdir -p "$dest"
+  local mig
+  mig="$(migrations_staging_dir "$dest")"
   local range="${base}...HEAD"
   local files
   files="$(git diff --name-only --diff-filter=ACMRT "$range" 2>/dev/null || true)"
@@ -123,6 +140,8 @@ delta_release() {
   fi
 
   local copied=0
+  local copied_upload=0
+  local copied_migrations=0
   while IFS= read -r f; do
     [[ -z "$f" ]] && continue
     if should_skip_path "$f"; then
@@ -131,9 +150,17 @@ delta_release() {
     if [[ ! -f "$f" ]]; then
       continue
     fi
+    if [[ "$f" == database/migrations/* ]]; then
+      mkdir -p "$mig"
+      cp -a "$f" "$mig/$(basename "$f")"
+      copied=$((copied + 1))
+      copied_migrations=$((copied_migrations + 1))
+      continue
+    fi
     mkdir -p "$dest/$(dirname "$f")"
     cp -a "$f" "$dest/$f"
     copied=$((copied + 1))
+    copied_upload=$((copied_upload + 1))
   done <<< "$files"
 
   if [[ "$copied" -eq 0 ]]; then
@@ -141,7 +168,10 @@ delta_release() {
     exit 1
   fi
 
-  echo "Delta bundle: $copied file(s) copied to $dest (from $range)."
+  echo "Delta bundle: $copied file(s) from $range — upload: $copied_upload -> $dest"
+  if [[ "$copied_migrations" -gt 0 ]]; then
+    echo "             migrations (SQL only, not in upload): $copied_migrations -> $mig"
+  fi
 }
 
 case "$MODE" in

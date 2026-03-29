@@ -269,9 +269,13 @@ if ($selectedState !== '' && !array_key_exists($selectedState, $stateOptions)) {
                         <label class="form-label fw-semibold" for="quick-client-phone">Phone</label>
                         <input id="quick-client-phone" name="phone" class="form-control" maxlength="40" />
                     </div>
-                    <div class="col-12 col-lg-8">
+                    <div class="col-12 col-lg-6">
                         <label class="form-label fw-semibold" for="quick-client-address-1">Address Line 1</label>
                         <input id="quick-client-address-1" name="address_line1" class="form-control" maxlength="190" />
+                    </div>
+                    <div class="col-12 col-lg-6">
+                        <label class="form-label fw-semibold" for="quick-client-address-2">Address Line 2</label>
+                        <input id="quick-client-address-2" name="address_line2" class="form-control" maxlength="190" />
                     </div>
                     <div class="col-12 col-lg-4">
                         <label class="form-label fw-semibold" for="quick-client-city">City</label>

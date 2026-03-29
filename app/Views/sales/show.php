@@ -9,15 +9,6 @@ if ($displayName === '') {
 
 $grossAmt = (float) ($sale['gross_amount'] ?? 0);
 $netAmt = (float) ($sale['net_amount'] ?? 0);
-$feeAmt = round(max(0, $grossAmt - $netAmt), 2);
-$feeMode = strtolower(trim((string) ($sale['sale_fee_mode'] ?? 'default')));
-$feeLabel = match ($feeMode) {
-    'none' => 'No fee',
-    'percent' => 'Custom %',
-    'amount' => 'Custom amount',
-    'default' => 'Default for type',
-    default => 'Default for type',
-};
 
 $formatSaleDate = static function (?string $value): string {
     $raw = trim((string) ($value ?? ''));
@@ -70,10 +61,6 @@ $formatSaleDate = static function (?string $value): string {
             <div class="record-field">
                 <span class="record-label">Gross</span>
                 <span class="record-value">$<?= e(number_format($grossAmt, 2)) ?></span>
-            </div>
-            <div class="record-field">
-                <span class="record-label">Fee</span>
-                <span class="record-value">$<?= e(number_format($feeAmt, 2)) ?> <span class="text-muted small">(<?= e($feeLabel) ?>)</span></span>
             </div>
             <div class="record-field">
                 <span class="record-label">Net</span>

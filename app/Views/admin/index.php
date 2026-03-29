@@ -51,13 +51,4 @@
             <p class="admin-nav-tile-desc">Centralize dropdown and pick-list values used across forms.</p>
         </a>
     </div>
-    <div class="col-12 col-sm-6 col-lg-3">
-        <a class="admin-nav-tile" href="<?= e(url('/admin/sale-fee-defaults')) ?>">
-            <div class="admin-nav-tile-icon admin-nav-tile-icon--invoice-types" aria-hidden="true">
-                <i class="fas fa-percent"></i>
-            </div>
-            <div class="admin-nav-tile-title">Sales default fees</div>
-            <p class="admin-nav-tile-desc">Per sale type: default platform or processing fee (% or fixed). Applies to sales that use the default.</p>
-        </a>
-    </div>
 </div>
