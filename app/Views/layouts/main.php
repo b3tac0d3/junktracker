@@ -2,7 +2,7 @@
 $pageTitle = isset($pageTitle) ? (string) $pageTitle : 'JunkTracker';
 $publicPage = (bool) ($publicPage ?? false);
 $user = auth_user();
-$appVersion = (string) config('app.version', '1.5.0');
+$appVersion = (string) config('app.version', '1.5.1');
 $workspaceRole = workspace_role();
 $businessId = current_business_id();
 $isGlobalSiteAdminContext = is_site_admin() && $businessId <= 0;
@@ -183,10 +183,10 @@ $navNotifications = is_array($navNotifications ?? null) ? $navNotifications : ['
                             <?php if (!$isGlobalSiteAdminContext): ?>
                                 <div class="sb-sidenav-menu-heading">Core</div>
                                 <a class="nav-link" href="<?= e(url('/clients')) ?>"><div class="sb-nav-link-icon"><i class="fas fa-users"></i></div>Clients</a>
-                                <a class="nav-link" href="<?= e(url('/deliveries')) ?>"><div class="sb-nav-link-icon"><i class="fas fa-truck"></i></div>Deliveries</a>
                                 <a class="nav-link" href="<?= e(url('/jobs')) ?>"><div class="sb-nav-link-icon"><i class="fas fa-briefcase"></i></div>Jobs</a>
                                 <a class="nav-link" href="<?= e(url('/sales')) ?>"><div class="sb-nav-link-icon"><i class="fas fa-sack-dollar"></i></div>Sales</a>
                                 <a class="nav-link" href="<?= e(url('/purchases')) ?>"><div class="sb-nav-link-icon"><i class="fas fa-cart-arrow-down"></i></div>Purchases</a>
+                                <a class="nav-link" href="<?= e(url('/deliveries')) ?>"><div class="sb-nav-link-icon"><i class="fas fa-truck"></i></div>Deliveries</a>
                                 <a class="nav-link" href="<?= e(url('/tasks')) ?>"><div class="sb-nav-link-icon"><i class="fas fa-list-check"></i></div>Tasks</a>
                                 <a class="nav-link" href="<?= e(url('/events')) ?>"><div class="sb-nav-link-icon"><i class="fas fa-calendar-days"></i></div>Events</a>
                                 <a class="nav-link" href="<?= e(url('/billing')) ?>"><div class="sb-nav-link-icon"><i class="fas fa-file-invoice-dollar"></i></div>Billing</a>

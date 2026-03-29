@@ -528,6 +528,11 @@ main .card.index-card-overflow-visible .card-body {
   border-bottom-color: #a855f7;
 }
 
+.reports-card-chart .index-card-header {
+  background: linear-gradient(90deg, #dbeafe, #e0e7ff);
+  border-bottom-color: #6366f1;
+}
+
 .reports-card-service .index-card-header {
   background: linear-gradient(90deg, #dcfce7, #bbf7d0);
   border-bottom-color: #22c55e;

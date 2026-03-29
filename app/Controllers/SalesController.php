@@ -9,6 +9,7 @@ use App\Models\FormSelectValue;
 use App\Models\Job;
 use App\Models\Purchase;
 use App\Models\Sale;
+use App\Models\SaleFeeDefault;
 use Core\Controller;
 
 final class SalesController extends Controller
@@ -70,13 +71,15 @@ final class SalesController extends Controller
     {
         require_business_role(['general_user', 'admin']);
 
+        $businessId = current_business_id();
         $this->render('sales/form', [
             'pageTitle' => 'Add Sale',
             'mode' => 'create',
             'actionUrl' => url('/sales'),
             'form' => $this->defaultForm(),
             'errors' => [],
-            'typeOptions' => $this->saleTypeOptions(current_business_id()),
+            'typeOptions' => $this->saleTypeOptions($businessId),
+            'feeDefaults' => SaleFeeDefault::mapForBusiness($businessId),
         ]);
     }
 
@@ -194,11 +197,12 @@ final class SalesController extends Controller
                 'form' => $form,
                 'errors' => $errors,
                 'typeOptions' => $this->saleTypeOptions($businessId),
+                'feeDefaults' => SaleFeeDefault::mapForBusiness($businessId),
             ]);
             return;
         }
 
-        $saleId = Sale::create($businessId, $this->payloadForSave($form), auth_user_id() ?? 0);
+        $saleId = Sale::create($businessId, $this->payloadForSave($form, $businessId), auth_user_id() ?? 0);
         flash('success', 'Sale added.');
         redirect('/sales/' . (string) $saleId);
     }
@@ -245,13 +249,15 @@ final class SalesController extends Controller
             return;
         }
 
+        $businessId = current_business_id();
         $this->render('sales/form', [
             'pageTitle' => 'Edit Sale',
             'mode' => 'edit',
             'actionUrl' => url('/sales/' . (string) $saleId . '/update'),
             'form' => $this->formFromModel($sale),
             'errors' => [],
-            'typeOptions' => $this->saleTypeOptions(current_business_id()),
+            'typeOptions' => $this->saleTypeOptions($businessId),
+            'feeDefaults' => SaleFeeDefault::mapForBusiness($businessId),
         ]);
     }
 
@@ -289,11 +295,12 @@ final class SalesController extends Controller
                 'form' => $form,
                 'errors' => $errors,
                 'typeOptions' => $this->saleTypeOptions($businessId),
+                'feeDefaults' => SaleFeeDefault::mapForBusiness($businessId),
             ]);
             return;
         }
 
-        Sale::update($businessId, $saleId, $this->payloadForSave($form), auth_user_id() ?? 0);
+        Sale::update($businessId, $saleId, $this->payloadForSave($form, $businessId), auth_user_id() ?? 0);
         flash('success', 'Sale updated.');
         redirect('/sales/' . (string) $saleId);
     }
@@ -337,7 +344,8 @@ final class SalesController extends Controller
         return [
             'name' => '',
             'gross_amount' => '',
-            'net_amount' => '',
+            'sale_fee_mode' => 'default',
+            'sale_fee_value' => '',
             'sale_type' => '',
             'sale_date' => date('Y-m-d'),
             'client_id' => '',
@@ -362,7 +370,8 @@ final class SalesController extends Controller
         return [
             'name' => trim((string) ($input['name'] ?? '')),
             'gross_amount' => trim((string) ($input['gross_amount'] ?? '')),
-            'net_amount' => trim((string) ($input['net_amount'] ?? '')),
+            'sale_fee_mode' => strtolower(trim((string) ($input['sale_fee_mode'] ?? 'default'))),
+            'sale_fee_value' => trim((string) ($input['sale_fee_value'] ?? '')),
             'sale_type' => strtolower(trim((string) ($input['sale_type'] ?? ''))),
             'sale_date' => trim((string) ($input['sale_date'] ?? '')),
             'client_id' => $clientId,
@@ -383,10 +392,23 @@ final class SalesController extends Controller
             $saleDate = $timestamp === false ? '' : date('Y-m-d', $timestamp);
         }
 
+        $feeMode = strtolower(trim((string) ($sale['sale_fee_mode'] ?? 'default')));
+        if (!in_array($feeMode, ['default', 'none', 'percent', 'amount'], true)) {
+            $feeMode = 'default';
+        }
+        $feeValRaw = $sale['sale_fee_value'] ?? null;
+        $feeValStr = '';
+        if ($feeValRaw !== null && $feeValRaw !== '' && ($feeMode === 'percent' || $feeMode === 'amount')) {
+            $feeValStr = is_numeric($feeValRaw)
+                ? (string) ((float) $feeValRaw)
+                : trim((string) $feeValRaw);
+        }
+
         return [
             'name' => trim((string) ($sale['name'] ?? '')),
             'gross_amount' => number_format((float) ($sale['gross_amount'] ?? 0), 2, '.', ''),
-            'net_amount' => number_format((float) ($sale['net_amount'] ?? 0), 2, '.', ''),
+            'sale_fee_mode' => $feeMode,
+            'sale_fee_value' => $feeValStr,
             'sale_type' => strtolower(trim((string) ($sale['sale_type'] ?? ''))),
             'sale_date' => $saleDate,
             'client_id' => ((int) ($sale['client_id'] ?? 0)) > 0 ? (string) ((int) ($sale['client_id'] ?? 0)) : '',
@@ -411,8 +433,22 @@ final class SalesController extends Controller
             $errors['gross_amount'] = 'Gross must be a valid amount.';
         }
 
-        if (!$this->isValidMoney($form['net_amount'])) {
-            $errors['net_amount'] = 'Net must be a valid amount.';
+        $feeMode = strtolower(trim((string) ($form['sale_fee_mode'] ?? 'default')));
+        if (!in_array($feeMode, ['default', 'none', 'percent', 'amount'], true)) {
+            $errors['sale_fee_mode'] = 'Choose a valid fee option.';
+        }
+        if ($feeMode === 'percent' || $feeMode === 'amount') {
+            $fv = trim((string) ($form['sale_fee_value'] ?? ''));
+            if ($fv === '' || !is_numeric($fv)) {
+                $errors['sale_fee_value'] = 'Enter a fee amount or percentage.';
+            } else {
+                $n = (float) $fv;
+                if ($n < 0) {
+                    $errors['sale_fee_value'] = 'Fee cannot be negative.';
+                } elseif ($feeMode === 'percent' && $n > 100) {
+                    $errors['sale_fee_value'] = 'Percentage cannot exceed 100.';
+                }
+            }
         }
 
         $typeOptions = $this->saleTypeOptions($businessId);
@@ -458,12 +494,25 @@ final class SalesController extends Controller
         return $errors;
     }
 
-    private function payloadForSave(array $form): array
+    private function payloadForSave(array $form, int $businessId): array
     {
+        $gross = round((float) $form['gross_amount'], 2);
+        $mode = strtolower(trim((string) ($form['sale_fee_mode'] ?? 'default')));
+        if (!in_array($mode, ['default', 'none', 'percent', 'amount'], true)) {
+            $mode = 'default';
+        }
+        $fvRaw = trim((string) ($form['sale_fee_value'] ?? ''));
+        $fv = ($fvRaw === '' || !is_numeric($fvRaw)) ? null : (float) $fvRaw;
+
+        $fee = Sale::computeFeeAmount($gross, $form['sale_type'], $mode, $fv, $businessId);
+        $net = Sale::computeNetFromGrossAndFee($gross, $fee);
+
         return [
             'name' => $form['name'],
-            'gross_amount' => round((float) $form['gross_amount'], 2),
-            'net_amount' => round((float) $form['net_amount'], 2),
+            'gross_amount' => $gross,
+            'net_amount' => $net,
+            'sale_fee_mode' => $mode,
+            'sale_fee_value' => ($mode === 'percent' || $mode === 'amount') ? $fv : null,
             'sale_type' => $form['sale_type'],
             'sale_date' => $this->toDatabaseDatetime($form['sale_date']),
             'client_id' => ($form['client_id'] === '') ? null : (int) $form['client_id'],

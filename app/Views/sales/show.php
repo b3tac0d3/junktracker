@@ -7,6 +7,18 @@ if ($displayName === '') {
     $displayName = 'Sale #' . (string) $saleId;
 }
 
+$grossAmt = (float) ($sale['gross_amount'] ?? 0);
+$netAmt = (float) ($sale['net_amount'] ?? 0);
+$feeAmt = round(max(0, $grossAmt - $netAmt), 2);
+$feeMode = strtolower(trim((string) ($sale['sale_fee_mode'] ?? 'default')));
+$feeLabel = match ($feeMode) {
+    'none' => 'No fee',
+    'percent' => 'Custom %',
+    'amount' => 'Custom amount',
+    'default' => 'Default for type',
+    default => 'Default for type',
+};
+
 $formatSaleDate = static function (?string $value): string {
     $raw = trim((string) ($value ?? ''));
     if ($raw === '') {
@@ -42,7 +54,7 @@ $formatSaleDate = static function (?string $value): string {
         <strong><i class="fas fa-sack-dollar me-2"></i>Sale Details</strong>
     </div>
     <div class="card-body">
-        <div class="record-row-fields record-row-fields-4">
+        <div class="record-row-fields record-row-fields-5">
             <div class="record-field">
                 <span class="record-label">Sale ID</span>
                 <span class="record-value"><?= e((string) $saleId) ?></span>
@@ -57,11 +69,15 @@ $formatSaleDate = static function (?string $value): string {
             </div>
             <div class="record-field">
                 <span class="record-label">Gross</span>
-                <span class="record-value">$<?= e(number_format((float) ($sale['gross_amount'] ?? 0), 2)) ?></span>
+                <span class="record-value">$<?= e(number_format($grossAmt, 2)) ?></span>
+            </div>
+            <div class="record-field">
+                <span class="record-label">Fee</span>
+                <span class="record-value">$<?= e(number_format($feeAmt, 2)) ?> <span class="text-muted small">(<?= e($feeLabel) ?>)</span></span>
             </div>
             <div class="record-field">
                 <span class="record-label">Net</span>
-                <span class="record-value">$<?= e(number_format((float) ($sale['net_amount'] ?? 0), 2)) ?></span>
+                <span class="record-value">$<?= e(number_format($netAmt, 2)) ?></span>
             </div>
         </div>
         <div class="record-row-fields record-row-fields-3 mt-3">

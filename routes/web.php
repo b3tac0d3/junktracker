@@ -7,6 +7,7 @@ use App\Controllers\AdminController;
 use App\Controllers\AdminBusinessDetailsController;
 use App\Controllers\AdminEmployeesController;
 use App\Controllers\AdminFormSelectValuesController;
+use App\Controllers\AdminSaleFeeDefaultsController;
 use App\Controllers\AdminInvoiceItemTypesController;
 use App\Controllers\AdminUsersController;
 use App\Controllers\AdminExportController;
@@ -241,6 +242,8 @@ $router->post('/admin/invoice-item-types', [AdminInvoiceItemTypesController::cla
 $router->get('/admin/invoice-item-types/{id}/edit', [AdminInvoiceItemTypesController::class, 'edit']);
 $router->post('/admin/invoice-item-types/{id}/update', [AdminInvoiceItemTypesController::class, 'update']);
 $router->post('/admin/invoice-item-types/{id}/delete', [AdminInvoiceItemTypesController::class, 'delete']);
+$router->get('/admin/sale-fee-defaults', [AdminSaleFeeDefaultsController::class, 'index']);
+$router->post('/admin/sale-fee-defaults/update', [AdminSaleFeeDefaultsController::class, 'update']);
 $router->get('/admin/form-select-values', [AdminFormSelectValuesController::class, 'index']);
 $router->get('/admin/form-select-values/{formKey}', [AdminFormSelectValuesController::class, 'show']);
 $router->post('/admin/form-select-values/quick-create', [AdminFormSelectValuesController::class, 'quickCreate']);

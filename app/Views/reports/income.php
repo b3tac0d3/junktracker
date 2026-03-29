@@ -63,65 +63,70 @@ $resetHref = url('/reports/income');
     </div>
     </section>
 
-<section class="card index-card mb-3 reports-card-totals">
-    <div class="card-header index-card-header">
-        <strong><i class="fas fa-chart-column me-2 jt-report-icon--totals" aria-hidden="true"></i>Summary</strong>
+<div class="row g-3 mb-3 align-items-stretch">
+    <div class="col-12 col-xl-6">
+        <section class="card index-card h-100 reports-card-totals">
+            <div class="card-header index-card-header">
+                <strong><i class="fas fa-chart-column me-2 jt-report-icon--totals" aria-hidden="true"></i>Summary</strong>
+            </div>
+            <div class="card-body">
+                <p class="small text-muted mb-3 mb-md-2">Period summary</p>
+                <div class="row g-3">
+                    <div class="col-6 col-md-4">
+                        <div class="jt-report-summary-metric">
+                            <div class="jt-report-summary-label small">Gross</div>
+                            <div class="fs-5 fw-semibold"><span class="jt-report-in"><?= e($formatMoney($overall['gross'] ?? 0)) ?></span></div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-4">
+                        <div class="jt-report-summary-metric">
+                            <div class="jt-report-summary-label small">Overall net</div>
+                            <div class="fs-5 fw-semibold"><span class="jt-report-net"><?= e($formatMoney($overall['net'] ?? 0)) ?></span></div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-4">
+                        <div class="jt-report-summary-metric">
+                            <div class="jt-report-summary-label small">After purchases</div>
+                            <div class="fs-5 fw-semibold"><span class="jt-report-net"><?= e($formatMoney($overall['net_minus_purchases'] ?? 0)) ?></span></div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-4">
+                        <div class="jt-report-summary-metric">
+                            <div class="jt-report-summary-label small">Total expense</div>
+                            <div class="fs-5 fw-semibold"><span class="jt-report-out"><?= e($formatMoney($expenses['total'] ?? 0)) ?></span></div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-4">
+                        <div class="jt-report-summary-metric">
+                            <div class="jt-report-summary-label small">Purchases</div>
+                            <div class="fs-5 fw-semibold"><span class="jt-report-out"><?= e($formatMoney($purchases['total'] ?? 0)) ?></span></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
     </div>
-    <div class="card-body">
-        <p class="small text-muted mb-3 mb-md-2">Period summary</p>
-        <div class="row g-3">
-            <div class="col-6 col-md-4 col-xl-2">
-                <div class="jt-report-summary-metric">
-                    <div class="jt-report-summary-label small">Gross</div>
-                    <div class="fs-5 fw-semibold"><span class="jt-report-in"><?= e($formatMoney($overall['gross'] ?? 0)) ?></span></div>
+    <div class="col-12 col-xl-6">
+        <section class="card index-card h-100 reports-card-chart">
+            <div class="card-header index-card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+                <strong class="mb-0"><i class="fas fa-chart-simple me-2 jt-report-icon--chart" aria-hidden="true"></i>Period overview</strong>
+                <div class="d-flex align-items-center gap-2 ms-md-auto">
+                    <label class="small text-muted mb-0 fw-semibold text-nowrap" for="jtReportsChartType">Chart type</label>
+                    <select id="jtReportsChartType" class="form-select form-select-sm jt-report-chart-type-select" aria-label="Chart type">
+                        <option value="pie" selected>Pie</option>
+                        <option value="bar">Bar</option>
+                    </select>
                 </div>
             </div>
-            <div class="col-6 col-md-4 col-xl-2">
-                <div class="jt-report-summary-metric">
-                    <div class="jt-report-summary-label small">Overall net</div>
-                    <div class="fs-5 fw-semibold"><span class="jt-report-net"><?= e($formatMoney($overall['net'] ?? 0)) ?></span></div>
+            <div class="card-body d-flex flex-column">
+                <p class="small text-muted mb-3 mb-md-2">Gross (sales + invoiced service), total expenses, and profit (net after general expenses) for <?= e($formatDate($fromDate)) ?>–<?= e($formatDate($toDate)) ?>.</p>
+                <div class="jt-report-chart-holder flex-grow-1">
+                    <canvas id="jtReportsChart" aria-label="Chart of gross, expenses, and profit" role="img"></canvas>
                 </div>
             </div>
-            <div class="col-6 col-md-4 col-xl-2">
-                <div class="jt-report-summary-metric">
-                    <div class="jt-report-summary-label small">After purchases</div>
-                    <div class="fs-5 fw-semibold"><span class="jt-report-net"><?= e($formatMoney($overall['net_minus_purchases'] ?? 0)) ?></span></div>
-                </div>
-            </div>
-            <div class="col-6 col-md-4 col-xl-2">
-                <div class="jt-report-summary-metric">
-                    <div class="jt-report-summary-label small">Total expense</div>
-                    <div class="fs-5 fw-semibold"><span class="jt-report-out"><?= e($formatMoney($expenses['total'] ?? 0)) ?></span></div>
-                </div>
-            </div>
-            <div class="col-6 col-md-4 col-xl-2">
-                <div class="jt-report-summary-metric">
-                    <div class="jt-report-summary-label small">Purchases</div>
-                    <div class="fs-5 fw-semibold"><span class="jt-report-out"><?= e($formatMoney($purchases['total'] ?? 0)) ?></span></div>
-                </div>
-            </div>
-        </div>
+        </section>
     </div>
-</section>
-
-<section class="card index-card mb-3 reports-card-chart">
-    <div class="card-header index-card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
-        <strong class="mb-0"><i class="fas fa-chart-simple me-2 jt-report-icon--chart" aria-hidden="true"></i>Period overview</strong>
-        <div class="d-flex align-items-center gap-2 ms-md-auto">
-            <label class="small text-muted mb-0 fw-semibold text-nowrap" for="jtReportsChartType">Chart type</label>
-            <select id="jtReportsChartType" class="form-select form-select-sm jt-report-chart-type-select" aria-label="Chart type">
-                <option value="bar" selected>Bar</option>
-                <option value="pie">Pie</option>
-            </select>
-        </div>
-    </div>
-    <div class="card-body">
-        <p class="small text-muted mb-3 mb-md-2">Gross (sales + invoiced service), total expenses, and profit (net after general expenses) for <?= e($formatDate($fromDate)) ?>–<?= e($formatDate($toDate)) ?>.</p>
-        <div class="jt-report-chart-holder">
-            <canvas id="jtReportsChart" aria-label="Chart of gross, expenses, and profit" role="img"></canvas>
-        </div>
-    </div>
-</section>
+</div>
 
 <?php if ($marginByJob !== []): ?>
 <section class="card index-card mb-3 reports-card-margin">
@@ -361,7 +366,7 @@ $resetHref = url('/reports/income');
     }
 
     function render() {
-        const type = typeSelect && typeSelect.value ? typeSelect.value : 'bar';
+        const type = typeSelect && typeSelect.value ? typeSelect.value : 'pie';
         if (chart) {
             chart.destroy();
             chart = null;

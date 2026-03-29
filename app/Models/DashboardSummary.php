@@ -411,13 +411,17 @@ final class DashboardSummary
 
         $windowEnd = date('Y-m-d H:i:s', strtotime('+14 days 23:59:59'));
 
+        $addr2Sql = SchemaInspector::hasColumn('client_deliveries', 'address_line2')
+            ? 'd.address_line2'
+            : "''";
+
         $sql = 'SELECT
                     d.id,
                     d.scheduled_at,
                     d.end_at,
                     d.status,
                     d.address_line1,
-                    d.address_line2,
+                    ' . $addr2Sql . ' AS address_line2,
                     d.city,
                     d.state,
                     COALESCE(NULLIF(TRIM(CONCAT_WS(" ", c.first_name, c.last_name)), ""), NULLIF(c.company_name, ""), CONCAT("Client #", c.id)) AS client_name
