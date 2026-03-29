@@ -174,6 +174,7 @@ final class JobsController extends Controller
         }
         $phone = trim((string) ($_POST['phone'] ?? ''));
         $addressLine1 = trim((string) ($_POST['address_line1'] ?? ''));
+        $addressLine2 = trim((string) ($_POST['address_line2'] ?? ''));
         $city = trim((string) ($_POST['city'] ?? ''));
         $state = trim((string) ($_POST['state'] ?? ''));
         $postalCode = trim((string) ($_POST['postal_code'] ?? ''));
@@ -203,6 +204,7 @@ final class JobsController extends Controller
             'client_type' => $clientType,
             'phone' => $phone,
             'address_line1' => $addressLine1,
+            'address_line2' => $addressLine2,
             'city' => $city,
             'state' => $state,
             'postal_code' => $postalCode,

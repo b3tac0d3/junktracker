@@ -68,6 +68,11 @@ final class DeliveriesController extends Controller
             if ($client !== null) {
                 $form['client_id'] = (string) $requestedClientId;
                 $form['client_name'] = Client::displayName($client);
+                $form['address_line1'] = trim((string) ($client['address_line1'] ?? ''));
+                $form['address_line2'] = trim((string) ($client['address_line2'] ?? ''));
+                $form['city'] = trim((string) ($client['city'] ?? ''));
+                $form['state'] = trim((string) ($client['state'] ?? ''));
+                $form['postal_code'] = trim((string) ($client['postal_code'] ?? ''));
             }
         }
 
@@ -113,7 +118,14 @@ final class DeliveriesController extends Controller
             redirect('/deliveries/create');
         }
 
-        flash('success', 'Delivery scheduled.');
+        $st = strtolower(trim((string) ($form['status'] ?? '')));
+        if ($st === 'need_to_schedule') {
+            flash('success', 'Delivery saved.');
+        } elseif ($st === 'scheduled' || $st === 'completed') {
+            flash('success', 'Delivery scheduled.');
+        } else {
+            flash('success', 'Delivery saved.');
+        }
         redirect('/deliveries/' . (string) $id);
     }
 
@@ -217,19 +229,17 @@ final class DeliveriesController extends Controller
      */
     private function defaultForm(): array
     {
-        $defaultStart = date('Y-m-d\TH:i', strtotime('+1 day'));
-
         return [
             'client_id' => '',
             'client_name' => '',
-            'scheduled_at' => $defaultStart,
-            'end_at' => '',
+            'scheduled_at' => '',
             'address_line1' => '',
+            'address_line2' => '',
             'city' => '',
             'state' => '',
             'postal_code' => '',
             'notes' => '',
-            'status' => 'scheduled',
+            'status' => 'need_to_schedule',
         ];
     }
 
@@ -243,13 +253,13 @@ final class DeliveriesController extends Controller
             'client_id' => trim((string) ($post['client_id'] ?? '')),
             'client_name' => trim((string) ($post['client_name'] ?? '')),
             'scheduled_at' => trim((string) ($post['scheduled_at'] ?? '')),
-            'end_at' => trim((string) ($post['end_at'] ?? '')),
             'address_line1' => trim((string) ($post['address_line1'] ?? '')),
+            'address_line2' => trim((string) ($post['address_line2'] ?? '')),
             'city' => trim((string) ($post['city'] ?? '')),
             'state' => trim((string) ($post['state'] ?? '')),
             'postal_code' => trim((string) ($post['postal_code'] ?? '')),
             'notes' => trim((string) ($post['notes'] ?? '')),
-            'status' => strtolower(trim((string) ($post['status'] ?? 'scheduled'))),
+            'status' => strtolower(trim((string) ($post['status'] ?? 'need_to_schedule'))),
         ];
     }
 
@@ -268,26 +278,17 @@ final class DeliveriesController extends Controller
             }
         }
 
-        $end = trim((string) ($row['end_at'] ?? ''));
-        $endLocal = '';
-        if ($end !== '') {
-            $ts = strtotime($end);
-            if ($ts !== false) {
-                $endLocal = date('Y-m-d\TH:i', $ts);
-            }
-        }
-
         return [
             'client_id' => (string) ((int) ($row['client_id'] ?? 0)),
             'client_name' => trim((string) ($row['client_name'] ?? '')),
             'scheduled_at' => $scheduledLocal,
-            'end_at' => $endLocal,
             'address_line1' => trim((string) ($row['address_line1'] ?? '')),
+            'address_line2' => trim((string) ($row['address_line2'] ?? '')),
             'city' => trim((string) ($row['city'] ?? '')),
             'state' => trim((string) ($row['state'] ?? '')),
             'postal_code' => trim((string) ($row['postal_code'] ?? '')),
             'notes' => trim((string) ($row['notes'] ?? '')),
-            'status' => strtolower(trim((string) ($row['status'] ?? 'scheduled'))),
+            'status' => strtolower(trim((string) ($row['status'] ?? 'need_to_schedule'))),
         ];
     }
 

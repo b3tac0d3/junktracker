@@ -18,6 +18,12 @@ $statusOptions = \App\Models\ClientDelivery::statusOptions();
 $statusLabel = static function (string $value): string {
     return ucwords(str_replace('_', ' ', $value));
 };
+$stateOptions = us_state_options();
+$selectedState = strtoupper(trim((string) ($form['state'] ?? '')));
+if ($selectedState !== '' && !array_key_exists($selectedState, $stateOptions)) {
+    $stateOptions[$selectedState] = $selectedState;
+}
+$statusNeedSchedule = ((string) ($form['status'] ?? '')) === 'need_to_schedule';
 ?>
 
 <div class="page-header d-flex flex-wrap align-items-end justify-content-between gap-2">
@@ -61,61 +67,69 @@ $statusLabel = static function (string $value): string {
                 <label class="form-label fw-semibold" for="delivery-status">Status</label>
                 <select id="delivery-status" name="status" class="form-select <?= $hasError('status') ? 'is-invalid' : '' ?>">
                     <?php foreach ($statusOptions as $opt): ?>
-                        <option value="<?= e($opt) ?>" <?= ((string) ($form['status'] ?? 'scheduled')) === $opt ? 'selected' : '' ?>><?= e($statusLabel($opt)) ?></option>
+                        <option value="<?= e($opt) ?>" <?= ((string) ($form['status'] ?? 'need_to_schedule')) === $opt ? 'selected' : '' ?>><?= e($statusLabel($opt)) ?></option>
                     <?php endforeach; ?>
                 </select>
                 <?php if ($hasError('status')): ?><div class="invalid-feedback d-block"><?= e($fieldError('status')) ?></div><?php endif; ?>
             </div>
 
             <div class="col-12 col-lg-3">
-                <label class="form-label fw-semibold" for="delivery-scheduled-at">Scheduled start</label>
+                <label class="form-label fw-semibold" for="delivery-scheduled-at">Scheduled time</label>
+                <?php if ($statusNeedSchedule): ?>
+                    <input type="hidden" name="scheduled_at" value="" />
+                <?php endif; ?>
                 <input
                     id="delivery-scheduled-at"
                     type="datetime-local"
-                    name="scheduled_at"
+                    <?php if (!$statusNeedSchedule): ?>name="scheduled_at"<?php endif; ?>
                     class="form-control <?= $hasError('scheduled_at') ? 'is-invalid' : '' ?>"
                     value="<?= e((string) ($form['scheduled_at'] ?? '')) ?>"
+                    <?= $statusNeedSchedule ? 'disabled' : '' ?>
                 />
                 <?php if ($hasError('scheduled_at')): ?><div class="invalid-feedback d-block"><?= e($fieldError('scheduled_at')) ?></div><?php endif; ?>
             </div>
 
-            <div class="col-12 col-lg-3">
-                <label class="form-label fw-semibold" for="delivery-end-at">End time <span class="text-muted fw-normal">(optional)</span></label>
-                <input
-                    id="delivery-end-at"
-                    type="datetime-local"
-                    name="end_at"
-                    class="form-control <?= $hasError('end_at') ? 'is-invalid' : '' ?>"
-                    value="<?= e((string) ($form['end_at'] ?? '')) ?>"
-                />
-                <?php if ($hasError('end_at')): ?><div class="invalid-feedback d-block"><?= e($fieldError('end_at')) ?></div><?php endif; ?>
-            </div>
+            <div class="col-12"><hr class="my-1"></div>
 
-            <div class="col-12">
-                <h6 class="text-muted text-uppercase small mb-2">Delivery location</h6>
-            </div>
             <div class="col-12 col-lg-6">
-                <label class="form-label fw-semibold" for="delivery-address-1">Address line 1</label>
+                <label class="form-label fw-semibold" for="delivery-address-1">Address Line 1</label>
                 <input
                     id="delivery-address-1"
                     name="address_line1"
                     class="form-control <?= $hasError('address_line1') ? 'is-invalid' : '' ?>"
                     value="<?= e((string) ($form['address_line1'] ?? '')) ?>"
                     maxlength="190"
-                    placeholder="Street address (optional if same as client)"
                 />
                 <?php if ($hasError('address_line1')): ?><div class="invalid-feedback d-block"><?= e($fieldError('address_line1')) ?></div><?php endif; ?>
             </div>
-            <div class="col-12 col-md-4 col-lg-2">
+            <div class="col-12 col-lg-6">
+                <label class="form-label fw-semibold" for="delivery-address-2">Address Line 2</label>
+                <input
+                    id="delivery-address-2"
+                    name="address_line2"
+                    class="form-control <?= $hasError('address_line2') ? 'is-invalid' : '' ?>"
+                    value="<?= e((string) ($form['address_line2'] ?? '')) ?>"
+                    maxlength="190"
+                />
+                <?php if ($hasError('address_line2')): ?><div class="invalid-feedback d-block"><?= e($fieldError('address_line2')) ?></div><?php endif; ?>
+            </div>
+
+            <div class="col-12"><hr class="my-1"></div>
+
+            <div class="col-12 col-lg-6">
                 <label class="form-label fw-semibold" for="delivery-city">City</label>
                 <input id="delivery-city" name="city" class="form-control" value="<?= e((string) ($form['city'] ?? '')) ?>" maxlength="120" />
             </div>
-            <div class="col-6 col-md-4 col-lg-2">
+            <div class="col-6 col-lg-3">
                 <label class="form-label fw-semibold" for="delivery-state">State</label>
-                <input id="delivery-state" name="state" class="form-control" value="<?= e((string) ($form['state'] ?? '')) ?>" maxlength="60" />
+                <select id="delivery-state" name="state" class="form-select">
+                    <?php foreach ($stateOptions as $value => $label): ?>
+                        <option value="<?= e($value) ?>" <?= $selectedState === $value ? 'selected' : '' ?>><?= e($label) ?></option>
+                    <?php endforeach; ?>
+                </select>
             </div>
-            <div class="col-6 col-md-4 col-lg-2">
-                <label class="form-label fw-semibold" for="delivery-postal">Postal code</label>
+            <div class="col-6 col-lg-3">
+                <label class="form-label fw-semibold" for="delivery-postal">Postal Code</label>
                 <input id="delivery-postal" name="postal_code" class="form-control" value="<?= e((string) ($form['postal_code'] ?? '')) ?>" maxlength="30" />
             </div>
 
@@ -173,20 +187,29 @@ $statusLabel = static function (string $value): string {
                         <label class="form-label fw-semibold" for="quick-client-phone-delivery">Phone</label>
                         <input id="quick-client-phone-delivery" name="phone" class="form-control" maxlength="40" />
                     </div>
-                    <div class="col-12 col-lg-8">
-                        <label class="form-label fw-semibold" for="quick-client-address-1-delivery">Address line 1</label>
+                    <div class="col-12 col-lg-6">
+                        <label class="form-label fw-semibold" for="quick-client-address-1-delivery">Address Line 1</label>
                         <input id="quick-client-address-1-delivery" name="address_line1" class="form-control" maxlength="190" />
                     </div>
-                    <div class="col-12 col-lg-4">
+                    <div class="col-12 col-lg-6">
+                        <label class="form-label fw-semibold" for="quick-client-address-2-delivery">Address Line 2</label>
+                        <input id="quick-client-address-2-delivery" name="address_line2" class="form-control" maxlength="190" />
+                    </div>
+                    <div class="col-12"><hr class="my-1"></div>
+                    <div class="col-12 col-lg-6">
                         <label class="form-label fw-semibold" for="quick-client-city-delivery">City</label>
                         <input id="quick-client-city-delivery" name="city" class="form-control" maxlength="120" />
                     </div>
-                    <div class="col-6 col-lg-4">
+                    <div class="col-6 col-lg-3">
                         <label class="form-label fw-semibold" for="quick-client-state-delivery">State</label>
-                        <input id="quick-client-state-delivery" name="state" class="form-control" maxlength="60" />
+                        <select id="quick-client-state-delivery" name="state" class="form-select">
+                            <?php foreach ($stateOptions as $value => $label): ?>
+                                <option value="<?= e($value) ?>"><?= e($label) ?></option>
+                            <?php endforeach; ?>
+                        </select>
                     </div>
-                    <div class="col-6 col-lg-4">
-                        <label class="form-label fw-semibold" for="quick-client-postal-delivery">Postal code</label>
+                    <div class="col-6 col-lg-3">
+                        <label class="form-label fw-semibold" for="quick-client-postal-delivery">Postal Code</label>
                         <input id="quick-client-postal-delivery" name="postal_code" class="form-control" maxlength="30" />
                     </div>
                     <div class="col-12">
@@ -214,6 +237,13 @@ window.addEventListener('DOMContentLoaded', () => {
     const quickClientForm = document.getElementById('quick-client-form-delivery');
     const quickClientError = document.getElementById('quick-client-error-delivery');
     const deliveryForm = document.getElementById('delivery-form');
+    const scheduledInput = document.getElementById('delivery-scheduled-at');
+    const statusSelect = document.getElementById('delivery-status');
+    const addressLine1Input = document.getElementById('delivery-address-1');
+    const addressLine2Input = document.getElementById('delivery-address-2');
+    const cityInput = document.getElementById('delivery-city');
+    const stateInput = document.getElementById('delivery-state');
+    const postalInput = document.getElementById('delivery-postal');
 
     if (!searchInput || !hiddenClientId || !hiddenClientName || !suggestions || !quickClientModalEl || !saveQuickClientBtn || !quickClientForm || !quickClientError || !deliveryForm) {
         return;
@@ -225,6 +255,97 @@ window.addEventListener('DOMContentLoaded', () => {
     const csrfToken = csrfInput ? csrfInput.value : '';
     const modal = bootstrap.Modal.getOrCreateInstance(quickClientModalEl);
     let debounce = null;
+
+    const fillIfEmpty = (input, value) => {
+        if (!input) {
+            return;
+        }
+        const next = (value || '').toString().trim();
+        if (input.tagName === 'SELECT') {
+            if ((input.value || '').trim() !== '') {
+                return;
+            }
+            if (next === '') {
+                return;
+            }
+            const up = next.toUpperCase();
+            const opts = Array.from(input.options || []);
+            if (opts.some((o) => o.value === up)) {
+                input.value = up;
+            } else if (opts.some((o) => o.value === next)) {
+                input.value = next;
+            }
+            return;
+        }
+        if ((input.value || '').trim() !== '') {
+            return;
+        }
+        if (next !== '') {
+            input.value = next;
+        }
+    };
+
+    const maybeAutofillDeliveryAddress = (client) => {
+        if (!client || typeof client !== 'object') {
+            return;
+        }
+        fillIfEmpty(addressLine1Input, client.address_line1);
+        fillIfEmpty(addressLine2Input, client.address_line2);
+        fillIfEmpty(cityInput, client.city);
+        fillIfEmpty(stateInput, client.state);
+        fillIfEmpty(postalInput, client.postal_code);
+    };
+
+    let hiddenScheduledAt = deliveryForm.querySelector('input[type="hidden"][name="scheduled_at"]');
+
+    const removeHiddenScheduledAt = () => {
+        if (hiddenScheduledAt && hiddenScheduledAt.parentNode) {
+            hiddenScheduledAt.parentNode.removeChild(hiddenScheduledAt);
+        }
+        hiddenScheduledAt = null;
+    };
+
+    const ensureHiddenScheduledAt = () => {
+        if (!scheduledInput || !deliveryForm) {
+            return;
+        }
+        if (!hiddenScheduledAt) {
+            hiddenScheduledAt = document.createElement('input');
+            hiddenScheduledAt.type = 'hidden';
+            hiddenScheduledAt.name = 'scheduled_at';
+            hiddenScheduledAt.value = '';
+            scheduledInput.insertAdjacentElement('afterend', hiddenScheduledAt);
+        }
+    };
+
+    const syncScheduledByStatus = () => {
+        if (!statusSelect || !scheduledInput) {
+            return;
+        }
+        const need = statusSelect.value === 'need_to_schedule';
+        if (need) {
+            scheduledInput.value = '';
+            scheduledInput.disabled = true;
+            scheduledInput.removeAttribute('name');
+            ensureHiddenScheduledAt();
+        } else {
+            scheduledInput.disabled = false;
+            scheduledInput.setAttribute('name', 'scheduled_at');
+            removeHiddenScheduledAt();
+        }
+    };
+
+    if (statusSelect && scheduledInput) {
+        statusSelect.addEventListener('change', syncScheduledByStatus);
+        syncScheduledByStatus();
+    }
+
+    deliveryForm.addEventListener('submit', () => {
+        if (statusSelect && statusSelect.value === 'need_to_schedule' && scheduledInput) {
+            scheduledInput.disabled = false;
+            scheduledInput.removeAttribute('name');
+        }
+    });
 
     const hideSuggestions = () => {
         suggestions.innerHTML = '';
@@ -296,6 +417,7 @@ window.addEventListener('DOMContentLoaded', () => {
                 row.querySelector('.client-suggestion-meta').textContent = meta;
                 row.addEventListener('click', () => {
                     setSelected(id, name);
+                    maybeAutofillDeliveryAddress(item);
                     hideSuggestions();
                 });
                 suggestions.appendChild(row);
@@ -382,6 +504,7 @@ window.addEventListener('DOMContentLoaded', () => {
             const clientId = Number(client.id || 0);
             if (clientId > 0) {
                 setSelected(clientId, (client.name || ('Client #' + clientId)).toString());
+                maybeAutofillDeliveryAddress(client);
             }
 
             quickClientForm.reset();

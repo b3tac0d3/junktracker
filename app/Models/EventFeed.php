@@ -58,6 +58,7 @@ final class EventFeed
             ? 'AND (
                 COALESCE(NULLIF(TRIM(CONCAT_WS(" ", c.first_name, c.last_name)), ""), NULLIF(c.company_name, ""), CONCAT("Client #", c.id)) LIKE :q
                 OR COALESCE(d.address_line1, "") LIKE :q
+                OR COALESCE(d.address_line2, "") LIKE :q
                 OR COALESCE(d.notes, "") LIKE :q
             )'
             : '';

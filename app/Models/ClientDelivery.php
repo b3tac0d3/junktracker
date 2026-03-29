@@ -13,7 +13,7 @@ final class ClientDelivery
      */
     public static function statusOptions(): array
     {
-        return ['scheduled', 'completed', 'cancelled'];
+        return ['need_to_schedule', 'scheduled', 'completed', 'cancelled'];
     }
 
     public static function findForBusiness(int $businessId, int $id): ?array
@@ -77,6 +77,7 @@ final class ClientDelivery
             :query = ""
             OR COALESCE(NULLIF(TRIM(CONCAT_WS(" ", c.first_name, c.last_name)), ""), NULLIF(c.company_name, ""), CONCAT("Client #", c.id)) LIKE :query_like_1
             OR COALESCE(d.address_line1, "") LIKE :query_like_2
+            OR COALESCE(d.address_line2, "") LIKE :query_like_2b
             OR COALESCE(d.notes, "") LIKE :query_like_3
             OR CAST(d.id AS CHAR) LIKE :query_like_4
         )';
@@ -84,7 +85,7 @@ final class ClientDelivery
         $sortBy = strtolower(trim($sortBy));
         $sortDir = strtolower(trim($sortDir)) === 'asc' ? 'ASC' : 'DESC';
         $sortMap = [
-            'scheduled_at' => "d.scheduled_at {$sortDir}, d.id {$sortDir}",
+            'scheduled_at' => "(d.scheduled_at IS NULL) ASC, d.scheduled_at {$sortDir}, d.id {$sortDir}",
             'id' => "d.id {$sortDir}",
             'client_name' => "COALESCE(NULLIF(TRIM(CONCAT_WS(\" \", c.first_name, c.last_name)), \"\"), NULLIF(c.company_name, \"\"), CONCAT(\"Client #\", c.id)) {$sortDir}, d.id {$sortDir}",
         ];
@@ -96,6 +97,7 @@ final class ClientDelivery
                     d.scheduled_at,
                     d.end_at,
                     d.address_line1,
+                    d.address_line2,
                     d.city,
                     d.state,
                     d.postal_code,
@@ -121,6 +123,7 @@ final class ClientDelivery
         $stmt->bindValue(':query', $query);
         $stmt->bindValue(':query_like_1', $queryLike);
         $stmt->bindValue(':query_like_2', $queryLike);
+        $stmt->bindValue(':query_like_2b', $queryLike);
         $stmt->bindValue(':query_like_3', $queryLike);
         $stmt->bindValue(':query_like_4', $queryLike);
         $stmt->bindValue(':row_limit', max(1, min($limit, 1000)), \PDO::PARAM_INT);
@@ -157,6 +160,7 @@ final class ClientDelivery
             :query = ""
             OR COALESCE(NULLIF(TRIM(CONCAT_WS(" ", c.first_name, c.last_name)), ""), NULLIF(c.company_name, ""), CONCAT("Client #", c.id)) LIKE :query_like_1
             OR COALESCE(d.address_line1, "") LIKE :query_like_2
+            OR COALESCE(d.address_line2, "") LIKE :query_like_2b
             OR COALESCE(d.notes, "") LIKE :query_like_3
             OR CAST(d.id AS CHAR) LIKE :query_like_4
         )';
@@ -177,6 +181,7 @@ final class ClientDelivery
         $stmt->bindValue(':query', $query);
         $stmt->bindValue(':query_like_1', $queryLike);
         $stmt->bindValue(':query_like_2', $queryLike);
+        $stmt->bindValue(':query_like_2b', $queryLike);
         $stmt->bindValue(':query_like_3', $queryLike);
         $stmt->bindValue(':query_like_4', $queryLike);
         $stmt->execute();
@@ -199,24 +204,29 @@ final class ClientDelivery
             $errors['client_id'] = 'Client not found.';
         }
 
-        $scheduledAt = self::normalizeDateTime((string) ($data['scheduled_at'] ?? ''));
-        if ($scheduledAt === null) {
-            $errors['scheduled_at'] = 'Enter a valid scheduled date and time.';
-        }
-
-        $endAt = self::normalizeDateTime((string) ($data['end_at'] ?? ''));
-        if ($endAt !== null && $scheduledAt !== null && strtotime($endAt) < strtotime($scheduledAt)) {
-            $errors['end_at'] = 'End time must be after the start time.';
-        }
-
-        $status = strtolower(trim((string) ($data['status'] ?? 'scheduled')));
+        $status = strtolower(trim((string) ($data['status'] ?? 'need_to_schedule')));
         if (!in_array($status, self::statusOptions(), true)) {
             $errors['status'] = 'Invalid status.';
         }
 
+        $scheduledAt = self::normalizeDateTime((string) ($data['scheduled_at'] ?? ''));
+        if ($status === 'need_to_schedule') {
+            // Time not set yet
+        } elseif ($status === 'scheduled' || $status === 'completed') {
+            if ($scheduledAt === null) {
+                $errors['scheduled_at'] = 'Enter a scheduled date and time.';
+            }
+        }
+        // cancelled: scheduled time optional
+
         $addressLine1 = trim((string) ($data['address_line1'] ?? ''));
         if (strlen($addressLine1) > 190) {
-            $errors['address_line1'] = 'Address is too long.';
+            $errors['address_line1'] = 'Address line 1 is too long.';
+        }
+
+        $addressLine2 = trim((string) ($data['address_line2'] ?? ''));
+        if (strlen($addressLine2) > 190) {
+            $errors['address_line2'] = 'Address line 2 is too long.';
         }
 
         return $errors;
@@ -231,35 +241,40 @@ final class ClientDelivery
             return 0;
         }
 
-        $scheduledAt = self::normalizeDateTime((string) ($data['scheduled_at'] ?? ''));
-        if ($scheduledAt === null) {
-            return 0;
+        $status = strtolower(trim((string) ($data['status'] ?? 'need_to_schedule')));
+        if (!in_array($status, self::statusOptions(), true)) {
+            $status = 'need_to_schedule';
         }
 
-        $endRaw = trim((string) ($data['end_at'] ?? ''));
-        $endAt = $endRaw === '' ? null : self::normalizeDateTime($endRaw);
-
-        $status = strtolower(trim((string) ($data['status'] ?? 'scheduled')));
-        if (!in_array($status, self::statusOptions(), true)) {
-            $status = 'scheduled';
+        $scheduledAt = self::normalizeDateTime((string) ($data['scheduled_at'] ?? ''));
+        if ($status === 'need_to_schedule') {
+            $scheduledAt = null;
+        }
+        if (($status === 'scheduled' || $status === 'completed') && $scheduledAt === null) {
+            return 0;
         }
 
         $sql = 'INSERT INTO client_deliveries (
                     business_id, client_id, scheduled_at, end_at,
-                    address_line1, city, state, postal_code, notes, status,
+                    address_line1, address_line2, city, state, postal_code, notes, status,
                     created_by, updated_by, created_at, updated_at
                 ) VALUES (
                     :business_id, :client_id, :scheduled_at, :end_at,
-                    :address_line1, :city, :state, :postal_code, :notes, :status,
+                    :address_line1, :address_line2, :city, :state, :postal_code, :notes, :status,
                     :created_by, :updated_by, NOW(), NOW()
                 )';
 
         $stmt = Database::connection()->prepare($sql);
         $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
         $stmt->bindValue(':client_id', (int) ($data['client_id'] ?? 0), \PDO::PARAM_INT);
-        $stmt->bindValue(':scheduled_at', $scheduledAt);
-        $stmt->bindValue(':end_at', $endAt);
+        if ($scheduledAt === null) {
+            $stmt->bindValue(':scheduled_at', null, \PDO::PARAM_NULL);
+        } else {
+            $stmt->bindValue(':scheduled_at', $scheduledAt);
+        }
+        $stmt->bindValue(':end_at', null, \PDO::PARAM_NULL);
         $stmt->bindValue(':address_line1', self::nullIfEmpty(trim((string) ($data['address_line1'] ?? ''))));
+        $stmt->bindValue(':address_line2', self::nullIfEmpty(trim((string) ($data['address_line2'] ?? ''))));
         $stmt->bindValue(':city', self::nullIfEmpty(trim((string) ($data['city'] ?? ''))));
         $stmt->bindValue(':state', self::nullIfEmpty(trim((string) ($data['state'] ?? ''))));
         $stmt->bindValue(':postal_code', self::nullIfEmpty(trim((string) ($data['postal_code'] ?? ''))));
@@ -282,17 +297,17 @@ final class ClientDelivery
             return false;
         }
 
-        $scheduledAt = self::normalizeDateTime((string) ($data['scheduled_at'] ?? ''));
-        if ($scheduledAt === null) {
-            return false;
+        $status = strtolower(trim((string) ($data['status'] ?? 'need_to_schedule')));
+        if (!in_array($status, self::statusOptions(), true)) {
+            $status = 'need_to_schedule';
         }
 
-        $endRaw = trim((string) ($data['end_at'] ?? ''));
-        $endAt = $endRaw === '' ? null : self::normalizeDateTime($endRaw);
-
-        $status = strtolower(trim((string) ($data['status'] ?? 'scheduled')));
-        if (!in_array($status, self::statusOptions(), true)) {
-            $status = 'scheduled';
+        $scheduledAt = self::normalizeDateTime((string) ($data['scheduled_at'] ?? ''));
+        if ($status === 'need_to_schedule') {
+            $scheduledAt = null;
+        }
+        if (($status === 'scheduled' || $status === 'completed') && $scheduledAt === null) {
+            return false;
         }
 
         $sql = 'UPDATE client_deliveries SET
@@ -300,6 +315,7 @@ final class ClientDelivery
                     scheduled_at = :scheduled_at,
                     end_at = :end_at,
                     address_line1 = :address_line1,
+                    address_line2 = :address_line2,
                     city = :city,
                     state = :state,
                     postal_code = :postal_code,
@@ -313,9 +329,14 @@ final class ClientDelivery
 
         $stmt = Database::connection()->prepare($sql);
         $stmt->bindValue(':client_id', (int) ($data['client_id'] ?? 0), \PDO::PARAM_INT);
-        $stmt->bindValue(':scheduled_at', $scheduledAt);
-        $stmt->bindValue(':end_at', $endAt);
+        if ($scheduledAt === null) {
+            $stmt->bindValue(':scheduled_at', null, \PDO::PARAM_NULL);
+        } else {
+            $stmt->bindValue(':scheduled_at', $scheduledAt);
+        }
+        $stmt->bindValue(':end_at', null, \PDO::PARAM_NULL);
         $stmt->bindValue(':address_line1', self::nullIfEmpty(trim((string) ($data['address_line1'] ?? ''))));
+        $stmt->bindValue(':address_line2', self::nullIfEmpty(trim((string) ($data['address_line2'] ?? ''))));
         $stmt->bindValue(':city', self::nullIfEmpty(trim((string) ($data['city'] ?? ''))));
         $stmt->bindValue(':state', self::nullIfEmpty(trim((string) ($data['state'] ?? ''))));
         $stmt->bindValue(':postal_code', self::nullIfEmpty(trim((string) ($data['postal_code'] ?? ''))));

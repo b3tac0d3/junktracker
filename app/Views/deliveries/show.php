@@ -15,13 +15,19 @@ $formatDt = static function (?string $value): string {
     return $ts === false ? '—' : date('m/d/Y g:i A', $ts);
 };
 
+$line1 = trim((string) ($delivery['address_line1'] ?? ''));
+$line2 = trim((string) ($delivery['address_line2'] ?? ''));
 $addrParts = array_filter([
-    trim((string) ($delivery['address_line1'] ?? '')),
+    $line1,
+    $line2,
     trim((string) ($delivery['city'] ?? '')),
     trim((string) ($delivery['state'] ?? '')),
     trim((string) ($delivery['postal_code'] ?? '')),
 ], static fn (string $v): bool => $v !== '');
 $addrDisplay = $addrParts !== [] ? implode(', ', $addrParts) : '—';
+
+$scheduledRaw = trim((string) ($delivery['scheduled_at'] ?? ''));
+$isNeedScheduleStatus = $status === 'need_to_schedule';
 
 $notes = trim((string) ($delivery['notes'] ?? ''));
 ?>
@@ -60,12 +66,12 @@ $notes = trim((string) ($delivery['notes'] ?? ''));
                 <span class="badge text-bg-secondary"><?= e($statusLabel) ?></span>
             </div>
             <div class="col-12 col-md-6 col-lg-4">
-                <div class="small text-muted text-uppercase">Scheduled start</div>
-                <div><?= e($formatDt((string) ($delivery['scheduled_at'] ?? ''))) ?></div>
-            </div>
-            <div class="col-12 col-md-6 col-lg-4">
-                <div class="small text-muted text-uppercase">End time</div>
-                <div><?= e($formatDt((string) ($delivery['end_at'] ?? ''))) ?></div>
+                <div class="small text-muted text-uppercase">Scheduled time</div>
+                <?php if ($isNeedScheduleStatus): ?>
+                    <div class="text-muted">Not set</div>
+                <?php else: ?>
+                    <div><?= e($formatDt((string) ($delivery['scheduled_at'] ?? ''))) ?></div>
+                <?php endif; ?>
             </div>
             <div class="col-12">
                 <div class="small text-muted text-uppercase">Delivery address</div>

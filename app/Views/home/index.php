@@ -164,9 +164,11 @@ $employeeDisplayName = static function (array $row): string {
                     $dn = trim((string) ($d['client_name'] ?? '')) ?: 'Client';
                     $ds = $formatDate((string) ($d['scheduled_at'] ?? ''));
                     $daddr = trim((string) ($d['address_line1'] ?? ''));
+                    $daddr2 = trim((string) ($d['address_line2'] ?? ''));
+                    $dstreet = trim($daddr . ($daddr2 !== '' ? ', ' . $daddr2 : ''));
                     $dcity = trim((string) ($d['city'] ?? ''));
                     $dst = trim((string) ($d['state'] ?? ''));
-                    $dmeta = $daddr !== '' ? $daddr : ($dcity !== '' || $dst !== '' ? trim($dcity . ', ' . $dst) : '');
+                    $dmeta = $dstreet !== '' ? $dstreet : ($dcity !== '' || $dst !== '' ? trim($dcity . ', ' . $dst) : '');
                     ?>
                     <a class="simple-list-row simple-list-row-link" href="<?= e(url('/deliveries/' . (string) $did)) ?>">
                         <span class="simple-list-title"><?= e($dn) ?></span>

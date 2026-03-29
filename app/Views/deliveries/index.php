@@ -6,7 +6,7 @@ $sortDir = strtolower(trim((string) ($sortDir ?? 'asc')));
 $deliveries = is_array($deliveries ?? null) ? $deliveries : [];
 $pagination = is_array($pagination ?? null) ? $pagination : pagination_meta(1, 25, count($deliveries), count($deliveries));
 $perPage = (int) ($pagination['per_page'] ?? 25);
-$statusOptions = is_array($statusOptions ?? null) ? $statusOptions : ['scheduled', 'completed', 'cancelled'];
+$statusOptions = is_array($statusOptions ?? null) ? $statusOptions : \App\Models\ClientDelivery::statusOptions();
 
 $statusLabel = static function (string $value): string {
     return ucwords(str_replace('_', ' ', $value));
@@ -94,14 +94,18 @@ $statusLabel = static function (string $value): string {
                     $clientName = trim((string) ($row['client_name'] ?? '')) ?: '—';
                     $when = trim((string) ($row['scheduled_at'] ?? ''));
                     $whenTs = $when !== '' ? strtotime($when) : false;
-                    $whenDisplay = $whenTs === false ? '—' : date('m/d/Y g:i A', $whenTs);
                     $st = strtolower(trim((string) ($row['status'] ?? '')));
+                    $whenDisplay = $st === 'need_to_schedule'
+                        ? 'Need to schedule'
+                        : ($whenTs === false ? '—' : date('m/d/Y g:i A', $whenTs));
                     $addr = trim((string) ($row['address_line1'] ?? ''));
+                    $addr2 = trim((string) ($row['address_line2'] ?? ''));
                     $citySt = trim(implode(', ', array_filter([
                         trim((string) ($row['city'] ?? '')),
                         trim((string) ($row['state'] ?? '')),
                     ], static fn (string $v): bool => $v !== '')));
-                    $addrLine = $addr !== '' ? $addr . ($citySt !== '' ? ' · ' . $citySt : '') : ($citySt !== '' ? $citySt : '');
+                    $street = trim($addr . ($addr2 !== '' ? ', ' . $addr2 : ''));
+                    $addrLine = $street !== '' ? $street . ($citySt !== '' ? ' · ' . $citySt : '') : ($citySt !== '' ? $citySt : '');
                     ?>
                     <article class="record-row-simple">
                         <a class="record-row-link" href="<?= e(url('/deliveries/' . (string) $did)) ?>">
