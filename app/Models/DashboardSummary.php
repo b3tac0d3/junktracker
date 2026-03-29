@@ -11,7 +11,7 @@ final class DashboardSummary
 {
     public static function byBusiness(int $businessId, int $ownerUserId): array
     {
-        $cacheKey = 'dash:' . $businessId . ':' . $ownerUserId;
+        $cacheKey = 'dash:' . $businessId . ':' . $ownerUserId . ':' . AppCache::versionSuffix();
         if (AppCache::enabled()) {
             $cached = AppCache::get($cacheKey);
             if (is_array($cached) && isset($cached['sales'], $cached['service'], $cached['lists'])) {

@@ -29,7 +29,7 @@ final class NavNotifications
 
         $businessId = current_business_id();
         $userId = (int) (auth_user_id() ?? 0);
-        $cacheKey = 'nav:' . $businessId . ':' . $userId;
+        $cacheKey = 'nav:' . $businessId . ':' . $userId . ':' . AppCache::versionSuffix();
         if (AppCache::enabled()) {
             $cached = AppCache::get($cacheKey);
             if (is_array($cached) && array_key_exists('items', $cached) && array_key_exists('total', $cached)) {

@@ -25,6 +25,16 @@ final class AppCache
         return max(0, min($ttl, 3600));
     }
 
+    /**
+     * Append to cache keys so deploys that bump app.version invalidate APCu/file cache (avoids stale dashboard/nav after upload).
+     */
+    public static function versionSuffix(): string
+    {
+        $v = trim((string) config('app.version', ''));
+
+        return $v !== '' ? substr(md5($v), 0, 8) : '0';
+    }
+
     public static function get(string $key): mixed
     {
         if (!self::enabled()) {
