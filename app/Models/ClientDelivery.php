@@ -73,11 +73,16 @@ final class ClientDelivery
             $where[] = 'LOWER(d.status) = :status';
         }
 
+        $hasAddressLine2 = SchemaInspector::hasColumn('client_deliveries', 'address_line2');
+        $addr2Search = $hasAddressLine2
+            ? ' OR COALESCE(d.address_line2, "") LIKE :query_like_2b'
+            : '';
+
         $where[] = '(
             :query = ""
             OR COALESCE(NULLIF(TRIM(CONCAT_WS(" ", c.first_name, c.last_name)), ""), NULLIF(c.company_name, ""), CONCAT("Client #", c.id)) LIKE :query_like_1
-            OR COALESCE(d.address_line1, "") LIKE :query_like_2
-            OR COALESCE(d.address_line2, "") LIKE :query_like_2b
+            OR COALESCE(d.address_line1, "") LIKE :query_like_2'
+            . $addr2Search . '
             OR COALESCE(d.notes, "") LIKE :query_like_3
             OR CAST(d.id AS CHAR) LIKE :query_like_4
         )';
@@ -91,13 +96,15 @@ final class ClientDelivery
         ];
         $orderBy = $sortMap[$sortBy] ?? $sortMap['scheduled_at'];
 
+        $addressLine2Select = $hasAddressLine2 ? 'd.address_line2' : 'NULL AS address_line2';
+
         $sql = 'SELECT
                     d.id,
                     d.client_id,
                     d.scheduled_at,
                     d.end_at,
                     d.address_line1,
-                    d.address_line2,
+                    ' . $addressLine2Select . ',
                     d.city,
                     d.state,
                     d.postal_code,
@@ -123,7 +130,9 @@ final class ClientDelivery
         $stmt->bindValue(':query', $query);
         $stmt->bindValue(':query_like_1', $queryLike);
         $stmt->bindValue(':query_like_2', $queryLike);
-        $stmt->bindValue(':query_like_2b', $queryLike);
+        if ($hasAddressLine2) {
+            $stmt->bindValue(':query_like_2b', $queryLike);
+        }
         $stmt->bindValue(':query_like_3', $queryLike);
         $stmt->bindValue(':query_like_4', $queryLike);
         $stmt->bindValue(':row_limit', max(1, min($limit, 1000)), \PDO::PARAM_INT);
@@ -156,11 +165,16 @@ final class ClientDelivery
             $where[] = 'LOWER(d.status) = :status';
         }
 
+        $hasAddressLine2 = SchemaInspector::hasColumn('client_deliveries', 'address_line2');
+        $addr2Search = $hasAddressLine2
+            ? ' OR COALESCE(d.address_line2, "") LIKE :query_like_2b'
+            : '';
+
         $where[] = '(
             :query = ""
             OR COALESCE(NULLIF(TRIM(CONCAT_WS(" ", c.first_name, c.last_name)), ""), NULLIF(c.company_name, ""), CONCAT("Client #", c.id)) LIKE :query_like_1
-            OR COALESCE(d.address_line1, "") LIKE :query_like_2
-            OR COALESCE(d.address_line2, "") LIKE :query_like_2b
+            OR COALESCE(d.address_line1, "") LIKE :query_like_2'
+            . $addr2Search . '
             OR COALESCE(d.notes, "") LIKE :query_like_3
             OR CAST(d.id AS CHAR) LIKE :query_like_4
         )';
@@ -181,7 +195,9 @@ final class ClientDelivery
         $stmt->bindValue(':query', $query);
         $stmt->bindValue(':query_like_1', $queryLike);
         $stmt->bindValue(':query_like_2', $queryLike);
-        $stmt->bindValue(':query_like_2b', $queryLike);
+        if ($hasAddressLine2) {
+            $stmt->bindValue(':query_like_2b', $queryLike);
+        }
         $stmt->bindValue(':query_like_3', $queryLike);
         $stmt->bindValue(':query_like_4', $queryLike);
         $stmt->execute();
@@ -254,15 +270,17 @@ final class ClientDelivery
             return 0;
         }
 
-        $sql = 'INSERT INTO client_deliveries (
-                    business_id, client_id, scheduled_at, end_at,
-                    address_line1, address_line2, city, state, postal_code, notes, status,
-                    created_by, updated_by, created_at, updated_at
-                ) VALUES (
-                    :business_id, :client_id, :scheduled_at, :end_at,
-                    :address_line1, :address_line2, :city, :state, :postal_code, :notes, :status,
-                    :created_by, :updated_by, NOW(), NOW()
-                )';
+        $hasAddressLine2 = SchemaInspector::hasColumn('client_deliveries', 'address_line2');
+        $insertCols = 'business_id, client_id, scheduled_at, end_at, address_line1';
+        $insertVals = ':business_id, :client_id, :scheduled_at, :end_at, :address_line1';
+        if ($hasAddressLine2) {
+            $insertCols .= ', address_line2';
+            $insertVals .= ', :address_line2';
+        }
+        $insertCols .= ', city, state, postal_code, notes, status, created_by, updated_by, created_at, updated_at';
+        $insertVals .= ', :city, :state, :postal_code, :notes, :status, :created_by, :updated_by, NOW(), NOW()';
+
+        $sql = 'INSERT INTO client_deliveries (' . $insertCols . ') VALUES (' . $insertVals . ')';
 
         $stmt = Database::connection()->prepare($sql);
         $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
@@ -274,7 +292,9 @@ final class ClientDelivery
         }
         $stmt->bindValue(':end_at', null, \PDO::PARAM_NULL);
         $stmt->bindValue(':address_line1', self::nullIfEmpty(trim((string) ($data['address_line1'] ?? ''))));
-        $stmt->bindValue(':address_line2', self::nullIfEmpty(trim((string) ($data['address_line2'] ?? ''))));
+        if ($hasAddressLine2) {
+            $stmt->bindValue(':address_line2', self::nullIfEmpty(trim((string) ($data['address_line2'] ?? ''))));
+        }
         $stmt->bindValue(':city', self::nullIfEmpty(trim((string) ($data['city'] ?? ''))));
         $stmt->bindValue(':state', self::nullIfEmpty(trim((string) ($data['state'] ?? ''))));
         $stmt->bindValue(':postal_code', self::nullIfEmpty(trim((string) ($data['postal_code'] ?? ''))));
@@ -310,19 +330,27 @@ final class ClientDelivery
             return false;
         }
 
-        $sql = 'UPDATE client_deliveries SET
-                    client_id = :client_id,
-                    scheduled_at = :scheduled_at,
-                    end_at = :end_at,
-                    address_line1 = :address_line1,
-                    address_line2 = :address_line2,
-                    city = :city,
-                    state = :state,
-                    postal_code = :postal_code,
-                    notes = :notes,
-                    status = :status,
-                    updated_by = :updated_by,
-                    updated_at = NOW()
+        $hasAddressLine2 = SchemaInspector::hasColumn('client_deliveries', 'address_line2');
+        $setParts = [
+            'client_id = :client_id',
+            'scheduled_at = :scheduled_at',
+            'end_at = :end_at',
+            'address_line1 = :address_line1',
+        ];
+        if ($hasAddressLine2) {
+            $setParts[] = 'address_line2 = :address_line2';
+        }
+        $setParts = array_merge($setParts, [
+            'city = :city',
+            'state = :state',
+            'postal_code = :postal_code',
+            'notes = :notes',
+            'status = :status',
+            'updated_by = :updated_by',
+            'updated_at = NOW()',
+        ]);
+
+        $sql = 'UPDATE client_deliveries SET ' . implode(', ', $setParts) . '
                 WHERE business_id = :business_id
                   AND id = :id
                   AND deleted_at IS NULL';
@@ -336,7 +364,9 @@ final class ClientDelivery
         }
         $stmt->bindValue(':end_at', null, \PDO::PARAM_NULL);
         $stmt->bindValue(':address_line1', self::nullIfEmpty(trim((string) ($data['address_line1'] ?? ''))));
-        $stmt->bindValue(':address_line2', self::nullIfEmpty(trim((string) ($data['address_line2'] ?? ''))));
+        if ($hasAddressLine2) {
+            $stmt->bindValue(':address_line2', self::nullIfEmpty(trim((string) ($data['address_line2'] ?? ''))));
+        }
         $stmt->bindValue(':city', self::nullIfEmpty(trim((string) ($data['city'] ?? ''))));
         $stmt->bindValue(':state', self::nullIfEmpty(trim((string) ($data['state'] ?? ''))));
         $stmt->bindValue(':postal_code', self::nullIfEmpty(trim((string) ($data['postal_code'] ?? ''))));

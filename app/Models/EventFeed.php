@@ -54,11 +54,14 @@ final class EventFeed
             return [];
         }
 
+        $hasDeliveryAddr2 = SchemaInspector::hasColumn('client_deliveries', 'address_line2');
+        $addr2Or = $hasDeliveryAddr2 ? ' OR COALESCE(d.address_line2, "") LIKE :q' : '';
+
         $searchWhere = $q !== ''
             ? 'AND (
                 COALESCE(NULLIF(TRIM(CONCAT_WS(" ", c.first_name, c.last_name)), ""), NULLIF(c.company_name, ""), CONCAT("Client #", c.id)) LIKE :q
-                OR COALESCE(d.address_line1, "") LIKE :q
-                OR COALESCE(d.address_line2, "") LIKE :q
+                OR COALESCE(d.address_line1, "") LIKE :q'
+                . $addr2Or . '
                 OR COALESCE(d.notes, "") LIKE :q
             )'
             : '';

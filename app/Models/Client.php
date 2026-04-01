@@ -193,7 +193,7 @@ final class Client
         )";
     }
 
-    public static function searchOptions(int $businessId, string $query, int $limit = 8): array
+    public static function searchOptions(int $businessId, string $query, int $limit = 8, int $excludeClientId = 0): array
     {
         $pdo = Database::connection();
         $needle = trim($query);
@@ -211,6 +211,7 @@ final class Client
         $statusSql = self::hasColumn('clients', 'status') ? 'c.status' : "'active'";
         $businessWhere = self::hasColumn('clients', 'business_id') ? 'c.business_id = :business_id' : '1 = 1';
         $deletedWhere = self::hasColumn('clients', 'deleted_at') ? 'c.deleted_at IS NULL' : '1 = 1';
+        $excludeSql = ($excludeClientId > 0) ? ' AND c.id <> :exclude_client_id' : '';
 
         $sql = "SELECT
                     c.id,
@@ -226,6 +227,7 @@ final class Client
                 FROM clients c
                 WHERE {$businessWhere}
                   AND {$deletedWhere}
+                  {$excludeSql}
                   AND (
                     CONCAT_WS(' ', COALESCE(c.first_name, ''), COALESCE(c.last_name, ''), COALESCE({$companySql}, '')) LIKE :query_like_1
                     OR COALESCE({$phoneSql}, '') LIKE :query_like_2
@@ -243,11 +245,57 @@ final class Client
         if (self::hasColumn('clients', 'business_id')) {
             $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
         }
+        if ($excludeClientId > 0) {
+            $stmt->bindValue(':exclude_client_id', $excludeClientId, \PDO::PARAM_INT);
+        }
         $stmt->bindValue(':query_like_1', $queryLike);
         $stmt->bindValue(':query_like_2', $queryLike);
         $stmt->bindValue(':query_like_3', $queryLike);
         $stmt->bindValue(':query_like_4', $queryLike);
         $stmt->bindValue(':row_limit', max(1, min($limit, 50)), \PDO::PARAM_INT);
+        $stmt->execute();
+
+        $rows = $stmt->fetchAll();
+        return is_array($rows) ? $rows : [];
+    }
+
+    /**
+     * Clients this person referred (same business).
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public static function referralsSentBy(int $businessId, int $referrerClientId, int $limit = 100): array
+    {
+        if (!self::hasColumn('clients', 'referred_by_client_id') || $referrerClientId <= 0) {
+            return [];
+        }
+
+        $companySql = self::hasColumn('clients', 'company_name') ? 'c.company_name' : 'NULL';
+        $phoneSql = self::hasColumn('clients', 'phone') ? 'c.phone' : 'NULL';
+        $citySql = self::hasColumn('clients', 'city') ? 'c.city' : 'NULL';
+        $businessWhere = self::hasColumn('clients', 'business_id') ? 'c.business_id = :business_id' : '1 = 1';
+        $deletedWhere = self::hasColumn('clients', 'deleted_at') ? 'c.deleted_at IS NULL' : '1 = 1';
+
+        $sql = "SELECT
+                    c.id,
+                    c.first_name,
+                    c.last_name,
+                    {$companySql} AS company_name,
+                    COALESCE({$phoneSql}, '') AS phone,
+                    COALESCE({$citySql}, '') AS city
+                FROM clients c
+                WHERE {$businessWhere}
+                  AND {$deletedWhere}
+                  AND c.referred_by_client_id = :referrer_id
+                ORDER BY c.id DESC
+                LIMIT :row_limit";
+
+        $stmt = Database::connection()->prepare($sql);
+        if (self::hasColumn('clients', 'business_id')) {
+            $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
+        }
+        $stmt->bindValue(':referrer_id', $referrerClientId, \PDO::PARAM_INT);
+        $stmt->bindValue(':row_limit', max(1, min($limit, 500)), \PDO::PARAM_INT);
         $stmt->execute();
 
         $rows = $stmt->fetchAll();
@@ -282,6 +330,19 @@ final class Client
         $businessWhere = self::hasColumn('clients', 'business_id') ? 'c.business_id = :business_id' : '1 = 1';
         $deletedWhere = self::hasColumn('clients', 'deleted_at') ? 'c.deleted_at IS NULL' : '1 = 1';
 
+        $refJoin = '';
+        $refSelect = '';
+        if (self::hasColumn('clients', 'referred_by_client_id')) {
+            $refDeleted = self::hasColumn('clients', 'deleted_at') ? 'ref.deleted_at IS NULL' : '1=1';
+            $refJoin = ' LEFT JOIN clients ref ON ref.id = c.referred_by_client_id AND ref.business_id = c.business_id AND ' . $refDeleted;
+            $refCompanyRef = self::hasColumn('clients', 'company_name') ? 'ref.company_name' : 'NULL';
+            $refSelect = ',
+                    c.referred_by_client_id AS referred_by_client_id,
+                    ref.first_name AS referrer_first_name,
+                    ref.last_name AS referrer_last_name,
+                    ' . $refCompanyRef . ' AS referrer_company_name';
+        }
+
         $sql = "SELECT
                     c.id,
                     c.first_name,
@@ -302,7 +363,9 @@ final class Client
                     {$postalCodeSql} AS postal_code,
                     {$statusSql} AS status,
                     {$activeSql} AS is_active
+                    {$refSelect}
                 FROM clients c
+                {$refJoin}
                 WHERE {$businessWhere}
                   AND c.id = :client_id
                   AND {$deletedWhere}
@@ -910,6 +973,13 @@ final class Client
             }
         }
 
+        if (array_key_exists('referred_by_client_id', $data) && self::hasColumn('clients', 'referred_by_client_id')) {
+            $rid = (int) ($data['referred_by_client_id'] ?? 0);
+            $columns[] = 'referred_by_client_id';
+            $values[] = ':referred_by_client_id';
+            $params['referred_by_client_id'] = $rid > 0 ? $rid : null;
+        }
+
         if (self::hasColumn('clients', 'created_by')) {
             $columns[] = 'created_by';
             $values[] = ':created_by';
@@ -1005,6 +1075,12 @@ final class Client
                 $sets[] = $secondaryCanTextColumn . ' = :secondary_can_text_value';
                 $params['secondary_can_text_value'] = ((int) ($data['secondary_can_text'] ?? 0)) === 1 ? 1 : 0;
             }
+        }
+
+        if (array_key_exists('referred_by_client_id', $data) && self::hasColumn('clients', 'referred_by_client_id')) {
+            $rid = (int) ($data['referred_by_client_id'] ?? 0);
+            $sets[] = 'referred_by_client_id = :referred_by_client_id';
+            $params['referred_by_client_id'] = $rid > 0 ? $rid : null;
         }
 
         if (self::hasColumn('clients', 'updated_by')) {

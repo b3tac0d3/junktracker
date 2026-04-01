@@ -7,6 +7,7 @@ $hasClientType = (bool) ($hasClientType ?? false);
 $hasNewsletter = (bool) ($hasNewsletter ?? false);
 $clientTypeOptions = is_array($clientTypeOptions ?? null) ? $clientTypeOptions : ['client', 'company', 'realtor', 'other'];
 $clientId = (int) ($clientId ?? 0);
+$referralsSent = is_array($referralsSent ?? null) ? $referralsSent : [];
 
 $fieldError = static function (string $field) use ($errors): string {
     return isset($errors[$field]) ? (string) $errors[$field] : '';
@@ -31,6 +32,50 @@ if ($selectedState !== '' && !array_key_exists($selectedState, $stateOptions)) {
         <a class="btn btn-outline-secondary" href="<?= e(url('/clients')) ?>">Back to Clients</a>
     </div>
 </div>
+
+<?php if ($mode === 'edit' && $referralsSent !== []): ?>
+    <section class="card index-card mb-3">
+        <div class="card-header index-card-header">
+            <strong><i class="fas fa-user-friends me-2"></i>Referrals sent</strong>
+        </div>
+        <div class="card-body py-3">
+            <div class="simple-list-table">
+                <?php foreach ($referralsSent as $ref): ?>
+                    <?php
+                    if (!is_array($ref)) {
+                        continue;
+                    }
+                    $refId = (int) ($ref['id'] ?? 0);
+                    if ($refId <= 0) {
+                        continue;
+                    }
+                    $refName = trim(((string) ($ref['first_name'] ?? '')) . ' ' . ((string) ($ref['last_name'] ?? '')));
+                    if ($refName === '') {
+                        $refName = trim((string) ($ref['company_name'] ?? ''));
+                    }
+                    if ($refName === '') {
+                        $refName = 'Client #' . (string) $refId;
+                    }
+                    $refCity = trim((string) ($ref['city'] ?? ''));
+                    $refPhone = trim((string) ($ref['phone'] ?? ''));
+                    ?>
+                    <a class="simple-list-row simple-list-row-link" href="<?= e(url('/clients/' . (string) $refId)) ?>">
+                        <div class="simple-list-title"><?= e($refName) ?></div>
+                        <div class="simple-list-meta">
+                            <?php if ($refPhone !== ''): ?>
+                                <span><?= e(format_phone($refPhone)) ?></span>
+                            <?php endif; ?>
+                            <?php if ($refCity !== ''): ?>
+                                <span><?= e($refCity) ?></span>
+                            <?php endif; ?>
+                            <span>ID #<?= e((string) $refId) ?></span>
+                        </div>
+                    </a>
+                <?php endforeach; ?>
+            </div>
+        </div>
+    </section>
+<?php endif; ?>
 
 <section class="card index-card">
     <div class="card-header index-card-header">
@@ -173,6 +218,26 @@ if ($selectedState !== '' && !array_key_exists($selectedState, $stateOptions)) {
             <div class="col-12"><hr class="my-1"></div>
 
             <div class="col-12">
+                <label class="form-label fw-semibold" for="referrer-search">Referred by</label>
+                <input type="hidden" id="referrer-client-id" name="referred_by_client_id" value="<?= e((string) ($form['referred_by_client_id'] ?? '')) ?>" />
+                <div class="position-relative client-autosuggest-wrap">
+                    <input
+                        id="referrer-search"
+                        type="text"
+                        class="form-control <?= $hasError('referred_by_client_id') ? 'is-invalid' : '' ?>"
+                        value="<?= e((string) ($form['referrer_display_name'] ?? '')) ?>"
+                        placeholder="Search for the client who referred this person…"
+                        autocomplete="off"
+                        data-search-url="<?= e(url('/clients/referrer-search')) ?>"
+                        data-exclude-id="<?= (string) $clientId ?>"
+                    />
+                    <div id="referrer-suggestions" class="client-suggestions d-none" role="listbox" aria-label="Referrer suggestions"></div>
+                </div>
+                <?php if ($hasError('referred_by_client_id')): ?><div class="invalid-feedback d-block"><?= e($fieldError('referred_by_client_id')) ?></div><?php endif; ?>
+                <div class="form-text">Optional. Links this record to an existing client who sent you this lead.</div>
+            </div>
+
+            <div class="col-12">
                 <label class="form-label fw-semibold" for="client-primary-note">Primary Note</label>
                 <textarea id="client-primary-note" name="primary_note" class="form-control" rows="4"><?= e((string) ($form['primary_note'] ?? '')) ?></textarea>
             </div>
@@ -184,3 +249,95 @@ if ($selectedState !== '' && !array_key_exists($selectedState, $stateOptions)) {
         </form>
     </div>
 </section>
+
+<script>
+window.addEventListener('DOMContentLoaded', () => {
+    const searchInput = document.getElementById('referrer-search');
+    const hiddenId = document.getElementById('referrer-client-id');
+    const suggestions = document.getElementById('referrer-suggestions');
+    if (!searchInput || !hiddenId || !suggestions) {
+        return;
+    }
+    const searchUrl = String(searchInput.dataset.searchUrl || '');
+    const excludeId = String(searchInput.dataset.excludeId || '0');
+    let debounce = null;
+
+    const hide = () => {
+        suggestions.innerHTML = '';
+        suggestions.classList.add('d-none');
+    };
+
+    const render = (items) => {
+        suggestions.innerHTML = '';
+        if (!Array.isArray(items) || items.length === 0) {
+            hide();
+            return;
+        }
+        items.forEach((item) => {
+            const id = Number(item && item.id ? item.id : 0);
+            const name = String(item && item.name ? item.name : '').trim();
+            if (!id || name === '') {
+                return;
+            }
+            const phone = String(item && item.phone ? item.phone : '').trim();
+            const city = String(item && item.city ? item.city : '').trim();
+            const meta = [phone, city].filter(Boolean).join(' · ');
+            const row = document.createElement('button');
+            row.type = 'button';
+            row.className = 'client-suggestion-item';
+            row.innerHTML = '<span class="client-suggestion-name"></span><span class="client-suggestion-meta"></span>';
+            row.querySelector('.client-suggestion-name').textContent = name;
+            row.querySelector('.client-suggestion-meta').textContent = meta;
+            row.addEventListener('click', () => {
+                hiddenId.value = String(id);
+                searchInput.value = name;
+                hide();
+            });
+            suggestions.appendChild(row);
+        });
+        if (suggestions.children.length > 0) {
+            suggestions.classList.remove('d-none');
+        }
+    };
+
+    const fetchResults = (query) => {
+        if (query.length < 2 || searchUrl === '') {
+            hide();
+            return;
+        }
+        let url = searchUrl + '?q=' + encodeURIComponent(query);
+        if (excludeId !== '0') {
+            url += '&exclude_id=' + encodeURIComponent(excludeId);
+        }
+        fetch(url, {
+            headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' },
+        })
+            .then((r) => r.ok ? r.json() : Promise.reject())
+            .then((payload) => {
+                render(Array.isArray(payload && payload.results) ? payload.results : []);
+            })
+            .catch(() => hide());
+    };
+
+    searchInput.addEventListener('input', () => {
+        hiddenId.value = '';
+        if (debounce) {
+            clearTimeout(debounce);
+        }
+        debounce = setTimeout(() => fetchResults(String(searchInput.value || '').trim()), 160);
+    });
+
+    searchInput.addEventListener('focus', () => {
+        const q = String(searchInput.value || '').trim();
+        if (q.length >= 2) {
+            fetchResults(q);
+        }
+    });
+
+    document.addEventListener('click', (event) => {
+        if (!suggestions.contains(event.target) && event.target !== searchInput) {
+            hide();
+        }
+    });
+});
+</script>

@@ -69,6 +69,35 @@ final class ClientsController extends Controller
             'hasNewsletter' => SchemaInspector::hasColumn('clients', 'newsletter_subscribed'),
             'clientTypeOptions' => FormSelectValue::optionsForSection($businessId, 'client_type'),
             'clientId' => 0,
+            'referralsSent' => [],
+        ]);
+    }
+
+    public function referrerSearch(): void
+    {
+        require_business_role(['general_user', 'admin']);
+
+        $businessId = current_business_id();
+        $query = trim((string) ($_GET['q'] ?? ''));
+        $exclude = (int) ($_GET['exclude_id'] ?? 0);
+        $items = Client::searchOptions($businessId, $query, 12, $exclude);
+
+        $results = [];
+        foreach ($items as $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+            $results[] = [
+                'id' => (int) ($item['id'] ?? 0),
+                'name' => (string) ($item['name'] ?? ''),
+                'phone' => (string) ($item['phone'] ?? ''),
+                'city' => (string) ($item['city'] ?? ''),
+            ];
+        }
+
+        $this->json([
+            'ok' => true,
+            'results' => $results,
         ]);
     }
 
@@ -99,8 +128,8 @@ final class ClientsController extends Controller
         }
 
         $businessId = current_business_id();
-        $form = $this->formFromPost($_POST);
-        $errors = $this->validateForm($form, $businessId);
+        $form = $this->formWithReferrerDisplayName($this->formFromPost($_POST), $businessId);
+        $errors = $this->validateForm($form, $businessId, null);
         if ($errors !== []) {
             $this->render('clients/form', [
                 'pageTitle' => 'Add Client',
@@ -112,6 +141,7 @@ final class ClientsController extends Controller
                 'hasNewsletter' => SchemaInspector::hasColumn('clients', 'newsletter_subscribed'),
                 'clientTypeOptions' => FormSelectValue::optionsForSection($businessId, 'client_type'),
                 'clientId' => 0,
+                'referralsSent' => [],
             ]);
             return;
         }
@@ -140,6 +170,11 @@ final class ClientsController extends Controller
             return;
         }
 
+        $referralsSent = [];
+        if (SchemaInspector::hasColumn('clients', 'referred_by_client_id')) {
+            $referralsSent = Client::referralsSentBy($businessId, $clientId, 100);
+        }
+
         $this->render('clients/form', [
             'pageTitle' => 'Edit Client',
             'mode' => 'edit',
@@ -150,6 +185,7 @@ final class ClientsController extends Controller
             'hasNewsletter' => SchemaInspector::hasColumn('clients', 'newsletter_subscribed'),
             'clientTypeOptions' => FormSelectValue::optionsForSection($businessId, 'client_type'),
             'clientId' => $clientId,
+            'referralsSent' => $referralsSent,
         ]);
     }
 
@@ -177,9 +213,13 @@ final class ClientsController extends Controller
             return;
         }
 
-        $form = $this->formFromPost($_POST);
-        $errors = $this->validateForm($form, $businessId);
+        $form = $this->formWithReferrerDisplayName($this->formFromPost($_POST), $businessId);
+        $errors = $this->validateForm($form, $businessId, $clientId);
         if ($errors !== []) {
+            $referralsSent = [];
+            if (SchemaInspector::hasColumn('clients', 'referred_by_client_id')) {
+                $referralsSent = Client::referralsSentBy($businessId, $clientId, 100);
+            }
             $this->render('clients/form', [
                 'pageTitle' => 'Edit Client',
                 'mode' => 'edit',
@@ -190,6 +230,7 @@ final class ClientsController extends Controller
                 'hasNewsletter' => SchemaInspector::hasColumn('clients', 'newsletter_subscribed'),
                 'clientTypeOptions' => FormSelectValue::optionsForSection($businessId, 'client_type'),
                 'clientId' => $clientId,
+                'referralsSent' => $referralsSent,
             ]);
             return;
         }
@@ -226,6 +267,11 @@ final class ClientsController extends Controller
         $contacts = ClientContact::forClient($businessId, $clientId, 50);
         $bolo = ClientBoloProfile::isAvailable() ? ClientBoloProfile::findForClient($businessId, $clientId) : null;
 
+        $referralsSent = [];
+        if (SchemaInspector::hasColumn('clients', 'referred_by_client_id')) {
+            $referralsSent = Client::referralsSentBy($businessId, $clientId, 100);
+        }
+
         $this->render('clients/show', [
             'pageTitle' => 'Client',
             'client' => $client,
@@ -239,6 +285,8 @@ final class ClientsController extends Controller
             'hasNewsletter' => SchemaInspector::hasColumn('clients', 'newsletter_subscribed'),
             'hasBolo' => ClientBoloProfile::isAvailable(),
             'boloHasActiveFlag' => ClientBoloProfile::hasActiveFlag(),
+            'hasReferrals' => SchemaInspector::hasColumn('clients', 'referred_by_client_id'),
+            'referralsSent' => $referralsSent,
         ]);
     }
 
@@ -524,6 +572,26 @@ final class ClientsController extends Controller
         exit;
     }
 
+    /**
+     * Keeps the referrer search field populated after validation errors.
+     *
+     * @param array<string, mixed> $form
+     * @return array<string, mixed>
+     */
+    private function formWithReferrerDisplayName(array $form, int $businessId): array
+    {
+        $rid = (int) trim((string) ($form['referred_by_client_id'] ?? ''));
+        if ($rid <= 0) {
+            $form['referrer_display_name'] = trim((string) ($form['referrer_display_name'] ?? ''));
+
+            return $form;
+        }
+        $c = Client::findForBusiness($businessId, $rid);
+        $form['referrer_display_name'] = $c !== null ? Client::displayName($c) : '';
+
+        return $form;
+    }
+
     private function defaultForm(): array
     {
         return [
@@ -543,11 +611,24 @@ final class ClientsController extends Controller
             'client_type' => 'client',
             'primary_note' => '',
             'newsletter_subscribed' => '0',
+            'referred_by_client_id' => '',
+            'referrer_display_name' => '',
         ];
     }
 
     private function formFromModel(array $client): array
     {
+        $refId = (int) ($client['referred_by_client_id'] ?? 0);
+        $refDisplay = '';
+        if ($refId > 0) {
+            $refDisplay = Client::displayName([
+                'id' => $refId,
+                'first_name' => (string) ($client['referrer_first_name'] ?? ''),
+                'last_name' => (string) ($client['referrer_last_name'] ?? ''),
+                'company_name' => (string) ($client['referrer_company_name'] ?? ''),
+            ]);
+        }
+
         return [
             'first_name' => trim((string) ($client['first_name'] ?? '')),
             'last_name' => trim((string) ($client['last_name'] ?? '')),
@@ -565,6 +646,8 @@ final class ClientsController extends Controller
             'client_type' => trim((string) ($client['client_type'] ?? 'client')),
             'primary_note' => trim((string) ($client['primary_note'] ?? '')),
             'newsletter_subscribed' => ((int) ($client['newsletter_subscribed'] ?? 0)) === 1 ? '1' : '0',
+            'referred_by_client_id' => $refId > 0 ? (string) $refId : '',
+            'referrer_display_name' => $refDisplay,
         ];
     }
 
@@ -598,15 +681,31 @@ final class ClientsController extends Controller
             'client_type' => $clientType,
             'primary_note' => trim((string) ($input['primary_note'] ?? '')),
             'newsletter_subscribed' => isset($input['newsletter_subscribed']) ? '1' : '0',
+            'referred_by_client_id' => trim((string) ($input['referred_by_client_id'] ?? '')),
         ];
     }
 
-    private function validateForm(array $form, int $businessId): array
+    private function validateForm(array $form, int $businessId, ?int $editingClientId = null): array
     {
         $errors = [];
 
         if ($form['first_name'] === '' && $form['last_name'] === '' && $form['company_name'] === '') {
             $errors['first_name'] = 'Enter a first/last name or a company name.';
+        }
+
+        if (SchemaInspector::hasColumn('clients', 'referred_by_client_id')) {
+            $refRaw = trim((string) ($form['referred_by_client_id'] ?? ''));
+            $refId = $refRaw === '' ? 0 : (int) $refRaw;
+            if ($refId > 0) {
+                if ($editingClientId !== null && $refId === $editingClientId) {
+                    $errors['referred_by_client_id'] = 'A client cannot refer themselves.';
+                } else {
+                    $refClient = Client::findForBusiness($businessId, $refId);
+                    if ($refClient === null) {
+                        $errors['referred_by_client_id'] = 'Choose a valid referring client from the list.';
+                    }
+                }
+            }
         }
 
         $allowedTypes = FormSelectValue::optionsForSection($businessId, 'client_type');
@@ -665,6 +764,11 @@ final class ClientsController extends Controller
                     $payload['newsletter_unsubscribe_token'] = bin2hex(random_bytes(32));
                 }
             }
+        }
+
+        if (SchemaInspector::hasColumn('clients', 'referred_by_client_id')) {
+            $rid = (int) trim((string) ($form['referred_by_client_id'] ?? ''));
+            $payload['referred_by_client_id'] = $rid > 0 ? $rid : null;
         }
 
         return $payload;

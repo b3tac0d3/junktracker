@@ -8,6 +8,8 @@ $purchases = is_array($purchases ?? null) ? $purchases : [];
 $contacts = is_array($contacts ?? null) ? $contacts : [];
 $bolo = is_array($bolo ?? null) ? $bolo : null;
 $hasNewsletter = (bool) ($hasNewsletter ?? false);
+$hasReferrals = (bool) ($hasReferrals ?? false);
+$referralsSent = is_array($referralsSent ?? null) ? $referralsSent : [];
 $hasBolo = (bool) ($hasBolo ?? false);
 $boloHasActiveFlag = (bool) ($boloHasActiveFlag ?? false);
 $boloProfileActive = true;
@@ -38,6 +40,18 @@ if ($displayName === '') {
 }
 if ($displayName === '') {
     $displayName = 'Client #' . (string) ((int) ($client['id'] ?? 0));
+}
+
+$referredById = (int) ($client['referred_by_client_id'] ?? 0);
+$referrerDisplayName = '';
+if ($hasReferrals && $referredById > 0) {
+    $referrerDisplayName = trim(((string) ($client['referrer_first_name'] ?? '')) . ' ' . ((string) ($client['referrer_last_name'] ?? '')));
+    if ($referrerDisplayName === '') {
+        $referrerDisplayName = trim((string) ($client['referrer_company_name'] ?? ''));
+    }
+    if ($referrerDisplayName === '') {
+        $referrerDisplayName = 'Client #' . (string) $referredById;
+    }
 }
 
 $addressStreet = implode(', ', array_filter([
@@ -193,9 +207,61 @@ $isInactive = $clientStatus === 'inactive' || (array_key_exists('is_active', $cl
                 <span class="record-label">Primary Note</span>
                 <span class="record-value"><?= e($primaryNote !== '' ? $primaryNote : '—') ?></span>
             </div>
+            <?php if ($hasReferrals && $referredById > 0): ?>
+                <div class="record-field">
+                    <span class="record-label">Referred by</span>
+                    <span class="record-value">
+                        <a href="<?= e(url('/clients/' . (string) $referredById)) ?>"><?= e($referrerDisplayName) ?></a>
+                    </span>
+                </div>
+            <?php endif; ?>
         </div>
     </div>
 </section>
+
+<?php if ($hasReferrals && $referralsSent !== []): ?>
+    <section class="card index-card mb-3">
+        <div class="card-header index-card-header">
+            <strong><i class="fas fa-user-friends me-2"></i>Referrals sent</strong>
+        </div>
+        <div class="card-body">
+            <div class="simple-list-table">
+                <?php foreach ($referralsSent as $ref): ?>
+                    <?php
+                    if (!is_array($ref)) {
+                        continue;
+                    }
+                    $refId = (int) ($ref['id'] ?? 0);
+                    if ($refId <= 0) {
+                        continue;
+                    }
+                    $refName = trim(((string) ($ref['first_name'] ?? '')) . ' ' . ((string) ($ref['last_name'] ?? '')));
+                    if ($refName === '') {
+                        $refName = trim((string) ($ref['company_name'] ?? ''));
+                    }
+                    if ($refName === '') {
+                        $refName = 'Client #' . (string) $refId;
+                    }
+                    $refCity = trim((string) ($ref['city'] ?? ''));
+                    $refPhone = trim((string) ($ref['phone'] ?? ''));
+                    ?>
+                    <a class="simple-list-row simple-list-row-link" href="<?= e(url('/clients/' . (string) $refId)) ?>">
+                        <div class="simple-list-title"><?= e($refName) ?></div>
+                        <div class="simple-list-meta">
+                            <?php if ($refPhone !== ''): ?>
+                                <span><?= e(format_phone($refPhone)) ?></span>
+                            <?php endif; ?>
+                            <?php if ($refCity !== ''): ?>
+                                <span><?= e($refCity) ?></span>
+                            <?php endif; ?>
+                            <span>ID #<?= e((string) $refId) ?></span>
+                        </div>
+                    </a>
+                <?php endforeach; ?>
+            </div>
+        </div>
+    </section>
+<?php endif; ?>
 
 <?php if ($hasBolo): ?>
     <section class="card index-card mb-3">

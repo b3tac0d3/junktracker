@@ -6,6 +6,8 @@ namespace App\Controllers;
 
 use App\Models\Client;
 use App\Models\FormSelectValue;
+use App\Models\Job;
+use App\Models\Purchase;
 use App\Models\Task;
 use Core\Controller;
 
@@ -408,7 +410,8 @@ final class TasksController extends Controller
             return;
         }
 
-        $task = Task::findForBusiness(current_business_id(), $taskId);
+        $businessId = current_business_id();
+        $task = Task::findForBusiness($businessId, $taskId);
         if ($task === null) {
             http_response_code(404);
             $this->render('errors/404', ['pageTitle' => 'Not Found']);
@@ -418,7 +421,119 @@ final class TasksController extends Controller
         $this->render('tasks/show', [
             'pageTitle' => 'Task',
             'task' => $task,
+            'taskLink' => $this->taskLinkDisplay($businessId, $task),
         ]);
+    }
+
+    /**
+     * @param array<string, mixed> $task
+     * @return array<string, mixed>
+     */
+    private function taskLinkDisplay(int $businessId, array $task): array
+    {
+        $type = strtolower(trim((string) ($task['link_type'] ?? '')));
+        $linkId = (int) ($task['link_id'] ?? 0);
+        if ($type === '' || $linkId <= 0) {
+            return ['state' => 'empty'];
+        }
+
+        $base = [
+            'state' => 'resolved',
+            'job' => null,
+            'purchase' => null,
+            'client' => null,
+            'phone' => '',
+        ];
+
+        if ($type === 'job') {
+            $job = Job::findForBusiness($businessId, $linkId);
+            if ($job === null) {
+                return [
+                    'state' => 'missing',
+                    'link_type' => $type,
+                    'link_id' => $linkId,
+                ];
+            }
+            $jobId = (int) ($job['id'] ?? 0);
+            $jobTitle = trim((string) ($job['title'] ?? ''));
+            if ($jobTitle === '') {
+                $jobTitle = 'Job #' . (string) $jobId;
+            }
+            $base['job'] = [
+                'title' => $jobTitle,
+                'url' => url('/jobs/' . (string) $jobId),
+            ];
+            $clientId = (int) ($job['client_id'] ?? 0);
+            if ($clientId > 0) {
+                $client = Client::findForBusiness($businessId, $clientId);
+                if ($client !== null) {
+                    $base['client'] = [
+                        'name' => Client::displayName($client),
+                        'url' => url('/clients/' . (string) $clientId),
+                    ];
+                    $base['phone'] = trim((string) ($client['phone'] ?? ''));
+                }
+            }
+
+            return $base;
+        }
+
+        if ($type === 'client') {
+            $client = Client::findForBusiness($businessId, $linkId);
+            if ($client === null) {
+                return [
+                    'state' => 'missing',
+                    'link_type' => $type,
+                    'link_id' => $linkId,
+                ];
+            }
+            $cid = (int) ($client['id'] ?? 0);
+            $base['client'] = [
+                'name' => Client::displayName($client),
+                'url' => url('/clients/' . (string) $cid),
+            ];
+            $base['phone'] = trim((string) ($client['phone'] ?? ''));
+
+            return $base;
+        }
+
+        if ($type === 'purchase') {
+            $purchase = Purchase::findForBusiness($businessId, $linkId);
+            if ($purchase === null) {
+                return [
+                    'state' => 'missing',
+                    'link_type' => $type,
+                    'link_id' => $linkId,
+                ];
+            }
+            $pid = (int) ($purchase['id'] ?? 0);
+            $pTitle = trim((string) ($purchase['title'] ?? ''));
+            if ($pTitle === '') {
+                $pTitle = 'Purchase #' . (string) $pid;
+            }
+            $base['purchase'] = [
+                'title' => $pTitle,
+                'url' => url('/purchases/' . (string) $pid),
+            ];
+            $clientId = (int) ($purchase['client_id'] ?? 0);
+            if ($clientId > 0) {
+                $base['client'] = [
+                    'name' => trim((string) ($purchase['client_name'] ?? '')) !== ''
+                        ? trim((string) $purchase['client_name'])
+                        : ('Client #' . (string) $clientId),
+                    'url' => url('/clients/' . (string) $clientId),
+                ];
+                $base['phone'] = trim((string) ($purchase['client_phone'] ?? ''));
+            }
+
+            return $base;
+        }
+
+        return [
+            'state' => 'unknown',
+            'link_type' => $type,
+            'link_id' => $linkId,
+        ];
     }
 
     public function takeOwnership(array $params): void

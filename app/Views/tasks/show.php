@@ -1,5 +1,6 @@
 <?php
 $task = is_array($task ?? null) ? $task : [];
+$taskLink = is_array($taskLink ?? null) ? $taskLink : ['state' => 'empty'];
 $title = trim((string) ($task['title'] ?? '')) !== '' ? (string) $task['title'] : ('Task #' . (string) ((int) ($task['id'] ?? 0)));
 $status = str_replace('_', ' ', (string) ($task['status'] ?? 'open'));
 $statusRaw = strtolower(trim((string) ($task['status'] ?? 'open')));
@@ -77,14 +78,77 @@ $canTakeOwnership = $currentUserId > 0 && $currentUserId !== $taskOwnerId;
                 <span class="record-label">Assigned</span>
                 <span class="record-value"><?= e(trim((string) ($task['assigned_name'] ?? '')) ?: '—') ?></span>
             </div>
-            <div class="record-field">
-                <span class="record-label">Linked Type</span>
-                <span class="record-value"><?= e(trim((string) ($task['link_type'] ?? '')) ?: '—') ?></span>
-            </div>
-            <div class="record-field">
-                <span class="record-label">Linked ID</span>
-                <span class="record-value"><?= e(trim((string) ($task['link_id'] ?? '')) ?: '—') ?></span>
-            </div>
+            <?php
+            $linkState = (string) ($taskLink['state'] ?? 'empty');
+            $jobLink = is_array($taskLink['job'] ?? null) ? $taskLink['job'] : null;
+            $purchaseLink = is_array($taskLink['purchase'] ?? null) ? $taskLink['purchase'] : null;
+            $clientLink = is_array($taskLink['client'] ?? null) ? $taskLink['client'] : null;
+            $linkPhone = trim((string) ($taskLink['phone'] ?? ''));
+            $telDigits = $linkPhone !== '' ? preg_replace('/\D+/', '', $linkPhone) : '';
+            ?>
+            <?php if ($linkState === 'resolved' && $jobLink !== null): ?>
+                <div class="record-field">
+                    <span class="record-label">Job</span>
+                    <span class="record-value">
+                        <a href="<?= e((string) ($jobLink['url'] ?? '#')) ?>"><?= e((string) ($jobLink['title'] ?? 'Job')) ?></a>
+                    </span>
+                </div>
+            <?php endif; ?>
+            <?php if ($linkState === 'resolved' && $purchaseLink !== null): ?>
+                <div class="record-field">
+                    <span class="record-label">Purchase</span>
+                    <span class="record-value">
+                        <a href="<?= e((string) ($purchaseLink['url'] ?? '#')) ?>"><?= e((string) ($purchaseLink['title'] ?? 'Purchase')) ?></a>
+                    </span>
+                </div>
+            <?php endif; ?>
+            <?php if ($linkState === 'resolved' && $clientLink !== null): ?>
+                <div class="record-field">
+                    <span class="record-label">Client</span>
+                    <span class="record-value">
+                        <a href="<?= e((string) ($clientLink['url'] ?? '#')) ?>"><?= e((string) ($clientLink['name'] ?? 'Client')) ?></a>
+                    </span>
+                </div>
+            <?php endif; ?>
+            <?php if ($linkState === 'resolved' && $linkPhone !== ''): ?>
+                <div class="record-field">
+                    <span class="record-label">Client phone</span>
+                    <span class="record-value">
+                        <?php if ($telDigits !== ''): ?>
+                            <a href="<?= e('tel:' . $telDigits) ?>"><?= e(format_phone($linkPhone)) ?></a>
+                        <?php else: ?>
+                            <?= e(format_phone($linkPhone)) ?>
+                        <?php endif; ?>
+                    </span>
+                </div>
+            <?php elseif ($linkState === 'resolved' && $clientLink !== null): ?>
+                <div class="record-field">
+                    <span class="record-label">Client phone</span>
+                    <span class="record-value">—</span>
+                </div>
+            <?php endif; ?>
+            <?php if ($linkState === 'missing'): ?>
+                <div class="record-field record-field-full">
+                    <span class="record-label">Linked record</span>
+                    <span class="record-value text-warning">
+                        Linked <?= e((string) ($taskLink['link_type'] ?? '')) ?> #<?= e((string) (int) ($taskLink['link_id'] ?? 0)) ?> was not found (it may have been deleted).
+                    </span>
+                </div>
+            <?php elseif ($linkState === 'unknown'): ?>
+                <div class="record-field">
+                    <span class="record-label">Linked type</span>
+                    <span class="record-value"><?= e((string) ($taskLink['link_type'] ?? '—')) ?></span>
+                </div>
+                <div class="record-field">
+                    <span class="record-label">Linked ID</span>
+                    <span class="record-value"><?= e((string) (int) ($taskLink['link_id'] ?? 0)) ?></span>
+                </div>
+            <?php elseif ($linkState === 'empty'): ?>
+                <div class="record-field">
+                    <span class="record-label">Linked record</span>
+                    <span class="record-value">—</span>
+                </div>
+            <?php endif; ?>
             <div class="record-field record-field-full">
                 <span class="record-label">Note</span>
                 <span class="record-value"><?= e(trim((string) ($task['body'] ?? '')) ?: '—') ?></span>
