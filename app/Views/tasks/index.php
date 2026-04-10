@@ -29,8 +29,8 @@ foreach ($statusOptionsRaw as $statusOptionRaw) {
         <h1>Tasks</h1>
         <p class="muted">Quick-add tasks, then click any task to add full details.</p>
     </div>
-    <div class="d-flex gap-2">
-        <a class="btn btn-primary" href="<?= e(url('/tasks/create')) ?>"><i class="fas fa-plus me-2"></i>Add Task</a>
+    <div class="jt-page-header-actions d-grid gap-2 d-md-flex d-md-flex-wrap justify-content-md-end align-items-md-center">
+        <a class="btn btn-primary w-100 w-md-auto" href="<?= e(url('/tasks/create')) ?>"><i class="fas fa-plus me-2"></i>Add Task</a>
     </div>
 </div>
 

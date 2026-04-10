@@ -82,17 +82,17 @@ $clientStatus = strtolower(trim((string) ($client['status'] ?? 'active')));
 $isInactive = $clientStatus === 'inactive' || (array_key_exists('is_active', $client) && (int) ($client['is_active'] ?? 1) === 0);
 ?>
 
-<div class="page-header d-flex flex-wrap align-items-end justify-content-between gap-2">
+<div class="page-header d-flex flex-wrap align-items-start justify-content-between gap-2">
     <div>
         <h1>Client Details</h1>
         <p class="muted"><?= e($displayName) ?></p>
     </div>
-    <div class="d-flex gap-2">
+    <div class="jt-page-header-actions d-grid gap-2 d-md-flex d-md-flex-wrap justify-content-md-end align-items-md-center">
         <?php if ($isInactive): ?>
-            <span class="badge text-bg-secondary align-self-center">Deactivated</span>
+            <span class="badge text-bg-secondary align-self-center justify-self-start">Deactivated</span>
         <?php endif; ?>
-        <div class="dropdown">
-            <button class="btn btn-primary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+        <div class="dropdown w-100 w-md-auto">
+            <button class="btn btn-primary dropdown-toggle w-100" type="button" data-bs-toggle="dropdown" aria-expanded="false">
                 <i class="fas fa-ellipsis-h me-2"></i>Actions
             </button>
             <ul class="dropdown-menu dropdown-menu-end">
@@ -109,6 +109,11 @@ $isInactive = $clientStatus === 'inactive' || (array_key_exists('is_active', $cl
                 <li>
                     <a class="dropdown-item" href="<?= e(url('/purchases/create') . '?client_id=' . (string) ((int) ($client['id'] ?? 0))) ?>">
                         <i class="fas fa-cart-arrow-down me-2"></i>Add Purchase
+                    </a>
+                </li>
+                <li>
+                    <a class="dropdown-item" href="<?= e(url('/sales/create') . '?client_id=' . (string) ((int) ($client['id'] ?? 0))) ?>">
+                        <i class="fas fa-hand-holding-usd me-2"></i>Add Sale
                     </a>
                 </li>
                 <li>
@@ -144,7 +149,7 @@ $isInactive = $clientStatus === 'inactive' || (array_key_exists('is_active', $cl
                 </li>
             </ul>
         </div>
-        <a class="btn btn-outline-secondary" href="<?= e(url('/clients')) ?>">Back to Clients</a>
+        <a class="btn btn-outline-secondary w-100 w-md-auto" href="<?= e(url('/clients')) ?>">Back to Clients</a>
     </div>
 </div>
 

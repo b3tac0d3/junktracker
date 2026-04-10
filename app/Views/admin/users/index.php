@@ -24,11 +24,11 @@ $displayName = static function (array $row): string {
         <h1>Users</h1>
         <p class="muted"><?= e($isSiteAdminGlobal ? 'Global user management' : 'Business user management') ?></p>
     </div>
-    <div class="d-flex gap-2">
-        <a class="btn btn-primary" href="<?= e(url('/admin/users/create')) ?>">
+    <div class="jt-page-header-actions d-grid gap-2 d-md-flex d-md-flex-wrap justify-content-md-end align-items-md-center">
+        <a class="btn btn-primary w-100 w-md-auto" href="<?= e(url('/admin/users/create')) ?>">
             <i class="fas fa-plus me-2"></i><?= e($isSiteAdminGlobal ? 'Add Site Admin' : 'Add User') ?>
         </a>
-        <a class="btn btn-outline-secondary" href="<?= e(url('/admin')) ?>">Back to Admin</a>
+        <a class="btn btn-outline-secondary w-100 w-md-auto" href="<?= e(url('/admin')) ?>">Back to Admin</a>
     </div>
 </div>
 

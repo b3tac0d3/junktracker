@@ -3,6 +3,17 @@
  * so Bootstrap + FullCalendar defaults do not win over jt-theme.css (which loads in <head>).
  */
 
+/* Events page: use ~full width on small screens (centered) */
+@media (max-width: 767.98px) {
+  .jt-events-screen {
+    box-sizing: border-box;
+    width: 99%;
+    max-width: 99vw;
+    margin-left: auto;
+    margin-right: auto;
+  }
+}
+
 /* FullCalendar uses <a> for nav; override Bootstrap link color/underline */
 .jt-calendar .fc a.fc-daygrid-day-number,
 .jt-calendar .fc .fc-daygrid-day-number,
@@ -42,4 +53,91 @@
 .jt-calendar .fc .fc-event {
   border-radius: 10px;
   padding: 2px 4px;
+}
+
+/* Month / week *grid* cells: title only (no time), truncated like iOS calendar */
+.jt-calendar .fc-daygrid-event .fc-event-main {
+  min-width: 0;
+}
+
+.jt-calendar .fc-daygrid-event .fc-event-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.jt-calendar .fc-daygrid-event {
+  font-size: 0.72rem;
+}
+
+@media (min-width: 768px) {
+  .jt-calendar .fc-daygrid-event {
+    font-size: 0.8rem;
+  }
+}
+
+/* Mobile: iPhone-style Day / Week / Month / List segmented control */
+.jt-cal-view-segment {
+  background: rgba(15, 23, 42, 0.05);
+}
+
+.jt-cal-view-btn {
+  color: #1e3a5f;
+  background: transparent;
+  font-weight: 600;
+  font-size: 0.78rem;
+  line-height: 1.2;
+}
+
+.jt-cal-view-btn:hover,
+.jt-cal-view-btn:focus-visible {
+  background: rgba(37, 99, 235, 0.1);
+  color: #1c64d6;
+}
+
+.jt-cal-view-btn--active {
+  background: #1c64d6 !important;
+  color: #fff !important;
+}
+
+.jt-cal-view-btn--active:hover,
+.jt-cal-view-btn--active:focus-visible {
+  background: #1557b8 !important;
+  color: #fff !important;
+}
+
+/* Mobile list view: one column, days stacked */
+@media (max-width: 767.98px) {
+  .jt-calendar .fc-list {
+    border-radius: 0.5rem;
+    overflow: hidden;
+  }
+
+  .jt-calendar .fc-list-day-cushion {
+    padding: 0.65rem 0.75rem 0.4rem;
+    font-size: 0.8rem;
+    letter-spacing: 0.03em;
+  }
+
+  .jt-calendar .fc-list-event {
+    padding: 0.45rem 0.5rem;
+    align-items: flex-start;
+  }
+
+  .jt-calendar .fc-list-event-time {
+    width: 4.25rem;
+    flex-shrink: 0;
+    font-weight: 600;
+    padding-top: 0.1rem;
+  }
+
+  .jt-calendar .fc-list-event-title {
+    line-height: 1.35;
+  }
+
+  .jt-calendar .fc-list-empty {
+    padding: 1rem 0.75rem;
+  }
 }

@@ -3,6 +3,7 @@ $job = is_array($job ?? null) ? $job : [];
 $errors = is_array($errors ?? null) ? $errors : [];
 $form = is_array($form ?? null) ? $form : [];
 $assignedEmployees = is_array($assignedEmployees ?? null) ? $assignedEmployees : [];
+$availableEmployees = is_array($availableEmployees ?? null) ? $availableEmployees : [];
 $actionUrl = (string) ($actionUrl ?? '');
 $searchUrl = (string) ($searchUrl ?? '');
 
@@ -19,7 +20,7 @@ $employeeId = (int) ($form['employee_id'] ?? 0);
 <div class="page-header d-flex flex-wrap align-items-end justify-content-between gap-2">
     <div>
         <h1>Add Employee</h1>
-        <p class="muted">Assign an employee to <?= e($jobTitle) ?> for quick punch in and out.</p>
+        <p class="muted">Assign employees to <?= e($jobTitle) ?> for quick punch in and out.</p>
     </div>
     <div>
         <a class="btn btn-outline-secondary" href="<?= e(url('/jobs/' . (string) $jobId)) ?>">Back to Job</a>
@@ -27,10 +28,69 @@ $employeeId = (int) ($form['employee_id'] ?? 0);
 </div>
 
 <section class="card index-card index-card-overflow-visible mb-3">
-    <div class="card-header index-card-header">
-        <strong><i class="fas fa-user-plus me-2"></i>Assign Employee</strong>
+    <div class="card-header index-card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+        <strong><i class="fas fa-users me-2"></i>Add employees</strong>
+        <?php if ($availableEmployees !== []): ?>
+            <div class="btn-group btn-group-sm">
+                <button type="button" class="btn btn-outline-secondary" id="job-emp-select-all">Select all</button>
+                <button type="button" class="btn btn-outline-secondary" id="job-emp-clear-all">Clear</button>
+            </div>
+        <?php endif; ?>
     </div>
     <div class="card-body">
+        <?php if ($availableEmployees === []): ?>
+            <div class="record-empty mb-0">Every active employee is already assigned to this job, or there are no active employees.</div>
+        <?php else: ?>
+            <form method="post" action="<?= e($actionUrl) ?>" id="job-add-employees-bulk">
+                <?= csrf_field() ?>
+                <div class="border rounded p-2 mb-3" style="max-height: min(360px, 55vh); overflow-y: auto;">
+                    <?php foreach ($availableEmployees as $row): ?>
+                        <?php
+                        if (!is_array($row)) {
+                            continue;
+                        }
+                        $eid = (int) ($row['id'] ?? 0);
+                        if ($eid <= 0) {
+                            continue;
+                        }
+                        $label = trim((string) ($row['name'] ?? ''));
+                        if ($label === '') {
+                            $label = 'Employee #' . (string) $eid;
+                        }
+                        $metaParts = [];
+                        $linkedUserName = trim((string) ($row['linked_user_name'] ?? ''));
+                        $employeeName = trim((string) ($row['employee_name'] ?? ''));
+                        $linkedUserEmail = trim((string) ($row['linked_user_email'] ?? ''));
+                        if ($linkedUserName !== '') {
+                            $metaParts[] = 'Linked user: ' . $linkedUserName;
+                        }
+                        if ($employeeName !== '' && strcasecmp($employeeName, $label) !== 0) {
+                            $metaParts[] = 'Employee: ' . $employeeName;
+                        }
+                        if ($linkedUserEmail !== '') {
+                            $metaParts[] = $linkedUserEmail;
+                        }
+                        $meta = implode(' · ', $metaParts);
+                        $chkId = 'job-emp-add-' . (string) $eid;
+                        ?>
+                        <div class="form-check py-1 border-bottom">
+                            <input class="form-check-input" type="checkbox" name="employee_ids[]" value="<?= (string) $eid ?>" id="<?= e($chkId) ?>" />
+                            <label class="form-check-label w-100" for="<?= e($chkId) ?>">
+                                <span class="fw-semibold"><?= e($label) ?></span>
+                                <?php if ($meta !== ''): ?>
+                                    <span class="d-block small text-muted"><?= e($meta) ?></span>
+                                <?php endif; ?>
+                            </label>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+                <?php if (isset($errors['employee_ids'])): ?><div class="text-danger small mb-2"><?= e((string) $errors['employee_ids']) ?></div><?php endif; ?>
+                <button class="btn btn-primary" type="submit"><i class="fas fa-plus me-2"></i>Add selected employees</button>
+            </form>
+        <?php endif; ?>
+
+        <hr class="my-4" />
+        <p class="small text-muted mb-2">Or add one by search</p>
         <form method="post" action="<?= e($actionUrl) ?>" class="row g-3">
             <?= csrf_field() ?>
             <div class="col-12 col-lg-8">
@@ -52,7 +112,7 @@ $employeeId = (int) ($form['employee_id'] ?? 0);
                 <?php if (isset($errors['employee_id'])): ?><div class="invalid-feedback d-block"><?= e((string) $errors['employee_id']) ?></div><?php endif; ?>
             </div>
             <div class="col-12 col-lg-4 d-flex align-items-end">
-                <button class="btn btn-primary w-100" type="submit"><i class="fas fa-plus me-2"></i>Add Employee</button>
+                <button class="btn btn-outline-primary w-100" type="submit"><i class="fas fa-plus me-2"></i>Add employee</button>
             </div>
         </form>
     </div>
@@ -94,6 +154,24 @@ $employeeId = (int) ($form['employee_id'] ?? 0);
 
 <script>
 window.addEventListener('DOMContentLoaded', () => {
+    const selectAllBtn = document.getElementById('job-emp-select-all');
+    const clearAllBtn = document.getElementById('job-emp-clear-all');
+    const bulkForm = document.getElementById('job-add-employees-bulk');
+    const setAllCheckboxes = (checked) => {
+        if (!bulkForm) {
+            return;
+        }
+        bulkForm.querySelectorAll('input[type="checkbox"][name="employee_ids[]"]').forEach((el) => {
+            el.checked = checked;
+        });
+    };
+    if (selectAllBtn) {
+        selectAllBtn.addEventListener('click', () => setAllCheckboxes(true));
+    }
+    if (clearAllBtn) {
+        clearAllBtn.addEventListener('click', () => setAllCheckboxes(false));
+    }
+
     const input = document.getElementById('job-employee-name');
     const hidden = document.getElementById('job-employee-id');
     const suggestions = document.getElementById('job-employee-suggestions');

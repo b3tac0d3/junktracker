@@ -179,6 +179,13 @@ h1, h2, h3 {
   font-size: 1.45rem;
 }
 
+.kpi-card .kpi-card-subamount {
+  font-size: 1.05rem;
+  font-weight: 600;
+  opacity: 0.92;
+  white-space: nowrap;
+}
+
 .kpi-card small {
   opacity: .9;
   font-size: .84rem;
@@ -241,6 +248,24 @@ h1, h2, h3 {
 .page-header .muted,
 .muted {
   color: var(--jt-muted);
+}
+
+/* Actions + Back (etc.) on one row at md+: avoid label wrap and mismatched button heights */
+@media (min-width: 768px) {
+  .jt-page-header-actions {
+    flex-wrap: nowrap !important;
+    align-items: center !important;
+  }
+
+  .jt-page-header-actions > .btn,
+  .jt-page-header-actions > .dropdown > .btn,
+  .jt-page-header-actions > form .btn {
+    white-space: nowrap;
+  }
+
+  .jt-page-header-actions > .badge {
+    flex-shrink: 0;
+  }
 }
 
 .kpi-grid {
@@ -884,6 +909,50 @@ a.admin-nav-tile:focus {
 .record-row-main {
   display: grid;
   gap: .25rem;
+}
+
+.billing-record-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: .35rem .75rem;
+}
+
+.billing-record-head .billing-record-title {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.jt-billing-total {
+  font-weight: 700;
+  white-space: nowrap;
+  font-size: 1rem;
+}
+
+.jt-billing-total--paid {
+  color: #198754;
+}
+
+.jt-billing-total--partial {
+  color: #fd7e14;
+}
+
+.jt-billing-total--unpaid {
+  color: #dc3545;
+}
+
+.jt-billing-total--estimate {
+  color: #0d6efd;
+}
+
+.billing-record-subline {
+  margin-top: .1rem;
+}
+
+.billing-record-date-sep {
+  color: var(--jt-muted);
+  user-select: none;
 }
 
 .record-title-simple {

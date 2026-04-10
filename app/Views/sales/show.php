@@ -30,13 +30,22 @@ $formatSaleDate = static function (?string $value): string {
         <h1><?= e($displayName) ?></h1>
         <p class="muted">Sale Details</p>
     </div>
-    <div class="d-flex gap-2">
-        <a class="btn btn-primary" href="<?= e(url('/sales/' . (string) $saleId . '/edit')) ?>"><i class="fas fa-pen me-2"></i>Edit Sale</a>
-        <form method="post" action="<?= e(url('/sales/' . (string) $saleId . '/delete')) ?>" onsubmit="return confirm('Delete this sale?');">
-            <?= csrf_field() ?>
-            <button class="btn btn-danger" type="submit"><i class="fas fa-trash me-2"></i>Delete Sale</button>
-        </form>
-        <a class="btn btn-outline-secondary" href="<?= e(url('/sales')) ?>">Back to Sales</a>
+    <div class="jt-page-header-actions d-grid gap-2 d-md-flex d-md-flex-wrap justify-content-md-end align-items-md-center">
+        <div class="dropdown w-100 w-md-auto">
+            <button class="btn btn-primary dropdown-toggle w-100" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                <i class="fas fa-ellipsis-h me-2"></i>Actions
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end">
+                <li><a class="dropdown-item" href="<?= e(url('/sales/' . (string) $saleId . '/edit')) ?>"><i class="fas fa-pen me-2"></i>Edit Sale</a></li>
+                <li>
+                    <form method="post" action="<?= e(url('/sales/' . (string) $saleId . '/delete')) ?>" class="m-0" onsubmit="return confirm('Delete this sale?');">
+                        <?= csrf_field() ?>
+                        <button class="dropdown-item text-danger" type="submit"><i class="fas fa-trash me-2"></i>Delete Sale</button>
+                    </form>
+                </li>
+            </ul>
+        </div>
+        <a class="btn btn-outline-secondary w-100 w-md-auto" href="<?= e(url('/sales')) ?>">Back to Sales</a>
     </div>
 </div>
 

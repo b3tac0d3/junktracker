@@ -18,6 +18,7 @@ if ($estimateStatusOptions === []) {
         'sent' => 'Sent',
         'approved' => 'Approved',
         'declined' => 'Declined',
+        'converted' => 'Converted',
     ];
 }
 $invoiceStatusOptions = is_array($invoiceStatusOptions ?? null) ? $invoiceStatusOptions : [];
@@ -184,11 +185,17 @@ $cancelUrl = $fromJob
     </div>
 </div>
 
+<?php
+$fromEstimateIdPost = (int) ($_GET['from_estimate_id'] ?? ($_POST['from_estimate_id'] ?? 0));
+?>
 <form method="post" action="<?= e($actionUrl) ?>" id="financial-doc-form">
     <?= csrf_field() ?>
     <input type="hidden" name="type" value="<?= e($documentType) ?>">
     <input type="hidden" name="client_id" value="<?= e((string) $clientId) ?>">
     <input type="hidden" name="job_id" value="<?= e((string) $jobId) ?>">
+    <?php if ($fromEstimateIdPost > 0 && $mode === 'create' && $documentType === 'invoice'): ?>
+        <input type="hidden" name="from_estimate_id" value="<?= e((string) $fromEstimateIdPost) ?>">
+    <?php endif; ?>
     <?php if ($fromJob): ?>
         <input type="hidden" name="from" value="job">
     <?php endif; ?>

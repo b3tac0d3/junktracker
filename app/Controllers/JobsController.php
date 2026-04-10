@@ -570,6 +570,7 @@ final class JobsController extends Controller
             'actionUrl' => url('/jobs/' . (string) $jobId . '/employees'),
             'searchUrl' => url('/jobs/' . (string) $jobId . '/employees/search'),
             'assignedEmployees' => Job::assignedEmployees($businessId, $jobId),
+            'availableEmployees' => Job::unassignedEmployeesForJob($businessId, $jobId),
             'errors' => [],
             'form' => [
                 'employee_id' => '',
@@ -659,15 +660,34 @@ final class JobsController extends Controller
             return;
         }
 
-        $employeeId = (int) ($_POST['employee_id'] ?? 0);
-        if ($employeeId <= 0) {
+        $actorUserId = auth_user_id() ?? 0;
+
+        $bulkRaw = $_POST['employee_ids'] ?? [];
+        $employeeIds = [];
+        if (is_array($bulkRaw)) {
+            foreach ($bulkRaw as $raw) {
+                $eid = (int) $raw;
+                if ($eid > 0) {
+                    $employeeIds[$eid] = true;
+                }
+            }
+        }
+        $employeeIds = array_keys($employeeIds);
+
+        if ($employeeIds === []) {
+            $employeeIds = [(int) ($_POST['employee_id'] ?? 0)];
+            $employeeIds = array_values(array_filter($employeeIds, static fn (int $id): bool => $id > 0));
+        }
+
+        if ($employeeIds === []) {
             $this->render('jobs/employee_add', [
                 'pageTitle' => 'Add Employee',
                 'job' => $job,
                 'actionUrl' => url('/jobs/' . (string) $jobId . '/employees'),
                 'searchUrl' => url('/jobs/' . (string) $jobId . '/employees/search'),
                 'assignedEmployees' => Job::assignedEmployees($businessId, $jobId),
-                'errors' => ['employee_id' => 'Choose a valid employee from suggestions.'],
+                'availableEmployees' => Job::unassignedEmployeesForJob($businessId, $jobId),
+                'errors' => ['employee_ids' => 'Select at least one employee, or pick one from the search field.'],
                 'form' => [
                     'employee_id' => '',
                     'employee_name' => trim((string) ($_POST['employee_name'] ?? '')),
@@ -676,13 +696,28 @@ final class JobsController extends Controller
             return;
         }
 
-        $assigned = Job::assignEmployee($businessId, $jobId, $employeeId, auth_user_id() ?? 0);
-        if ($assigned) {
-            flash('success', 'Employee added to job.');
+        $ok = 0;
+        $fail = 0;
+        foreach ($employeeIds as $employeeId) {
+            if (Job::assignEmployee($businessId, $jobId, $employeeId, $actorUserId)) {
+                $ok++;
+            } else {
+                $fail++;
+            }
+        }
+
+        if ($ok > 0 && $fail === 0) {
+            $msg = $ok === 1 ? 'Employee added to job.' : (string) $ok . ' employees added to job.';
+            flash('success', $msg);
             redirect('/jobs/' . (string) $jobId);
         }
 
-        flash('error', 'Unable to add employee to this job.');
+        if ($ok > 0 && $fail > 0) {
+            flash('success', 'Added ' . (string) $ok . ' employee(s). ' . (string) $fail . ' could not be added (inactive or invalid).');
+            redirect('/jobs/' . (string) $jobId);
+        }
+
+        flash('error', 'Unable to add employee(s) to this job.');
         redirect('/jobs/' . (string) $jobId . '/employees/add');
     }
 

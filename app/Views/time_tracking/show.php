@@ -15,27 +15,50 @@ if ($effectiveMinutes <= 0 && $isOpenEntry) {
 $totalPaid = $hourlyRate > 0 ? (($effectiveMinutes / 60) * $hourlyRate) : 0.0;
 ?>
 
+<?php
+$entryId = (int) ($entry['id'] ?? 0);
+$editEntryUrl = url('/time-tracking/' . (string) $entryId . '/edit');
+$deleteEntryUrl = url('/time-tracking/' . (string) $entryId . '/delete');
+$canManageEntry = workspace_role() !== 'punch_only';
+?>
 <div class="page-header d-flex flex-wrap align-items-end justify-content-between gap-2">
     <div>
         <h1>Time Entry</h1>
-        <p class="muted">Entry #<?= e((string) ((int) ($entry['id'] ?? 0))) ?></p>
+        <p class="muted">Entry #<?= e((string) $entryId) ?></p>
     </div>
-    <div class="d-flex gap-2">
-        <?php if ($isOpenEntry && $employeeId > 0): ?>
-            <form method="post" action="<?= e(url('/time-tracking/punch-out')) ?>">
+    <div class="jt-page-header-actions d-grid gap-2 d-md-flex d-md-flex-wrap justify-content-md-end align-items-md-center">
+        <?php if ($canManageEntry): ?>
+            <div class="dropdown w-100 w-md-auto">
+                <button class="btn btn-primary dropdown-toggle w-100" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                    <i class="fas fa-ellipsis-h me-2"></i>Actions
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end">
+                    <?php if ($isOpenEntry && $employeeId > 0): ?>
+                        <li>
+                            <form method="post" action="<?= e(url('/time-tracking/punch-out')) ?>" class="m-0">
+                                <?= csrf_field() ?>
+                                <input type="hidden" name="employee_id" value="<?= e((string) $employeeId) ?>" />
+                                <button class="dropdown-item text-danger" type="submit"><i class="fas fa-stop me-2"></i>Punch Out</button>
+                            </form>
+                        </li>
+                    <?php endif; ?>
+                    <li><a class="dropdown-item" href="<?= e($editEntryUrl) ?>"><i class="fas fa-pen me-2"></i>Edit Entry</a></li>
+                    <li>
+                        <form method="post" action="<?= e($deleteEntryUrl) ?>" class="m-0" onsubmit="return confirm('Delete this time entry?');">
+                            <?= csrf_field() ?>
+                            <button class="dropdown-item text-danger" type="submit"><i class="fas fa-trash me-2"></i>Delete</button>
+                        </form>
+                    </li>
+                </ul>
+            </div>
+        <?php elseif ($isOpenEntry && $employeeId > 0): ?>
+            <form method="post" action="<?= e(url('/time-tracking/punch-out')) ?>" class="w-100 w-md-auto">
                 <?= csrf_field() ?>
                 <input type="hidden" name="employee_id" value="<?= e((string) $employeeId) ?>" />
-                <button class="btn btn-outline-danger" type="submit"><i class="fas fa-stop me-2"></i>Punch Out</button>
+                <button class="btn btn-outline-danger w-100 w-md-auto" type="submit"><i class="fas fa-stop me-2"></i>Punch Out</button>
             </form>
         <?php endif; ?>
-        <?php if (workspace_role() !== 'punch_only'): ?>
-            <a class="btn btn-primary" href="<?= e(url('/time-tracking/' . (string) ((int) ($entry['id'] ?? 0)) . '/edit')) ?>"><i class="fas fa-pen me-2"></i>Edit Entry</a>
-            <form method="post" action="<?= e(url('/time-tracking/' . (string) ((int) ($entry['id'] ?? 0)) . '/delete')) ?>" onsubmit="return confirm('Delete this time entry?');">
-                <?= csrf_field() ?>
-                <button class="btn btn-outline-danger" type="submit"><i class="fas fa-trash me-2"></i>Delete</button>
-            </form>
-        <?php endif; ?>
-        <a class="btn btn-outline-secondary" href="<?= e(url('/time-tracking')) ?>">Back to Time Tracking</a>
+        <a class="btn btn-outline-secondary w-100 w-md-auto" href="<?= e(url('/time-tracking')) ?>">Back to Time Tracking</a>
     </div>
 </div>
 

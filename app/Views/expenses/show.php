@@ -17,19 +17,19 @@ if ($jobTitle === '' && $jobId > 0) {
         <h1>Expense #<?= e((string) $expenseId) ?></h1>
         <p class="muted"><?= e($jobId > 0 ? 'Job Expense' : 'General Expense') ?></p>
     </div>
-    <div class="d-flex gap-2">
+    <div class="jt-page-header-actions d-grid gap-2 d-md-flex d-md-flex-wrap justify-content-md-end align-items-md-center">
         <?php if ($jobId <= 0): ?>
-            <a class="btn btn-primary" href="<?= e(url('/expenses/' . (string) $expenseId . '/edit')) ?>"><i class="fas fa-pen me-2"></i>Edit</a>
-            <form method="post" action="<?= e(url('/expenses/' . (string) $expenseId . '/delete')) ?>" onsubmit="return confirm('Delete this expense?');">
+            <a class="btn btn-primary w-100 w-md-auto" href="<?= e(url('/expenses/' . (string) $expenseId . '/edit')) ?>"><i class="fas fa-pen me-2"></i>Edit</a>
+            <form method="post" action="<?= e(url('/expenses/' . (string) $expenseId . '/delete')) ?>" class="w-100 w-md-auto" onsubmit="return confirm('Delete this expense?');">
                 <?= csrf_field() ?>
-                <button class="btn btn-danger" type="submit"><i class="fas fa-trash me-2"></i>Delete</button>
+                <button class="btn btn-danger w-100 w-md-auto" type="submit"><i class="fas fa-trash me-2"></i>Delete</button>
             </form>
         <?php endif; ?>
         <?php if ($jobId > 0): ?>
-            <a class="btn btn-outline-secondary" href="<?= e(url('/jobs/' . (string) $jobId . '/expenses/' . (string) $expenseId . '/edit')) ?>">Edit in Job</a>
-            <a class="btn btn-outline-secondary" href="<?= e(url('/jobs/' . (string) $jobId)) ?>">View Job</a>
+            <a class="btn btn-outline-secondary w-100 w-md-auto" href="<?= e(url('/jobs/' . (string) $jobId . '/expenses/' . (string) $expenseId . '/edit')) ?>">Edit in Job</a>
+            <a class="btn btn-outline-secondary w-100 w-md-auto" href="<?= e(url('/jobs/' . (string) $jobId)) ?>">View Job</a>
         <?php endif; ?>
-        <a class="btn btn-outline-secondary" href="<?= e(url('/expenses')) ?>">Back to Expenses</a>
+        <a class="btn btn-outline-secondary w-100 w-md-auto" href="<?= e(url('/expenses')) ?>">Back to Expenses</a>
     </div>
 </div>
 

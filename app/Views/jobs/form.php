@@ -430,22 +430,43 @@ window.addEventListener('DOMContentLoaded', () => {
         scheduledEndInput.dataset.autoDefaulted = '1';
     };
 
+    seedScheduledDefaults();
+
+    /** Start value before the last scheduled-start change (for preserving start→end duration). */
+    let previousScheduledStartValue = (scheduledStartInput && scheduledStartInput.value)
+        ? scheduledStartInput.value
+        : '';
+
     const applyStartEndDefaults = () => {
         if (!scheduledStartInput || !scheduledEndInput) {
             return;
         }
-        const startDate = parseLocalDatetimeValue(scheduledStartInput.value);
-        if (!startDate) {
+        const newStart = parseLocalDatetimeValue(scheduledStartInput.value);
+        if (!newStart) {
+            previousScheduledStartValue = '';
+            return;
+        }
+
+        const oldStart = parseLocalDatetimeValue(previousScheduledStartValue);
+        const oldEnd = parseLocalDatetimeValue((scheduledEndInput.value || '').trim());
+
+        if (oldStart && oldEnd) {
+            const deltaMs = oldEnd.getTime() - oldStart.getTime();
+            const newEnd = new Date(newStart.getTime() + deltaMs);
+            scheduledEndInput.value = toLocalDatetimeValue(newEnd);
+            scheduledEndInput.dataset.autoDefaulted = '1';
+            previousScheduledStartValue = scheduledStartInput.value;
             return;
         }
 
         const endRaw = (scheduledEndInput.value || '').trim();
         const canSetEnd = endRaw === '' || scheduledEndInput.dataset.autoDefaulted === '1';
         if (canSetEnd) {
-            const endDate = new Date(startDate.getTime() + (60 * 60 * 1000));
+            const endDate = new Date(newStart.getTime() + (60 * 60 * 1000));
             scheduledEndInput.value = toLocalDatetimeValue(endDate);
             scheduledEndInput.dataset.autoDefaulted = '1';
         }
+        previousScheduledStartValue = scheduledStartInput.value;
     };
 
     const attachHourlyRounding = (input, options = {}) => {
@@ -465,7 +486,6 @@ window.addEventListener('DOMContentLoaded', () => {
         });
     };
 
-    seedScheduledDefaults();
     attachHourlyRounding(scheduledStartInput, { onValueSet: applyStartEndDefaults });
     if (scheduledStartInput) {
         scheduledStartInput.addEventListener('change', applyStartEndDefaults);

@@ -1961,10 +1961,20 @@ final class Job
         $stmt->bindValue(':query_like_3', $queryLike);
         $stmt->bindValue(':query_like_4', $queryLike);
         $stmt->bindValue(':query_like_5', $queryLike);
-        $stmt->bindValue(':row_limit', max(1, min($limit, 100)), \PDO::PARAM_INT);
+        $stmt->bindValue(':row_limit', max(1, min($limit, 500)), \PDO::PARAM_INT);
         $stmt->execute();
 
         $rows = $stmt->fetchAll();
         return is_array($rows) ? $rows : [];
+    }
+
+    /**
+     * Active employees in the business not yet assigned to this job (for bulk add UI).
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public static function unassignedEmployeesForJob(int $businessId, int $jobId): array
+    {
+        return self::employeeSearchOptions($businessId, $jobId, '', 500);
     }
 }

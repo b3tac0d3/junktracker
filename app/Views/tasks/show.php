@@ -10,33 +10,47 @@ $currentUserId = (int) (auth_user_id() ?? 0);
 $canTakeOwnership = $currentUserId > 0 && $currentUserId !== $taskOwnerId;
 ?>
 
+<?php $taskId = (int) ($task['id'] ?? 0); ?>
 <div class="page-header d-flex flex-wrap align-items-end justify-content-between gap-2">
     <div>
         <h1>Task Details</h1>
         <p class="muted"><?= e($title) ?></p>
     </div>
-    <div class="d-flex gap-2">
-        <?php if (!$isClosed): ?>
-            <form method="post" action="<?= e(url('/tasks/' . (string) ((int) ($task['id'] ?? 0)) . '/quick-complete')) ?>">
-                <?= csrf_field() ?>
-                <input type="hidden" name="done" value="1" />
-                <button class="btn btn-outline-success" type="submit"><i class="fas fa-check me-2"></i>Quick Complete</button>
-            </form>
-        <?php else: ?>
-            <form method="post" action="<?= e(url('/tasks/' . (string) ((int) ($task['id'] ?? 0)) . '/quick-complete')) ?>">
-                <?= csrf_field() ?>
-                <input type="hidden" name="done" value="0" />
-                <button class="btn btn-outline-warning" type="submit"><i class="fas fa-redo me-2"></i>Reopen</button>
-            </form>
-        <?php endif; ?>
-        <?php if ($canTakeOwnership): ?>
-            <form method="post" action="<?= e(url('/tasks/' . (string) ((int) ($task['id'] ?? 0)) . '/take-ownership')) ?>">
-                <?= csrf_field() ?>
-                <button class="btn btn-outline-primary" type="submit"><i class="fas fa-hand me-2"></i>Take Ownership</button>
-            </form>
-        <?php endif; ?>
-        <a class="btn btn-primary" href="<?= e(url('/tasks/' . (string) ((int) ($task['id'] ?? 0)) . '/edit')) ?>"><i class="fas fa-pen me-2"></i>Edit Task</a>
-        <a class="btn btn-outline-secondary" href="<?= e(url('/tasks')) ?>">Back to Tasks</a>
+    <div class="jt-page-header-actions d-grid gap-2 d-md-flex d-md-flex-wrap justify-content-md-end align-items-md-center">
+        <div class="dropdown w-100 w-md-auto">
+            <button class="btn btn-primary dropdown-toggle w-100" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                <i class="fas fa-ellipsis-h me-2"></i>Actions
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end">
+                <?php if (!$isClosed): ?>
+                    <li>
+                        <form method="post" action="<?= e(url('/tasks/' . (string) $taskId . '/quick-complete')) ?>" class="m-0">
+                            <?= csrf_field() ?>
+                            <input type="hidden" name="done" value="1" />
+                            <button class="dropdown-item text-success" type="submit"><i class="fas fa-check me-2"></i>Quick Complete</button>
+                        </form>
+                    </li>
+                <?php else: ?>
+                    <li>
+                        <form method="post" action="<?= e(url('/tasks/' . (string) $taskId . '/quick-complete')) ?>" class="m-0">
+                            <?= csrf_field() ?>
+                            <input type="hidden" name="done" value="0" />
+                            <button class="dropdown-item text-warning" type="submit"><i class="fas fa-redo me-2"></i>Reopen</button>
+                        </form>
+                    </li>
+                <?php endif; ?>
+                <?php if ($canTakeOwnership): ?>
+                    <li>
+                        <form method="post" action="<?= e(url('/tasks/' . (string) $taskId . '/take-ownership')) ?>" class="m-0">
+                            <?= csrf_field() ?>
+                            <button class="dropdown-item" type="submit"><i class="fas fa-hand me-2"></i>Take Ownership</button>
+                        </form>
+                    </li>
+                <?php endif; ?>
+                <li><a class="dropdown-item" href="<?= e(url('/tasks/' . (string) $taskId . '/edit')) ?>"><i class="fas fa-pen me-2"></i>Edit Task</a></li>
+            </ul>
+        </div>
+        <a class="btn btn-outline-secondary w-100 w-md-auto" href="<?= e(url('/tasks')) ?>">Back to Tasks</a>
     </div>
 </div>
 

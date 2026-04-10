@@ -75,6 +75,21 @@ final class Invoice
         return is_array($rows) ? $rows : [];
     }
 
+    /**
+     * Billing list: hide estimates that are declined, closed, converted, or cancelled.
+     */
+    private static function sqlBillingListExcludeTerminalEstimates(string $typeSql, string $statusSql): string
+    {
+        if (!SchemaInspector::hasColumn('invoices', 'type') || !SchemaInspector::hasColumn('invoices', 'status')) {
+            return '1=1';
+        }
+
+        $t = 'LOWER(TRIM(COALESCE(' . $typeSql . ", '')))";
+        $s = 'LOWER(TRIM(COALESCE(' . $statusSql . ", '')))";
+
+        return '(' . $t . " <> 'estimate' OR " . $s . " NOT IN ('declined','closed','converted','cancelled'))";
+    }
+
     public static function indexList(
         int $businessId,
         string $search = '',
@@ -82,7 +97,9 @@ final class Invoice
         int $limit = 25,
         int $offset = 0,
         string $sortBy = 'date',
-        string $sortDir = 'desc'
+        string $sortDir = 'desc',
+        string $dateFrom = '',
+        string $dateTo = ''
     ): array
     {
         if (!SchemaInspector::hasTable('invoices')) {
@@ -91,6 +108,8 @@ final class Invoice
 
         $query = trim($search);
         $status = strtolower(trim($status));
+        $dateFrom = trim($dateFrom);
+        $dateTo = trim($dateTo);
 
         $numberSql = SchemaInspector::hasColumn('invoices', 'invoice_number')
             ? 'i.invoice_number'
@@ -103,6 +122,7 @@ final class Invoice
         $issueDateSql = SchemaInspector::hasColumn('invoices', 'issue_date') ? 'i.issue_date' : 'NULL';
         $dueDateSql = SchemaInspector::hasColumn('invoices', 'due_date') ? 'i.due_date' : 'NULL';
         $jobIdSql = SchemaInspector::hasColumn('invoices', 'job_id') ? 'i.job_id' : 'NULL';
+        $createdAtSql = SchemaInspector::hasColumn('invoices', 'created_at') ? 'i.created_at' : 'NULL';
 
         $joinSql = '';
         $clientNameSql = "'—'";
@@ -112,9 +132,25 @@ final class Invoice
             $joinSql = " LEFT JOIN clients c ON c.id = i.client_id {$joinDeleted}";
         }
 
+        $jobJoinSql = '';
+        $jobTitleSql = 'NULL';
+        if (SchemaInspector::hasTable('jobs') && SchemaInspector::hasColumn('invoices', 'job_id')) {
+            $titleCol = SchemaInspector::hasColumn('jobs', 'title')
+                ? 'jb.title'
+                : (SchemaInspector::hasColumn('jobs', 'name') ? 'jb.name' : "CONCAT('Job #', jb.id)");
+            $jobTitleSql = "COALESCE(NULLIF({$titleCol}, ''), CONCAT('Job #', jb.id))";
+            $jobDeleted = SchemaInspector::hasColumn('jobs', 'deleted_at') ? 'AND jb.deleted_at IS NULL' : '';
+            $jobJoinSql = " LEFT JOIN jobs jb ON jb.id = i.job_id {$jobDeleted}";
+        }
+
+        $jobLikeClause = $jobTitleSql !== 'NULL'
+            ? " OR {$jobTitleSql} LIKE :query_like_5"
+            : '';
+
         $where = [];
         $where[] = SchemaInspector::hasColumn('invoices', 'business_id') ? 'i.business_id = :business_id' : '1=1';
         $where[] = SchemaInspector::hasColumn('invoices', 'deleted_at') ? 'i.deleted_at IS NULL' : '1=1';
+        $where[] = self::sqlBillingListExcludeTerminalEstimates($typeSql, $statusSql);
         if ($status !== '') {
             $where[] = 'LOWER(' . $statusSql . ') = :status';
         }
@@ -124,18 +160,27 @@ final class Invoice
             OR {$clientNameSql} LIKE :query_like_2
             OR {$statusSql} LIKE :query_like_3
             OR CAST(i.id AS CHAR) LIKE :query_like_4
+            {$jobLikeClause}
         )";
 
         $sortBy = strtolower(trim($sortBy));
         $sortDir = strtolower(trim($sortDir)) === 'asc' ? 'ASC' : 'DESC';
         $createdDateExpr = SchemaInspector::hasColumn('invoices', 'created_at') ? 'DATE(i.created_at)' : 'i.id';
         $dateExpr = "COALESCE({$issueDateSql}, {$createdDateExpr})";
+        if ($dateFrom !== '') {
+            $where[] = "DATE({$dateExpr}) >= :date_from";
+        }
+        if ($dateTo !== '') {
+            $where[] = "DATE({$dateExpr}) <= :date_to";
+        }
         $sortMap = [
             'date' => "{$dateExpr} {$sortDir}, i.id {$sortDir}",
             'id' => "i.id {$sortDir}",
             'client_name' => "{$clientNameSql} {$sortDir}, i.id {$sortDir}",
         ];
         $orderBy = $sortMap[$sortBy] ?? $sortMap['date'];
+
+        $jobNameSelect = $jobTitleSql !== 'NULL' ? "{$jobTitleSql} AS job_name" : 'NULL AS job_name';
 
         $sql = "SELECT
                     i.id,
@@ -146,9 +191,12 @@ final class Invoice
                     {$issueDateSql} AS issue_date,
                     {$dueDateSql} AS due_date,
                     {$jobIdSql} AS job_id,
-                    {$clientNameSql} AS client_name
+                    {$createdAtSql} AS created_at,
+                    {$clientNameSql} AS client_name,
+                    {$jobNameSelect}
                 FROM invoices i
                 {$joinSql}
+                {$jobJoinSql}
                 WHERE " . implode(' AND ', $where) . "
                 ORDER BY {$orderBy}
                 LIMIT :row_limit
@@ -167,6 +215,15 @@ final class Invoice
         $stmt->bindValue(':query_like_2', $queryLike);
         $stmt->bindValue(':query_like_3', $queryLike);
         $stmt->bindValue(':query_like_4', $queryLike);
+        if ($jobTitleSql !== 'NULL') {
+            $stmt->bindValue(':query_like_5', $queryLike);
+        }
+        if ($dateFrom !== '') {
+            $stmt->bindValue(':date_from', $dateFrom);
+        }
+        if ($dateTo !== '') {
+            $stmt->bindValue(':date_to', $dateTo);
+        }
         $stmt->bindValue(':row_limit', max(1, min($limit, 1000)), \PDO::PARAM_INT);
         $stmt->bindValue(':row_offset', max(0, $offset), \PDO::PARAM_INT);
         $stmt->execute();
@@ -175,7 +232,13 @@ final class Invoice
         return is_array($rows) ? $rows : [];
     }
 
-    public static function indexCount(int $businessId, string $search = '', string $status = ''): int
+    public static function indexCount(
+        int $businessId,
+        string $search = '',
+        string $status = '',
+        string $dateFrom = '',
+        string $dateTo = ''
+    ): int
     {
         if (!SchemaInspector::hasTable('invoices')) {
             return 0;
@@ -183,11 +246,14 @@ final class Invoice
 
         $query = trim($search);
         $status = strtolower(trim($status));
+        $dateFrom = trim($dateFrom);
+        $dateTo = trim($dateTo);
 
         $numberSql = SchemaInspector::hasColumn('invoices', 'invoice_number')
             ? 'i.invoice_number'
             : "CONCAT('INV-', i.id)";
         $statusSql = SchemaInspector::hasColumn('invoices', 'status') ? 'i.status' : "'draft'";
+        $issueDateSql = SchemaInspector::hasColumn('invoices', 'issue_date') ? 'i.issue_date' : 'NULL';
 
         $joinSql = '';
         $clientNameSql = "'—'";
@@ -197,9 +263,27 @@ final class Invoice
             $joinSql = " LEFT JOIN clients c ON c.id = i.client_id {$joinDeleted}";
         }
 
+        $jobJoinSql = '';
+        $jobTitleSql = 'NULL';
+        if (SchemaInspector::hasTable('jobs') && SchemaInspector::hasColumn('invoices', 'job_id')) {
+            $titleCol = SchemaInspector::hasColumn('jobs', 'title')
+                ? 'jb.title'
+                : (SchemaInspector::hasColumn('jobs', 'name') ? 'jb.name' : "CONCAT('Job #', jb.id)");
+            $jobTitleSql = "COALESCE(NULLIF({$titleCol}, ''), CONCAT('Job #', jb.id))";
+            $jobDeleted = SchemaInspector::hasColumn('jobs', 'deleted_at') ? 'AND jb.deleted_at IS NULL' : '';
+            $jobJoinSql = " LEFT JOIN jobs jb ON jb.id = i.job_id {$jobDeleted}";
+        }
+
+        $jobLikeClause = $jobTitleSql !== 'NULL'
+            ? " OR {$jobTitleSql} LIKE :query_like_5"
+            : '';
+
+        $typeSql = SchemaInspector::hasColumn('invoices', 'type') ? 'i.type' : "'invoice'";
+
         $where = [];
         $where[] = SchemaInspector::hasColumn('invoices', 'business_id') ? 'i.business_id = :business_id' : '1=1';
         $where[] = SchemaInspector::hasColumn('invoices', 'deleted_at') ? 'i.deleted_at IS NULL' : '1=1';
+        $where[] = self::sqlBillingListExcludeTerminalEstimates($typeSql, $statusSql);
         if ($status !== '') {
             $where[] = 'LOWER(' . $statusSql . ') = :status';
         }
@@ -209,11 +293,22 @@ final class Invoice
             OR {$clientNameSql} LIKE :query_like_2
             OR {$statusSql} LIKE :query_like_3
             OR CAST(i.id AS CHAR) LIKE :query_like_4
+            {$jobLikeClause}
         )";
+
+        $createdDateExpr = SchemaInspector::hasColumn('invoices', 'created_at') ? 'DATE(i.created_at)' : 'i.id';
+        $dateExpr = "COALESCE({$issueDateSql}, {$createdDateExpr})";
+        if ($dateFrom !== '') {
+            $where[] = "DATE({$dateExpr}) >= :date_from";
+        }
+        if ($dateTo !== '') {
+            $where[] = "DATE({$dateExpr}) <= :date_to";
+        }
 
         $sql = "SELECT COUNT(*)
                 FROM invoices i
                 {$joinSql}
+                {$jobJoinSql}
                 WHERE " . implode(' AND ', $where);
 
         $stmt = Database::connection()->prepare($sql);
@@ -229,6 +324,15 @@ final class Invoice
         $stmt->bindValue(':query_like_2', $queryLike);
         $stmt->bindValue(':query_like_3', $queryLike);
         $stmt->bindValue(':query_like_4', $queryLike);
+        if ($jobTitleSql !== 'NULL') {
+            $stmt->bindValue(':query_like_5', $queryLike);
+        }
+        if ($dateFrom !== '') {
+            $stmt->bindValue(':date_from', $dateFrom);
+        }
+        if ($dateTo !== '') {
+            $stmt->bindValue(':date_to', $dateTo);
+        }
         $stmt->execute();
 
         return (int) $stmt->fetchColumn();
@@ -1494,7 +1598,7 @@ final class Invoice
         }
 
         $preferred = $type === 'estimate'
-            ? ['draft', 'sent', 'approved', 'declined']
+            ? ['draft', 'sent', 'approved', 'declined', 'converted']
             : ['unsent', 'sent', 'partially_paid', 'paid_in_full', 'draft', 'partial', 'paid'];
 
         foreach ($preferred as $candidate) {

@@ -2,6 +2,7 @@
 $pageTitle = 'Events';
 ?>
 
+<div class="jt-events-screen">
 <div class="page-header">
     <h1>Events</h1>
     <p class="muted">Calendar for appointments, cancellations, tasks due dates, and scheduled jobs.</p>
@@ -73,8 +74,17 @@ $pageTitle = 'Events';
                 </div>
             </div>
         </div>
+        <div class="d-md-none jt-calendar-mobile-views mb-3" role="tablist" aria-label="Calendar view">
+            <div class="jt-cal-view-segment d-flex rounded-3 overflow-hidden border border-primary border-opacity-25" role="group">
+                <button type="button" class="jt-cal-view-btn flex-fill btn btn-sm border-0 rounded-0 py-2" data-jt-cal-view="timeGridDay">Day</button>
+                <button type="button" class="jt-cal-view-btn flex-fill btn btn-sm border-0 rounded-0 py-2 border-start border-primary border-opacity-25" data-jt-cal-view="timeGridWeek">Week</button>
+                <button type="button" class="jt-cal-view-btn jt-cal-view-btn--active flex-fill btn btn-sm border-0 rounded-0 py-2 border-start border-primary border-opacity-25" data-jt-cal-view="dayGridMonth" aria-pressed="true">Month</button>
+                <button type="button" class="jt-cal-view-btn flex-fill btn btn-sm border-0 rounded-0 py-2 border-start border-primary border-opacity-25" data-jt-cal-view="listWeek">List</button>
+            </div>
+        </div>
         <div id="jt-calendar" class="jt-calendar"></div>
     </div>
+</div>
 </div>
 
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.css" />
@@ -114,62 +124,29 @@ window.addEventListener('DOMContentLoaded', () => {
   const mobileMedia = window.matchMedia('(max-width: 767.98px)');
   const isMobile = mobileMedia.matches;
 
-  const eventDatesInRange = (event) => {
-    const dates = [];
-    if (!event.start) {
-      return dates;
-    }
-
-    const start = new Date(event.start);
-    const end = event.end ? new Date(event.end) : new Date(event.start);
-
-    start.setHours(0, 0, 0, 0);
-    end.setHours(0, 0, 0, 0);
-
-    if (event.allDay && event.end) {
-      end.setDate(end.getDate() - 1);
-    }
-
-    for (let cursor = new Date(start); cursor <= end; cursor.setDate(cursor.getDate() + 1)) {
-      dates.push(cursor.toISOString().slice(0, 10));
-    }
-
-    return dates;
-  };
-
-  const refreshEmptyDayPlaceholders = (calendar) => {
-    const viewType = calendar.view?.type || '';
-    const placeholders = el.querySelectorAll('.jt-calendar-empty-day');
-    placeholders.forEach((node) => node.remove());
-
-    if (!viewType.startsWith('dayGrid') || !mobileMedia.matches) {
+  const syncMobileViewButtons = () => {
+    const group = document.querySelector('.jt-calendar-mobile-views');
+    if (!group || !mobileMedia.matches) {
       return;
     }
-
-    const eventDays = new Set();
-    calendar.getEvents().forEach((event) => {
-      eventDatesInRange(event).forEach((dateKey) => eventDays.add(dateKey));
-    });
-
-    el.querySelectorAll('.fc-daygrid-day[data-date]').forEach((cell) => {
-      const dateKey = cell.getAttribute('data-date');
-      const isOtherMonth = cell.classList.contains('fc-day-other');
-      const eventsWrap = cell.querySelector('.fc-daygrid-day-events');
-
-      if (!dateKey || isOtherMonth || !eventsWrap || eventDays.has(dateKey)) {
-        return;
-      }
-
-      const placeholder = document.createElement('div');
-      placeholder.className = 'jt-calendar-empty-day';
-      placeholder.textContent = 'No events';
-      eventsWrap.appendChild(placeholder);
+    const type = calendar.view?.type || '';
+    group.querySelectorAll('.jt-cal-view-btn').forEach((btn) => {
+      const v = btn.getAttribute('data-jt-cal-view') || '';
+      const on = v === type;
+      btn.classList.toggle('jt-cal-view-btn--active', on);
+      btn.setAttribute('aria-pressed', on ? 'true' : 'false');
     });
   };
 
-  const calendar = new FullCalendar.Calendar(el, {
-    initialView: isMobile ? 'dayGridWeek' : 'dayGridMonth',
+  let calendar;
+  calendar = new FullCalendar.Calendar(el, {
+    // Mobile: segmented Day / Week / Month / List (iPhone-style); default Month like iOS calendar home
+    initialView: 'dayGridMonth',
     height: 'auto',
+    scrollTime: '07:00:00',
+    slotMinTime: '05:00:00',
+    slotMaxTime: '22:00:00',
+    slotDuration: '00:30:00',
     headerToolbar: isMobile
       ? {
           left: 'prev,next',
@@ -185,11 +162,21 @@ window.addEventListener('DOMContentLoaded', () => {
     nowIndicator: true,
     dayMaxEvents: true,
     eventTimeFormat: { hour: 'numeric', minute: '2-digit', meridiem: 'short' },
+    /* Month / week *grid*: title only (iOS-style); time + list still show times */
+    views: {
+      dayGridMonth: {
+        displayEventTime: false,
+      },
+      dayGridWeek: {
+        displayEventTime: false,
+      },
+    },
     editable: false,
     eventStartEditable: false,
     eventDurationEditable: false,
-    datesSet: () => refreshEmptyDayPlaceholders(calendar),
-    eventsSet: () => refreshEmptyDayPlaceholders(calendar),
+    datesSet: () => {
+      syncMobileViewButtons();
+    },
     events: (info, success, failure) => {
       const params = new URLSearchParams();
       params.set('start', info.startStr);
@@ -253,12 +240,23 @@ window.addEventListener('DOMContentLoaded', () => {
 
   calendar.render();
 
+  document.querySelectorAll('.jt-cal-view-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const view = btn.getAttribute('data-jt-cal-view');
+      if (view) {
+        calendar.changeView(view);
+      }
+    });
+  });
+  syncMobileViewButtons();
+
   const refetch = () => calendar.refetchEvents();
   document.getElementById('jt-src-events')?.addEventListener('change', refetch);
   document.getElementById('jt-type-appt')?.addEventListener('change', refetch);
   document.getElementById('jt-type-cancel')?.addEventListener('change', refetch);
   document.getElementById('jt-src-tasks')?.addEventListener('change', refetch);
   document.getElementById('jt-src-jobs')?.addEventListener('change', refetch);
+  document.getElementById('jt-src-deliveries')?.addEventListener('change', refetch);
   document.getElementById('jt-event-q')?.addEventListener('input', debounce(refetch, 250));
 
   const filterToggle = document.getElementById('jt-filter-toggle');

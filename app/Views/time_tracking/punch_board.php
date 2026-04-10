@@ -70,6 +70,19 @@ $employeeDisplayName = static function (array $row): string {
                         </div>
 
                         <?php if ($isOpen): ?>
+                            <?php
+                            $openNotesRaw = trim((string) ($employee['open_notes'] ?? ''));
+                            $openJobIdRow = (int) ($employee['open_job_id'] ?? 0);
+                            if ($openJobIdRow > 0) {
+                                $switchDefaultSelection = (string) $openJobIdRow;
+                            } elseif ($openNotesRaw !== '' && str_starts_with($openNotesRaw, 'Shop Time')) {
+                                $switchDefaultSelection = 'shop_time';
+                            } elseif ($openNotesRaw !== '' && str_starts_with($openNotesRaw, 'General Labor')) {
+                                $switchDefaultSelection = 'general_labor';
+                            } else {
+                                $switchDefaultSelection = '';
+                            }
+                            ?>
                             <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
                                 <div class="record-row-fields record-row-fields-3 flex-grow-1">
                                     <div class="record-field">
@@ -89,6 +102,47 @@ $employeeDisplayName = static function (array $row): string {
                                     <?= csrf_field() ?>
                                     <input type="hidden" name="employee_id" value="<?= e((string) $employeeId) ?>" />
                                     <button class="btn btn-outline-danger" type="submit"><i class="fas fa-stop me-2"></i>Punch Out</button>
+                                </form>
+                            </div>
+                            <div class="mt-3 pt-3 border-top">
+                                <p class="small text-muted mb-2">
+                                    <i class="fas fa-exchange-alt me-1"></i>
+                                    Switch to another job or non-job type without going off the clock — your current punch ends and a new one starts at the same time.
+                                </p>
+                                <form method="post" action="<?= e(url('/time-tracking/switch-job')) ?>" class="row g-2 align-items-end">
+                                    <?= csrf_field() ?>
+                                    <input type="hidden" name="employee_id" value="<?= e((string) $employeeId) ?>" />
+                                    <div class="col-12 col-xl-6">
+                                        <label class="form-label fw-semibold" for="time-switch-job-<?= e((string) $employeeId) ?>">Switch to</label>
+                                        <select class="form-select" id="time-switch-job-<?= e((string) $employeeId) ?>" name="job_selection" required>
+                                            <option value=""<?= $switchDefaultSelection === '' ? ' selected' : '' ?>>Select new job or non-job type</option>
+                                            <option value="shop_time"<?= $switchDefaultSelection === 'shop_time' ? ' selected' : '' ?>>Shop Time</option>
+                                            <option value="general_labor"<?= $switchDefaultSelection === 'general_labor' ? ' selected' : '' ?>>General Labor</option>
+                                            <?php foreach ($punchBoardJobs as $jobOption): ?>
+                                                <?php
+                                                $jobOptionId = (int) ($jobOption['id'] ?? 0);
+                                                if ($jobOptionId <= 0) {
+                                                    continue;
+                                                }
+                                                $jobOptionTitle = trim((string) ($jobOption['title'] ?? ''));
+                                                $jobOptionCity = trim((string) ($jobOption['city'] ?? ''));
+                                                $jobOptionLabel = $jobOptionTitle !== '' ? $jobOptionTitle : ('Job #' . (string) $jobOptionId);
+                                                if ($jobOptionCity !== '') {
+                                                    $jobOptionLabel .= ' - ' . $jobOptionCity;
+                                                }
+                                                $sel = $switchDefaultSelection === (string) $jobOptionId ? ' selected' : '';
+                                                ?>
+                                                <option value="<?= e((string) $jobOptionId) ?>"<?= $sel ?>><?= e($jobOptionLabel) ?></option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                    </div>
+                                    <div class="col-12 col-xl-4">
+                                        <label class="form-label fw-semibold" for="time-switch-note-<?= e((string) $employeeId) ?>">Note</label>
+                                        <input id="time-switch-note-<?= e((string) $employeeId) ?>" type="text" class="form-control" name="notes" placeholder="Optional" />
+                                    </div>
+                                    <div class="col-12 col-xl-2 d-grid">
+                                        <button class="btn btn-primary" type="submit"><i class="fas fa-exchange-alt me-2"></i>Switch</button>
+                                    </div>
                                 </form>
                             </div>
                         <?php else: ?>

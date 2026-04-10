@@ -147,6 +147,7 @@ $router->get('/time-tracking/job-search', [TimeTrackingController::class, 'jobSe
 $router->post('/time-tracking', [TimeTrackingController::class, 'store']);
 $router->post('/time-tracking/punch-in', [TimeTrackingController::class, 'punchIn']);
 $router->post('/time-tracking/punch-out', [TimeTrackingController::class, 'punchOut']);
+$router->post('/time-tracking/switch-job', [TimeTrackingController::class, 'switchJob']);
 $router->get('/time-tracking/{id}/edit', [TimeTrackingController::class, 'edit']);
 $router->post('/time-tracking/{id}/update', [TimeTrackingController::class, 'update']);
 $router->post('/time-tracking/{id}/delete', [TimeTrackingController::class, 'delete']);

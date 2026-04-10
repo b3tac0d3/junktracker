@@ -11,6 +11,7 @@ use App\Models\ClientPortalAccess;
 use App\Models\FormSelectValue;
 use App\Models\InvoiceItemType;
 use App\Models\Invoice;
+use App\Models\Job;
 use Core\Controller;
 use Core\Mailer;
 
@@ -24,6 +25,17 @@ final class BillingController extends Controller
         $status = strtolower(trim((string) ($_GET['status'] ?? '')));
         $sortBy = strtolower(trim((string) ($_GET['sort_by'] ?? 'date')));
         $sortDir = strtolower(trim((string) ($_GET['sort_dir'] ?? 'desc')));
+        $dateFrom = trim((string) ($_GET['date_from'] ?? ''));
+        $dateTo = trim((string) ($_GET['date_to'] ?? ''));
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateFrom)) {
+            $dateFrom = '';
+        }
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateTo)) {
+            $dateTo = '';
+        }
+        if ($dateFrom !== '' && $dateTo !== '' && $dateFrom > $dateTo) {
+            [$dateFrom, $dateTo] = [$dateTo, $dateFrom];
+        }
         if (!in_array($sortBy, ['date', 'id', 'client_name'], true)) {
             $sortBy = 'date';
         }
@@ -39,14 +51,14 @@ final class BillingController extends Controller
         $businessId = current_business_id();
         $perPage = pagination_per_page($_GET['per_page'] ?? null);
         $page = pagination_current_page($_GET['page'] ?? null);
-        $totalRows = Invoice::indexCount($businessId, $search, $status);
+        $totalRows = Invoice::indexCount($businessId, $search, $status, $dateFrom, $dateTo);
         $totalPages = pagination_total_pages($totalRows, $perPage);
         if ($page > $totalPages) {
             $page = $totalPages;
         }
         $offset = pagination_offset($page, $perPage);
 
-        $invoices = Invoice::indexList($businessId, $search, $status, $perPage, $offset, $sortBy, $sortDir);
+        $invoices = Invoice::indexList($businessId, $search, $status, $perPage, $offset, $sortBy, $sortDir, $dateFrom, $dateTo);
         $pagination = pagination_meta($page, $perPage, $totalRows, count($invoices));
         $summary = Invoice::summary($businessId);
 
@@ -56,6 +68,8 @@ final class BillingController extends Controller
             'status' => $status,
             'sortBy' => $sortBy,
             'sortDir' => $sortDir,
+            'dateFrom' => $dateFrom,
+            'dateTo' => $dateTo,
             'statusOptions' => $statusOptions,
             'invoices' => $invoices,
             'summary' => $summary,
@@ -187,6 +201,13 @@ final class BillingController extends Controller
         $invoiceId = Invoice::create($businessId, $this->payloadForSave($form), $actorUserId);
         Invoice::replaceLineItems($businessId, $invoiceId, $form['items'], $actorUserId);
         AuditLog::write('invoice_created', 'invoices', $invoiceId, $businessId, $actorUserId, ['type' => $form['type']]);
+        $fromEstimateId = (int) ($_POST['from_estimate_id'] ?? 0);
+        if ($fromEstimateId > 0 && $form['type'] === 'invoice') {
+            $srcEst = Invoice::findForBusiness($businessId, $fromEstimateId);
+            if ($srcEst !== null && strtolower(trim((string) ($srcEst['type'] ?? ''))) === 'estimate') {
+                Invoice::updateStatus($businessId, $fromEstimateId, 'estimate', 'converted', $actorUserId);
+            }
+        }
         if ($form['type'] === 'invoice') {
             $syncJobId = (int) ($form['job_id'] ?? 0);
             if ($this->hasInlinePayment($form)) {
@@ -197,7 +218,8 @@ final class BillingController extends Controller
             }
         }
         flash('success', ucfirst($form['type']) . ' created.');
-        redirect('/billing/' . (string) $invoiceId . $this->billingBackSuffix($_POST));
+        $fallback = '/billing/' . (string) $invoiceId . $this->billingBackSuffix($_POST);
+        redirect($this->billingReturnUrlAfterSave($_POST, $fallback));
     }
 
     public function edit(array $params): void
@@ -306,7 +328,8 @@ final class BillingController extends Controller
         }
         AuditLog::write('invoice_updated', 'invoices', $invoiceId, $businessId, $actorUserId, ['type' => $form['type']]);
         flash('success', ucfirst($form['type']) . ' updated.');
-        redirect('/billing/' . (string) $invoiceId . $backSuffix);
+        $fallback = '/billing/' . (string) $invoiceId . $backSuffix;
+        redirect($this->billingReturnUrlAfterSave($_POST, $fallback));
     }
 
     public function show(array $params): void
@@ -711,11 +734,12 @@ final class BillingController extends Controller
         AuditLog::write('payment_created', 'payments', $paymentId, $businessId, $actorUserId, ['invoice_id' => (int) ($form['invoice_id'] ?? 0)]);
         flash('success', 'Payment added.');
 
+        if ($returnJobId > 0 && Job::findForBusiness($businessId, $returnJobId) !== null) {
+            redirect('/jobs/' . (string) $returnJobId);
+        }
+
         $redirect = '/billing/payments/' . (string) $paymentId;
         $query = [];
-        if ($returnJobId > 0) {
-            $query['job_id'] = (string) $returnJobId;
-        }
         if ($returnInvoiceId > 0) {
             $query['invoice_id'] = (string) $returnInvoiceId;
         }
@@ -924,11 +948,12 @@ final class BillingController extends Controller
         AuditLog::write('payment_updated', 'payments', $paymentId, $businessId, $actorUserId, ['invoice_id' => (int) ($form['invoice_id'] ?? 0)]);
         flash('success', 'Payment updated.');
 
+        if ($returnJobId > 0 && Job::findForBusiness($businessId, $returnJobId) !== null) {
+            redirect('/jobs/' . (string) $returnJobId);
+        }
+
         $redirect = '/billing/payments/' . (string) $paymentId;
         $query = [];
-        if ($returnJobId > 0) {
-            $query['job_id'] = (string) $returnJobId;
-        }
         if ($returnInvoiceId > 0) {
             $query['invoice_id'] = (string) $returnInvoiceId;
         }
@@ -936,6 +961,27 @@ final class BillingController extends Controller
             $redirect .= '?' . http_build_query($query);
         }
         redirect($redirect);
+    }
+
+    /**
+     * After creating/updating an invoice from a job, return to the job instead of the billing record.
+     *
+     * @param array<string, mixed> $input
+     */
+    private function billingReturnUrlAfterSave(array $input, string $fallbackUrl): string
+    {
+        $from = strtolower(trim((string) ($input['from'] ?? '')));
+        $jobId = max(0, (int) ($input['job_id'] ?? 0));
+        if ($from !== 'job' || $jobId <= 0) {
+            return $fallbackUrl;
+        }
+
+        $businessId = current_business_id();
+        if (Job::findForBusiness($businessId, $jobId) === null) {
+            return $fallbackUrl;
+        }
+
+        return '/jobs/' . (string) $jobId;
     }
 
     private function defaultForm(): array
@@ -971,7 +1017,7 @@ final class BillingController extends Controller
      */
     private function estimateStatusOptions(): array
     {
-        $fallback = ['draft', 'sent', 'approved', 'declined'];
+        $fallback = ['draft', 'sent', 'approved', 'declined', 'converted'];
         return $this->optionLabelMap($this->selectValueList('estimate_status', $fallback));
     }
 

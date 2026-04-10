@@ -19,11 +19,16 @@ final class DashboardSummary
             }
         }
 
+        $ytdFrom = date('Y-01-01');
+        $ytdTo = date('Y-m-d');
+        $ytdIncome = ReportSummary::build($businessId, $ytdFrom, $ytdTo);
+
         $payload = [
             'sales' => self::salesSummary($businessId),
             'service' => self::serviceSummary($businessId),
             'expenses' => self::expensesSummary($businessId),
             'purchases' => self::purchasesSummary($businessId),
+            'ytd_net_minus_purchases' => round((float) ($ytdIncome['overall']['net_minus_purchases'] ?? 0), 2),
             'jobs' => self::jobsSummary($businessId),
             'tasks' => self::tasksSummary($businessId, $ownerUserId),
             'three_month_chart' => self::lastThreeMonthsChart($businessId),

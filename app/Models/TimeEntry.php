@@ -753,12 +753,15 @@ final class TimeEntry
         $where[] = SchemaInspector::hasColumn('employee_time_entries', 'employee_id') ? 't.employee_id = :employee_id' : '1=1';
         $where[] = $clockOutSql . ' IS NULL';
 
+        $notesSql = SchemaInspector::hasColumn('employee_time_entries', 'notes') ? 't.notes' : "''";
+
         $sql = "SELECT
                     t.id,
                     t.employee_id,
                     t.job_id,
                     t.clock_in_at,
                     {$isNonJobSql} AS is_non_job,
+                    {$notesSql} AS notes,
                     {$jobTitleSql} AS job_title
                 FROM employee_time_entries t
                 {$joinSql}
@@ -830,6 +833,99 @@ final class TimeEntry
         return (int) ($openEntry['id'] ?? 0);
     }
 
+    /**
+     * Close the open entry and immediately start a new one at the same timestamp (job switch).
+     *
+     * @return array{ok: true, closed_entry_id: int, new_entry_id: int}|array{ok: false, error: string, noop?: bool}
+     */
+    public static function punchSwitchJob(
+        int $businessId,
+        int $employeeId,
+        int $actorUserId,
+        ?int $newJobId,
+        bool $newIsNonJob,
+        string $newNotes
+    ): array {
+        $open = self::openEntryForEmployee($businessId, $employeeId);
+        if ($open === null) {
+            return ['ok' => false, 'error' => 'no_open'];
+        }
+
+        $tNotes = trim($newNotes);
+        $oJob = (int) ($open['job_id'] ?? 0);
+        $oNj = ((int) ($open['is_non_job'] ?? 0)) === 1;
+        $oNotes = trim((string) ($open['notes'] ?? ''));
+        $nJob = $newIsNonJob ? 0 : (int) ($newJobId ?? 0);
+
+        if ($oJob === $nJob && $oNj === $newIsNonJob && $oNotes === $tNotes) {
+            return ['ok' => false, 'error' => 'noop', 'noop' => true];
+        }
+
+        $clockAt = date('Y-m-d H:i:s');
+        $openId = (int) ($open['id'] ?? 0);
+        if ($openId <= 0) {
+            return ['ok' => false, 'error' => 'no_open'];
+        }
+
+        $clockInAt = trim((string) ($open['clock_in_at'] ?? ''));
+        $clockInTs = strtotime($clockInAt);
+        $clockOutTs = strtotime($clockAt);
+        $durationMinutes = null;
+        if ($clockInTs !== false && $clockOutTs !== false && $clockOutTs >= $clockInTs) {
+            $durationMinutes = (int) floor(($clockOutTs - $clockInTs) / 60);
+        }
+
+        $pdo = Database::connection();
+        $pdo->beginTransaction();
+        try {
+            self::update($businessId, $openId, [
+                'employee_id' => (int) ($open['employee_id'] ?? $employeeId),
+                'job_id' => isset($open['job_id']) ? (int) ($open['job_id'] ?? 0) : null,
+                'is_non_job' => $oNj ? 1 : 0,
+                'clock_in_at' => $clockInAt,
+                'clock_out_at' => $clockAt,
+                'duration_minutes' => $durationMinutes,
+                'clock_in_lat' => null,
+                'clock_in_lng' => null,
+                'clock_out_lat' => null,
+                'clock_out_lng' => null,
+                'notes' => $oNotes,
+            ], $actorUserId);
+
+            if (self::hasOverlapForEmployee($businessId, $employeeId, $clockAt, null, null)) {
+                $pdo->rollBack();
+                return ['ok' => false, 'error' => 'overlap'];
+            }
+
+            $newId = self::create($businessId, [
+                'employee_id' => $employeeId,
+                'job_id' => $newIsNonJob ? null : ($newJobId !== null && $newJobId > 0 ? $newJobId : null),
+                'is_non_job' => $newIsNonJob ? 1 : 0,
+                'clock_in_at' => $clockAt,
+                'clock_out_at' => null,
+                'duration_minutes' => null,
+                'clock_in_lat' => null,
+                'clock_in_lng' => null,
+                'clock_out_lat' => null,
+                'clock_out_lng' => null,
+                'notes' => $tNotes,
+            ], $actorUserId);
+
+            if ($newId <= 0) {
+                $pdo->rollBack();
+                return ['ok' => false, 'error' => 'create_failed'];
+            }
+
+            $pdo->commit();
+            return ['ok' => true, 'closed_entry_id' => $openId, 'new_entry_id' => $newId];
+        } catch (\Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            return ['ok' => false, 'error' => 'exception'];
+        }
+    }
+
     public static function punchBoardEmployees(int $businessId, ?int $scopeEmployeeId = null): array
     {
         if (!SchemaInspector::hasTable('employees')) {
@@ -856,6 +952,7 @@ final class TimeEntry
         $jobTitleField = SchemaInspector::hasColumn('jobs', 'title')
             ? 'j.title'
             : (SchemaInspector::hasColumn('jobs', 'name') ? 'j.name' : "CONCAT('Job #', j.id)");
+        $openNotesField = SchemaInspector::hasColumn('employee_time_entries', 'notes') ? 'open_entry.notes' : "''";
 
         $sql = "SELECT
                     e.id,
@@ -866,6 +963,7 @@ final class TimeEntry
                     open_entry.id AS open_entry_id,
                     open_entry.clock_in_at AS open_clock_in_at,
                     open_entry.job_id AS open_job_id,
+                    {$openNotesField} AS open_notes,
                     CASE
                         WHEN COALESCE(open_entry.is_non_job, 0) = 1 OR open_entry.job_id IS NULL THEN 'Non-Job Time'
                         ELSE COALESCE(NULLIF({$jobTitleField}, ''), CONCAT('Job #', j.id))

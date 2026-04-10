@@ -2,7 +2,7 @@
 $pageTitle = isset($pageTitle) ? (string) $pageTitle : 'JunkTracker';
 $publicPage = (bool) ($publicPage ?? false);
 $user = auth_user();
-$appVersion = (string) config('app.version', '1.5.2');
+$appVersion = (string) config('app.version', '1.6.3-beta');
 $workspaceRole = workspace_role();
 $businessId = current_business_id();
 $isGlobalSiteAdminContext = is_site_admin() && $businessId <= 0;
@@ -31,6 +31,7 @@ $navNotifications = is_array($navNotifications ?? null) ? $navNotifications : ['
     <main class="container py-5">
         <?php if ($success = flash('success')): ?><div class="alert alert-success"><?= e($success) ?></div><?php endif; ?>
         <?php if ($error = flash('error')): ?><div class="alert alert-danger"><?= e($error) ?></div><?php endif; ?>
+        <?php if ($info = flash('info')): ?><div class="alert alert-info"><?= e($info) ?></div><?php endif; ?>
         <?php
         $file = isset($viewFile) ? base_path((string) $viewFile) : null;
         if ($file !== null && is_file($file)) {
@@ -229,6 +230,7 @@ $navNotifications = is_array($navNotifications ?? null) ? $navNotifications : ['
                 <div class="container-fluid px-4 py-3">
                     <?php if ($success = flash('success')): ?><div class="alert alert-success"><?= e($success) ?></div><?php endif; ?>
                     <?php if ($error = flash('error')): ?><div class="alert alert-danger"><?= e($error) ?></div><?php endif; ?>
+                    <?php if ($info = flash('info')): ?><div class="alert alert-info"><?= e($info) ?></div><?php endif; ?>
                     <?php
                     $file = isset($viewFile) ? base_path((string) $viewFile) : null;
                     if ($file !== null && is_file($file)) {

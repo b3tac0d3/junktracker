@@ -80,6 +80,8 @@ foreach ($punchBoardJobs as $jobOption) {
     ];
 }
 
+$openPunch = (string) ($form['open_punch'] ?? '0') === '1';
+
 $selectedJobSelection = $selectedJobId > 0 ? (string) $selectedJobId : $jobSelRaw;
 $hasJobOption = false;
 foreach ($jobSelectOptions as $jobOpt) {
@@ -167,6 +169,21 @@ if (!$hasJobOption && $selectedJobId > 0) {
             </div>
 
             <div class="col-12">
+                <div class="form-check">
+                    <input
+                        type="checkbox"
+                        name="open_punch"
+                        value="1"
+                        id="entry-open-punch"
+                        class="form-check-input"
+                        <?= $openPunch ? 'checked' : '' ?>
+                    />
+                    <label class="form-check-label" for="entry-open-punch">Open punch (still clocked in — no clock out)</label>
+                </div>
+                <div class="form-text">Backdate clock-in only and leave the entry open. Uncheck to enter a clock-out; changing clock-in then updates clock-out to the same day as usual.</div>
+            </div>
+
+            <div class="col-12">
                 <label class="form-label fw-semibold" for="entry-notes">Note</label>
                 <textarea id="entry-notes" name="notes" rows="4" class="form-control"><?= e((string) ($form['notes'] ?? '')) ?></textarea>
             </div>
@@ -189,6 +206,9 @@ window.addEventListener('DOMContentLoaded', () => {
     const employeeOptions = <?= json_encode($employeeAutosuggest, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
 
     const clockInInput = document.getElementById('entry-clock-in');
+    const clockOutInput = document.getElementById('entry-clock-out');
+    const openPunchCheckbox = document.getElementById('entry-open-punch');
+
     const toLocalDatetimeValue = (dateObj) => {
         const pad = (v) => String(v).padStart(2, '0');
         return dateObj.getFullYear()
@@ -198,9 +218,79 @@ window.addEventListener('DOMContentLoaded', () => {
             + ':' + pad(dateObj.getMinutes());
     };
 
+    const parseLocalDatetimeValue = (rawValue) => {
+        const raw = String(rawValue || '').trim();
+        if (raw === '') {
+            return null;
+        }
+        const parsed = new Date(raw);
+        return Number.isNaN(parsed.getTime()) ? null : parsed;
+    };
+
+    /** Keep clock-out on the same calendar day as clock-in; default +1h if out was empty. */
+    const syncClockOutWithClockIn = () => {
+        if (!clockInInput || !clockOutInput) {
+            return;
+        }
+        if (openPunchCheckbox && openPunchCheckbox.checked) {
+            return;
+        }
+        const start = parseLocalDatetimeValue(clockInInput.value);
+        if (!start) {
+            return;
+        }
+        const endExisting = parseLocalDatetimeValue(clockOutInput.value);
+        if (!endExisting) {
+            clockOutInput.value = toLocalDatetimeValue(new Date(start.getTime() + 60 * 60 * 1000));
+            return;
+        }
+        const merged = new Date(
+            start.getFullYear(),
+            start.getMonth(),
+            start.getDate(),
+            endExisting.getHours(),
+            endExisting.getMinutes(),
+            0,
+            0
+        );
+        if (merged.getTime() <= start.getTime()) {
+            merged.setTime(start.getTime() + 60 * 60 * 1000);
+        }
+        clockOutInput.value = toLocalDatetimeValue(merged);
+    };
+
     if (clockInInput && String(clockInInput.value || '').trim() === '') {
         const now = new Date();
         clockInInput.value = toLocalDatetimeValue(now);
+    }
+    if (clockOutInput && clockInInput && String(clockOutInput.value || '').trim() === '') {
+        if (!openPunchCheckbox || !openPunchCheckbox.checked) {
+            syncClockOutWithClockIn();
+        }
+    }
+
+    if (openPunchCheckbox && clockOutInput) {
+        const syncOpenPunchDisabledState = () => {
+            const open = openPunchCheckbox.checked;
+            clockOutInput.disabled = open;
+            if (open) {
+                clockOutInput.value = '';
+            }
+        };
+        syncOpenPunchDisabledState();
+        openPunchCheckbox.addEventListener('change', () => {
+            const open = openPunchCheckbox.checked;
+            clockOutInput.disabled = open;
+            if (open) {
+                clockOutInput.value = '';
+            } else if (clockInInput) {
+                syncClockOutWithClockIn();
+            }
+        });
+    }
+
+    if (clockInInput) {
+        clockInInput.addEventListener('change', syncClockOutWithClockIn);
     }
 
     const clearSuggestions = (el) => {

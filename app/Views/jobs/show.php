@@ -95,12 +95,12 @@ $formatDuration = static function (int $minutes): string {
         <div class="d-flex flex-wrap align-items-center gap-3">
             <h1 class="mb-0"><?= e($title) ?></h1>
         </div>
-        <div class="d-flex flex-wrap gap-2 align-items-center">
+        <div class="jt-page-header-actions d-grid gap-2 d-md-flex d-md-flex-wrap align-items-md-center justify-content-md-end">
         <?php if ($isInactive): ?>
-            <span class="badge text-bg-secondary align-self-center">Deactivated</span>
+            <span class="badge text-bg-secondary align-self-center justify-self-start">Deactivated</span>
         <?php endif; ?>
-        <div class="dropdown">
-            <button class="btn btn-primary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+        <div class="dropdown w-100 w-md-auto">
+            <button class="btn btn-primary dropdown-toggle w-100" type="button" data-bs-toggle="dropdown" aria-expanded="false">
                 <i class="fas fa-ellipsis-h me-2"></i>Actions
             </button>
             <ul class="dropdown-menu dropdown-menu-end">
@@ -124,7 +124,7 @@ $formatDuration = static function (int $minutes): string {
                 </li>
             </ul>
         </div>
-        <a class="btn btn-outline-secondary" href="<?= e(url('/jobs')) ?>">Back to Jobs</a>
+        <a class="btn btn-outline-secondary w-100 w-md-auto" href="<?= e(url('/jobs')) ?>">Back to Jobs</a>
         </div>
     </div>
 </div>
@@ -591,7 +591,14 @@ $formatDuration = static function (int $minutes): string {
 
 <section class="card index-card mt-3">
     <div class="card-header index-card-header d-flex align-items-center justify-content-between gap-2 flex-wrap">
-        <strong><i class="fas fa-users me-2"></i>Assigned Employees</strong>
+        <div class="d-flex align-items-center gap-2 min-w-0 flex-grow-1">
+            <?php if ($assignedEmployees !== []): ?>
+                <div class="form-check flex-shrink-0 mb-0">
+                    <input class="form-check-input" type="checkbox" id="jt-bulk-select-all" title="Select all" aria-label="Select all employees for mass punch">
+                </div>
+            <?php endif; ?>
+            <strong class="mb-0"><i class="fas fa-users me-2"></i>Assigned Employees</strong>
+        </div>
         <div class="d-flex align-items-center gap-2 flex-wrap justify-content-end">
             <a class="btn btn-outline-primary btn-sm" href="<?= e($employeeAddUrl) ?>"><i class="fas fa-user-plus me-1"></i>Add Employee</a>
             <?php if ($assignedEmployees !== []): ?>
@@ -693,11 +700,45 @@ $formatDuration = static function (int $minutes): string {
                 (function () {
                     var form = document.getElementById('jt-bulk-punch-form');
                     var actionInput = document.getElementById('jt-bulk-action');
+                    var selectAll = document.getElementById('jt-bulk-select-all');
                     if (!form || !actionInput) {
                         return;
                     }
+                    function getEmployeeBoxes() {
+                        return document.querySelectorAll('input[form="jt-bulk-punch-form"][name="employee_ids[]"]');
+                    }
+                    function syncSelectAll() {
+                        if (!selectAll) {
+                            return;
+                        }
+                        var boxes = getEmployeeBoxes();
+                        var n = boxes.length;
+                        var checked = 0;
+                        for (var i = 0; i < n; i++) {
+                            if (boxes[i].checked) {
+                                checked++;
+                            }
+                        }
+                        selectAll.indeterminate = checked > 0 && checked < n;
+                        selectAll.checked = n > 0 && checked === n;
+                    }
+                    if (selectAll) {
+                        selectAll.addEventListener('change', function () {
+                            var boxes = getEmployeeBoxes();
+                            var on = selectAll.checked;
+                            for (var i = 0; i < boxes.length; i++) {
+                                boxes[i].checked = on;
+                            }
+                            selectAll.indeterminate = false;
+                        });
+                        var boxesInit = getEmployeeBoxes();
+                        for (var j = 0; j < boxesInit.length; j++) {
+                            boxesInit[j].addEventListener('change', syncSelectAll);
+                        }
+                        syncSelectAll();
+                    }
                     function submitBulk(action) {
-                        var boxes = document.querySelectorAll('input[form="jt-bulk-punch-form"][name="employee_ids[]"]');
+                        var boxes = getEmployeeBoxes();
                         var any = false;
                         for (var i = 0; i < boxes.length; i++) {
                             if (boxes[i].checked) {

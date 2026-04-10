@@ -15,9 +15,9 @@ if ($displayName === '') {
         <h1><?= e($displayName) ?></h1>
         <p class="muted">Employee #<?= e((string) $employeeId) ?></p>
     </div>
-    <div class="d-flex gap-2">
-        <a class="btn btn-primary" href="<?= e(url('/admin/employees/' . (string) $employeeId . '/edit')) ?>"><i class="fas fa-pen me-2"></i>Edit Employee</a>
-        <a class="btn btn-outline-secondary" href="<?= e(url('/admin/employees')) ?>">Back to Employees</a>
+    <div class="jt-page-header-actions d-grid gap-2 d-md-flex d-md-flex-wrap justify-content-md-end align-items-md-center">
+        <a class="btn btn-primary w-100 w-md-auto" href="<?= e(url('/admin/employees/' . (string) $employeeId . '/edit')) ?>"><i class="fas fa-pen me-2"></i>Edit Employee</a>
+        <a class="btn btn-outline-secondary w-100 w-md-auto" href="<?= e(url('/admin/employees')) ?>">Back to Employees</a>
     </div>
 </div>
 

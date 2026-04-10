@@ -7,9 +7,9 @@ $deposits = is_array($deposits ?? null) ? $deposits : [];
         <h1>Bank deposits</h1>
         <p class="muted">Match bank deposits to recorded payments</p>
     </div>
-    <div class="d-flex gap-2">
-        <a class="btn btn-primary" href="<?= e(url('/billing/deposits/create')) ?>">Add deposit</a>
-        <a class="btn btn-outline-secondary" href="<?= e(url('/billing')) ?>">Back to Billing</a>
+    <div class="jt-page-header-actions d-grid gap-2 d-md-flex d-md-flex-wrap justify-content-md-end align-items-md-center">
+        <a class="btn btn-primary w-100 w-md-auto" href="<?= e(url('/billing/deposits/create')) ?>">Add deposit</a>
+        <a class="btn btn-outline-secondary w-100 w-md-auto" href="<?= e(url('/billing')) ?>">Back to Billing</a>
     </div>
 </div>
 

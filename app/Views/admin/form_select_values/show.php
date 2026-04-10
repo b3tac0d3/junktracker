@@ -11,9 +11,9 @@ $sections = is_array($formCatalog['sections'] ?? null) ? $formCatalog['sections'
         <h1><?= e($formLabel) ?> Select Values</h1>
         <p class="muted">Quick add and inline edit/delete by section.</p>
     </div>
-    <div class="d-flex gap-2">
-        <a class="btn btn-outline-secondary" href="<?= e(url('/admin/form-select-values')) ?>">Back to Forms</a>
-        <a class="btn btn-outline-secondary" href="<?= e(url('/admin')) ?>">Back to Admin</a>
+    <div class="jt-page-header-actions d-grid gap-2 d-md-flex d-md-flex-wrap justify-content-md-end align-items-md-center">
+        <a class="btn btn-outline-secondary w-100 w-md-auto" href="<?= e(url('/admin/form-select-values')) ?>">Back to Forms</a>
+        <a class="btn btn-outline-secondary w-100 w-md-auto" href="<?= e(url('/admin')) ?>">Back to Admin</a>
     </div>
 </div>
 

@@ -37,13 +37,22 @@ $notes = trim((string) ($delivery['notes'] ?? ''));
         <h1>Delivery #<?= e((string) $id) ?></h1>
         <p class="muted"><?= e($clientName) ?></p>
     </div>
-    <div class="d-flex flex-wrap gap-2">
-        <a class="btn btn-outline-secondary" href="<?= e(url('/deliveries')) ?>">All deliveries</a>
-        <a class="btn btn-primary" href="<?= e(url('/deliveries/' . (string) $id . '/edit')) ?>"><i class="fas fa-pen me-2"></i>Edit</a>
-        <form method="post" action="<?= e(url('/deliveries/' . (string) $id . '/delete')) ?>" onsubmit="return confirm('Remove this delivery?');">
-            <?= csrf_field() ?>
-            <button class="btn btn-outline-danger" type="submit"><i class="fas fa-trash me-2"></i>Delete</button>
-        </form>
+    <div class="jt-page-header-actions d-grid gap-2 d-md-flex d-md-flex-wrap justify-content-md-end align-items-md-center">
+        <div class="dropdown w-100 w-md-auto">
+            <button class="btn btn-primary dropdown-toggle w-100" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                <i class="fas fa-ellipsis-h me-2"></i>Actions
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end">
+                <li><a class="dropdown-item" href="<?= e(url('/deliveries/' . (string) $id . '/edit')) ?>"><i class="fas fa-pen me-2"></i>Edit</a></li>
+                <li>
+                    <form method="post" action="<?= e(url('/deliveries/' . (string) $id . '/delete')) ?>" class="m-0" onsubmit="return confirm('Remove this delivery?');">
+                        <?= csrf_field() ?>
+                        <button class="dropdown-item text-danger" type="submit"><i class="fas fa-trash me-2"></i>Delete</button>
+                    </form>
+                </li>
+            </ul>
+        </div>
+        <a class="btn btn-outline-secondary w-100 w-md-auto" href="<?= e(url('/deliveries')) ?>">All deliveries</a>
     </div>
 </div>
 

@@ -189,9 +189,9 @@ $currentStatus = strtolower(trim((string) ($invoice['status'] ?? '')));
         <h1><?= e($docTitle) ?></h1>
         <p class="muted"><?= e($docHeaderNumber) ?></p>
     </div>
-    <div class="d-flex gap-2">
-        <div class="dropdown">
-            <button class="btn btn-primary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+    <div class="jt-page-header-actions d-grid gap-2 d-md-flex d-md-flex-wrap justify-content-md-end align-items-md-center">
+        <div class="dropdown w-100 w-md-auto">
+            <button class="btn btn-primary dropdown-toggle w-100" type="button" data-bs-toggle="dropdown" aria-expanded="false">
                 <i class="fas fa-ellipsis-h me-2"></i>Actions
             </button>
             <ul class="dropdown-menu dropdown-menu-end">
@@ -252,7 +252,7 @@ $currentStatus = strtolower(trim((string) ($invoice['status'] ?? '')));
                 </li>
             </ul>
         </div>
-        <a class="btn btn-outline-secondary" href="<?= e($backUrl) ?>"><?= e($backLabel) ?></a>
+        <a class="btn btn-outline-secondary w-100 w-md-auto" href="<?= e($backUrl) ?>"><?= e($backLabel) ?></a>
     </div>
 </div>
 

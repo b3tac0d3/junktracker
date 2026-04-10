@@ -88,7 +88,7 @@ final class FormSelectValue
                     'estimate_status' => [
                         'label' => 'Estimate Status',
                         'hint' => 'Used on estimate forms and quick status updates.',
-                        'defaults' => ['draft', 'sent', 'approved', 'declined'],
+                        'defaults' => ['draft', 'sent', 'approved', 'declined', 'converted'],
                     ],
                     'invoice_status' => [
                         'label' => 'Invoice Status',

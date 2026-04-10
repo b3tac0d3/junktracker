@@ -20,11 +20,11 @@ $stateOptions = [
         <h1><?= workspace_role() === 'punch_only' ? 'My Time' : 'Time Tracking' ?></h1>
         <p class="muted">Manual entry and punch clock</p>
     </div>
-    <div class="d-flex flex-wrap gap-2">
+    <div class="jt-page-header-actions d-grid gap-2 d-md-flex d-md-flex-wrap justify-content-md-end align-items-md-center">
         <?php if (workspace_role() !== 'punch_only'): ?>
-            <a class="btn btn-primary" href="<?= e(url('/time-tracking/create')) ?>"><i class="fas fa-plus me-2"></i>Add Time Entry</a>
+            <a class="btn btn-primary w-100 w-md-auto" href="<?= e(url('/time-tracking/create')) ?>"><i class="fas fa-plus me-2"></i>Add Time Entry</a>
         <?php endif; ?>
-        <a class="btn btn-outline-secondary" href="<?= e(url('/time-tracking/punch-board')) ?>"><i class="fas fa-user-clock me-2"></i><?= e($canManageEmployees ? 'Punch Board' : 'My Punch Clock') ?></a>
+        <a class="btn btn-outline-secondary w-100 w-md-auto" href="<?= e(url('/time-tracking/punch-board')) ?>"><i class="fas fa-user-clock me-2"></i><?= e($canManageEmployees ? 'Punch Board' : 'My Punch Clock') ?></a>
     </div>
 </div>
 

@@ -64,48 +64,52 @@ $formatSaleDate = static function (?string $value): string {
         <strong><i class="fas fa-filter me-2"></i>Filters</strong>
     </div>
     <div class="card-body">
-        <form method="get" action="<?= e(url('/sales')) ?>" class="row g-3 align-items-end">
+        <form method="get" action="<?= e(url('/sales')) ?>" class="d-flex flex-column gap-3">
             <input type="hidden" name="page" value="1">
             <input type="hidden" name="per_page" value="<?= e((string) $perPage) ?>">
-            <div class="col-12 col-lg-4">
-                <label class="form-label fw-semibold" for="sales-search">Search</label>
-                <input id="sales-search" class="form-control" name="q" value="<?= e($search) ?>" placeholder="Search by sale name, type, note, or id..." />
+            <div class="row g-3 align-items-end">
+                <div class="col-12 col-md-4">
+                    <label class="form-label fw-semibold" for="sales-search">Search</label>
+                    <input id="sales-search" class="form-control" name="q" value="<?= e($search) ?>" placeholder="Search by title, client, notes, or id…" />
+                </div>
+                <div class="col-12 col-md-4">
+                    <label class="form-label fw-semibold" for="sales-type">Type</label>
+                    <select id="sales-type" class="form-select" name="type">
+                        <option value="">All</option>
+                        <?php foreach ($typeOptions as $option): ?>
+                            <option value="<?= e($option) ?>" <?= $type === $option ? 'selected' : '' ?>><?= e($option) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="col-12 col-md-4">
+                    <label class="form-label fw-semibold" for="sales-sort-by">Sort By</label>
+                    <select id="sales-sort-by" class="form-select" name="sort_by">
+                        <option value="date" <?= $sortBy === 'date' ? 'selected' : '' ?>>Date</option>
+                        <option value="id" <?= $sortBy === 'id' ? 'selected' : '' ?>>ID</option>
+                        <option value="client_name" <?= $sortBy === 'client_name' ? 'selected' : '' ?>>Client Name</option>
+                    </select>
+                </div>
             </div>
-            <div class="col-12 col-lg-2">
-                <label class="form-label fw-semibold" for="sales-type">Type</label>
-                <select id="sales-type" class="form-select" name="type">
-                    <option value="">All</option>
-                    <?php foreach ($typeOptions as $option): ?>
-                        <option value="<?= e($option) ?>" <?= $type === $option ? 'selected' : '' ?>><?= e($option) ?></option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
-            <div class="col-12 col-md-3 col-lg-2">
-                <label class="form-label fw-semibold" for="sales-from-date">From</label>
-                <input id="sales-from-date" class="form-control" type="date" name="from" value="<?= e($fromDate) ?>" />
-            </div>
-            <div class="col-12 col-md-3 col-lg-2">
-                <label class="form-label fw-semibold" for="sales-to-date">To</label>
-                <input id="sales-to-date" class="form-control" type="date" name="to" value="<?= e($toDate) ?>" />
-            </div>
-            <div class="col-12 col-md-3 col-lg-1">
-                <label class="form-label fw-semibold" for="sales-sort-by">Sort By</label>
-                <select id="sales-sort-by" class="form-select" name="sort_by">
-                    <option value="date" <?= $sortBy === 'date' ? 'selected' : '' ?>>Date</option>
-                    <option value="id" <?= $sortBy === 'id' ? 'selected' : '' ?>>ID</option>
-                    <option value="client_name" <?= $sortBy === 'client_name' ? 'selected' : '' ?>>Client Name</option>
-                </select>
-            </div>
-            <div class="col-12 col-md-3 col-lg-1">
-                <label class="form-label fw-semibold" for="sales-sort-dir">Sort Order</label>
-                <select id="sales-sort-dir" class="form-select" name="sort_dir">
-                    <option value="desc" <?= $sortDir === 'desc' ? 'selected' : '' ?>>Descending</option>
-                    <option value="asc" <?= $sortDir === 'asc' ? 'selected' : '' ?>>Ascending</option>
-                </select>
-            </div>
-            <div class="col-12 col-lg-2 d-grid d-lg-flex gap-2">
-                <button class="btn btn-primary flex-fill" type="submit">Apply</button>
-                <a class="btn btn-outline-secondary flex-fill" href="<?= e(url('/sales')) ?>">Clear</a>
+            <div class="row g-3 align-items-end">
+                <div class="col-6 col-md-4 col-lg-3">
+                    <label class="form-label fw-semibold" for="sales-from-date">From</label>
+                    <input id="sales-from-date" class="form-control" type="date" name="from" value="<?= e($fromDate) ?>" />
+                </div>
+                <div class="col-6 col-md-4 col-lg-3">
+                    <label class="form-label fw-semibold" for="sales-to-date">To</label>
+                    <input id="sales-to-date" class="form-control" type="date" name="to" value="<?= e($toDate) ?>" />
+                </div>
+                <div class="col-12 col-md-4 col-lg-3">
+                    <label class="form-label fw-semibold" for="sales-sort-dir">Sort Order</label>
+                    <select id="sales-sort-dir" class="form-select" name="sort_dir">
+                        <option value="desc" <?= $sortDir === 'desc' ? 'selected' : '' ?>>Descending</option>
+                        <option value="asc" <?= $sortDir === 'asc' ? 'selected' : '' ?>>Ascending</option>
+                    </select>
+                </div>
+                <div class="col-12 col-md-12 col-lg-3 d-grid d-md-flex gap-2">
+                    <button class="btn btn-primary flex-fill" type="submit">Apply</button>
+                    <a class="btn btn-outline-secondary flex-fill" href="<?= e(url('/sales')) ?>">Clear</a>
+                </div>
             </div>
         </form>
     </div>

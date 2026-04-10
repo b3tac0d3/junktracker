@@ -12,9 +12,9 @@ $tableAvailable = (bool) ($tableAvailable ?? true);
         <h1>Invoice Item Types</h1>
         <p class="muted">Manage reusable invoice/estimate line item defaults.</p>
     </div>
-    <div class="d-flex gap-2">
-        <a class="btn btn-primary" href="<?= e(url('/admin/invoice-item-types/create')) ?>"><i class="fas fa-plus me-2"></i>Add Item Type</a>
-        <a class="btn btn-outline-secondary" href="<?= e(url('/admin')) ?>">Back to Admin</a>
+    <div class="jt-page-header-actions d-grid gap-2 d-md-flex d-md-flex-wrap justify-content-md-end align-items-md-center">
+        <a class="btn btn-primary w-100 w-md-auto" href="<?= e(url('/admin/invoice-item-types/create')) ?>"><i class="fas fa-plus me-2"></i>Add Item Type</a>
+        <a class="btn btn-outline-secondary w-100 w-md-auto" href="<?= e(url('/admin')) ?>">Back to Admin</a>
     </div>
 </div>
 

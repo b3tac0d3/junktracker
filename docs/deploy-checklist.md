@@ -2,7 +2,8 @@
 
 Short list to keep releases predictable. Pair with delta bundles from `scripts/build-live-release.sh` and version tags.
 
-**Latest patch notes:** [releases/live-1.5.3.md](./releases/live-1.5.3.md) (referrals, task links, deliveries schema safety).
+**Latest release notes:** [releases/live-1.6.3-beta.md](./releases/live-1.6.3-beta.md) (estimate list + converted status, sales/purchases filters).  
+**Earlier:** [releases/live-1.6.2-beta.md](./releases/live-1.6.2-beta.md), [releases/live-1.6.1-beta.md](./releases/live-1.6.1-beta.md), [releases/live-1.6.0.md](./releases/live-1.6.0.md), [releases/live-1.5.3.md](./releases/live-1.5.3.md).
 
 **“Run live”** (release phrase): bump `config/app.php` to the new version, commit and push, tag `vX.Y.Z` on that commit, then build with `./scripts/build-live-release.sh junktracker_beta_X.Y.Z v<previous_tag>` (delta from the prior tag). Example: `./scripts/build-live-release.sh junktracker_beta_1.5.0 v1.4.0.3`.
 

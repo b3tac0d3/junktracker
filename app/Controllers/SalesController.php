@@ -71,11 +71,21 @@ final class SalesController extends Controller
         require_business_role(['general_user', 'admin']);
 
         $businessId = current_business_id();
+        $form = $this->defaultForm();
+        $clientIdPrefill = (int) ($_GET['client_id'] ?? 0);
+        if ($clientIdPrefill > 0) {
+            $client = Client::findForBusiness($businessId, $clientIdPrefill);
+            if ($client !== null) {
+                $form['client_id'] = (string) $clientIdPrefill;
+                $form['client_name'] = Client::displayName($client);
+            }
+        }
+
         $this->render('sales/form', [
             'pageTitle' => 'Add Sale',
             'mode' => 'create',
             'actionUrl' => url('/sales'),
-            'form' => $this->defaultForm(),
+            'form' => $form,
             'errors' => [],
             'typeOptions' => $this->saleTypeOptions($businessId),
         ]);

@@ -14,6 +14,7 @@ $totalYtdGross = (float) ($sales['ytd_gross'] ?? 0) + (float) ($service['ytd_gro
 $totalMtdNet = (float) ($sales['mtd_net'] ?? 0) + (float) ($service['mtd_net'] ?? 0);
 $totalYtdNet = (float) ($sales['ytd_net'] ?? 0) + (float) ($service['ytd_net'] ?? 0);
 $profitYtd = $totalYtdNet - (float) ($expenses['ytd_total'] ?? 0);
+$ytdNetMinusPurchases = (float) ($summary['ytd_net_minus_purchases'] ?? 0);
 
 $dispatchJobs = is_array($lists['dispatch_jobs'] ?? null) ? $lists['dispatch_jobs'] : [];
 $prospects = is_array($lists['prospects'] ?? null) ? $lists['prospects'] : [];
@@ -119,8 +120,8 @@ $employeeDisplayName = static function (array $row): string {
     </a>
     <a class="kpi-card kpi-card-link" href="<?= e(url('/reports')) ?>">
         <span>Profit YTD</span>
-        <strong>$<?= e(number_format($profitYtd, 2)) ?></strong>
-        <small>Net YTD less expenses</small>
+        <strong>$<?= e(number_format($profitYtd, 2)) ?><span class="kpi-card-subamount"> ($<?= e(number_format($ytdNetMinusPurchases, 2)) ?>)</span></strong>
+        <small>Net YTD less expenses · After purchase costs (YTD) in parentheses</small>
     </a>
 </div>
 

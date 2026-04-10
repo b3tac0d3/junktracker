@@ -478,26 +478,19 @@ final class TimeTrackingController extends Controller
             redirect('/time-tracking/punch-board');
         }
 
-        $jobSelection = trim((string) ($_POST['job_selection'] ?? ''));
-        $specialSelections = [
-            'shop_time' => 'Shop Time',
-            'general_labor' => 'General Labor',
-        ];
-        $jobId = 0;
-        $isNonJob = true;
-        $notes = trim((string) ($_POST['notes'] ?? ''));
-
-        if ($jobSelection !== '' && isset($specialSelections[$jobSelection])) {
-            $specialLabel = $specialSelections[$jobSelection];
-            $notes = $notes !== '' ? ($specialLabel . ' - ' . $notes) : $specialLabel;
-        } else {
-            $jobId = (int) ($_POST['job_selection'] ?? 0);
-            $isNonJob = $jobId <= 0;
-            if (!$isNonJob && !TimeEntry::jobExistsForBusiness($businessId, $jobId)) {
-                flash('error', 'Choose a valid active job or one of the built-in non-job types.');
-                redirect('/time-tracking/punch-board');
-            }
+        $resolved = $this->resolvePunchJobSelection(
+            $businessId,
+            (string) ($_POST['job_selection'] ?? ''),
+            (string) ($_POST['notes'] ?? '')
+        );
+        if (isset($resolved['error'])) {
+            flash('error', 'Choose a valid active job or one of the built-in non-job types.');
+            redirect('/time-tracking/punch-board');
         }
+
+        $jobId = (int) $resolved['job_id'];
+        $isNonJob = (bool) $resolved['is_non_job'];
+        $notes = (string) $resolved['notes'];
 
         $clockInAt = date('Y-m-d H:i:s');
         if (TimeEntry::hasOverlapForEmployee($businessId, $employeeId, $clockInAt, null)) {
@@ -558,6 +551,116 @@ final class TimeTrackingController extends Controller
         redirect('/time-tracking/punch-board');
     }
 
+    public function switchJob(): void
+    {
+        require_business_role(['punch_only', 'general_user', 'admin']);
+
+        if (!verify_csrf($_POST['csrf_token'] ?? null)) {
+            flash('error', 'Session expired. Please try again.');
+            redirect('/time-tracking/punch-board');
+        }
+
+        $businessId = current_business_id();
+        $canManageEmployees = $this->canManageEmployees();
+        $selfEmployee = $this->currentUserEmployee($businessId);
+
+        $employeeId = (int) ($_POST['employee_id'] ?? 0);
+        if (!$canManageEmployees) {
+            if ($selfEmployee === null) {
+                flash('error', 'No employee profile is linked to your user yet. Ask an admin to link one.');
+                redirect('/time-tracking/punch-board');
+            }
+            $employeeId = (int) ($selfEmployee['id'] ?? 0);
+        }
+
+        if ($employeeId <= 0) {
+            flash('error', 'Choose an employee before switching jobs.');
+            redirect('/time-tracking/punch-board');
+        }
+
+        $employee = Employee::findForBusiness($businessId, $employeeId);
+        if ($employee === null || trim((string) ($employee['status'] ?? 'active')) === 'inactive') {
+            flash('error', 'Employee is not available.');
+            redirect('/time-tracking/punch-board');
+        }
+
+        $resolved = $this->resolvePunchJobSelection(
+            $businessId,
+            (string) ($_POST['job_selection'] ?? ''),
+            (string) ($_POST['notes'] ?? '')
+        );
+        if (isset($resolved['error'])) {
+            flash('error', 'Choose a valid active job or one of the built-in non-job types.');
+            redirect('/time-tracking/punch-board');
+        }
+
+        $jobId = (int) $resolved['job_id'];
+        $isNonJob = (bool) $resolved['is_non_job'];
+        $notes = (string) $resolved['notes'];
+
+        $result = TimeEntry::punchSwitchJob(
+            $businessId,
+            $employeeId,
+            auth_user_id() ?? 0,
+            $jobId > 0 ? $jobId : null,
+            $isNonJob,
+            $notes
+        );
+
+        if (($result['ok'] ?? false) === true) {
+            if (!$isNonJob && $jobId > 0) {
+                Job::assignEmployee($businessId, $jobId, $employeeId, auth_user_id() ?? 0);
+            }
+            flash('success', 'Switched jobs — previous punch ended and a new punch started at the same time.');
+            redirect('/time-tracking/punch-board');
+        }
+
+        $err = (string) ($result['error'] ?? '');
+        if ($err === 'noop') {
+            flash('info', 'Already on that job and note — choose something different to switch.');
+            redirect('/time-tracking/punch-board');
+        }
+        if ($err === 'no_open') {
+            flash('error', 'No open punch found for this employee. Punch in first.');
+            redirect('/time-tracking/punch-board');
+        }
+
+        flash('error', 'Unable to switch jobs. Try punching out and back in.');
+        redirect('/time-tracking/punch-board');
+    }
+
+    /**
+     * @return array{job_id: int, is_non_job: bool, notes: string}|array{error: string}
+     */
+    private function resolvePunchJobSelection(int $businessId, string $jobSelection, string $notes): array
+    {
+        $jobSelection = trim($jobSelection);
+        $notes = trim($notes);
+        $specialSelections = [
+            'shop_time' => 'Shop Time',
+            'general_labor' => 'General Labor',
+        ];
+        $jobId = 0;
+        $isNonJob = true;
+
+        if ($jobSelection !== '' && isset($specialSelections[$jobSelection])) {
+            $specialLabel = $specialSelections[$jobSelection];
+            $notes = $notes !== '' ? ($specialLabel . ' - ' . $notes) : $specialLabel;
+        } else {
+            $jobId = (int) $jobSelection;
+            $isNonJob = $jobId <= 0;
+            if (!$isNonJob && !TimeEntry::jobExistsForBusiness($businessId, $jobId)) {
+                return ['error' => 'invalid_job'];
+            }
+        }
+
+        return [
+            'job_id' => $jobId,
+            'is_non_job' => $isNonJob,
+            'notes' => $notes,
+        ];
+    }
+
     private function defaultForm(): array
     {
         return [
@@ -568,6 +671,7 @@ final class TimeTrackingController extends Controller
             'job_selection' => '',
             'clock_in_at' => '',
             'clock_out_at' => '',
+            'open_punch' => '0',
             'clock_in_lat' => '',
             'clock_in_lng' => '',
             'clock_out_lat' => '',
@@ -588,6 +692,7 @@ final class TimeTrackingController extends Controller
             'job_selection' => $jobId > 0 ? (string) $jobId : '',
             'clock_in_at' => $this->toInputDatetime((string) ($entry['clock_in_at'] ?? '')),
             'clock_out_at' => $this->toInputDatetime((string) ($entry['clock_out_at'] ?? '')),
+            'open_punch' => trim((string) ($entry['clock_out_at'] ?? '')) === '' ? '1' : '0',
             'clock_in_lat' => trim((string) ($entry['clock_in_lat'] ?? '')),
             'clock_in_lng' => trim((string) ($entry['clock_in_lng'] ?? '')),
             'clock_out_lat' => trim((string) ($entry['clock_out_lat'] ?? '')),
@@ -598,6 +703,12 @@ final class TimeTrackingController extends Controller
 
     private function formFromPost(array $input): array
     {
+        $openPunch = isset($input['open_punch']) && (string) $input['open_punch'] === '1';
+        $clockOut = trim((string) ($input['clock_out_at'] ?? ''));
+        if ($openPunch) {
+            $clockOut = '';
+        }
+
         return [
             'employee_id' => trim((string) ($input['employee_id'] ?? '')),
             'employee_name' => trim((string) ($input['employee_name'] ?? '')),
@@ -605,7 +716,8 @@ final class TimeTrackingController extends Controller
             'job_id' => '',
             'job_title' => '',
             'clock_in_at' => trim((string) ($input['clock_in_at'] ?? '')),
-            'clock_out_at' => trim((string) ($input['clock_out_at'] ?? '')),
+            'clock_out_at' => $clockOut,
+            'open_punch' => $openPunch ? '1' : '0',
             'clock_in_lat' => trim((string) ($input['clock_in_lat'] ?? '')),
             'clock_in_lng' => trim((string) ($input['clock_in_lng'] ?? '')),
             'clock_out_lat' => trim((string) ($input['clock_out_lat'] ?? '')),
