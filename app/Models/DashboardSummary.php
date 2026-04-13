@@ -36,6 +36,7 @@ final class DashboardSummary
                 'dispatch_jobs' => self::dispatchJobs($businessId),
                 'prospects' => self::prospectJobs($businessId),
                 'purchase_prospects' => self::purchaseProspects($businessId),
+                'outstanding_quotes' => self::outstandingQuotes($businessId),
                 'my_tasks_due' => self::myTasksDue($businessId, $ownerUserId),
                 'recent_sales' => self::recentSales($businessId),
                 'upcoming_deliveries' => self::upcomingDeliveries($businessId),
@@ -594,6 +595,91 @@ final class DashboardSummary
 
         $stmt = Database::connection()->prepare($sql);
         if (SchemaInspector::hasColumn('purchases', 'business_id')) {
+            $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
+        }
+        $stmt->bindValue(':row_limit', max(1, min($limit, 20)), \PDO::PARAM_INT);
+        $stmt->execute();
+
+        $rows = $stmt->fetchAll();
+        return is_array($rows) ? $rows : [];
+    }
+
+    private static function outstandingQuotes(int $businessId, int $limit = 6): array
+    {
+        if (!SchemaInspector::hasTable('invoices')) {
+            return [];
+        }
+
+        $numberSql = SchemaInspector::hasColumn('invoices', 'invoice_number')
+            ? 'i.invoice_number'
+            : "CONCAT('EST-', i.id)";
+        $statusSql = SchemaInspector::hasColumn('invoices', 'status') ? 'LOWER(COALESCE(i.status, ""))' : "'draft'";
+        $totalSql = SchemaInspector::hasColumn('invoices', 'total')
+            ? 'COALESCE(i.total, 0)'
+            : (SchemaInspector::hasColumn('invoices', 'subtotal') ? 'COALESCE(i.subtotal, 0)' : '0');
+        $issueDateSql = SchemaInspector::hasColumn('invoices', 'issue_date') ? 'i.issue_date' : 'NULL';
+        $dueDateSql = SchemaInspector::hasColumn('invoices', 'due_date') ? 'i.due_date' : 'NULL';
+        $typeSql = SchemaInspector::hasColumn('invoices', 'type') ? 'LOWER(COALESCE(i.type, ""))' : "'invoice'";
+        $jobIdSql = SchemaInspector::hasColumn('invoices', 'job_id') ? 'i.job_id' : 'NULL';
+
+        $joinSql = '';
+        $clientNameSql = "'—'";
+        if (SchemaInspector::hasTable('clients') && SchemaInspector::hasColumn('invoices', 'client_id')) {
+            $joinSql = ' LEFT JOIN clients c ON c.id = i.client_id';
+            if (SchemaInspector::hasColumn('clients', 'business_id') && SchemaInspector::hasColumn('invoices', 'business_id')) {
+                $joinSql .= ' AND c.business_id = i.business_id';
+            }
+            if (SchemaInspector::hasColumn('clients', 'deleted_at')) {
+                $joinSql .= ' AND c.deleted_at IS NULL';
+            }
+            $clientNameSql = "COALESCE(NULLIF(TRIM(CONCAT_WS(' ', c.first_name, c.last_name)), ''), NULLIF(c.company_name, ''), CONCAT('Client #', c.id))";
+        }
+
+        $jobJoinSql = '';
+        $jobTitleSql = 'NULL';
+        if (SchemaInspector::hasTable('jobs') && SchemaInspector::hasColumn('invoices', 'job_id')) {
+            $jobBaseTitleSql = SchemaInspector::hasColumn('jobs', 'title')
+                ? 'j.title'
+                : (SchemaInspector::hasColumn('jobs', 'name') ? 'j.name' : "CONCAT('Job #', j.id)");
+            $jobJoinSql = ' LEFT JOIN jobs j ON j.id = i.job_id';
+            if (SchemaInspector::hasColumn('jobs', 'business_id') && SchemaInspector::hasColumn('invoices', 'business_id')) {
+                $jobJoinSql .= ' AND j.business_id = i.business_id';
+            }
+            if (SchemaInspector::hasColumn('jobs', 'deleted_at')) {
+                $jobJoinSql .= ' AND j.deleted_at IS NULL';
+            }
+            $jobTitleSql = "COALESCE(NULLIF({$jobBaseTitleSql}, ''), CONCAT('Job #', j.id))";
+        }
+
+        $where = [
+            SchemaInspector::hasColumn('invoices', 'business_id') ? 'i.business_id = :business_id' : '1=1',
+            SchemaInspector::hasColumn('invoices', 'deleted_at') ? 'i.deleted_at IS NULL' : '1=1',
+            "{$typeSql} = 'estimate'",
+            "{$statusSql} NOT IN ('declined', 'closed', 'converted', 'cancelled')",
+        ];
+
+        $sql = "SELECT
+                    i.id,
+                    {$numberSql} AS invoice_number,
+                    {$statusSql} AS status,
+                    {$totalSql} AS total,
+                    {$issueDateSql} AS issue_date,
+                    {$dueDateSql} AS due_date,
+                    {$clientNameSql} AS client_name,
+                    {$jobIdSql} AS job_id,
+                    {$jobTitleSql} AS job_title
+                FROM invoices i
+                {$joinSql}
+                {$jobJoinSql}
+                WHERE " . implode(' AND ', $where) . "
+                ORDER BY
+                    CASE WHEN {$dueDateSql} IS NULL THEN 1 ELSE 0 END,
+                    {$dueDateSql} ASC,
+                    i.id DESC
+                LIMIT :row_limit";
+
+        $stmt = Database::connection()->prepare($sql);
+        if (SchemaInspector::hasColumn('invoices', 'business_id')) {
             $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
         }
         $stmt->bindValue(':row_limit', max(1, min($limit, 20)), \PDO::PARAM_INT);

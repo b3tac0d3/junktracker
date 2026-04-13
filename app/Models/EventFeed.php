@@ -133,6 +133,9 @@ final class EventFeed
                 'borderColor' => $color,
                 'url' => url('/deliveries/' . (string) $id),
                 'editable' => false,
+                'extendedProps' => [
+                    'customerName' => $clientName,
+                ],
             ];
         }
 
@@ -257,17 +260,36 @@ final class EventFeed
             ? 'j.title'
             : (SchemaInspector::hasColumn('jobs', 'name') ? 'j.name' : "CONCAT('Job #', j.id)");
         $statusSql = SchemaInspector::hasColumn('jobs', 'status') ? 'LOWER(j.status)' : "'pending'";
+        $jobTypeSql = SchemaInspector::hasColumn('jobs', 'job_type') ? 'LOWER(COALESCE(j.job_type, ""))' : "''";
         $deletedWhere = SchemaInspector::hasColumn('jobs', 'deleted_at') ? 'AND j.deleted_at IS NULL' : '';
         $businessWhere = SchemaInspector::hasColumn('jobs', 'business_id') ? 'j.business_id = :business_id' : '1=1';
-        $searchWhere = $q !== '' ? "AND ({$titleSql} LIKE :q)" : '';
+        $joinClient = SchemaInspector::hasTable('clients') && SchemaInspector::hasColumn('jobs', 'client_id');
+        $clientNameSql = 'NULL';
+        $joinSql = '';
+        if ($joinClient) {
+            $clientNameSql = "COALESCE(NULLIF(TRIM(CONCAT_WS(' ', c.first_name, c.last_name)), ''), NULLIF(c.company_name, ''), CONCAT('Client #', c.id))";
+            $joinDeleted = SchemaInspector::hasColumn('clients', 'deleted_at') ? 'AND c.deleted_at IS NULL' : '';
+            $bizMatch = SchemaInspector::hasColumn('clients', 'business_id') && SchemaInspector::hasColumn('jobs', 'business_id')
+                ? 'AND c.business_id = j.business_id'
+                : '';
+            $joinSql = " LEFT JOIN clients c ON c.id = j.client_id {$bizMatch} {$joinDeleted}";
+        }
+        $searchWhere = $q !== ''
+            ? ($joinClient
+                ? "AND ({$titleSql} LIKE :q OR {$clientNameSql} LIKE :q)"
+                : "AND ({$titleSql} LIKE :q)")
+            : '';
 
         $sql = "SELECT
                     j.id,
                     {$titleSql} AS title,
                     {$startSql} AS scheduled_start_at,
                     {$endSql} AS scheduled_end_at,
-                    {$statusSql} AS status_key
+                    {$statusSql} AS status_key,
+                    {$jobTypeSql} AS job_type_key,
+                    {$clientNameSql} AS client_name
                 FROM jobs j
+                {$joinSql}
                 WHERE {$businessWhere}
                   {$deletedWhere}
                   {$searchWhere}
@@ -306,14 +328,20 @@ final class EventFeed
             }
 
             $status = (string) ($row['status_key'] ?? 'pending');
+            $jobType = strtolower(trim((string) ($row['job_type_key'] ?? '')));
             $color = match ($status) {
                 'active' => '#15803d',
                 'completed' => '#0f766e',
                 'cancelled' => '#b91c1c',
                 default => '#c2410c',
             };
+            if ($jobType === 'quote' && $status !== 'cancelled') {
+                $color = '#7c3aed';
+            }
 
             $endAt = trim((string) ($row['scheduled_end_at'] ?? ''));
+
+            $customerName = $joinClient ? trim((string) ($row['client_name'] ?? '')) : '';
 
             $events[] = [
                 'id' => 'job:' . $id,
@@ -325,10 +353,73 @@ final class EventFeed
                 'borderColor' => $color,
                 'url' => url('/jobs/' . (string) $id),
                 'editable' => false,
+                'extendedProps' => [
+                    'customerName' => $customerName,
+                    'jobType' => $jobType,
+                ],
             ];
         }
 
         return $events;
+    }
+
+    /**
+     * @param array<int, int> $jobIds
+     * @return array<int, string>
+     */
+    private static function jobClientNamesByJobIds(int $businessId, array $jobIds): array
+    {
+        $jobIds = array_values(array_unique(array_filter(array_map(static fn($v) => (int) $v, $jobIds), static fn($v) => $v > 0)));
+        if ($jobIds === [] || !SchemaInspector::hasTable('jobs')) {
+            return [];
+        }
+        $joinClient = SchemaInspector::hasTable('clients') && SchemaInspector::hasColumn('jobs', 'client_id');
+        if (!$joinClient) {
+            return [];
+        }
+
+        $clientNameSql = "COALESCE(NULLIF(TRIM(CONCAT_WS(' ', c.first_name, c.last_name)), ''), NULLIF(c.company_name, ''), CONCAT('Client #', c.id))";
+        $joinDeleted = SchemaInspector::hasColumn('clients', 'deleted_at') ? 'AND c.deleted_at IS NULL' : '';
+        $bizMatch = SchemaInspector::hasColumn('clients', 'business_id') && SchemaInspector::hasColumn('jobs', 'business_id')
+            ? 'AND c.business_id = j.business_id'
+            : '';
+        $joinSql = " LEFT JOIN clients c ON c.id = j.client_id {$bizMatch} {$joinDeleted}";
+
+        $placeholders = implode(',', array_fill(0, count($jobIds), '?'));
+        $hasBusiness = SchemaInspector::hasColumn('jobs', 'business_id');
+        $sql = "SELECT j.id, {$clientNameSql} AS client_name
+                FROM jobs j
+                {$joinSql}
+                WHERE j.id IN ({$placeholders})";
+        $params = $jobIds;
+        if ($hasBusiness) {
+            $sql = "SELECT j.id, {$clientNameSql} AS client_name
+                    FROM jobs j
+                    {$joinSql}
+                    WHERE j.business_id = ? AND j.id IN ({$placeholders})";
+            $params = array_merge([$businessId], $jobIds);
+        }
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute($params);
+        $rows = $stmt->fetchAll();
+        if (!is_array($rows)) {
+            return [];
+        }
+
+        $out = [];
+        foreach ($rows as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $jid = (int) ($row['id'] ?? 0);
+            if ($jid <= 0) {
+                continue;
+            }
+            $out[$jid] = trim((string) ($row['client_name'] ?? ''));
+        }
+
+        return $out;
     }
 
     /**
@@ -347,6 +438,19 @@ final class EventFeed
         if ($rows === []) {
             return [];
         }
+
+        $jobIdsForNames = [];
+        foreach ($rows as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $linkType = strtolower(trim((string) ($row['link_type'] ?? '')));
+            $linkId = (int) ($row['link_id'] ?? 0);
+            if ($linkType === 'job' && $linkId > 0) {
+                $jobIdsForNames[] = $linkId;
+            }
+        }
+        $jobCustomerNames = self::jobClientNamesByJobIds($businessId, $jobIdsForNames);
 
         $events = [];
         foreach ($rows as $row) {
@@ -384,6 +488,10 @@ final class EventFeed
                 default => 'Event',
             };
 
+            $linkType = strtolower(trim((string) ($row['link_type'] ?? '')));
+            $linkId = (int) ($row['link_id'] ?? 0);
+            $customerName = ($linkType === 'job' && $linkId > 0) ? ($jobCustomerNames[$linkId] ?? '') : '';
+
             $events[] = [
                 'id' => 'event:' . $id,
                 'title' => $titlePrefix . ': ' . (string) ($row['title'] ?? ('Event #' . $id)),
@@ -398,6 +506,7 @@ final class EventFeed
                     'jtType' => $type,
                     'jtStatus' => $status,
                     'jtId' => $id,
+                    'customerName' => $customerName,
                 ],
             ];
         }

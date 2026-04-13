@@ -17,6 +17,7 @@ $pageTitle = 'Events';
                     <span class="badge" style="background:#2563eb;">Cancels</span>
                     <span class="badge" style="background:#16a34a;">Tasks</span>
                     <span class="badge" style="background:#ea580c;">Jobs</span>
+                    <span class="badge" style="background:#7c3aed;">Quotes</span>
                 </div>
             </div>
     </div>
@@ -121,6 +122,28 @@ window.addEventListener('DOMContentLoaded', () => {
 
   const getQuery = () => (document.getElementById('jt-event-q')?.value || '').trim();
 
+  /** Show customer name next to the title in all calendar views (uses feed extendedProps). */
+  const appendCustomerToEventTitle = (info) => {
+    const customer = String(info.event.extendedProps?.customerName || '').trim();
+    if (!customer) {
+      return;
+    }
+    const fullTitle = String(info.event.title || '');
+    if (fullTitle.includes(customer)) {
+      return;
+    }
+    const titleEl =
+      info.el.querySelector('.fc-list-event-title a') ||
+      info.el.querySelector('.fc-event-title');
+    if (!titleEl) {
+      return;
+    }
+    const suffix = document.createElement('span');
+    suffix.className = 'jt-cal-event-customer';
+    suffix.textContent = ' · ' + customer;
+    titleEl.appendChild(suffix);
+  };
+
   const mobileMedia = window.matchMedia('(max-width: 767.98px)');
   const isMobile = mobileMedia.matches;
 
@@ -174,6 +197,7 @@ window.addEventListener('DOMContentLoaded', () => {
     editable: false,
     eventStartEditable: false,
     eventDurationEditable: false,
+    eventDidMount: appendCustomerToEventTitle,
     datesSet: () => {
       syncMobileViewButtons();
     },
@@ -206,6 +230,20 @@ window.addEventListener('DOMContentLoaded', () => {
 
       const title = arg.event.title || 'Event';
       titleEl.textContent = title;
+
+      const customerWrap = document.getElementById('jt-event-quickview-customer-wrap');
+      const customerEl = document.getElementById('jt-event-quickview-customer');
+      const ext = arg.event.extendedProps || {};
+      const customerName = String(ext.customerName || '').trim();
+      if (customerWrap && customerEl) {
+        if (customerName !== '') {
+          customerEl.textContent = customerName;
+          customerWrap.classList.remove('d-none');
+        } else {
+          customerEl.textContent = '';
+          customerWrap.classList.add('d-none');
+        }
+      }
 
       const start = arg.event.start;
       const end = arg.event.end;
@@ -315,6 +353,10 @@ window.addEventListener('DOMContentLoaded', () => {
                     <h2 class="h5 m-0" id="jt-event-quickview-title">Event</h2>
                 </div>
                 <button type="button" class="btn btn-outline-secondary btn-sm" id="jt-event-quickview-close">Close</button>
+            </div>
+            <div id="jt-event-quickview-customer-wrap" class="mb-2 d-none">
+                <div class="small text-uppercase text-muted fw-bold mb-1">Customer</div>
+                <div id="jt-event-quickview-customer" class="small"></div>
             </div>
             <div class="mb-2">
                 <div class="small text-uppercase text-muted fw-bold mb-1">When</div>

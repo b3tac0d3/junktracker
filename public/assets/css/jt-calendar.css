@@ -68,6 +68,18 @@
   line-height: 1.25;
 }
 
+/* Customer suffix from eventDidMount (extendedProps.customerName) */
+.jt-calendar .jt-cal-event-customer {
+  font-weight: 500;
+  opacity: 0.92;
+}
+
+.jt-calendar .fc-list-event-title .jt-cal-event-customer,
+.jt-calendar .fc-list-event-title a .jt-cal-event-customer {
+  font-weight: 400;
+  opacity: 0.88;
+}
+
 .jt-calendar .fc-daygrid-event {
   font-size: 0.72rem;
 }

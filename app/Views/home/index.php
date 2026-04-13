@@ -19,6 +19,7 @@ $ytdNetMinusPurchases = (float) ($summary['ytd_net_minus_purchases'] ?? 0);
 $dispatchJobs = is_array($lists['dispatch_jobs'] ?? null) ? $lists['dispatch_jobs'] : [];
 $prospects = is_array($lists['prospects'] ?? null) ? $lists['prospects'] : [];
 $purchaseProspects = is_array($lists['purchase_prospects'] ?? null) ? $lists['purchase_prospects'] : [];
+$outstandingQuotes = is_array($lists['outstanding_quotes'] ?? null) ? $lists['outstanding_quotes'] : [];
 $myTasksDue = is_array($lists['my_tasks_due'] ?? null) ? $lists['my_tasks_due'] : [];
 $recentSales = is_array($lists['recent_sales'] ?? null) ? $lists['recent_sales'] : [];
 $upcomingDeliveries = is_array($lists['upcoming_deliveries'] ?? null) ? $lists['upcoming_deliveries'] : [];
@@ -345,6 +346,38 @@ $employeeDisplayName = static function (array $row): string {
                         <a class="simple-list-row simple-list-row-link" href="<?= e(url('/purchases/' . (string) $purchaseId)) ?>">
                             <span class="simple-list-title"><?= e($title) ?></span>
                             <span class="simple-list-meta"><?= e($client) ?> · <?= e($statusLabel) ?> · <?= e($when) ?></span>
+                        </a>
+                    <?php endforeach; ?>
+                </div>
+            <?php endif; ?>
+        </div>
+    </section>
+
+    <section class="card index-card">
+        <div class="card-header index-card-header d-flex align-items-center justify-content-between">
+            <strong><i class="fas fa-file-signature me-2 jt-dashboard-icon--service" aria-hidden="true"></i>Outstanding Quotes</strong>
+            <a class="small text-decoration-none fw-semibold" href="<?= e(url('/billing')) ?>">Open Billing</a>
+        </div>
+        <div class="card-body">
+            <?php if ($outstandingQuotes === []): ?>
+                <div class="record-empty">No outstanding quotes right now.</div>
+            <?php else: ?>
+                <div class="simple-list-table">
+                    <?php foreach ($outstandingQuotes as $quote): ?>
+                        <?php
+                        $quoteId = (int) ($quote['id'] ?? 0);
+                        $quoteNumberRaw = trim((string) ($quote['invoice_number'] ?? ''));
+                        $quoteNumber = $quoteNumberRaw !== '' ? $quoteNumberRaw : ('EST-' . (string) $quoteId);
+                        $quoteStatus = strtolower(trim((string) ($quote['status'] ?? 'draft')));
+                        $quoteStatusLabel = ucfirst(str_replace('_', ' ', $quoteStatus));
+                        $quoteClient = trim((string) ($quote['client_name'] ?? '')) ?: '—';
+                        $quoteTotal = (float) ($quote['total'] ?? 0);
+                        $quoteDue = $formatDateOnly((string) ($quote['due_date'] ?? ''));
+                        $quoteJobTitle = trim((string) ($quote['job_title'] ?? ''));
+                        ?>
+                        <a class="simple-list-row simple-list-row-link" href="<?= e(url('/billing/' . (string) $quoteId)) ?>">
+                            <span class="simple-list-title"><?= e('Estimate #' . $quoteNumber) ?></span>
+                            <span class="simple-list-meta"><?= e($quoteClient) ?> · <?= e($quoteStatusLabel) ?> · $<?= e(number_format($quoteTotal, 2)) ?> · <?= e($quoteDue) ?><?= e($quoteJobTitle !== '' ? ' · ' . $quoteJobTitle : '') ?></span>
                         </a>
                     <?php endforeach; ?>
                 </div>
