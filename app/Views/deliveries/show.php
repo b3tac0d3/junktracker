@@ -25,6 +25,13 @@ $addrParts = array_filter([
     trim((string) ($delivery['postal_code'] ?? '')),
 ], static fn (string $v): bool => $v !== '');
 $addrDisplay = $addrParts !== [] ? implode(', ', $addrParts) : '—';
+$mapsAddressUrl = maps_directions_url_from_parts([
+    (string) ($delivery['address_line1'] ?? ''),
+    (string) ($delivery['address_line2'] ?? ''),
+    (string) ($delivery['city'] ?? ''),
+    (string) ($delivery['state'] ?? ''),
+    (string) ($delivery['postal_code'] ?? ''),
+]);
 
 $scheduledRaw = trim((string) ($delivery['scheduled_at'] ?? ''));
 $isNeedScheduleStatus = $status === 'need_to_schedule';
@@ -84,7 +91,11 @@ $notes = trim((string) ($delivery['notes'] ?? ''));
             </div>
             <div class="col-12">
                 <div class="small text-muted text-uppercase">Delivery address</div>
-                <div><?= e($addrDisplay) ?></div>
+                <?php if ($mapsAddressUrl !== '' && $addrDisplay !== '—'): ?>
+                    <a href="<?= e($mapsAddressUrl) ?>" target="_blank" rel="noopener noreferrer"><?= e($addrDisplay) ?></a>
+                <?php else: ?>
+                    <div><?= e($addrDisplay) ?></div>
+                <?php endif; ?>
             </div>
             <?php if ($notes !== ''): ?>
                 <div class="col-12">

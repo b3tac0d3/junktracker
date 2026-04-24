@@ -119,7 +119,7 @@ final class EventFeed
             };
 
             $clientName = trim((string) ($row['client_name'] ?? ''));
-            $title = $clientName !== '' ? 'Delivery: ' . $clientName : 'Delivery #' . (string) $id;
+            $title = $clientName !== '' ? $clientName : 'Delivery #' . (string) $id;
 
             $endAt = trim((string) ($row['end_at'] ?? ''));
 
@@ -135,6 +135,7 @@ final class EventFeed
                 'editable' => false,
                 'extendedProps' => [
                     'customerName' => $clientName,
+                    'eventType' => 'Delivery',
                 ],
             ];
         }
@@ -224,13 +225,16 @@ final class EventFeed
 
             $events[] = [
                 'id' => 'task:' . $id,
-                'title' => 'Task: ' . (string) ($row['title'] ?? ('Task #' . $id)),
+                'title' => (string) ($row['title'] ?? ('Task #' . $id)),
                 'start' => self::toIso($dueAt),
                 'allDay' => false,
                 'backgroundColor' => $color,
                 'borderColor' => $color,
                 'url' => url('/tasks/' . (string) $id),
                 'editable' => false,
+                'extendedProps' => [
+                    'eventType' => 'Task',
+                ],
             ];
         }
 
@@ -345,7 +349,7 @@ final class EventFeed
 
             $events[] = [
                 'id' => 'job:' . $id,
-                'title' => 'Job: ' . (string) ($row['title'] ?? ('Job #' . $id)),
+                'title' => (string) ($row['title'] ?? ('Job #' . $id)),
                 'start' => self::toIso($startAt),
                 'end' => $endAt !== '' ? self::toIso($endAt) : null,
                 'allDay' => false,
@@ -356,6 +360,7 @@ final class EventFeed
                 'extendedProps' => [
                     'customerName' => $customerName,
                     'jobType' => $jobType,
+                    'eventType' => $jobType === 'quote' ? 'Quote' : 'Job',
                 ],
             ];
         }
@@ -480,21 +485,13 @@ final class EventFeed
             };
             $color = $status === 'cancelled' ? '#64748b' : $baseColor;
 
-            $titlePrefix = match ($type) {
-                'appointment' => 'Appt',
-                'cancellation' => 'Cancel',
-                'reminder' => 'Reminder',
-                'note' => 'Note',
-                default => 'Event',
-            };
-
             $linkType = strtolower(trim((string) ($row['link_type'] ?? '')));
             $linkId = (int) ($row['link_id'] ?? 0);
             $customerName = ($linkType === 'job' && $linkId > 0) ? ($jobCustomerNames[$linkId] ?? '') : '';
 
             $events[] = [
                 'id' => 'event:' . $id,
-                'title' => $titlePrefix . ': ' . (string) ($row['title'] ?? ('Event #' . $id)),
+                'title' => (string) ($row['title'] ?? ('Event #' . $id)),
                 'start' => self::toIso($startAt),
                 'end' => $endAt !== '' ? self::toIso($endAt) : null,
                 'allDay' => ((int) ($row['all_day'] ?? 0)) === 1,
@@ -507,6 +504,13 @@ final class EventFeed
                     'jtStatus' => $status,
                     'jtId' => $id,
                     'customerName' => $customerName,
+                    'eventType' => match ($type) {
+                        'appointment' => 'Appointment',
+                        'cancellation' => 'Cancellation',
+                        'reminder' => 'Reminder',
+                        'note' => 'Note',
+                        default => 'Event',
+                    },
                 ],
             ];
         }

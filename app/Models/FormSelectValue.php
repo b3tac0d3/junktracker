@@ -53,7 +53,7 @@ final class FormSelectValue
                     'job_type' => [
                         'label' => 'Job Type',
                         'hint' => 'Used on job create/edit forms and job details.',
-                        'defaults' => ['quote'],
+                        'defaults' => ['removal', 'cleanout', 'demo', 'haul_away'],
                     ],
                     'job_status' => [
                         'label' => 'Job Status',

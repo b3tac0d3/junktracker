@@ -23,6 +23,7 @@ final class JobsController extends Controller
 
         $search = trim((string) ($_GET['q'] ?? ''));
         $status = strtolower(trim((string) ($_GET['status'] ?? 'dispatch')));
+        $jobType = trim((string) ($_GET['job_type'] ?? ''));
         $fromDate = trim((string) ($_GET['from_date'] ?? date('Y-01-01')));
         $toDate = trim((string) ($_GET['to_date'] ?? date('Y-12-31')));
         $sortBy = strtolower(trim((string) ($_GET['sort_by'] ?? 'date')));
@@ -42,6 +43,19 @@ final class JobsController extends Controller
         }
         $businessId = current_business_id();
         $statusOptions = $this->jobStatusOptions($businessId);
+        $jobTypeOptions = FormSelectValue::optionsForSection($businessId, 'job_type');
+        $jobTypeMap = ['' => 'All'];
+        foreach ($jobTypeOptions as $jobTypeOptionRaw) {
+            $jobTypeOption = trim((string) $jobTypeOptionRaw);
+            if ($jobTypeOption === '') {
+                continue;
+            }
+            $jobTypeMap[strtolower($jobTypeOption)] = $jobTypeOption;
+        }
+        $jobType = strtolower($jobType);
+        if (!array_key_exists($jobType, $jobTypeMap)) {
+            $jobType = '';
+        }
         $allowedStatuses = array_merge(['dispatch'], $statusOptions);
         if ($status !== '' && !in_array($status, $allowedStatuses, true)) {
             $status = 'dispatch';
@@ -49,21 +63,23 @@ final class JobsController extends Controller
 
         $perPage = pagination_per_page($_GET['per_page'] ?? null);
         $page = pagination_current_page($_GET['page'] ?? null);
-        $totalRows = Job::indexCount($businessId, $search, $status, $fromDate, $toDate);
+        $totalRows = Job::indexCount($businessId, $search, $status, $jobType, $fromDate, $toDate);
         $totalPages = pagination_total_pages($totalRows, $perPage);
         if ($page > $totalPages) {
             $page = $totalPages;
         }
         $offset = pagination_offset($page, $perPage);
 
-        $jobs = Job::indexList($businessId, $search, $status, $perPage, $offset, $fromDate, $toDate, $sortBy, $sortDir);
-        $filteredSummary = Job::filteredSummary($businessId, $search, $status, $fromDate, $toDate);
+        $jobs = Job::indexList($businessId, $search, $status, $jobType, $perPage, $offset, $fromDate, $toDate, $sortBy, $sortDir);
+        $filteredSummary = Job::filteredSummary($businessId, $search, $status, $jobType, $fromDate, $toDate);
         $pagination = pagination_meta($page, $perPage, $totalRows, count($jobs));
 
         $this->render('jobs/index', [
             'pageTitle' => 'Jobs',
             'search' => $search,
             'status' => $status,
+            'jobType' => $jobType,
+            'jobTypeOptions' => $jobTypeMap,
             'fromDate' => $fromDate,
             'toDate' => $toDate,
             'statusOptions' => $statusOptions,
@@ -361,7 +377,11 @@ final class JobsController extends Controller
             return;
         }
 
-        Job::update($businessId, $jobId, $this->payloadForSave($form), auth_user_id() ?? 0);
+        $actorUserId = (int) (auth_user_id() ?? 0);
+        $previousStatus = strtolower(trim((string) ($job['status'] ?? 'pending')));
+        $nextStatus = strtolower(trim((string) ($form['status'] ?? 'pending')));
+        Job::update($businessId, $jobId, $this->payloadForSave($form), $actorUserId);
+        $this->syncEstimatesForJobStatusChange($businessId, $jobId, $previousStatus, $nextStatus, $actorUserId);
         flash('success', 'Job updated.');
         redirect('/jobs/' . (string) $jobId);
     }
@@ -500,6 +520,7 @@ final class JobsController extends Controller
 
         $actor = (int) (auth_user_id() ?? 0);
         if (Job::updateStatus($businessId, $jobId, $status, $actor)) {
+            $this->syncEstimatesForJobStatusChange($businessId, $jobId, $current, $status, $actor);
             flash('success', 'Job status updated.');
         } else {
             flash('error', 'Could not update status.');
@@ -1766,6 +1787,37 @@ final class JobsController extends Controller
             'link_type' => 'job',
             'link_id' => $jobId,
         ], $actorUserId);
+    }
+
+    private function syncEstimatesForJobStatusChange(
+        int $businessId,
+        int $jobId,
+        string $fromStatus,
+        string $toStatus,
+        int $actorUserId
+    ): void {
+        $from = strtolower(trim($fromStatus));
+        $to = strtolower(trim($toStatus));
+        if ($jobId <= 0 || $to === '' || $from === $to) {
+            return;
+        }
+        if (in_array($to, ['pending', 'active'], true)) {
+            return;
+        }
+
+        $targetEstimateStatus = $to === 'complete' ? 'converted' : 'declined';
+        $estimates = Invoice::listByJobAndType($businessId, $jobId, 'estimate');
+        foreach ($estimates as $estimate) {
+            if (!is_array($estimate)) {
+                continue;
+            }
+            $estimateId = (int) ($estimate['id'] ?? 0);
+            if ($estimateId <= 0) {
+                continue;
+            }
+
+            Invoice::updateStatus($businessId, $estimateId, 'estimate', $targetEstimateStatus, $actorUserId);
+        }
     }
 
     private function json(array $payload, int $status = 200): never

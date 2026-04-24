@@ -60,16 +60,18 @@ final class ClientDelivery
 
         $query = trim($search);
         $status = strtolower(trim($status));
-        $allowedStatuses = self::statusOptions();
-        if ($status !== '' && !in_array($status, $allowedStatuses, true)) {
-            $status = '';
+        $allowedStatuses = array_merge(['dispatch', ''], self::statusOptions());
+        if (!in_array($status, $allowedStatuses, true)) {
+            $status = 'dispatch';
         }
 
         $where = [
             'd.business_id = :business_id',
             'd.deleted_at IS NULL',
         ];
-        if ($status !== '') {
+        if ($status === 'dispatch') {
+            $where[] = "LOWER(d.status) IN ('need_to_schedule', 'scheduled')";
+        } elseif ($status !== '') {
             $where[] = 'LOWER(d.status) = :status';
         }
 
@@ -124,7 +126,7 @@ final class ClientDelivery
         $stmt = Database::connection()->prepare($sql);
         $queryLike = '%' . $query . '%';
         $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
-        if ($status !== '') {
+        if ($status !== '' && $status !== 'dispatch') {
             $stmt->bindValue(':status', $status);
         }
         $stmt->bindValue(':query', $query);
@@ -152,16 +154,18 @@ final class ClientDelivery
 
         $query = trim($search);
         $status = strtolower(trim($status));
-        $allowedStatuses = self::statusOptions();
-        if ($status !== '' && !in_array($status, $allowedStatuses, true)) {
-            $status = '';
+        $allowedStatuses = array_merge(['dispatch', ''], self::statusOptions());
+        if (!in_array($status, $allowedStatuses, true)) {
+            $status = 'dispatch';
         }
 
         $where = [
             'd.business_id = :business_id',
             'd.deleted_at IS NULL',
         ];
-        if ($status !== '') {
+        if ($status === 'dispatch') {
+            $where[] = "LOWER(d.status) IN ('need_to_schedule', 'scheduled')";
+        } elseif ($status !== '') {
             $where[] = 'LOWER(d.status) = :status';
         }
 
@@ -189,7 +193,7 @@ final class ClientDelivery
         $stmt = Database::connection()->prepare($sql);
         $queryLike = '%' . $query . '%';
         $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
-        if ($status !== '') {
+        if ($status !== '' && $status !== 'dispatch') {
             $stmt->bindValue(':status', $status);
         }
         $stmt->bindValue(':query', $query);

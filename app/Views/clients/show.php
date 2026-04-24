@@ -63,6 +63,13 @@ $addressRegion = implode(', ', array_filter([
     trim((string) ($client['state'] ?? '')),
     trim((string) ($client['postal_code'] ?? '')),
 ], static fn (string $value): bool => $value !== ''));
+$mapsAddressUrl = maps_directions_url_from_parts([
+    (string) ($client['address_line1'] ?? ''),
+    (string) ($client['address_line2'] ?? ''),
+    (string) ($client['city'] ?? ''),
+    (string) ($client['state'] ?? ''),
+    (string) ($client['postal_code'] ?? ''),
+]);
 if ($addressStreet === '' && $addressRegion === '') {
     $addressStreet = '—';
 }
@@ -202,9 +209,20 @@ $isInactive = $clientStatus === 'inactive' || (array_key_exists('is_active', $cl
             <div class="record-field">
                 <span class="record-label">Full Address</span>
                 <span class="record-value record-value-stack">
-                    <span><?= e($addressStreet) ?></span>
-                    <?php if ($addressRegion !== ''): ?>
-                        <span><?= e($addressRegion) ?></span>
+                    <?php if ($mapsAddressUrl !== '' && $addressStreet !== '—'): ?>
+                        <a href="<?= e($mapsAddressUrl) ?>" target="_blank" rel="noopener noreferrer">
+                            <?= e($addressStreet) ?>
+                        </a>
+                        <?php if ($addressRegion !== ''): ?>
+                            <a href="<?= e($mapsAddressUrl) ?>" target="_blank" rel="noopener noreferrer">
+                                <?= e($addressRegion) ?>
+                            </a>
+                        <?php endif; ?>
+                    <?php else: ?>
+                        <span><?= e($addressStreet) ?></span>
+                        <?php if ($addressRegion !== ''): ?>
+                            <span><?= e($addressRegion) ?></span>
+                        <?php endif; ?>
                     <?php endif; ?>
                 </span>
             </div>

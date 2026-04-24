@@ -153,6 +153,15 @@ if ($normalizedQuickStatusOptions !== []) {
     $quickStatusOptions = $normalizedQuickStatusOptions;
 }
 $currentStatus = strtolower(trim((string) ($invoice['status'] ?? '')));
+$askConvert = isset($_GET['ask_convert']) && $_GET['ask_convert'] === '1';
+$convertToInvoiceUrl = '';
+if ($docType === 'estimate') {
+    unset($quickStatusOptions['converted']);
+    $convertToInvoiceUrl = url('/billing/create') . '?type=invoice&from_estimate_id=' . (string) $recordId;
+    if ($fromJob && $jobBackId > 0) {
+        $convertToInvoiceUrl .= '&from=job&job_id=' . (string) $jobBackId;
+    }
+}
 ?>
 
 <style>
@@ -230,12 +239,6 @@ $currentStatus = strtolower(trim((string) ($invoice['status'] ?? '')));
                     <?php endforeach; ?>
                 <?php endif; ?>
                 <?php if ($docType === 'estimate'): ?>
-                    <?php
-                    $convertToInvoiceUrl = url('/billing/create') . '?type=invoice&from_estimate_id=' . (string) $recordId;
-                    if ($fromJob && $jobBackId > 0) {
-                        $convertToInvoiceUrl .= '&from=job&job_id=' . (string) $jobBackId;
-                    }
-                    ?>
                     <li><a class="dropdown-item" href="<?= e($convertToInvoiceUrl) ?>"><i class="fas fa-file-invoice me-2"></i>Convert to Invoice</a></li>
                 <?php endif; ?>
                 <?php if ($docType === 'invoice'): ?>
@@ -255,6 +258,15 @@ $currentStatus = strtolower(trim((string) ($invoice['status'] ?? '')));
         <a class="btn btn-outline-secondary w-100 w-md-auto" href="<?= e($backUrl) ?>"><?= e($backLabel) ?></a>
     </div>
 </div>
+
+<?php if ($docType === 'estimate' && $currentStatus === 'approved'): ?>
+    <section class="alert alert-success d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+        <div>Estimate is approved. Convert it to an invoice to close it out and remove future follow-up reminders.</div>
+        <a class="btn btn-success btn-sm" href="<?= e($convertToInvoiceUrl) ?>">
+            <i class="fas fa-file-invoice me-1"></i>Convert to Invoice
+        </a>
+    </section>
+<?php endif; ?>
 
 <section class="card index-card print-card print-page mb-3">
     <div class="card-body">
@@ -443,3 +455,14 @@ $currentStatus = strtolower(trim((string) ($invoice['status'] ?? '')));
         <?php endif; ?>
     </div>
 </section>
+
+<?php if ($docType === 'estimate' && $currentStatus === 'approved' && $askConvert && $convertToInvoiceUrl !== ''): ?>
+    <script>
+    window.addEventListener('DOMContentLoaded', () => {
+        const shouldConvert = window.confirm('Estimate approved. Convert it to an invoice now?');
+        if (shouldConvert) {
+            window.location.href = <?= json_encode($convertToInvoiceUrl) ?>;
+        }
+    });
+    </script>
+<?php endif; ?>

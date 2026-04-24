@@ -2,7 +2,7 @@
 $pageTitle = isset($pageTitle) ? (string) $pageTitle : 'JunkTracker';
 $publicPage = (bool) ($publicPage ?? false);
 $user = auth_user();
-$appVersion = (string) config('app.version', '1.6.4-beta');
+$appVersion = (string) config('app.version', '1.7.0');
 $workspaceRole = workspace_role();
 $businessId = current_business_id();
 $isGlobalSiteAdminContext = is_site_admin() && $businessId <= 0;
@@ -17,7 +17,7 @@ $navNotifications = is_array($navNotifications ?? null) ? $navNotifications : ['
 <head>
     <meta charset="utf-8" />
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, shrink-to-fit=no" />
     <meta name="robots" content="noindex, nofollow" />
     <title><?= e($pageTitle) ?> - JunkTracker</title>
     <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
@@ -55,6 +55,27 @@ $navNotifications = is_array($navNotifications ?? null) ? $navNotifications : ['
                             <button class="btn btn-primary" type="submit"><i class="fas fa-search"></i></button>
                         </div>
                     </form>
+                </li>
+                <li class="nav-item dropdown d-md-none">
+                    <a
+                        class="nav-link"
+                        id="mobileSearchDropdown"
+                        href="#"
+                        role="button"
+                        data-bs-toggle="dropdown"
+                        aria-expanded="false"
+                        title="Search"
+                    >
+                        <i class="fas fa-search fa-fw" aria-hidden="true"></i>
+                    </a>
+                    <div class="dropdown-menu dropdown-menu-end p-2" aria-labelledby="mobileSearchDropdown" style="min-width: 280px;">
+                        <form method="get" action="<?= e(url('/search')) ?>">
+                            <div class="input-group input-group-sm">
+                                <input class="form-control" type="text" name="global_q" value="<?= e($globalSearchQuery) ?>" placeholder="Search..." aria-label="Search" autocomplete="off" />
+                                <button class="btn btn-primary" type="submit"><i class="fas fa-search"></i></button>
+                            </div>
+                        </form>
+                    </div>
                 </li>
             <?php endif; ?>
             <?php if (!$isGlobalSiteAdminContext && !$isPunchOnlyWorkspace): ?>
@@ -185,6 +206,7 @@ $navNotifications = is_array($navNotifications ?? null) ? $navNotifications : ['
                                 <div class="sb-sidenav-menu-heading">Core</div>
                                 <a class="nav-link" href="<?= e(url('/clients')) ?>"><div class="sb-nav-link-icon"><i class="fas fa-users"></i></div>Clients</a>
                                 <a class="nav-link" href="<?= e(url('/jobs')) ?>"><div class="sb-nav-link-icon"><i class="fas fa-briefcase"></i></div>Jobs</a>
+                                <a class="nav-link" href="<?= e(url('/quotes')) ?>"><div class="sb-nav-link-icon"><i class="fas fa-file-signature"></i></div>Quotes</a>
                                 <a class="nav-link" href="<?= e(url('/sales')) ?>"><div class="sb-nav-link-icon"><i class="fas fa-sack-dollar"></i></div>Sales</a>
                                 <a class="nav-link" href="<?= e(url('/purchases')) ?>"><div class="sb-nav-link-icon"><i class="fas fa-cart-arrow-down"></i></div>Purchases</a>
                                 <a class="nav-link" href="<?= e(url('/deliveries')) ?>"><div class="sb-nav-link-icon"><i class="fas fa-truck"></i></div>Deliveries</a>

@@ -1,6 +1,7 @@
 <?php
 $search = trim((string) ($search ?? ''));
 $status = strtolower(trim((string) ($status ?? 'dispatch')));
+$jobType = strtolower(trim((string) ($jobType ?? '')));
 $fromDate = trim((string) ($fromDate ?? date('Y-01-01')));
 $toDate = trim((string) ($toDate ?? date('Y-12-31')));
 $sortBy = strtolower(trim((string) ($sortBy ?? 'date')));
@@ -23,6 +24,19 @@ foreach ($statusOptionsRaw as $statusOptionRaw) {
         continue;
     }
     $statusOptions[$statusOption] = ucwords(str_replace('_', ' ', $statusOption));
+}
+$jobTypeOptionsRaw = is_array($jobTypeOptions ?? null) ? $jobTypeOptions : ['' => 'All'];
+$jobTypeOptions = ['' => 'All'];
+foreach ($jobTypeOptionsRaw as $jobTypeValue => $jobTypeLabelRaw) {
+    $value = strtolower(trim((string) $jobTypeValue));
+    $label = trim((string) $jobTypeLabelRaw);
+    if ($value === '' || $value === 'quote') {
+        continue;
+    }
+    if ($label === '') {
+        $label = ucwords(str_replace('_', ' ', $value));
+    }
+    $jobTypeOptions[$value] = $label;
 }
 ?>
 
@@ -72,15 +86,23 @@ foreach ($statusOptionsRaw as $statusOptionRaw) {
             <input type="hidden" name="page" value="1">
             <input type="hidden" name="per_page" value="<?= e((string) $perPage) ?>">
             <div class="row g-3 align-items-end">
-                <div class="col-12 col-md-8">
+                <div class="col-12 col-md-6">
                     <label class="form-label fw-semibold" for="jobs-search">Search</label>
                     <input id="jobs-search" class="form-control" name="q" value="<?= e($search) ?>" placeholder="Search by job, client, city, or id..." />
                 </div>
-                <div class="col-12 col-md-4">
+                <div class="col-12 col-md-3">
                     <label class="form-label fw-semibold" for="jobs-status">Status</label>
                     <select id="jobs-status" class="form-select" name="status">
                         <?php foreach ($statusOptions as $value => $label): ?>
                             <option value="<?= e($value) ?>" <?= $status === $value ? 'selected' : '' ?>><?= e($label) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="col-12 col-md-3">
+                    <label class="form-label fw-semibold" for="jobs-job-type">Job Type</label>
+                    <select id="jobs-job-type" class="form-select" name="job_type">
+                        <?php foreach ($jobTypeOptions as $value => $label): ?>
+                            <option value="<?= e($value) ?>" <?= $jobType === (string) $value ? 'selected' : '' ?>><?= e($label) ?></option>
                         <?php endforeach; ?>
                     </select>
                 </div>

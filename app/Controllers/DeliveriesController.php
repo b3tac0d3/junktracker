@@ -16,7 +16,7 @@ final class DeliveriesController extends Controller
         require_business_role(['general_user', 'admin']);
 
         $search = trim((string) ($_GET['q'] ?? ''));
-        $status = strtolower(trim((string) ($_GET['status'] ?? '')));
+        $status = strtolower(trim((string) ($_GET['status'] ?? 'dispatch')));
         $sortBy = strtolower(trim((string) ($_GET['sort_by'] ?? 'scheduled_at')));
         $sortDir = strtolower(trim((string) ($_GET['sort_dir'] ?? 'asc')));
         if (!in_array($sortBy, ['scheduled_at', 'id', 'client_name'], true)) {
@@ -28,8 +28,9 @@ final class DeliveriesController extends Controller
 
         $businessId = current_business_id();
         $statusOptions = ClientDelivery::statusOptions();
-        if ($status !== '' && !in_array($status, $statusOptions, true)) {
-            $status = '';
+        $allowedFilterStatuses = array_merge(['dispatch', ''], $statusOptions);
+        if (!in_array($status, $allowedFilterStatuses, true)) {
+            $status = 'dispatch';
         }
 
         $perPage = pagination_per_page($_GET['per_page'] ?? null);

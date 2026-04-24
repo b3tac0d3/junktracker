@@ -44,6 +44,7 @@ final class Job
         int $businessId,
         string $search = '',
         string $status = '',
+        string $jobType = '',
         int $limit = 25,
         int $offset = 0,
         ?string $fromDate = null,
@@ -59,6 +60,7 @@ final class Job
         $pdo = Database::connection();
         $query = trim($search);
         $status = strtolower(trim($status));
+        $jobType = strtolower(trim($jobType));
 
         $titleSql = SchemaInspector::hasColumn('jobs', 'title')
             ? 'j.title'
@@ -95,6 +97,9 @@ final class Job
             } else {
                 $where[] = 'LOWER(' . $statusSql . ') = :status';
             }
+        }
+        if ($jobType !== '' && $jobTypeSql !== 'NULL') {
+            $where[] = 'LOWER(COALESCE(' . $jobTypeSql . ", '')) = :job_type";
         }
         if ($fromDate !== null && trim($fromDate) !== '') {
             $where[] = "{$filterDateSql} >= :from_date";
@@ -144,6 +149,9 @@ final class Job
         if ($status !== '' && $status !== 'dispatch') {
             $stmt->bindValue(':status', $status);
         }
+        if ($jobType !== '' && $jobTypeSql !== 'NULL') {
+            $stmt->bindValue(':job_type', $jobType);
+        }
         if ($fromDate !== null && trim($fromDate) !== '') {
             $stmt->bindValue(':from_date', $fromDate);
         }
@@ -167,6 +175,7 @@ final class Job
         int $businessId,
         string $search = '',
         string $status = '',
+        string $jobType = '',
         ?string $fromDate = null,
         ?string $toDate = null
     ): array {
@@ -176,7 +185,9 @@ final class Job
 
         $query = trim($search);
         $status = strtolower(trim($status));
+        $jobType = strtolower(trim($jobType));
         $statusSql = SchemaInspector::hasColumn('jobs', 'status') ? 'j.status' : "'pending'";
+        $jobTypeSql = SchemaInspector::hasColumn('jobs', 'job_type') ? 'j.job_type' : 'NULL';
         $createdDateSql = SchemaInspector::hasColumn('jobs', 'created_at') ? 'DATE(j.created_at)' : 'CURDATE()';
         $scheduledDateSql = SchemaInspector::hasColumn('jobs', 'scheduled_start_at')
             ? 'DATE(j.scheduled_start_at)'
@@ -238,6 +249,9 @@ final class Job
                 $where[] = 'LOWER(' . $statusSql . ') = :status';
             }
         }
+        if ($jobType !== '' && $jobTypeSql !== 'NULL') {
+            $where[] = 'LOWER(COALESCE(' . $jobTypeSql . ", '')) = :job_type";
+        }
         if ($fromDate !== null && trim($fromDate) !== '') {
             $where[] = "{$filterDateSql} >= :from_date";
         }
@@ -269,6 +283,9 @@ final class Job
         }
         if ($status !== '' && $status !== 'dispatch') {
             $stmt->bindValue(':status', $status);
+        }
+        if ($jobType !== '' && $jobTypeSql !== 'NULL') {
+            $stmt->bindValue(':job_type', $jobType);
         }
         if ($fromDate !== null && trim($fromDate) !== '') {
             $stmt->bindValue(':from_date', $fromDate);
@@ -470,6 +487,7 @@ final class Job
         int $businessId,
         string $search = '',
         string $status = '',
+        string $jobType = '',
         ?string $fromDate = null,
         ?string $toDate = null
     ): int
@@ -480,6 +498,7 @@ final class Job
 
         $query = trim($search);
         $status = strtolower(trim($status));
+        $jobType = strtolower(trim($jobType));
 
         $titleSql = SchemaInspector::hasColumn('jobs', 'title')
             ? 'j.title'
@@ -512,6 +531,9 @@ final class Job
                 $where[] = 'LOWER(' . $statusSql . ') = :status';
             }
         }
+        if ($jobType !== '' && $jobTypeSql !== 'NULL') {
+            $where[] = 'LOWER(COALESCE(' . $jobTypeSql . ", '')) = :job_type";
+        }
         if ($fromDate !== null && trim($fromDate) !== '') {
             $where[] = "{$filterDateSql} >= :from_date";
         }
@@ -538,6 +560,9 @@ final class Job
         }
         if ($status !== '' && $status !== 'dispatch') {
             $stmt->bindValue(':status', $status);
+        }
+        if ($jobType !== '' && $jobTypeSql !== 'NULL') {
+            $stmt->bindValue(':job_type', $jobType);
         }
         if ($fromDate !== null && trim($fromDate) !== '') {
             $stmt->bindValue(':from_date', $fromDate);

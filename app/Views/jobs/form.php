@@ -32,6 +32,9 @@ if ($statusOptions === []) {
 $jobTypeOptions = [];
 foreach ($jobTypeOptionsRaw as $jobTypeOptionRaw) {
     $jobTypeOption = trim((string) $jobTypeOptionRaw);
+    if (strtolower($jobTypeOption) === 'quote') {
+        continue;
+    }
     if ($jobTypeOption === '' || in_array($jobTypeOption, $jobTypeOptions, true)) {
         continue;
     }

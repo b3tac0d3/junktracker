@@ -84,6 +84,7 @@ final class BillingController extends Controller
         $businessId = current_business_id();
         $clientOptions = Invoice::clientOptions($businessId);
         $jobOptions = Invoice::jobOptions($businessId);
+        $quoteOptions = Invoice::quoteOptions($businessId);
         $form = $this->defaultForm();
         $documentType = 'invoice';
 
@@ -123,6 +124,16 @@ final class BillingController extends Controller
             }
         }
 
+        $requestedQuoteId = (int) ($_GET['quote_id'] ?? 0);
+        if ($requestedQuoteId > 0) {
+            foreach ($quoteOptions as $row) {
+                if ((int) ($row['id'] ?? 0) === $requestedQuoteId) {
+                    $form['quote_id'] = (string) $requestedQuoteId;
+                    break;
+                }
+            }
+        }
+
         $sourceEstimateId = (int) ($_GET['from_estimate_id'] ?? 0);
         if ($sourceEstimateId > 0) {
             $sourceEstimate = Invoice::findForBusiness($businessId, $sourceEstimateId);
@@ -154,6 +165,7 @@ final class BillingController extends Controller
             'errors' => [],
             'clientOptions' => $clientOptions,
             'jobOptions' => $jobOptions,
+            'quoteOptions' => $quoteOptions,
             'invoiceItemTypes' => InvoiceItemType::activeOptions($businessId),
             'documentType' => $documentType,
             'estimateStatusOptions' => $this->estimateStatusOptions(),
@@ -175,9 +187,10 @@ final class BillingController extends Controller
         $businessId = current_business_id();
         $clientOptions = Invoice::clientOptions($businessId);
         $jobOptions = Invoice::jobOptions($businessId);
+        $quoteOptions = Invoice::quoteOptions($businessId);
         $invoiceItemTypes = InvoiceItemType::activeOptions($businessId);
         $form = $this->formFromPost($_POST);
-        $errors = $this->validateForm($form, $clientOptions, $jobOptions, $invoiceItemTypes);
+        $errors = $this->validateForm($form, $clientOptions, $jobOptions, $quoteOptions, $invoiceItemTypes);
         if ($errors !== []) {
             $this->render('billing/form', [
                 'pageTitle' => $form['type'] === 'estimate' ? 'Add Estimate' : 'Add Invoice',
@@ -187,6 +200,7 @@ final class BillingController extends Controller
                 'errors' => $errors,
                 'clientOptions' => $clientOptions,
                 'jobOptions' => $jobOptions,
+                'quoteOptions' => $quoteOptions,
                 'invoiceItemTypes' => $invoiceItemTypes,
                 'documentType' => $form['type'],
                 'estimateStatusOptions' => $this->estimateStatusOptions(),
@@ -249,6 +263,7 @@ final class BillingController extends Controller
             'errors' => [],
             'clientOptions' => Invoice::clientOptions($businessId),
             'jobOptions' => Invoice::jobOptions($businessId),
+            'quoteOptions' => Invoice::quoteOptions($businessId),
             'invoiceItemTypes' => InvoiceItemType::activeOptions($businessId),
             'invoiceId' => $invoiceId,
             'documentType' => strtolower((string) ($invoice['type'] ?? 'invoice')) === 'estimate' ? 'estimate' : 'invoice',
@@ -286,9 +301,10 @@ final class BillingController extends Controller
 
         $clientOptions = Invoice::clientOptions($businessId);
         $jobOptions = Invoice::jobOptions($businessId);
+        $quoteOptions = Invoice::quoteOptions($businessId);
         $invoiceItemTypes = InvoiceItemType::activeOptions($businessId);
         $form = $this->formFromPost($_POST);
-        $errors = $this->validateForm($form, $clientOptions, $jobOptions, $invoiceItemTypes);
+        $errors = $this->validateForm($form, $clientOptions, $jobOptions, $quoteOptions, $invoiceItemTypes);
         if ($errors !== []) {
             $this->render('billing/form', [
                 'pageTitle' => $form['type'] === 'estimate' ? 'Edit Estimate' : 'Edit Invoice',
@@ -298,6 +314,7 @@ final class BillingController extends Controller
                 'errors' => $errors,
                 'clientOptions' => $clientOptions,
                 'jobOptions' => $jobOptions,
+                'quoteOptions' => $quoteOptions,
                 'invoiceItemTypes' => $invoiceItemTypes,
                 'invoiceId' => $invoiceId,
                 'documentType' => $form['type'],
@@ -638,7 +655,11 @@ final class BillingController extends Controller
             flash('error', 'Unable to update status.');
         }
 
-        redirect('/billing/' . (string) $invoiceId . $backSuffix);
+        $target = '/billing/' . (string) $invoiceId . $backSuffix;
+        if ($updated && $type === 'estimate' && $status === 'approved') {
+            $target .= (str_contains($target, '?') ? '&' : '?') . 'ask_convert=1';
+        }
+        redirect($target);
     }
 
     public function createPayment(): void
@@ -994,6 +1015,7 @@ final class BillingController extends Controller
             'invoice_number' => '',
             'client_id' => '',
             'job_id' => '',
+            'quote_id' => '',
             'issue_date' => $today,
             'due_date' => $today,
             'subtotal' => '0.00',
@@ -1343,6 +1365,7 @@ final class BillingController extends Controller
             'invoice_number' => trim((string) ($invoice['invoice_number'] ?? '')),
             'client_id' => (string) ((int) ($invoice['client_id'] ?? 0)),
             'job_id' => (string) ((int) ($invoice['job_id'] ?? 0)),
+            'quote_id' => (string) ((int) ($invoice['quote_id'] ?? 0)),
             'issue_date' => trim((string) ($invoice['issue_date'] ?? '')),
             'due_date' => trim((string) ($invoice['due_date'] ?? '')),
             'subtotal' => number_format((float) ($invoice['subtotal'] ?? 0), 2, '.', ''),
@@ -1405,6 +1428,7 @@ final class BillingController extends Controller
             'invoice_number' => trim((string) ($input['invoice_number'] ?? '')),
             'client_id' => trim((string) ($input['client_id'] ?? '')),
             'job_id' => trim((string) ($input['job_id'] ?? '')),
+            'quote_id' => trim((string) ($input['quote_id'] ?? '')),
             'issue_date' => trim((string) ($input['issue_date'] ?? '')),
             'due_date' => trim((string) ($input['due_date'] ?? '')),
             'subtotal' => trim((string) ($input['subtotal'] ?? '0')),
@@ -1423,7 +1447,7 @@ final class BillingController extends Controller
         ];
     }
 
-    private function validateForm(array $form, array $clientOptions, array $jobOptions, array $invoiceItemTypes = []): array
+    private function validateForm(array $form, array $clientOptions, array $jobOptions, array $quoteOptions, array $invoiceItemTypes = []): array
     {
         $errors = [];
         $allowedTypes = ['estimate', 'invoice'];
@@ -1433,6 +1457,7 @@ final class BillingController extends Controller
         ];
         $clientIds = array_map(static fn (array $row): int => (int) ($row['id'] ?? 0), $clientOptions);
         $jobIds = array_map(static fn (array $row): int => (int) ($row['id'] ?? 0), $jobOptions);
+        $quoteIds = array_map(static fn (array $row): int => (int) ($row['id'] ?? 0), $quoteOptions);
 
         if (!in_array($form['type'], $allowedTypes, true)) {
             $errors['type'] = 'Choose a valid type.';
@@ -1449,8 +1474,14 @@ final class BillingController extends Controller
         }
 
         $jobId = (int) $form['job_id'];
-        if ($jobId <= 0 || !in_array($jobId, $jobIds, true)) {
-            $errors['job_id'] = 'This record must be linked to a valid job.';
+        $quoteId = (int) $form['quote_id'];
+        $hasValidJob = $jobId > 0 && in_array($jobId, $jobIds, true);
+        $hasValidQuote = $quoteId > 0 && in_array($quoteId, $quoteIds, true);
+        if (!$hasValidJob && !$hasValidQuote) {
+            $errors['job_id'] = 'Link this record to a valid job or quote.';
+        }
+        if ($quoteId > 0 && !$hasValidQuote) {
+            $errors['quote_id'] = 'Choose a valid quote.';
         }
 
         if ($form['issue_date'] !== '' && !$this->isValidDate($form['issue_date'])) {
@@ -1581,6 +1612,7 @@ final class BillingController extends Controller
             'invoice_number' => $form['invoice_number'],
             'client_id' => (int) $form['client_id'],
             'job_id' => (int) $form['job_id'],
+            'quote_id' => (int) $form['quote_id'],
             'issue_date' => $form['issue_date'] !== '' ? $form['issue_date'] : null,
             'due_date' => $form['due_date'] !== '' ? $form['due_date'] : null,
             'subtotal' => $subtotal,

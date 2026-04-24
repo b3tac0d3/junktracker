@@ -75,6 +75,36 @@ final class Invoice
         return is_array($rows) ? $rows : [];
     }
 
+    public static function quoteOptions(int $businessId, int $limit = 300): array
+    {
+        if (!SchemaInspector::hasTable('quotes')) {
+            return [];
+        }
+
+        $businessWhere = SchemaInspector::hasColumn('quotes', 'business_id') ? 'q.business_id = :business_id' : '1=1';
+        $deletedWhere = SchemaInspector::hasColumn('quotes', 'deleted_at') ? 'q.deleted_at IS NULL' : '1=1';
+        $titleSql = SchemaInspector::hasColumn('quotes', 'title') ? 'q.title' : "CONCAT('Quote #', q.id)";
+        $statusSql = SchemaInspector::hasColumn('quotes', 'status') ? 'LOWER(COALESCE(q.status, ""))' : '"new"';
+
+        $sql = "SELECT
+                    q.id,
+                    COALESCE(NULLIF({$titleSql}, ''), CONCAT('Quote #', q.id)) AS title
+                FROM quotes q
+                WHERE {$businessWhere}
+                  AND {$deletedWhere}
+                  AND {$statusSql} IN ('new','sent','follow_up','won')
+                ORDER BY q.id DESC
+                LIMIT :row_limit";
+        $stmt = Database::connection()->prepare($sql);
+        if (SchemaInspector::hasColumn('quotes', 'business_id')) {
+            $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
+        }
+        $stmt->bindValue(':row_limit', max(1, min($limit, 1000)), \PDO::PARAM_INT);
+        $stmt->execute();
+        $rows = $stmt->fetchAll();
+        return is_array($rows) ? $rows : [];
+    }
+
     /**
      * Billing list: hide estimates that are declined, closed, converted, or cancelled.
      */
@@ -1142,12 +1172,13 @@ final class Invoice
 
     public static function create(int $businessId, array $data, int $actorUserId): int
     {
+        $hasQuoteId = SchemaInspector::hasColumn('invoices', 'quote_id');
         $sql = 'INSERT INTO invoices (
-                    business_id, client_id, job_id, type, status, invoice_number,
+                    business_id, client_id, job_id, ' . ($hasQuoteId ? 'quote_id, ' : '') . 'type, status, invoice_number,
                     issue_date, due_date, subtotal, tax_rate, tax_amount, total,
                     customer_note, internal_note, created_by, updated_by, created_at, updated_at
                 ) VALUES (
-                    :business_id, :client_id, :job_id, :type, :status, :invoice_number,
+                    :business_id, :client_id, :job_id, ' . ($hasQuoteId ? ':quote_id, ' : '') . ':type, :status, :invoice_number,
                     :issue_date, :due_date, :subtotal, :tax_rate, :tax_amount, :total,
                     :customer_note, :internal_note, :created_by, :updated_by, NOW(), NOW()
                 )';
@@ -1164,8 +1195,7 @@ final class Invoice
             $invoiceNumber = self::nextBusinessDocumentNumber($businessId, $type);
         }
 
-        $stmt = Database::connection()->prepare($sql);
-        $stmt->execute([
+        $params = [
             'business_id' => $businessId,
             'client_id' => (int) ($data['client_id'] ?? 0),
             'job_id' => (isset($data['job_id']) && (int) $data['job_id'] > 0) ? (int) $data['job_id'] : null,
@@ -1182,7 +1212,12 @@ final class Invoice
             'internal_note' => trim((string) ($data['internal_note'] ?? '')),
             'created_by' => $actorUserId,
             'updated_by' => $actorUserId,
-        ]);
+        ];
+        if ($hasQuoteId) {
+            $params['quote_id'] = (isset($data['quote_id']) && (int) $data['quote_id'] > 0) ? (int) $data['quote_id'] : null;
+        }
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute($params);
 
         return (int) Database::connection()->lastInsertId();
     }
@@ -1190,10 +1225,12 @@ final class Invoice
     public static function update(int $businessId, int $invoiceId, array $data, int $actorUserId): bool
     {
         $deletedWhere = SchemaInspector::hasColumn('invoices', 'deleted_at') ? 'AND deleted_at IS NULL' : '';
+        $hasQuoteId = SchemaInspector::hasColumn('invoices', 'quote_id');
 
         $sql = 'UPDATE invoices
                 SET client_id = :client_id,
                     job_id = :job_id,
+                    ' . ($hasQuoteId ? 'quote_id = :quote_id,' : '') . '
                     type = :type,
                     status = :status,
                     invoice_number = :invoice_number,
@@ -1223,8 +1260,7 @@ final class Invoice
             $invoiceNumber = self::existingInvoiceNumber($businessId, $invoiceId);
         }
 
-        $stmt = Database::connection()->prepare($sql);
-        return $stmt->execute([
+        $params = [
             'client_id' => (int) ($data['client_id'] ?? 0),
             'job_id' => (isset($data['job_id']) && (int) $data['job_id'] > 0) ? (int) $data['job_id'] : null,
             'type' => $type,
@@ -1241,7 +1277,12 @@ final class Invoice
             'updated_by' => $actorUserId,
             'invoice_id' => $invoiceId,
             'business_id' => $businessId,
-        ]);
+        ];
+        if ($hasQuoteId) {
+            $params['quote_id'] = (isset($data['quote_id']) && (int) $data['quote_id'] > 0) ? (int) $data['quote_id'] : null;
+        }
+        $stmt = Database::connection()->prepare($sql);
+        return $stmt->execute($params);
     }
 
     public static function updateStatus(int $businessId, int $invoiceId, string $type, string $status, int $actorUserId): bool

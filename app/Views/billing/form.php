@@ -3,6 +3,7 @@ $form = is_array($form ?? null) ? $form : [];
 $errors = is_array($errors ?? null) ? $errors : [];
 $clientOptions = is_array($clientOptions ?? null) ? $clientOptions : [];
 $jobOptions = is_array($jobOptions ?? null) ? $jobOptions : [];
+$quoteOptions = is_array($quoteOptions ?? null) ? $quoteOptions : [];
 $invoiceItemTypes = is_array($invoiceItemTypes ?? null) ? $invoiceItemTypes : [];
 $mode = (string) ($mode ?? 'create');
 $actionUrl = (string) ($actionUrl ?? url('/billing'));
@@ -89,8 +90,10 @@ $hasError = static function (string $field) use ($errors): bool {
 
 $clientId = (int) ($form['client_id'] ?? 0);
 $jobId = (int) ($form['job_id'] ?? 0);
+$quoteId = (int) ($form['quote_id'] ?? 0);
 $clientName = '—';
 $jobTitle = '—';
+$quoteTitle = '—';
 foreach ($clientOptions as $client) {
     if ((int) ($client['id'] ?? 0) === $clientId) {
         $clientName = trim((string) ($client['name'] ?? '')) ?: ('Client #' . (string) $clientId);
@@ -100,6 +103,12 @@ foreach ($clientOptions as $client) {
 foreach ($jobOptions as $job) {
     if ((int) ($job['id'] ?? 0) === $jobId) {
         $jobTitle = trim((string) ($job['title'] ?? '')) ?: ('Job #' . (string) $jobId);
+        break;
+    }
+}
+foreach ($quoteOptions as $quoteOption) {
+    if ((int) ($quoteOption['id'] ?? 0) === $quoteId) {
+        $quoteTitle = trim((string) ($quoteOption['title'] ?? '')) ?: ('Quote #' . (string) $quoteId);
         break;
     }
 }
@@ -193,6 +202,7 @@ $fromEstimateIdPost = (int) ($_GET['from_estimate_id'] ?? ($_POST['from_estimate
     <input type="hidden" name="type" value="<?= e($documentType) ?>">
     <input type="hidden" name="client_id" value="<?= e((string) $clientId) ?>">
     <input type="hidden" name="job_id" value="<?= e((string) $jobId) ?>">
+    <input type="hidden" name="quote_id" value="<?= e((string) $quoteId) ?>">
     <?php if ($fromEstimateIdPost > 0 && $mode === 'create' && $documentType === 'invoice'): ?>
         <input type="hidden" name="from_estimate_id" value="<?= e((string) $fromEstimateIdPost) ?>">
     <?php endif; ?>
@@ -204,8 +214,8 @@ $fromEstimateIdPost = (int) ($_GET['from_estimate_id'] ?? ($_POST['from_estimate
             <strong><i class="fas fa-file-lines me-2"></i><?= e($documentType === 'estimate' ? 'Estimate Details' : 'Invoice Details') ?></strong>
         </div>
         <div class="card-body">
-            <?php if ($clientId <= 0 || $jobId <= 0): ?>
-                <div class="alert alert-warning mb-3">This document must be created from a job so client and job are locked correctly.</div>
+            <?php if ($clientId <= 0 || ($jobId <= 0 && $quoteId <= 0)): ?>
+                <div class="alert alert-warning mb-3">This document must be created from a job or quote so client linkage is locked correctly.</div>
             <?php endif; ?>
 
             <div class="row g-3">
@@ -219,6 +229,12 @@ $fromEstimateIdPost = (int) ($_GET['from_estimate_id'] ?? ($_POST['from_estimate
                     <label class="form-label fw-semibold">Job</label>
                     <div class="fw-semibold py-2"><?= e($jobTitle) ?></div>
                     <?php if ($hasError('job_id')): ?><div class="invalid-feedback d-block"><?= e($fieldError('job_id')) ?></div><?php endif; ?>
+                </div>
+
+                <div class="col-12 col-lg-6">
+                    <label class="form-label fw-semibold">Quote</label>
+                    <div class="fw-semibold py-2"><?= e($quoteTitle) ?></div>
+                    <?php if ($hasError('quote_id')): ?><div class="invalid-feedback d-block"><?= e($fieldError('quote_id')) ?></div><?php endif; ?>
                 </div>
 
                 <div class="col-12 col-lg-4">

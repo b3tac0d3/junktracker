@@ -1,0 +1,295 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Controllers;
+
+use App\Models\AuditLog;
+use App\Models\Client;
+use App\Models\Job;
+use App\Models\Quote;
+use Core\Controller;
+
+final class QuotesController extends Controller
+{
+    public function index(): void
+    {
+        require_business_role(['general_user', 'admin']);
+
+        $search = trim((string) ($_GET['q'] ?? ''));
+        $status = strtolower(trim((string) ($_GET['status'] ?? 'dispatch')));
+        $businessId = current_business_id();
+        $statusOptions = Quote::statusOptions();
+        $allowed = array_merge(['dispatch', ''], $statusOptions);
+        if (!in_array($status, $allowed, true)) {
+            $status = 'dispatch';
+        }
+
+        $perPage = pagination_per_page($_GET['per_page'] ?? null);
+        $page = pagination_current_page($_GET['page'] ?? null);
+        $totalRows = Quote::indexCount($businessId, $search, $status);
+        $totalPages = pagination_total_pages($totalRows, $perPage);
+        if ($page > $totalPages) {
+            $page = $totalPages;
+        }
+        $offset = pagination_offset($page, $perPage);
+        $quotes = Quote::indexList($businessId, $search, $status, $perPage, $offset);
+        $pagination = pagination_meta($page, $perPage, $totalRows, count($quotes));
+
+        $this->render('quotes/index', [
+            'pageTitle' => 'Quotes',
+            'search' => $search,
+            'status' => $status,
+            'statusOptions' => $statusOptions,
+            'quotes' => $quotes,
+            'pagination' => $pagination,
+        ]);
+    }
+
+    public function create(): void
+    {
+        require_business_role(['general_user', 'admin']);
+
+        $form = $this->defaultForm();
+        $businessId = current_business_id();
+        $requestedClientId = (int) ($_GET['client_id'] ?? 0);
+        if ($requestedClientId > 0) {
+            $client = Client::findForBusiness($businessId, $requestedClientId);
+            if ($client !== null) {
+                $form['client_id'] = (string) $requestedClientId;
+                $form['address_line1'] = trim((string) ($client['address_line1'] ?? ''));
+                $form['address_line2'] = trim((string) ($client['address_line2'] ?? ''));
+                $form['city'] = trim((string) ($client['city'] ?? ''));
+                $form['state'] = trim((string) ($client['state'] ?? ''));
+                $form['postal_code'] = trim((string) ($client['postal_code'] ?? ''));
+            }
+        }
+
+        $this->render('quotes/form', [
+            'pageTitle' => 'Add Quote',
+            'mode' => 'create',
+            'actionUrl' => url('/quotes'),
+            'form' => $form,
+            'errors' => [],
+            'statusOptions' => Quote::statusOptions(),
+            'clientOptions' => Job::clientOptions($businessId),
+        ]);
+    }
+
+    public function store(): void
+    {
+        require_business_role(['general_user', 'admin']);
+        if (!verify_csrf($_POST['csrf_token'] ?? null)) {
+            flash('error', 'Session expired. Please try again.');
+            redirect('/quotes/create');
+        }
+
+        $businessId = current_business_id();
+        $form = $this->formFromPost($_POST);
+        $errors = Quote::validate($form, $businessId);
+        if ($errors !== []) {
+            $this->render('quotes/form', [
+                'pageTitle' => 'Add Quote',
+                'mode' => 'create',
+                'actionUrl' => url('/quotes'),
+                'form' => $form,
+                'errors' => $errors,
+                'statusOptions' => Quote::statusOptions(),
+                'clientOptions' => Job::clientOptions($businessId),
+            ]);
+            return;
+        }
+
+        $actorUserId = (int) (auth_user_id() ?? 0);
+        $quoteId = Quote::create($businessId, $form, $actorUserId);
+        if ($quoteId <= 0) {
+            flash('error', 'Unable to create quote.');
+            redirect('/quotes/create');
+        }
+        AuditLog::write('quote_created', 'quotes', $quoteId, $businessId, $actorUserId, []);
+        flash('success', 'Quote created.');
+        redirect('/quotes/' . (string) $quoteId);
+    }
+
+    public function show(array $params): void
+    {
+        require_business_role(['general_user', 'admin']);
+        $quoteId = (int) ($params['id'] ?? 0);
+        $businessId = current_business_id();
+        $quote = Quote::findForBusiness($businessId, $quoteId);
+        if ($quote === null) {
+            http_response_code(404);
+            $this->render('errors/404', ['pageTitle' => 'Not Found']);
+            return;
+        }
+
+        $estimates = Quote::estimatesByQuote($businessId, $quoteId);
+        $this->render('quotes/show', [
+            'pageTitle' => 'Quote',
+            'quote' => $quote,
+            'estimates' => $estimates,
+        ]);
+    }
+
+    public function edit(array $params): void
+    {
+        require_business_role(['general_user', 'admin']);
+        $quoteId = (int) ($params['id'] ?? 0);
+        $businessId = current_business_id();
+        $quote = Quote::findForBusiness($businessId, $quoteId);
+        if ($quote === null) {
+            http_response_code(404);
+            $this->render('errors/404', ['pageTitle' => 'Not Found']);
+            return;
+        }
+
+        $this->render('quotes/form', [
+            'pageTitle' => 'Edit Quote',
+            'mode' => 'edit',
+            'actionUrl' => url('/quotes/' . (string) $quoteId . '/update'),
+            'form' => $this->formFromModel($quote),
+            'errors' => [],
+            'statusOptions' => Quote::statusOptions(),
+            'clientOptions' => Job::clientOptions($businessId),
+            'quoteId' => $quoteId,
+        ]);
+    }
+
+    public function update(array $params): void
+    {
+        require_business_role(['general_user', 'admin']);
+        if (!verify_csrf($_POST['csrf_token'] ?? null)) {
+            flash('error', 'Session expired. Please try again.');
+            redirect('/quotes');
+        }
+
+        $quoteId = (int) ($params['id'] ?? 0);
+        $businessId = current_business_id();
+        $quote = Quote::findForBusiness($businessId, $quoteId);
+        if ($quote === null) {
+            http_response_code(404);
+            $this->render('errors/404', ['pageTitle' => 'Not Found']);
+            return;
+        }
+
+        $form = $this->formFromPost($_POST);
+        $errors = Quote::validate($form, $businessId);
+        if ($errors !== []) {
+            $this->render('quotes/form', [
+                'pageTitle' => 'Edit Quote',
+                'mode' => 'edit',
+                'actionUrl' => url('/quotes/' . (string) $quoteId . '/update'),
+                'form' => $form,
+                'errors' => $errors,
+                'statusOptions' => Quote::statusOptions(),
+                'clientOptions' => Job::clientOptions($businessId),
+                'quoteId' => $quoteId,
+            ]);
+            return;
+        }
+
+        $actorUserId = (int) (auth_user_id() ?? 0);
+        Quote::update($businessId, $quoteId, $form, $actorUserId);
+        AuditLog::write('quote_updated', 'quotes', $quoteId, $businessId, $actorUserId, []);
+        flash('success', 'Quote updated.');
+        redirect('/quotes/' . (string) $quoteId);
+    }
+
+    public function convertToJob(array $params): void
+    {
+        require_business_role(['general_user', 'admin']);
+        if (!verify_csrf($_POST['csrf_token'] ?? null)) {
+            flash('error', 'Session expired. Please try again.');
+            redirect('/quotes');
+        }
+
+        $quoteId = (int) ($params['id'] ?? 0);
+        $businessId = current_business_id();
+        $actorUserId = (int) (auth_user_id() ?? 0);
+        $jobId = Quote::convertToJob($businessId, $quoteId, $actorUserId);
+        if ($jobId <= 0) {
+            flash('error', 'Unable to convert quote to job.');
+            redirect('/quotes/' . (string) $quoteId);
+        }
+        AuditLog::write('quote_converted_to_job', 'quotes', $quoteId, $businessId, $actorUserId, ['job_id' => $jobId]);
+        flash('success', 'Quote converted to job.');
+        redirect('/jobs/' . (string) $jobId);
+    }
+
+    private function defaultForm(): array
+    {
+        return [
+            'client_id' => '',
+            'title' => '',
+            'status' => 'new',
+            'service_type' => '',
+            'quoted_amount' => '',
+            'notes' => '',
+            'next_follow_up_at' => '',
+            'lost_reason' => '',
+            'source' => '',
+            'priority' => '',
+            'address_line1' => '',
+            'address_line2' => '',
+            'city' => '',
+            'state' => '',
+            'postal_code' => '',
+            'converted_job_id' => '',
+        ];
+    }
+
+    private function formFromPost(array $input): array
+    {
+        return [
+            'client_id' => trim((string) ($input['client_id'] ?? '')),
+            'title' => trim((string) ($input['title'] ?? '')),
+            'status' => strtolower(trim((string) ($input['status'] ?? 'new'))),
+            'service_type' => trim((string) ($input['service_type'] ?? '')),
+            'quoted_amount' => trim((string) ($input['quoted_amount'] ?? '')),
+            'notes' => trim((string) ($input['notes'] ?? '')),
+            'next_follow_up_at' => trim((string) ($input['next_follow_up_at'] ?? '')),
+            'lost_reason' => trim((string) ($input['lost_reason'] ?? '')),
+            'source' => trim((string) ($input['source'] ?? '')),
+            'priority' => trim((string) ($input['priority'] ?? '')),
+            'address_line1' => trim((string) ($input['address_line1'] ?? '')),
+            'address_line2' => trim((string) ($input['address_line2'] ?? '')),
+            'city' => trim((string) ($input['city'] ?? '')),
+            'state' => trim((string) ($input['state'] ?? '')),
+            'postal_code' => trim((string) ($input['postal_code'] ?? '')),
+            'converted_job_id' => trim((string) ($input['converted_job_id'] ?? '')),
+        ];
+    }
+
+    private function formFromModel(array $quote): array
+    {
+        return [
+            'client_id' => (string) ((int) ($quote['client_id'] ?? 0)),
+            'title' => trim((string) ($quote['title'] ?? '')),
+            'status' => strtolower(trim((string) ($quote['status'] ?? 'new'))),
+            'service_type' => trim((string) ($quote['service_type'] ?? '')),
+            'quoted_amount' => trim((string) ($quote['quoted_amount'] ?? '')),
+            'notes' => trim((string) ($quote['notes'] ?? '')),
+            'next_follow_up_at' => $this->toInputDatetime((string) ($quote['next_follow_up_at'] ?? '')),
+            'lost_reason' => trim((string) ($quote['lost_reason'] ?? '')),
+            'source' => trim((string) ($quote['source'] ?? '')),
+            'priority' => trim((string) ($quote['priority'] ?? '')),
+            'address_line1' => trim((string) ($quote['address_line1'] ?? '')),
+            'address_line2' => trim((string) ($quote['address_line2'] ?? '')),
+            'city' => trim((string) ($quote['city'] ?? '')),
+            'state' => trim((string) ($quote['state'] ?? '')),
+            'postal_code' => trim((string) ($quote['postal_code'] ?? '')),
+            'converted_job_id' => (string) ((int) ($quote['converted_job_id'] ?? 0)),
+        ];
+    }
+
+    private function toInputDatetime(string $value): string
+    {
+        $value = trim($value);
+        if ($value === '') {
+            return '';
+        }
+        $ts = strtotime($value);
+        return $ts === false ? '' : date('Y-m-d\TH:i', $ts);
+    }
+}
+

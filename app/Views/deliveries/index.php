@@ -1,16 +1,28 @@
 <?php
 $search = trim((string) ($search ?? ''));
-$status = strtolower(trim((string) ($status ?? '')));
+$status = strtolower(trim((string) ($status ?? 'dispatch')));
 $sortBy = strtolower(trim((string) ($sortBy ?? 'scheduled_at')));
 $sortDir = strtolower(trim((string) ($sortDir ?? 'asc')));
 $deliveries = is_array($deliveries ?? null) ? $deliveries : [];
 $pagination = is_array($pagination ?? null) ? $pagination : pagination_meta(1, 25, count($deliveries), count($deliveries));
 $perPage = (int) ($pagination['per_page'] ?? 25);
-$statusOptions = is_array($statusOptions ?? null) ? $statusOptions : \App\Models\ClientDelivery::statusOptions();
+$statusOptionsRaw = is_array($statusOptions ?? null) ? $statusOptions : \App\Models\ClientDelivery::statusOptions();
 
 $statusLabel = static function (string $value): string {
     return ucwords(str_replace('_', ' ', $value));
 };
+
+$filterStatusOptions = [
+    'dispatch' => 'Dispatch (Need to schedule + Scheduled)',
+    '' => 'All',
+];
+foreach ($statusOptionsRaw as $opt) {
+    $opt = strtolower(trim((string) $opt));
+    if ($opt === '' || array_key_exists($opt, $filterStatusOptions)) {
+        continue;
+    }
+    $filterStatusOptions[$opt] = $statusLabel($opt);
+}
 ?>
 
 <div class="page-header d-flex flex-wrap align-items-end justify-content-between gap-2">
@@ -45,9 +57,8 @@ $statusLabel = static function (string $value): string {
             <div class="col-12 col-lg-2">
                 <label class="form-label fw-semibold" for="deliveries-status">Status</label>
                 <select id="deliveries-status" class="form-select" name="status">
-                    <option value="" <?= $status === '' ? 'selected' : '' ?>>All</option>
-                    <?php foreach ($statusOptions as $opt): ?>
-                        <option value="<?= e($opt) ?>" <?= $status === $opt ? 'selected' : '' ?>><?= e($statusLabel($opt)) ?></option>
+                    <?php foreach ($filterStatusOptions as $value => $label): ?>
+                        <option value="<?= e((string) $value) ?>" <?= $status === $value ? 'selected' : '' ?>><?= e($label) ?></option>
                     <?php endforeach; ?>
                 </select>
             </div>

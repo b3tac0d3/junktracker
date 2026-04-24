@@ -68,6 +68,33 @@ function portal_url(string $token): string
     return url('/portal/' . rawurlencode($token));
 }
 
+function maps_directions_url(string $destination): string
+{
+    $destination = trim($destination);
+    if ($destination === '') {
+        return '';
+    }
+
+    return 'https://www.google.com/maps/dir/?api=1&destination=' . rawurlencode($destination);
+}
+
+/**
+ * @param array<int, string|null> $parts
+ */
+function maps_directions_url_from_parts(array $parts): string
+{
+    $normalized = [];
+    foreach ($parts as $part) {
+        $value = trim((string) $part);
+        if ($value === '') {
+            continue;
+        }
+        $normalized[] = $value;
+    }
+
+    return maps_directions_url(implode(', ', $normalized));
+}
+
 function asset(string $path = ''): string
 {
     $base = url('assets/' . ltrim($path, '/'));

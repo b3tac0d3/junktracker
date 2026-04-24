@@ -17,6 +17,13 @@ $addressRegion = implode(', ', array_filter([
     trim((string) ($job['state'] ?? '')),
     trim((string) ($job['postal_code'] ?? '')),
 ], static fn (string $value): bool => $value !== ''));
+$mapsAddressUrl = maps_directions_url_from_parts([
+    (string) ($job['address_line1'] ?? ''),
+    (string) ($job['address_line2'] ?? ''),
+    (string) ($job['city'] ?? ''),
+    (string) ($job['state'] ?? ''),
+    (string) ($job['postal_code'] ?? ''),
+]);
 if ($addressStreet === '' && $addressRegion === '') {
     $addressStreet = '—';
 }
@@ -210,9 +217,20 @@ $formatDuration = static function (int $minutes): string {
             <div class="record-field record-field-full">
                 <span class="record-label">Address</span>
                 <span class="record-value record-value-stack">
-                    <span><?= e($addressStreet) ?></span>
-                    <?php if ($addressRegion !== ''): ?>
-                        <span><?= e($addressRegion) ?></span>
+                    <?php if ($mapsAddressUrl !== '' && $addressStreet !== '—'): ?>
+                        <a href="<?= e($mapsAddressUrl) ?>" target="_blank" rel="noopener noreferrer">
+                            <?= e($addressStreet) ?>
+                        </a>
+                        <?php if ($addressRegion !== ''): ?>
+                            <a href="<?= e($mapsAddressUrl) ?>" target="_blank" rel="noopener noreferrer">
+                                <?= e($addressRegion) ?>
+                            </a>
+                        <?php endif; ?>
+                    <?php else: ?>
+                        <span><?= e($addressStreet) ?></span>
+                        <?php if ($addressRegion !== ''): ?>
+                            <span><?= e($addressRegion) ?></span>
+                        <?php endif; ?>
                     <?php endif; ?>
                 </span>
             </div>

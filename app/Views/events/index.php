@@ -77,10 +77,10 @@ $pageTitle = 'Events';
         </div>
         <div class="d-md-none jt-calendar-mobile-views mb-3" role="tablist" aria-label="Calendar view">
             <div class="jt-cal-view-segment d-flex rounded-3 overflow-hidden border border-primary border-opacity-25" role="group">
-                <button type="button" class="jt-cal-view-btn flex-fill btn btn-sm border-0 rounded-0 py-2" data-jt-cal-view="timeGridDay">Day</button>
-                <button type="button" class="jt-cal-view-btn flex-fill btn btn-sm border-0 rounded-0 py-2 border-start border-primary border-opacity-25" data-jt-cal-view="timeGridWeek">Week</button>
-                <button type="button" class="jt-cal-view-btn jt-cal-view-btn--active flex-fill btn btn-sm border-0 rounded-0 py-2 border-start border-primary border-opacity-25" data-jt-cal-view="dayGridMonth" aria-pressed="true">Month</button>
-                <button type="button" class="jt-cal-view-btn flex-fill btn btn-sm border-0 rounded-0 py-2 border-start border-primary border-opacity-25" data-jt-cal-view="listWeek">List</button>
+                <button type="button" class="jt-cal-view-btn jt-cal-view-btn--active flex-fill btn btn-sm border-0 rounded-0 py-2" data-jt-cal-view="timeGridDay" aria-pressed="true">Day</button>
+                <button type="button" class="jt-cal-view-btn flex-fill btn btn-sm border-0 rounded-0 py-2 border-start border-primary border-opacity-25" data-jt-cal-view="listWeek">Week</button>
+                <button type="button" class="jt-cal-view-btn flex-fill btn btn-sm border-0 rounded-0 py-2 border-start border-primary border-opacity-25" data-jt-cal-view="dayGridMonth">Month</button>
+                <button type="button" class="jt-cal-view-btn flex-fill btn btn-sm border-0 rounded-0 py-2 border-start border-primary border-opacity-25" data-jt-cal-view="listMonth">List</button>
             </div>
         </div>
         <div id="jt-calendar" class="jt-calendar"></div>
@@ -93,6 +93,7 @@ $pageTitle = 'Events';
 <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
 <script>
 window.addEventListener('DOMContentLoaded', () => {
+  document.body.classList.add('jt-events-page');
   const el = document.getElementById('jt-calendar');
   if (!el || !window.FullCalendar) return;
 
@@ -146,6 +147,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
   const mobileMedia = window.matchMedia('(max-width: 767.98px)');
   const isMobile = mobileMedia.matches;
+  const eventsScreen = document.querySelector('.jt-events-screen');
 
   const syncMobileViewButtons = () => {
     const group = document.querySelector('.jt-calendar-mobile-views');
@@ -161,10 +163,19 @@ window.addEventListener('DOMContentLoaded', () => {
     });
   };
 
+  const syncMobileMonthFullscreen = () => {
+    if (!eventsScreen) {
+      return;
+    }
+    const currentView = calendar?.view?.type || '';
+    const isMonthView = currentView === 'dayGridMonth';
+    eventsScreen.classList.toggle('jt-events-mobile-month-fullscreen', mobileMedia.matches && isMonthView);
+  };
+
   let calendar;
   calendar = new FullCalendar.Calendar(el, {
-    // Mobile: segmented Day / Week / Month / List (iPhone-style); default Month like iOS calendar home
-    initialView: 'dayGridMonth',
+    // Mobile: segmented Day / Week / Month / List; default Day on phones.
+    initialView: isMobile ? 'timeGridDay' : 'dayGridMonth',
     height: 'auto',
     scrollTime: '07:00:00',
     slotMinTime: '05:00:00',
@@ -200,6 +211,7 @@ window.addEventListener('DOMContentLoaded', () => {
     eventDidMount: appendCustomerToEventTitle,
     datesSet: () => {
       syncMobileViewButtons();
+      syncMobileMonthFullscreen();
     },
     events: (info, success, failure) => {
       const params = new URLSearchParams();
@@ -233,8 +245,18 @@ window.addEventListener('DOMContentLoaded', () => {
 
       const customerWrap = document.getElementById('jt-event-quickview-customer-wrap');
       const customerEl = document.getElementById('jt-event-quickview-customer');
+      const typeWrap = document.getElementById('jt-event-quickview-type-wrap');
+      const typeEl = document.getElementById('jt-event-quickview-type');
       const ext = arg.event.extendedProps || {};
       const customerName = String(ext.customerName || '').trim();
+      let eventType = String(ext.eventType || '').trim();
+      if (eventType === '') {
+        const rawId = String(arg.event.id || '');
+        if (rawId.startsWith('task:')) eventType = 'Task';
+        else if (rawId.startsWith('job:')) eventType = 'Job';
+        else if (rawId.startsWith('delivery:')) eventType = 'Delivery';
+        else eventType = 'Event';
+      }
       if (customerWrap && customerEl) {
         if (customerName !== '') {
           customerEl.textContent = customerName;
@@ -243,6 +265,10 @@ window.addEventListener('DOMContentLoaded', () => {
           customerEl.textContent = '';
           customerWrap.classList.add('d-none');
         }
+      }
+      if (typeWrap && typeEl) {
+        typeEl.textContent = eventType;
+        typeWrap.classList.remove('d-none');
       }
 
       const start = arg.event.start;
@@ -287,6 +313,11 @@ window.addEventListener('DOMContentLoaded', () => {
     });
   });
   syncMobileViewButtons();
+  syncMobileMonthFullscreen();
+  mobileMedia.addEventListener('change', () => {
+    syncMobileViewButtons();
+    syncMobileMonthFullscreen();
+  });
 
   const refetch = () => calendar.refetchEvents();
   document.getElementById('jt-src-events')?.addEventListener('change', refetch);
@@ -357,6 +388,10 @@ window.addEventListener('DOMContentLoaded', () => {
             <div id="jt-event-quickview-customer-wrap" class="mb-2 d-none">
                 <div class="small text-uppercase text-muted fw-bold mb-1">Customer</div>
                 <div id="jt-event-quickview-customer" class="small"></div>
+            </div>
+            <div id="jt-event-quickview-type-wrap" class="mb-2 d-none">
+                <div class="small text-uppercase text-muted fw-bold mb-1">Type</div>
+                <div id="jt-event-quickview-type" class="small"></div>
             </div>
             <div class="mb-2">
                 <div class="small text-uppercase text-muted fw-bold mb-1">When</div>

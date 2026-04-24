@@ -242,6 +242,18 @@ if ($selectedState !== '' && !array_key_exists($selectedState, $stateOptions)) {
                 <textarea id="client-primary-note" name="primary_note" class="form-control" rows="4"><?= e((string) ($form['primary_note'] ?? '')) ?></textarea>
             </div>
 
+            <?php if ($mode === 'create'): ?>
+                <?php $nextAction = strtolower(trim((string) ($form['next_action'] ?? ''))); ?>
+                <div class="col-12 col-lg-4">
+                    <label class="form-label fw-semibold" for="client-next-action">Next Step</label>
+                    <select id="client-next-action" name="next_action" class="form-select">
+                        <option value="" <?= $nextAction === '' ? 'selected' : '' ?>>No action</option>
+                        <option value="job" <?= $nextAction === 'job' ? 'selected' : '' ?>>Go to Add Job</option>
+                        <option value="quote" <?= $nextAction === 'quote' ? 'selected' : '' ?>>Go to Add Quote</option>
+                    </select>
+                </div>
+            <?php endif; ?>
+
             <div class="col-12 d-flex gap-2">
                 <button class="btn btn-primary" type="submit"><?= e($mode === 'edit' ? 'Save Changes' : 'Create Client') ?></button>
                 <a class="btn btn-outline-secondary" href="<?= e($mode === 'edit' && isset($clientId) ? url('/clients/' . (string) ((int) $clientId)) : url('/clients')) ?>">Cancel</a>

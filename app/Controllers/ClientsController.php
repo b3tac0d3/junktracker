@@ -148,6 +148,13 @@ final class ClientsController extends Controller
 
         $clientId = Client::create($businessId, $this->payloadForSave($form, true, null), auth_user_id() ?? 0);
         flash('success', 'Client created.');
+        $nextAction = strtolower(trim((string) ($form['next_action'] ?? '')));
+        if ($nextAction === 'job') {
+            redirect('/jobs/create?client_id=' . (string) $clientId);
+        }
+        if ($nextAction === 'quote') {
+            redirect('/quotes/create?client_id=' . (string) $clientId);
+        }
         redirect('/clients/' . (string) $clientId);
     }
 
@@ -613,6 +620,7 @@ final class ClientsController extends Controller
             'newsletter_subscribed' => '0',
             'referred_by_client_id' => '',
             'referrer_display_name' => '',
+            'next_action' => '',
         ];
     }
 
@@ -682,6 +690,7 @@ final class ClientsController extends Controller
             'primary_note' => trim((string) ($input['primary_note'] ?? '')),
             'newsletter_subscribed' => isset($input['newsletter_subscribed']) ? '1' : '0',
             'referred_by_client_id' => trim((string) ($input['referred_by_client_id'] ?? '')),
+            'next_action' => strtolower(trim((string) ($input['next_action'] ?? ''))),
         ];
     }
 

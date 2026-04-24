@@ -21,6 +21,7 @@ use App\Controllers\ExpensesController;
 use App\Controllers\HomeController;
 use App\Controllers\JobsController;
 use App\Controllers\PurchasesController;
+use App\Controllers\QuotesController;
 use App\Controllers\ReportsController;
 use App\Controllers\SettingsController;
 use App\Controllers\SiteAdminController;
@@ -126,6 +127,14 @@ $router->post('/jobs/{id}/employees/{employeeId}/punch-out', [JobsController::cl
 $router->post('/jobs/{id}/closeout', [JobsController::class, 'saveCloseout']);
 $router->post('/jobs/{id}/quick-status', [JobsController::class, 'quickStatus']);
 $router->get('/jobs/{id}', [JobsController::class, 'show']);
+
+$router->get('/quotes', [QuotesController::class, 'index']);
+$router->get('/quotes/create', [QuotesController::class, 'create']);
+$router->post('/quotes', [QuotesController::class, 'store']);
+$router->get('/quotes/{id}/edit', [QuotesController::class, 'edit']);
+$router->post('/quotes/{id}/update', [QuotesController::class, 'update']);
+$router->post('/quotes/{id}/convert-to-job', [QuotesController::class, 'convertToJob']);
+$router->get('/quotes/{id}', [QuotesController::class, 'show']);
 
 $router->get('/tasks', [TasksController::class, 'index']);
 $router->get('/tasks/create', [TasksController::class, 'create']);

@@ -356,7 +356,7 @@ $employeeDisplayName = static function (array $row): string {
     <section class="card index-card">
         <div class="card-header index-card-header d-flex align-items-center justify-content-between">
             <strong><i class="fas fa-file-signature me-2 jt-dashboard-icon--service" aria-hidden="true"></i>Outstanding Quotes</strong>
-            <a class="small text-decoration-none fw-semibold" href="<?= e(url('/billing')) ?>">Open Billing</a>
+            <a class="small text-decoration-none fw-semibold" href="<?= e(url('/quotes')) ?>">Open Quotes</a>
         </div>
         <div class="card-body">
             <?php if ($outstandingQuotes === []): ?>
@@ -374,9 +374,16 @@ $employeeDisplayName = static function (array $row): string {
                         $quoteTotal = (float) ($quote['total'] ?? 0);
                         $quoteDue = $formatDateOnly((string) ($quote['due_date'] ?? ''));
                         $quoteJobTitle = trim((string) ($quote['job_title'] ?? ''));
+                        $quoteSourceType = strtolower(trim((string) ($quote['source_type'] ?? 'estimate')));
+                        $quoteHref = $quoteSourceType === 'quote'
+                            ? url('/quotes/' . (string) $quoteId)
+                            : url('/billing/' . (string) $quoteId);
+                        $quoteTitle = $quoteSourceType === 'quote'
+                            ? ($quoteNumberRaw !== '' ? $quoteNumberRaw : ('Quote #' . (string) $quoteId))
+                            : ('Estimate #' . $quoteNumber);
                         ?>
-                        <a class="simple-list-row simple-list-row-link" href="<?= e(url('/billing/' . (string) $quoteId)) ?>">
-                            <span class="simple-list-title"><?= e('Estimate #' . $quoteNumber) ?></span>
+                        <a class="simple-list-row simple-list-row-link" href="<?= e($quoteHref) ?>">
+                            <span class="simple-list-title"><?= e($quoteTitle) ?></span>
                             <span class="simple-list-meta"><?= e($quoteClient) ?> · <?= e($quoteStatusLabel) ?> · $<?= e(number_format($quoteTotal, 2)) ?> · <?= e($quoteDue) ?><?= e($quoteJobTitle !== '' ? ' · ' . $quoteJobTitle : '') ?></span>
                         </a>
                     <?php endforeach; ?>

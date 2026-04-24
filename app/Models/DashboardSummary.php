@@ -606,6 +606,38 @@ final class DashboardSummary
 
     private static function outstandingQuotes(int $businessId, int $limit = 6): array
     {
+        if (SchemaInspector::hasTable('quotes')) {
+            $sql = 'SELECT
+                        q.id,
+                        q.title AS invoice_number,
+                        LOWER(COALESCE(q.status, "new")) AS status,
+                        COALESCE(q.quoted_amount, 0) AS total,
+                        q.created_at AS issue_date,
+                        q.next_follow_up_at AS due_date,
+                        COALESCE(NULLIF(TRIM(CONCAT_WS(" ", c.first_name, c.last_name)), ""), NULLIF(c.company_name, ""), CONCAT("Client #", c.id)) AS client_name,
+                        q.converted_job_id AS job_id,
+                    q.title AS job_title,
+                    "quote" AS source_type
+                    FROM quotes q
+                    INNER JOIN clients c ON c.id = q.client_id
+                        AND c.business_id = q.business_id
+                        AND c.deleted_at IS NULL
+                    WHERE q.business_id = :business_id
+                      AND q.deleted_at IS NULL
+                      AND LOWER(COALESCE(q.status, "new")) IN ("new", "sent", "follow_up")
+                    ORDER BY
+                        CASE WHEN q.next_follow_up_at IS NULL THEN 1 ELSE 0 END,
+                        q.next_follow_up_at ASC,
+                        q.id DESC
+                    LIMIT :row_limit';
+            $stmt = Database::connection()->prepare($sql);
+            $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
+            $stmt->bindValue(':row_limit', max(1, min($limit, 20)), \PDO::PARAM_INT);
+            $stmt->execute();
+            $rows = $stmt->fetchAll();
+            return is_array($rows) ? $rows : [];
+        }
+
         if (!SchemaInspector::hasTable('invoices')) {
             return [];
         }
@@ -655,7 +687,7 @@ final class DashboardSummary
             SchemaInspector::hasColumn('invoices', 'business_id') ? 'i.business_id = :business_id' : '1=1',
             SchemaInspector::hasColumn('invoices', 'deleted_at') ? 'i.deleted_at IS NULL' : '1=1',
             "{$typeSql} = 'estimate'",
-            "{$statusSql} NOT IN ('declined', 'closed', 'converted', 'cancelled')",
+            "{$statusSql} NOT IN ('declined', 'closed', 'converted', 'cancelled', 'approved')",
         ];
 
         $sql = "SELECT
@@ -667,7 +699,8 @@ final class DashboardSummary
                     {$dueDateSql} AS due_date,
                     {$clientNameSql} AS client_name,
                     {$jobIdSql} AS job_id,
-                    {$jobTitleSql} AS job_title
+                    {$jobTitleSql} AS job_title,
+                    'estimate' AS source_type
                 FROM invoices i
                 {$joinSql}
                 {$jobJoinSql}
