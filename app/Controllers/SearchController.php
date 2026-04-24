@@ -76,7 +76,7 @@ final class SearchController extends Controller
                 } else {
                     $results['clients'] = Client::indexList($businessId, $query, $limit, 0);
                     $results['bolo_matches'] = ClientBoloProfile::searchMatches($businessId, $query, $limit);
-                    $results['jobs'] = Job::indexList($businessId, $query, '', $limit, 0);
+                    $results['jobs'] = Job::indexList($businessId, $query, '', '', $limit, 0);
                     $results['tasks'] = Task::indexList($businessId, $query, '', $limit, 0);
                     $searchFromDate = '';
                     $searchToDate = '';

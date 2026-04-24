@@ -298,7 +298,9 @@ final class FormSelectValue
                         continue;
                     }
 
-                    if (self::exists($businessId, $formKey, $sectionKey, $defaultValue)) {
+                    // Respect prior deletes: if the option ever existed for this business/scope,
+                    // do not auto-reseed it as a default on subsequent page loads.
+                    if (self::existsInAnyState($businessId, $formKey, $sectionKey, $defaultValue)) {
                         $sortOrder += 10;
                         continue;
                     }
@@ -470,24 +472,68 @@ final class FormSelectValue
             return false;
         }
 
-        $stmt = Database::connection()->prepare(
-            'UPDATE form_select_values
-             SET is_active = 0,
-                 deleted_at = NOW(),
-                 deleted_by = :deleted_by,
-                 updated_by = :updated_by,
-                 updated_at = NOW()
-             WHERE business_id = :business_id
-               AND id = :id
-               AND deleted_at IS NULL
-             LIMIT 1'
-        );
-        $stmt->execute([
-            'deleted_by' => $actorUserId > 0 ? $actorUserId : null,
-            'updated_by' => $actorUserId > 0 ? $actorUserId : null,
+        $hasIsActive = SchemaInspector::hasColumn('form_select_values', 'is_active');
+        $hasDeletedAt = SchemaInspector::hasColumn('form_select_values', 'deleted_at');
+        $hasDeletedBy = SchemaInspector::hasColumn('form_select_values', 'deleted_by');
+        $hasUpdatedBy = SchemaInspector::hasColumn('form_select_values', 'updated_by');
+        $hasUpdatedAt = SchemaInspector::hasColumn('form_select_values', 'updated_at');
+
+        if (!$hasIsActive && !$hasDeletedAt) {
+            $stmt = Database::connection()->prepare(
+                'DELETE FROM form_select_values
+                 WHERE business_id = :business_id
+                   AND id = :id
+                 LIMIT 1'
+            );
+            $stmt->execute([
+                'business_id' => $businessId,
+                'id' => $id,
+            ]);
+
+            return $stmt->rowCount() > 0;
+        }
+
+        $setParts = [];
+        $params = [
             'business_id' => $businessId,
             'id' => $id,
-        ]);
+        ];
+        if ($hasIsActive) {
+            $setParts[] = 'is_active = 0';
+        }
+        if ($hasDeletedAt) {
+            $setParts[] = 'deleted_at = NOW()';
+        }
+        if ($hasDeletedBy) {
+            $setParts[] = 'deleted_by = :deleted_by';
+            $params['deleted_by'] = $actorUserId > 0 ? $actorUserId : null;
+        }
+        if ($hasUpdatedBy) {
+            $setParts[] = 'updated_by = :updated_by';
+            $params['updated_by'] = $actorUserId > 0 ? $actorUserId : null;
+        }
+        if ($hasUpdatedAt) {
+            $setParts[] = 'updated_at = NOW()';
+        }
+        if ($setParts === []) {
+            return false;
+        }
+
+        $whereParts = [
+            'business_id = :business_id',
+            'id = :id',
+        ];
+        if ($hasDeletedAt) {
+            $whereParts[] = 'deleted_at IS NULL';
+        }
+
+        $stmt = Database::connection()->prepare(
+            'UPDATE form_select_values
+             SET ' . implode(', ', $setParts) . '
+             WHERE ' . implode(' AND ', $whereParts) . '
+             LIMIT 1'
+        );
+        $stmt->execute($params);
 
         return $stmt->rowCount() > 0;
     }
@@ -579,6 +625,31 @@ final class FormSelectValue
             $stmt->bindValue(':exclude_id', $excludeId, \PDO::PARAM_INT);
         }
         $stmt->execute();
+
+        return is_array($stmt->fetch());
+    }
+
+    private static function existsInAnyState(int $businessId, string $formKey, string $sectionKey, string $optionValue): bool
+    {
+        if (!self::isAvailable()) {
+            return false;
+        }
+
+        $stmt = Database::connection()->prepare(
+            'SELECT 1
+             FROM form_select_values
+             WHERE business_id = :business_id
+               AND form_key = :form_key
+               AND section_key = :section_key
+               AND LOWER(option_value) = :option_value
+             LIMIT 1'
+        );
+        $stmt->execute([
+            'business_id' => $businessId,
+            'form_key' => self::normalizeKey($formKey),
+            'section_key' => self::normalizeKey($sectionKey),
+            'option_value' => mb_strtolower(self::normalizeValue($optionValue)),
+        ]);
 
         return is_array($stmt->fetch());
     }
