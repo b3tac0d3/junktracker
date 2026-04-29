@@ -377,6 +377,34 @@ function format_phone(?string $value): string
     return sprintf('(%s) %s - %s', substr($digits, 0, 3), substr($digits, 3, 3), substr($digits, 6, 4));
 }
 
+function phone_tel_href(?string $value): string
+{
+    $raw = trim((string) ($value ?? ''));
+    if ($raw === '') {
+        return '';
+    }
+
+    $hasLeadingPlus = str_starts_with($raw, '+');
+    $digits = preg_replace('/\D+/', '', $raw);
+    if (!is_string($digits) || $digits === '') {
+        return '';
+    }
+
+    if ($hasLeadingPlus) {
+        return 'tel:+' . $digits;
+    }
+
+    if (strlen($digits) === 10) {
+        return 'tel:+1' . $digits;
+    }
+
+    if (strlen($digits) === 11 && str_starts_with($digits, '1')) {
+        return 'tel:+' . $digits;
+    }
+
+    return 'tel:' . $digits;
+}
+
 /**
  * Allowed "rows per page" values (shown in index pagination dropdowns).
  *

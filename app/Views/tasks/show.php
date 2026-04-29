@@ -128,8 +128,9 @@ $canTakeOwnership = $currentUserId > 0 && $currentUserId !== $taskOwnerId;
                 <div class="record-field">
                     <span class="record-label">Client phone</span>
                     <span class="record-value">
-                        <?php if ($telDigits !== ''): ?>
-                            <a href="<?= e('tel:' . $telDigits) ?>"><?= e(format_phone($linkPhone)) ?></a>
+                        <?php $phoneHref = phone_tel_href($linkPhone); ?>
+                        <?php if ($phoneHref !== ''): ?>
+                            <a href="<?= e($phoneHref) ?>"><?= e(format_phone($linkPhone)) ?></a>
                         <?php else: ?>
                             <?= e(format_phone($linkPhone)) ?>
                         <?php endif; ?>

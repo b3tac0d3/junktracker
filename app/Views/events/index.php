@@ -245,10 +245,13 @@ window.addEventListener('DOMContentLoaded', () => {
 
       const customerWrap = document.getElementById('jt-event-quickview-customer-wrap');
       const customerEl = document.getElementById('jt-event-quickview-customer');
+      const phoneWrap = document.getElementById('jt-event-quickview-phone-wrap');
+      const phoneEl = document.getElementById('jt-event-quickview-phone');
       const typeWrap = document.getElementById('jt-event-quickview-type-wrap');
       const typeEl = document.getElementById('jt-event-quickview-type');
       const ext = arg.event.extendedProps || {};
       const customerName = String(ext.customerName || '').trim();
+      const customerPhone = String(ext.customerPhone || '').trim();
       let eventType = String(ext.eventType || '').trim();
       if (eventType === '') {
         const rawId = String(arg.event.id || '');
@@ -264,6 +267,23 @@ window.addEventListener('DOMContentLoaded', () => {
         } else {
           customerEl.textContent = '';
           customerWrap.classList.add('d-none');
+        }
+      }
+      if (phoneWrap && phoneEl) {
+        const digits = customerPhone.replace(/\D+/g, '');
+        let href = '';
+        if (digits.length === 10) href = 'tel:+1' + digits;
+        else if (digits.length === 11 && digits.startsWith('1')) href = 'tel:+' + digits;
+        else if (digits.length > 0) href = 'tel:' + digits;
+
+        if (href !== '') {
+          phoneEl.textContent = customerPhone;
+          phoneEl.setAttribute('href', href);
+          phoneWrap.classList.remove('d-none');
+        } else {
+          phoneEl.textContent = '';
+          phoneEl.setAttribute('href', '#');
+          phoneWrap.classList.add('d-none');
         }
       }
       if (typeWrap && typeEl) {
@@ -392,6 +412,10 @@ window.addEventListener('DOMContentLoaded', () => {
             <div id="jt-event-quickview-type-wrap" class="mb-2 d-none">
                 <div class="small text-uppercase text-muted fw-bold mb-1">Type</div>
                 <div id="jt-event-quickview-type" class="small"></div>
+            </div>
+            <div id="jt-event-quickview-phone-wrap" class="mb-2 d-none">
+                <div class="small text-uppercase text-muted fw-bold mb-1">Phone</div>
+                <a id="jt-event-quickview-phone" class="small" href="#" rel="noopener noreferrer"></a>
             </div>
             <div class="mb-2">
                 <div class="small text-uppercase text-muted fw-bold mb-1">When</div>

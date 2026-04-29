@@ -71,7 +71,8 @@ final class EventFeed
                     d.scheduled_at,
                     d.end_at,
                     LOWER(d.status) AS status_key,
-                    COALESCE(NULLIF(TRIM(CONCAT_WS(' ', c.first_name, c.last_name)), ''), NULLIF(c.company_name, ''), CONCAT('Client #', c.id)) AS client_name
+                    COALESCE(NULLIF(TRIM(CONCAT_WS(' ', c.first_name, c.last_name)), ''), NULLIF(c.company_name, ''), CONCAT('Client #', c.id)) AS client_name,
+                    COALESCE(c.phone, '') AS client_phone
                 FROM client_deliveries d
                 INNER JOIN clients c ON c.id = d.client_id
                     AND c.business_id = d.business_id
@@ -119,6 +120,7 @@ final class EventFeed
             };
 
             $clientName = trim((string) ($row['client_name'] ?? ''));
+            $clientPhone = trim((string) ($row['client_phone'] ?? ''));
             $title = $clientName !== '' ? $clientName : 'Delivery #' . (string) $id;
 
             $endAt = trim((string) ($row['end_at'] ?? ''));
@@ -135,6 +137,7 @@ final class EventFeed
                 'editable' => false,
                 'extendedProps' => [
                     'customerName' => $clientName,
+                    'customerPhone' => $clientPhone,
                     'eventType' => 'Delivery',
                 ],
             ];
@@ -269,9 +272,11 @@ final class EventFeed
         $businessWhere = SchemaInspector::hasColumn('jobs', 'business_id') ? 'j.business_id = :business_id' : '1=1';
         $joinClient = SchemaInspector::hasTable('clients') && SchemaInspector::hasColumn('jobs', 'client_id');
         $clientNameSql = 'NULL';
+        $clientPhoneSql = "''";
         $joinSql = '';
         if ($joinClient) {
             $clientNameSql = "COALESCE(NULLIF(TRIM(CONCAT_WS(' ', c.first_name, c.last_name)), ''), NULLIF(c.company_name, ''), CONCAT('Client #', c.id))";
+            $clientPhoneSql = "COALESCE(c.phone, '')";
             $joinDeleted = SchemaInspector::hasColumn('clients', 'deleted_at') ? 'AND c.deleted_at IS NULL' : '';
             $bizMatch = SchemaInspector::hasColumn('clients', 'business_id') && SchemaInspector::hasColumn('jobs', 'business_id')
                 ? 'AND c.business_id = j.business_id'
@@ -291,7 +296,8 @@ final class EventFeed
                     {$endSql} AS scheduled_end_at,
                     {$statusSql} AS status_key,
                     {$jobTypeSql} AS job_type_key,
-                    {$clientNameSql} AS client_name
+                    {$clientNameSql} AS client_name,
+                    {$clientPhoneSql} AS client_phone
                 FROM jobs j
                 {$joinSql}
                 WHERE {$businessWhere}
@@ -346,6 +352,7 @@ final class EventFeed
             $endAt = trim((string) ($row['scheduled_end_at'] ?? ''));
 
             $customerName = $joinClient ? trim((string) ($row['client_name'] ?? '')) : '';
+            $customerPhone = $joinClient ? trim((string) ($row['client_phone'] ?? '')) : '';
 
             $events[] = [
                 'id' => 'job:' . $id,
@@ -359,6 +366,7 @@ final class EventFeed
                 'editable' => false,
                 'extendedProps' => [
                     'customerName' => $customerName,
+                    'customerPhone' => $customerPhone,
                     'jobType' => $jobType,
                     'eventType' => $jobType === 'quote' ? 'Quote' : 'Job',
                 ],
@@ -392,13 +400,13 @@ final class EventFeed
 
         $placeholders = implode(',', array_fill(0, count($jobIds), '?'));
         $hasBusiness = SchemaInspector::hasColumn('jobs', 'business_id');
-        $sql = "SELECT j.id, {$clientNameSql} AS client_name
+        $sql = "SELECT j.id, {$clientNameSql} AS client_name, COALESCE(c.phone, '') AS client_phone
                 FROM jobs j
                 {$joinSql}
                 WHERE j.id IN ({$placeholders})";
         $params = $jobIds;
         if ($hasBusiness) {
-            $sql = "SELECT j.id, {$clientNameSql} AS client_name
+            $sql = "SELECT j.id, {$clientNameSql} AS client_name, COALESCE(c.phone, '') AS client_phone
                     FROM jobs j
                     {$joinSql}
                     WHERE j.business_id = ? AND j.id IN ({$placeholders})";
@@ -421,7 +429,10 @@ final class EventFeed
             if ($jid <= 0) {
                 continue;
             }
-            $out[$jid] = trim((string) ($row['client_name'] ?? ''));
+            $out[$jid] = [
+                'name' => trim((string) ($row['client_name'] ?? '')),
+                'phone' => trim((string) ($row['client_phone'] ?? '')),
+            ];
         }
 
         return $out;
@@ -487,7 +498,15 @@ final class EventFeed
 
             $linkType = strtolower(trim((string) ($row['link_type'] ?? '')));
             $linkId = (int) ($row['link_id'] ?? 0);
-            $customerName = ($linkType === 'job' && $linkId > 0) ? ($jobCustomerNames[$linkId] ?? '') : '';
+            $customerName = '';
+            $customerPhone = '';
+            if ($linkType === 'job' && $linkId > 0) {
+                $jobClient = $jobCustomerNames[$linkId] ?? null;
+                if (is_array($jobClient)) {
+                    $customerName = trim((string) ($jobClient['name'] ?? ''));
+                    $customerPhone = trim((string) ($jobClient['phone'] ?? ''));
+                }
+            }
 
             $events[] = [
                 'id' => 'event:' . $id,
@@ -504,6 +523,7 @@ final class EventFeed
                     'jtStatus' => $status,
                     'jtId' => $id,
                     'customerName' => $customerName,
+                    'customerPhone' => $customerPhone,
                     'eventType' => match ($type) {
                         'appointment' => 'Appointment',
                         'cancellation' => 'Cancellation',

@@ -20,6 +20,7 @@ use App\Controllers\ClientsController;
 use App\Controllers\ExpensesController;
 use App\Controllers\HomeController;
 use App\Controllers\JobsController;
+use App\Controllers\NetworkingController;
 use App\Controllers\PurchasesController;
 use App\Controllers\QuotesController;
 use App\Controllers\ReportsController;
@@ -135,6 +136,14 @@ $router->get('/quotes/{id}/edit', [QuotesController::class, 'edit']);
 $router->post('/quotes/{id}/update', [QuotesController::class, 'update']);
 $router->post('/quotes/{id}/convert-to-job', [QuotesController::class, 'convertToJob']);
 $router->get('/quotes/{id}', [QuotesController::class, 'show']);
+
+$router->get('/networking', [NetworkingController::class, 'index']);
+$router->get('/networking/create', [NetworkingController::class, 'create']);
+$router->post('/networking', [NetworkingController::class, 'store']);
+$router->get('/networking/{id}/edit', [NetworkingController::class, 'edit']);
+$router->post('/networking/{id}/update', [NetworkingController::class, 'update']);
+$router->post('/networking/{id}/delete', [NetworkingController::class, 'delete']);
+$router->get('/networking/{id}', [NetworkingController::class, 'show']);
 
 $router->get('/tasks', [TasksController::class, 'index']);
 $router->get('/tasks/create', [TasksController::class, 'create']);

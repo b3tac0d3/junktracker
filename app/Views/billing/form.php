@@ -415,7 +415,7 @@ $fromEstimateIdPost = (int) ($_GET['from_estimate_id'] ?? ($_POST['from_estimate
     <?php endif; ?>
 
     <div class="d-flex gap-2">
-        <button class="btn btn-primary" type="submit" <?= ($clientId <= 0 || $jobId <= 0) ? 'disabled' : '' ?>><?= e($mode === 'edit' ? 'Save Changes' : 'Create ' . ucfirst($documentType)) ?></button>
+        <button class="btn btn-primary" type="submit" <?= ($clientId <= 0 || ($jobId <= 0 && $quoteId <= 0)) ? 'disabled' : '' ?>><?= e($mode === 'edit' ? 'Save Changes' : 'Create ' . ucfirst($documentType)) ?></button>
         <a class="btn btn-outline-secondary" href="<?= e($cancelUrl) ?>">Cancel</a>
     </div>
 </form>

@@ -26,7 +26,7 @@ $mapsAddressUrl = maps_directions_url_from_parts([
         <a class="btn btn-outline-secondary" href="<?= e(url('/quotes')) ?>">Back to Quotes</a>
         <a class="btn btn-outline-primary" href="<?= e(url('/quotes/' . (string) $quoteId . '/edit')) ?>">Edit</a>
         <?php if ($convertedJobId <= 0): ?>
-            <form method="post" action="<?= e(url('/quotes/' . (string) $quoteId . '/convert-to-job'))" onsubmit="return confirm('Convert this quote into a job?');">
+            <form method="post" action="<?= e(url('/quotes/' . (string) $quoteId . '/convert-to-job')) ?>" onsubmit="return confirm('Convert this quote into a job?');">
                 <?= csrf_field() ?>
                 <button class="btn btn-primary" type="submit"><i class="fas fa-briefcase me-2"></i>Convert to Job</button>
             </form>
@@ -47,17 +47,8 @@ $mapsAddressUrl = maps_directions_url_from_parts([
                     <dt class="col-sm-4">Service Type</dt>
                     <dd class="col-sm-8"><?= e(trim((string) ($quote['service_type'] ?? '')) ?: '—') ?></dd>
 
-                    <dt class="col-sm-4">Quoted Amount</dt>
-                    <dd class="col-sm-8"><?= e('$' . number_format((float) ($quote['quoted_amount'] ?? 0), 2)) ?></dd>
-
-                    <dt class="col-sm-4">Next Follow Up</dt>
-                    <dd class="col-sm-8"><?= e($followUpTs === false ? '—' : date('m/d/Y g:i A', $followUpTs)) ?></dd>
-
-                    <dt class="col-sm-4">Source</dt>
-                    <dd class="col-sm-8"><?= e(trim((string) ($quote['source'] ?? '')) ?: '—') ?></dd>
-
-                    <dt class="col-sm-4">Priority</dt>
-                    <dd class="col-sm-8"><?= e(trim((string) ($quote['priority'] ?? '')) ?: '—') ?></dd>
+                    <dt class="col-sm-4">Quote Date</dt>
+                    <dd class="col-sm-8"><?= e($followUpTs === false ? '—' : date('m/d/Y', $followUpTs)) ?></dd>
 
                     <dt class="col-sm-4">Address</dt>
                     <?php
@@ -90,7 +81,7 @@ $mapsAddressUrl = maps_directions_url_from_parts([
         <section class="card index-card">
             <div class="card-header index-card-header d-flex align-items-center justify-content-between">
                 <strong><i class="fas fa-file-invoice-dollar me-2"></i>Estimates</strong>
-                <a class="btn btn-sm btn-primary" href="<?= e(url('/billing/create?type=estimate&quote_id=' . (string) $quoteId . '&client_id=' . (string) ((int) ($quote['client_id'] ?? 0)))) ?>">Add Estimate</a>
+                <a class="btn btn-sm btn-primary text-white" href="<?= e(url('/billing/create?type=estimate&quote_id=' . (string) $quoteId . '&client_id=' . (string) ((int) ($quote['client_id'] ?? 0)))) ?>">Add Estimate</a>
             </div>
             <div class="card-body">
                 <?php if ($estimates === []): ?>

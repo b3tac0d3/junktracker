@@ -102,6 +102,8 @@ $clientDisplayName = static function (array $row): string {
                     <?php
                     $clientStatus = strtolower(trim((string) ($client['status'] ?? 'active')));
                     $isInactive = $clientStatus === 'inactive' || (array_key_exists('is_active', $client) && (int) ($client['is_active'] ?? 1) === 0);
+                    $phoneRaw = trim((string) ($client['phone'] ?? ''));
+                    $phoneHref = phone_tel_href($phoneRaw);
                     ?>
                     <article class="record-row-simple">
                         <a class="record-row-link" href="<?= e(url('/clients/' . (string) ((int) ($client['id'] ?? 0)))) ?>">
@@ -118,7 +120,13 @@ $clientDisplayName = static function (array $row): string {
                                 </div>
                                 <div class="record-field">
                                     <span class="record-label">Phone</span>
-                                    <span class="record-value"><?= e(format_phone((string) ($client['phone'] ?? ''))) ?></span>
+                                    <span class="record-value">
+                                        <?php if ($phoneHref !== ''): ?>
+                                            <a href="<?= e($phoneHref) ?>"><?= e(format_phone($phoneRaw)) ?></a>
+                                        <?php else: ?>
+                                            <?= e(format_phone($phoneRaw)) ?>
+                                        <?php endif; ?>
+                                    </span>
                                 </div>
                                 <div class="record-field">
                                     <span class="record-label">City</span>

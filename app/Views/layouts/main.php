@@ -205,6 +205,7 @@ $navNotifications = is_array($navNotifications ?? null) ? $navNotifications : ['
                             <?php if (!$isGlobalSiteAdminContext): ?>
                                 <div class="sb-sidenav-menu-heading">Core</div>
                                 <a class="nav-link" href="<?= e(url('/clients')) ?>"><div class="sb-nav-link-icon"><i class="fas fa-users"></i></div>Clients</a>
+                                <a class="nav-link" href="<?= e(url('/networking')) ?>"><div class="sb-nav-link-icon"><i class="fas fa-address-book"></i></div>Networking</a>
                                 <a class="nav-link" href="<?= e(url('/jobs')) ?>"><div class="sb-nav-link-icon"><i class="fas fa-briefcase"></i></div>Jobs</a>
                                 <a class="nav-link" href="<?= e(url('/quotes')) ?>"><div class="sb-nav-link-icon"><i class="fas fa-file-signature"></i></div>Quotes</a>
                                 <a class="nav-link" href="<?= e(url('/sales')) ?>"><div class="sb-nav-link-icon"><i class="fas fa-sack-dollar"></i></div>Sales</a>

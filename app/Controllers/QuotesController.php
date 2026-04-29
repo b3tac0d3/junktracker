@@ -6,7 +6,7 @@ namespace App\Controllers;
 
 use App\Models\AuditLog;
 use App\Models\Client;
-use App\Models\Job;
+use App\Models\FormSelectValue;
 use App\Models\Quote;
 use Core\Controller;
 
@@ -57,6 +57,7 @@ final class QuotesController extends Controller
             $client = Client::findForBusiness($businessId, $requestedClientId);
             if ($client !== null) {
                 $form['client_id'] = (string) $requestedClientId;
+                $form['client_name'] = Client::displayName($client);
                 $form['address_line1'] = trim((string) ($client['address_line1'] ?? ''));
                 $form['address_line2'] = trim((string) ($client['address_line2'] ?? ''));
                 $form['city'] = trim((string) ($client['city'] ?? ''));
@@ -72,7 +73,8 @@ final class QuotesController extends Controller
             'form' => $form,
             'errors' => [],
             'statusOptions' => Quote::statusOptions(),
-            'clientOptions' => Job::clientOptions($businessId),
+            'clientTypeOptions' => FormSelectValue::optionsForSection($businessId, 'client_type'),
+            'serviceTypeOptions' => FormSelectValue::optionsForSection($businessId, 'job_type'),
         ]);
     }
 
@@ -95,7 +97,8 @@ final class QuotesController extends Controller
                 'form' => $form,
                 'errors' => $errors,
                 'statusOptions' => Quote::statusOptions(),
-                'clientOptions' => Job::clientOptions($businessId),
+                'clientTypeOptions' => FormSelectValue::optionsForSection($businessId, 'client_type'),
+                'serviceTypeOptions' => FormSelectValue::optionsForSection($businessId, 'job_type'),
             ]);
             return;
         }
@@ -143,14 +146,24 @@ final class QuotesController extends Controller
             return;
         }
 
+        $form = $this->formFromModel($quote);
+        $clientIdForName = (int) ($form['client_id'] ?? 0);
+        if ($clientIdForName > 0) {
+            $clientRow = Client::findForBusiness($businessId, $clientIdForName);
+            if ($clientRow !== null) {
+                $form['client_name'] = Client::displayName($clientRow);
+            }
+        }
+
         $this->render('quotes/form', [
             'pageTitle' => 'Edit Quote',
             'mode' => 'edit',
             'actionUrl' => url('/quotes/' . (string) $quoteId . '/update'),
-            'form' => $this->formFromModel($quote),
+            'form' => $form,
             'errors' => [],
             'statusOptions' => Quote::statusOptions(),
-            'clientOptions' => Job::clientOptions($businessId),
+            'clientTypeOptions' => FormSelectValue::optionsForSection($businessId, 'client_type'),
+            'serviceTypeOptions' => FormSelectValue::optionsForSection($businessId, 'job_type'),
             'quoteId' => $quoteId,
         ]);
     }
@@ -182,7 +195,8 @@ final class QuotesController extends Controller
                 'form' => $form,
                 'errors' => $errors,
                 'statusOptions' => Quote::statusOptions(),
-                'clientOptions' => Job::clientOptions($businessId),
+                'clientTypeOptions' => FormSelectValue::optionsForSection($businessId, 'client_type'),
+                'serviceTypeOptions' => FormSelectValue::optionsForSection($businessId, 'job_type'),
                 'quoteId' => $quoteId,
             ]);
             return;
@@ -220,15 +234,13 @@ final class QuotesController extends Controller
     {
         return [
             'client_id' => '',
+            'client_name' => '',
             'title' => '',
             'status' => 'new',
             'service_type' => '',
-            'quoted_amount' => '',
             'notes' => '',
             'next_follow_up_at' => '',
             'lost_reason' => '',
-            'source' => '',
-            'priority' => '',
             'address_line1' => '',
             'address_line2' => '',
             'city' => '',
@@ -242,15 +254,13 @@ final class QuotesController extends Controller
     {
         return [
             'client_id' => trim((string) ($input['client_id'] ?? '')),
+            'client_name' => trim((string) ($input['client_name'] ?? '')),
             'title' => trim((string) ($input['title'] ?? '')),
             'status' => strtolower(trim((string) ($input['status'] ?? 'new'))),
             'service_type' => trim((string) ($input['service_type'] ?? '')),
-            'quoted_amount' => trim((string) ($input['quoted_amount'] ?? '')),
             'notes' => trim((string) ($input['notes'] ?? '')),
             'next_follow_up_at' => trim((string) ($input['next_follow_up_at'] ?? '')),
             'lost_reason' => trim((string) ($input['lost_reason'] ?? '')),
-            'source' => trim((string) ($input['source'] ?? '')),
-            'priority' => trim((string) ($input['priority'] ?? '')),
             'address_line1' => trim((string) ($input['address_line1'] ?? '')),
             'address_line2' => trim((string) ($input['address_line2'] ?? '')),
             'city' => trim((string) ($input['city'] ?? '')),
@@ -267,12 +277,9 @@ final class QuotesController extends Controller
             'title' => trim((string) ($quote['title'] ?? '')),
             'status' => strtolower(trim((string) ($quote['status'] ?? 'new'))),
             'service_type' => trim((string) ($quote['service_type'] ?? '')),
-            'quoted_amount' => trim((string) ($quote['quoted_amount'] ?? '')),
             'notes' => trim((string) ($quote['notes'] ?? '')),
-            'next_follow_up_at' => $this->toInputDatetime((string) ($quote['next_follow_up_at'] ?? '')),
+            'next_follow_up_at' => $this->toInputDate((string) ($quote['next_follow_up_at'] ?? '')),
             'lost_reason' => trim((string) ($quote['lost_reason'] ?? '')),
-            'source' => trim((string) ($quote['source'] ?? '')),
-            'priority' => trim((string) ($quote['priority'] ?? '')),
             'address_line1' => trim((string) ($quote['address_line1'] ?? '')),
             'address_line2' => trim((string) ($quote['address_line2'] ?? '')),
             'city' => trim((string) ($quote['city'] ?? '')),
@@ -282,14 +289,14 @@ final class QuotesController extends Controller
         ];
     }
 
-    private function toInputDatetime(string $value): string
+    private function toInputDate(string $value): string
     {
         $value = trim($value);
         if ($value === '') {
             return '';
         }
         $ts = strtotime($value);
-        return $ts === false ? '' : date('Y-m-d\TH:i', $ts);
+        return $ts === false ? '' : date('Y-m-d', $ts);
     }
 }
 

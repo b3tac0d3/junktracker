@@ -76,6 +76,8 @@ if ($addressStreet === '' && $addressRegion === '') {
 
 $primaryPhone = trim((string) ($client['phone'] ?? ''));
 $secondaryPhone = trim((string) ($client['secondary_phone'] ?? ''));
+$primaryPhoneHref = phone_tel_href($primaryPhone);
+$secondaryPhoneHref = phone_tel_href($secondaryPhone);
 $primaryNote = trim((string) ($client['primary_note'] ?? ''));
 
 $canTextRaw = $client['can_text'] ?? null;
@@ -177,7 +179,11 @@ $isInactive = $clientStatus === 'inactive' || (array_key_exists('is_active', $cl
             <div class="record-field">
                 <span class="record-label">Phone</span>
                 <span class="record-value">
-                    <?= e(format_phone($primaryPhone)) ?>
+                    <?php if ($primaryPhoneHref !== ''): ?>
+                        <a href="<?= e($primaryPhoneHref) ?>"><?= e(format_phone($primaryPhone)) ?></a>
+                    <?php else: ?>
+                        <?= e(format_phone($primaryPhone)) ?>
+                    <?php endif; ?>
                     <?php if ($primaryPhone !== ''): ?>
                         <span class="text-flag <?= e($canTextClass) ?>">Text: <?= e($canTextLabel) ?></span>
                     <?php endif; ?>
@@ -186,7 +192,11 @@ $isInactive = $clientStatus === 'inactive' || (array_key_exists('is_active', $cl
             <div class="record-field">
                 <span class="record-label">Secondary Phone</span>
                 <span class="record-value">
-                    <?= e(format_phone($secondaryPhone)) ?>
+                    <?php if ($secondaryPhoneHref !== ''): ?>
+                        <a href="<?= e($secondaryPhoneHref) ?>"><?= e(format_phone($secondaryPhone)) ?></a>
+                    <?php else: ?>
+                        <?= e(format_phone($secondaryPhone)) ?>
+                    <?php endif; ?>
                     <?php if ($secondaryPhone !== ''): ?>
                         <span class="text-flag <?= e($secondaryCanTextClass) ?>">Text: <?= e($secondaryCanTextLabel) ?></span>
                     <?php endif; ?>

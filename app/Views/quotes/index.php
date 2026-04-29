@@ -79,7 +79,6 @@ foreach ($statusOptionsRaw as $opt) {
                     $clientName = trim((string) ($row['client_name'] ?? '')) ?: '—';
                     $title = trim((string) ($row['title'] ?? '')) ?: ('Quote #' . (string) $qid);
                     $st = strtolower(trim((string) ($row['status'] ?? 'new')));
-                    $amount = (float) ($row['quoted_amount'] ?? 0);
                     $followUp = trim((string) ($row['next_follow_up_at'] ?? ''));
                     $followTs = $followUp !== '' ? strtotime($followUp) : false;
                     ?>
@@ -89,18 +88,14 @@ foreach ($statusOptionsRaw as $opt) {
                                 <h3 class="record-title-simple"><?= e($title) ?></h3>
                                 <p class="record-subtitle-simple"><?= e($clientName) ?></p>
                             </div>
-                            <div class="record-row-fields record-row-fields-3">
+                            <div class="record-row-fields record-row-fields-2">
                                 <div class="record-field">
                                     <span class="record-label">Status</span>
                                     <span class="record-value"><?= e($statusLabel($st)) ?></span>
                                 </div>
                                 <div class="record-field">
-                                    <span class="record-label">Quoted</span>
-                                    <span class="record-value"><?= e('$' . number_format($amount, 2)) ?></span>
-                                </div>
-                                <div class="record-field">
-                                    <span class="record-label">Follow up</span>
-                                    <span class="record-value"><?= e($followTs === false ? '—' : date('m/d/Y g:i A', $followTs)) ?></span>
+                                    <span class="record-label">Quote Date</span>
+                                    <span class="record-value"><?= e($followTs === false ? '—' : date('m/d/Y', $followTs)) ?></span>
                                 </div>
                             </div>
                         </a>

@@ -263,10 +263,12 @@ final class Quote
             return 0;
         }
 
+        $resolvedJobType = self::resolveJobTypeForConversion($businessId, (string) ($quote['service_type'] ?? ''));
+
         $jobId = Job::create($businessId, [
             'client_id' => (int) ($quote['client_id'] ?? 0),
             'title' => trim((string) ($quote['title'] ?? 'Quote Conversion')),
-            'job_type' => '',
+            'job_type' => $resolvedJobType,
             'status' => 'pending',
             'scheduled_start_at' => null,
             'scheduled_end_at' => null,
@@ -316,6 +318,42 @@ final class Quote
         }
 
         return $jobId;
+    }
+
+    private static function resolveJobTypeForConversion(int $businessId, string $serviceType): string
+    {
+        $raw = strtolower(trim($serviceType));
+        if ($raw === '') {
+            return '';
+        }
+
+        $normalized = preg_replace('/[\s\-]+/', '_', $raw) ?? $raw;
+        $normalized = preg_replace('/[^a-z0-9_]+/', '', $normalized) ?? $normalized;
+        $normalized = trim((string) $normalized, '_');
+        if ($normalized === '') {
+            return '';
+        }
+
+        $allowed = FormSelectValue::optionsForSection($businessId, 'job_type');
+        $allowedNormalized = [];
+        foreach ($allowed as $optionRaw) {
+            $candidate = strtolower(trim((string) $optionRaw));
+            if ($candidate === '') {
+                continue;
+            }
+            $candidate = preg_replace('/[\s\-]+/', '_', $candidate) ?? $candidate;
+            $candidate = preg_replace('/[^a-z0-9_]+/', '', $candidate) ?? $candidate;
+            $candidate = trim((string) $candidate, '_');
+            if ($candidate !== '') {
+                $allowedNormalized[$candidate] = true;
+            }
+        }
+
+        if ($allowedNormalized !== [] && !isset($allowedNormalized[$normalized])) {
+            return '';
+        }
+
+        return $normalized;
     }
 
     /**
