@@ -366,6 +366,7 @@ final class EventFeed
         $statusSql = SchemaInspector::hasColumn('jobs', 'status') ? 'LOWER(j.status)' : "'pending'";
         $jobTypeSql = SchemaInspector::hasColumn('jobs', 'job_type') ? 'LOWER(COALESCE(j.job_type, ""))' : "''";
         $deletedWhere = SchemaInspector::hasColumn('jobs', 'deleted_at') ? 'AND j.deleted_at IS NULL' : '';
+        $activeWhere = SchemaInspector::hasColumn('jobs', 'is_active') ? 'AND COALESCE(j.is_active, 1) = 1' : '';
         $businessWhere = SchemaInspector::hasColumn('jobs', 'business_id') ? 'j.business_id = :business_id' : '1=1';
         $joinClient = SchemaInspector::hasTable('clients') && SchemaInspector::hasColumn('jobs', 'client_id');
         $clientNameSql = 'NULL';
@@ -399,6 +400,7 @@ final class EventFeed
                 {$joinSql}
                 WHERE {$businessWhere}
                   {$deletedWhere}
+                  {$activeWhere}
                   {$searchWhere}
                   AND {$startSql} IS NOT NULL
                   AND {$startSql} >= :start_at

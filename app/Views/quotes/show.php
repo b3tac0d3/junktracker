@@ -89,7 +89,11 @@ $mapsAddressUrl = maps_directions_url_from_parts([
                     </dd>
 
                     <dt class="col-sm-4">Service Type</dt>
-                    <dd class="col-sm-8"><?= e(trim((string) ($quote['service_type'] ?? '')) ?: '—') ?></dd>
+                    <?php
+                    $serviceTypeRaw = trim((string) ($quote['service_type'] ?? ''));
+                    $serviceTypeDisplay = $serviceTypeRaw !== '' ? ucwords(str_replace('_', ' ', strtolower($serviceTypeRaw))) : '—';
+                    ?>
+                    <dd class="col-sm-8"><?= e($serviceTypeDisplay) ?></dd>
 
                     <dt class="col-sm-4">Quote Date</dt>
                     <dd class="col-sm-8"><?= e($followUpTs === false ? '—' : date('m/d/Y g:i A', $followUpTs)) ?></dd>

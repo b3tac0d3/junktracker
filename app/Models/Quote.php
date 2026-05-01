@@ -155,7 +155,8 @@ final class Quote
 
         $sql = 'SELECT
                     q.*,
-                    COALESCE(NULLIF(TRIM(CONCAT_WS(" ", c.first_name, c.last_name)), ""), NULLIF(c.company_name, ""), CONCAT("Client #", c.id)) AS client_name
+                    COALESCE(NULLIF(TRIM(CONCAT_WS(" ", c.first_name, c.last_name)), ""), NULLIF(c.company_name, ""), CONCAT("Client #", c.id)) AS client_name,
+                    COALESCE(c.phone, "") AS client_phone
                 FROM quotes q
                 INNER JOIN clients c ON c.id = q.client_id
                     AND c.business_id = q.business_id
