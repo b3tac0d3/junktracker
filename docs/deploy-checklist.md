@@ -2,17 +2,20 @@
 
 Short list to keep releases predictable. Pair with delta bundles from `scripts/build-live-release.sh` and version tags.
 
-**Latest release notes:** [releases/live-1.8.2-beta.md](./releases/live-1.8.2-beta.md) (calendar deactivated-job exclusion + quote detail fixes).  
-**Earlier:** [releases/live-1.8.1-beta.md](./releases/live-1.8.1-beta.md), [releases/live-1.8.0-beta.md](./releases/live-1.8.0-beta.md), [releases/live-1.7.2.md](./releases/live-1.7.2.md), [releases/live-1.7.0.md](./releases/live-1.7.0.md), [releases/live-1.6.4-beta.md](./releases/live-1.6.4-beta.md), [releases/live-1.6.3-beta.md](./releases/live-1.6.3-beta.md), [releases/live-1.6.2-beta.md](./releases/live-1.6.2-beta.md), [releases/live-1.6.1-beta.md](./releases/live-1.6.1-beta.md), [releases/live-1.6.0.md](./releases/live-1.6.0.md), [releases/live-1.5.3.md](./releases/live-1.5.3.md).
+**Latest release notes:** [releases/live-1.8.2.1-beta.md](./releases/live-1.8.2.1-beta.md) (deactivated job calendar exclusion + release helper script).  
+**Earlier:** [releases/live-1.8.2-beta.md](./releases/live-1.8.2-beta.md), [releases/live-1.8.1-beta.md](./releases/live-1.8.1-beta.md), [releases/live-1.8.0-beta.md](./releases/live-1.8.0-beta.md), [releases/live-1.7.2.md](./releases/live-1.7.2.md), [releases/live-1.7.0.md](./releases/live-1.7.0.md), [releases/live-1.6.4-beta.md](./releases/live-1.6.4-beta.md), [releases/live-1.6.3-beta.md](./releases/live-1.6.3-beta.md), [releases/live-1.6.2-beta.md](./releases/live-1.6.2-beta.md), [releases/live-1.6.1-beta.md](./releases/live-1.6.1-beta.md), [releases/live-1.6.0.md](./releases/live-1.6.0.md), [releases/live-1.5.3.md](./releases/live-1.5.3.md).
 
 ### Beta-live naming convention (standard)
 
-- **App version (`config/app.php`)**: `<major>.<minor>.<patch>-beta` (example: `1.8.2-beta`)
-- **Release notes file**: `docs/releases/live-<major>.<minor>.<patch>-beta.md`
-- **Bundle folder name**: `junktracker_beta_<major>.<minor>.<patch>-beta`
-- **Commit title**: `Release <major>.<minor>.<patch>-beta: <short summary>`
+- **App version (`config/app.php`)**: `<major>.<minor>.<patch>-beta` or `<major>.<minor>.<patch>.<hotfix>-beta` (examples: `1.8.2-beta`, `1.8.2.1-beta`)
+- **Release notes file**: `docs/releases/live-<version>.md`
+- **Bundle folder name**: `junktracker_beta_<version>`
+- **Commit title**: `Release <version>: <short summary>`
 
 **“Run live”** (release phrase): bump `config/app.php` to the new version, commit and push, tag `vX.Y.Z` on that commit, then build with `./scripts/build-live-release.sh junktracker_beta_X.Y.Z v<previous_tag>` (delta from the prior tag). Example: `./scripts/build-live-release.sh junktracker_beta_1.5.0 v1.4.0.3`.
+
+**One-command beta prep:** `./scripts/new-beta-release.sh <major>.<minor>.<patch>-beta "short summary"`  
+Example: `./scripts/new-beta-release.sh 1.8.3-beta "quote reminders and calendar polish"`
 
 The script writes two trees next to each other: **`…/<name>/upload/`** (what goes on the web server) and **`…/<name>/migrations/`** (SQL only). Database migrations are **never** placed inside the upload folder.
 
