@@ -5,6 +5,7 @@ $sales = is_array($summary['sales'] ?? null) ? $summary['sales'] : [];
 $service = is_array($summary['service'] ?? null) ? $summary['service'] : [];
 $expenses = is_array($summary['expenses'] ?? null) ? $summary['expenses'] : [];
 $purchasesSummary = is_array($summary['purchases'] ?? null) ? $summary['purchases'] : [];
+$receivables = is_array($summary['receivables'] ?? null) ? $summary['receivables'] : [];
 $jobs = is_array($summary['jobs'] ?? null) ? $summary['jobs'] : [];
 $tasks = is_array($summary['tasks'] ?? null) ? $summary['tasks'] : [];
 $lists = is_array($summary['lists'] ?? null) ? $summary['lists'] : [];
@@ -100,9 +101,9 @@ $employeeDisplayName = static function (array $row): string {
         <small>Net MTD $<?= e(number_format((float) ($sales['mtd_net'] ?? 0), 2)) ?> · Net YTD $<?= e(number_format((float) ($sales['ytd_net'] ?? 0), 2)) ?></small>
     </a>
     <a class="kpi-card kpi-card-link" href="<?= e(url('/reports')) ?>">
-        <span>Service MTD / YTD</span>
+        <span>Service Paid MTD / YTD</span>
         <strong>$<?= e(number_format((float) ($service['mtd_gross'] ?? 0), 2)) ?> / $<?= e(number_format((float) ($service['ytd_gross'] ?? 0), 2)) ?></strong>
-        <small>Net MTD $<?= e(number_format((float) ($service['mtd_net'] ?? 0), 2)) ?> · Net YTD $<?= e(number_format((float) ($service['ytd_net'] ?? 0), 2)) ?></small>
+        <small>Received payments (not invoiced totals)</small>
     </a>
     <a class="kpi-card kpi-card-link" href="<?= e(url('/reports')) ?>">
         <span>Total Income MTD / YTD</span>
@@ -118,6 +119,11 @@ $employeeDisplayName = static function (array $row): string {
         <span>Expenses MTD / YTD</span>
         <strong>$<?= e(number_format((float) ($expenses['mtd_total'] ?? 0), 2)) ?> / $<?= e(number_format((float) ($expenses['ytd_total'] ?? 0), 2)) ?></strong>
         <small>All recorded expenses</small>
+    </a>
+    <a class="kpi-card kpi-card-link" href="<?= e(url('/billing')) ?>">
+        <span>Payments Due</span>
+        <strong>$<?= e(number_format((float) ($receivables['payments_due'] ?? 0), 2)) ?></strong>
+        <small><?= e((string) ((int) ($receivables['open_invoices'] ?? 0))) ?> open invoice(s)</small>
     </a>
     <a class="kpi-card kpi-card-link" href="<?= e(url('/reports')) ?>">
         <span>Profit YTD</span>

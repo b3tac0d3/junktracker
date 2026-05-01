@@ -412,7 +412,7 @@ final class JobsController extends Controller
 
         Job::deactivate($businessId, $jobId, auth_user_id() ?? 0);
         flash('success', 'Job deactivated.');
-        redirect('/jobs/' . (string) $jobId);
+        redirect('/jobs');
     }
 
     public function show(array $params): void

@@ -26,6 +26,7 @@ final class DashboardSummary
         $payload = [
             'sales' => self::salesSummary($businessId),
             'service' => self::serviceSummary($businessId),
+            'receivables' => self::receivablesSummary($businessId),
             'expenses' => self::expensesSummary($businessId),
             'purchases' => self::purchasesSummary($businessId),
             'ytd_net_minus_purchases' => round((float) ($ytdIncome['overall']['net_minus_purchases'] ?? 0), 2),
@@ -125,34 +126,42 @@ final class DashboardSummary
             'ytd_count' => 0,
         ];
 
-        if (!SchemaInspector::hasTable('invoices')) {
+        if (!SchemaInspector::hasTable('payments') || !SchemaInspector::hasTable('invoices')) {
             return $summary;
         }
 
-        $totalSql = SchemaInspector::hasColumn('invoices', 'total')
-            ? 'COALESCE(i.total, 0)'
-            : (SchemaInspector::hasColumn('invoices', 'subtotal') ? 'COALESCE(i.subtotal, 0)' : '0');
-        $dateSql = SchemaInspector::hasColumn('invoices', 'issue_date') ? 'DATE(i.issue_date)' : 'DATE(i.created_at)';
+        $amountSql = SchemaInspector::hasColumn('payments', 'amount') ? 'COALESCE(p.amount, 0)' : '0';
+        $dateSql = SchemaInspector::hasColumn('payments', 'paid_at') ? 'DATE(p.paid_at)' : 'DATE(p.created_at)';
 
         $where = [
-            SchemaInspector::hasColumn('invoices', 'business_id') ? 'i.business_id = :business_id' : '1=1',
+            SchemaInspector::hasColumn('payments', 'business_id') ? 'p.business_id = :business_id' : '1=1',
+            SchemaInspector::hasColumn('invoices', 'business_id') ? 'i.business_id = :invoice_business_id' : '1=1',
+            SchemaInspector::hasColumn('payments', 'invoice_id') ? 'p.invoice_id = i.id' : '1=0',
+            SchemaInspector::hasColumn('payments', 'deleted_at') ? 'p.deleted_at IS NULL' : '1=1',
             SchemaInspector::hasColumn('invoices', 'deleted_at') ? 'i.deleted_at IS NULL' : '1=1',
         ];
         if (SchemaInspector::hasColumn('invoices', 'type')) {
             $where[] = "(LOWER(COALESCE(NULLIF(TRIM(i.type), ''), 'invoice')) = 'invoice')";
         }
+        if (SchemaInspector::hasColumn('invoices', 'status')) {
+            $where[] = "LOWER(COALESCE(i.status, '')) NOT IN ('cancelled','declined','closed')";
+        }
 
         $sql = "SELECT
-                    COALESCE(SUM(CASE WHEN {$dateSql} >= DATE_FORMAT(CURDATE(), '%Y-%m-01') AND {$dateSql} <= CURDATE() THEN {$totalSql} ELSE 0 END), 0) AS mtd_gross,
+                    COALESCE(SUM(CASE WHEN {$dateSql} >= DATE_FORMAT(CURDATE(), '%Y-%m-01') AND {$dateSql} <= CURDATE() THEN {$amountSql} ELSE 0 END), 0) AS mtd_gross,
                     COALESCE(SUM(CASE WHEN {$dateSql} >= DATE_FORMAT(CURDATE(), '%Y-%m-01') AND {$dateSql} <= CURDATE() THEN 1 ELSE 0 END), 0) AS mtd_count,
-                    COALESCE(SUM(CASE WHEN {$dateSql} >= DATE_FORMAT(CURDATE(), '%Y-01-01') AND {$dateSql} <= CURDATE() THEN {$totalSql} ELSE 0 END), 0) AS ytd_gross,
+                    COALESCE(SUM(CASE WHEN {$dateSql} >= DATE_FORMAT(CURDATE(), '%Y-01-01') AND {$dateSql} <= CURDATE() THEN {$amountSql} ELSE 0 END), 0) AS ytd_gross,
                     COALESCE(SUM(CASE WHEN {$dateSql} >= DATE_FORMAT(CURDATE(), '%Y-01-01') AND {$dateSql} <= CURDATE() THEN 1 ELSE 0 END), 0) AS ytd_count
-                FROM invoices i
+                FROM payments p
+                INNER JOIN invoices i ON i.id = p.invoice_id
                 WHERE " . implode(' AND ', $where);
 
         $stmt = Database::connection()->prepare($sql);
-        if (SchemaInspector::hasColumn('invoices', 'business_id')) {
+        if (SchemaInspector::hasColumn('payments', 'business_id')) {
             $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
+        }
+        if (SchemaInspector::hasColumn('invoices', 'business_id')) {
+            $stmt->bindValue(':invoice_business_id', $businessId, \PDO::PARAM_INT);
         }
         $stmt->execute();
 
@@ -173,6 +182,87 @@ final class DashboardSummary
             'ytd_gross' => $ytdGross,
             'ytd_net' => round($ytdGross - $ytdExpenses, 2),
             'ytd_count' => (int) ($row['ytd_count'] ?? 0),
+        ];
+    }
+
+    private static function receivablesSummary(int $businessId): array
+    {
+        $summary = [
+            'payments_due' => 0.0,
+            'open_invoices' => 0,
+        ];
+
+        if (!SchemaInspector::hasTable('invoices')) {
+            return $summary;
+        }
+
+        $invoiceTotalSql = SchemaInspector::hasColumn('invoices', 'total')
+            ? 'COALESCE(i.total, 0)'
+            : (SchemaInspector::hasColumn('invoices', 'subtotal') ? 'COALESCE(i.subtotal, 0)' : '0');
+        $invoiceBusinessWhere = SchemaInspector::hasColumn('invoices', 'business_id') ? 'i.business_id = :business_id' : '1=1';
+        $invoiceDeletedWhere = SchemaInspector::hasColumn('invoices', 'deleted_at') ? 'i.deleted_at IS NULL' : '1=1';
+
+        $typeWhere = '1=1';
+        if (SchemaInspector::hasColumn('invoices', 'type')) {
+            $typeWhere = "(LOWER(COALESCE(NULLIF(TRIM(i.type), ''), 'invoice')) = 'invoice')";
+        }
+
+        $statusWhere = '1=1';
+        if (SchemaInspector::hasColumn('invoices', 'status')) {
+            $statusWhere = "LOWER(COALESCE(i.status, '')) NOT IN ('paid','paid_in_full','cancelled','declined','closed')";
+        }
+
+        $hasPaymentsTable = SchemaInspector::hasTable('payments');
+        $hasPaymentsInvoiceId = SchemaInspector::hasColumn('payments', 'invoice_id');
+        $paymentsJoin = '';
+        $paymentsWhere = [];
+        if ($hasPaymentsTable && $hasPaymentsInvoiceId) {
+            $paymentsJoin = 'LEFT JOIN (
+                SELECT p.invoice_id, COALESCE(SUM(p.amount), 0) AS paid_total
+                FROM payments p';
+            $paymentsWhere[] = 'p.invoice_id IS NOT NULL';
+            if (SchemaInspector::hasColumn('payments', 'business_id')) {
+                $paymentsWhere[] = 'p.business_id = :payments_business_id';
+            }
+            if (SchemaInspector::hasColumn('payments', 'deleted_at')) {
+                $paymentsWhere[] = 'p.deleted_at IS NULL';
+            }
+            if ($paymentsWhere !== []) {
+                $paymentsJoin .= ' WHERE ' . implode(' AND ', $paymentsWhere);
+            }
+            $paymentsJoin .= ' GROUP BY p.invoice_id
+            ) pmt ON pmt.invoice_id = i.id';
+        } else {
+            $paymentsJoin = 'LEFT JOIN (SELECT NULL AS invoice_id, 0 AS paid_total) pmt ON 1=0';
+        }
+
+        $sql = "SELECT
+                    COALESCE(SUM(GREATEST({$invoiceTotalSql} - COALESCE(pmt.paid_total, 0), 0)), 0) AS payments_due,
+                    COALESCE(SUM(CASE WHEN GREATEST({$invoiceTotalSql} - COALESCE(pmt.paid_total, 0), 0) > 0.009 THEN 1 ELSE 0 END), 0) AS open_invoices
+                FROM invoices i
+                {$paymentsJoin}
+                WHERE {$invoiceBusinessWhere}
+                  AND {$invoiceDeletedWhere}
+                  AND {$typeWhere}
+                  AND {$statusWhere}";
+
+        $stmt = Database::connection()->prepare($sql);
+        if (SchemaInspector::hasColumn('invoices', 'business_id')) {
+            $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
+        }
+        if ($hasPaymentsTable && $hasPaymentsInvoiceId && SchemaInspector::hasColumn('payments', 'business_id')) {
+            $stmt->bindValue(':payments_business_id', $businessId, \PDO::PARAM_INT);
+        }
+        $stmt->execute();
+
+        $row = $stmt->fetch();
+        if (!is_array($row)) {
+            return $summary;
+        }
+
+        return [
+            'payments_due' => (float) ($row['payments_due'] ?? 0),
+            'open_invoices' => (int) ($row['open_invoices'] ?? 0),
         ];
     }
 
