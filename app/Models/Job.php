@@ -1087,6 +1087,12 @@ final class Job
         }
 
         $sets = [];
+        if (SchemaInspector::hasColumn('jobs', 'deleted_at')) {
+            $sets[] = 'deleted_at = NOW()';
+        }
+        if (SchemaInspector::hasColumn('jobs', 'deleted_by')) {
+            $sets[] = 'deleted_by = :deleted_by';
+        }
         if (SchemaInspector::hasColumn('jobs', 'is_active')) {
             $sets[] = 'is_active = 0';
         }
@@ -1115,6 +1121,9 @@ final class Job
         $params = ['job_id' => $jobId];
         if (SchemaInspector::hasColumn('jobs', 'business_id')) {
             $params['business_id'] = $businessId;
+        }
+        if (SchemaInspector::hasColumn('jobs', 'deleted_by')) {
+            $params['deleted_by'] = $actorUserId > 0 ? $actorUserId : null;
         }
         if (SchemaInspector::hasColumn('jobs', 'updated_by')) {
             $params['updated_by'] = $actorUserId;
