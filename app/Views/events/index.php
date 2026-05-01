@@ -5,7 +5,7 @@ $pageTitle = 'Events';
 <div class="jt-events-screen">
 <div class="page-header">
     <h1>Events</h1>
-    <p class="muted">Calendar for appointments, cancellations, tasks due dates, and scheduled jobs.</p>
+    <p class="muted">Calendar for appointments, cancellations, tasks, jobs, deliveries, and quotes.</p>
 </div>
 
 <div class="card index-card">
@@ -17,7 +17,7 @@ $pageTitle = 'Events';
                     <span class="badge" style="background:#2563eb;">Cancels</span>
                     <span class="badge" style="background:#16a34a;">Tasks</span>
                     <span class="badge" style="background:#ea580c;">Jobs</span>
-                    <span class="badge" style="background:#7c3aed;">Quotes</span>
+                    <span class="badge" style="background:#db2777;">Quotes</span>
                 </div>
             </div>
     </div>
@@ -69,6 +69,10 @@ $pageTitle = 'Events';
                                     <input class="form-check-input" type="checkbox" id="jt-src-deliveries" checked />
                                     <span class="small">Deliveries</span>
                                 </label>
+                                <label class="form-check d-flex align-items-center gap-2 m-0">
+                                    <input class="form-check-input" type="checkbox" id="jt-src-quotes" checked />
+                                    <span class="small">Quotes</span>
+                                </label>
                             </div>
                         </div>
                     </div>
@@ -111,6 +115,7 @@ window.addEventListener('DOMContentLoaded', () => {
     if (document.getElementById('jt-src-tasks')?.checked) sources.push('tasks');
     if (document.getElementById('jt-src-jobs')?.checked) sources.push('jobs');
     if (document.getElementById('jt-src-deliveries')?.checked) sources.push('deliveries');
+    if (document.getElementById('jt-src-quotes')?.checked) sources.push('quotes');
     return sources.join(',');
   };
 
@@ -258,6 +263,7 @@ window.addEventListener('DOMContentLoaded', () => {
         if (rawId.startsWith('task:')) eventType = 'Task';
         else if (rawId.startsWith('job:')) eventType = 'Job';
         else if (rawId.startsWith('delivery:')) eventType = 'Delivery';
+        else if (rawId.startsWith('quote:')) eventType = 'Quote';
         else eventType = 'Event';
       }
       if (customerWrap && customerEl) {
@@ -346,6 +352,7 @@ window.addEventListener('DOMContentLoaded', () => {
   document.getElementById('jt-src-tasks')?.addEventListener('change', refetch);
   document.getElementById('jt-src-jobs')?.addEventListener('change', refetch);
   document.getElementById('jt-src-deliveries')?.addEventListener('change', refetch);
+  document.getElementById('jt-src-quotes')?.addEventListener('change', refetch);
   document.getElementById('jt-event-q')?.addEventListener('input', debounce(refetch, 250));
 
   const filterToggle = document.getElementById('jt-filter-toggle');

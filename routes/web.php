@@ -134,6 +134,7 @@ $router->get('/quotes/create', [QuotesController::class, 'create']);
 $router->post('/quotes', [QuotesController::class, 'store']);
 $router->get('/quotes/{id}/edit', [QuotesController::class, 'edit']);
 $router->post('/quotes/{id}/update', [QuotesController::class, 'update']);
+$router->post('/quotes/{id}/quick-status', [QuotesController::class, 'quickStatus']);
 $router->post('/quotes/{id}/convert-to-job', [QuotesController::class, 'convertToJob']);
 $router->get('/quotes/{id}', [QuotesController::class, 'show']);
 

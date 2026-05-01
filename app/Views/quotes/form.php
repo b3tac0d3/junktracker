@@ -97,8 +97,8 @@ if ($selectedServiceType !== '' && !array_key_exists($selectedServiceType, $norm
             </div>
 
             <div class="col-12 col-lg-6">
-                <label class="form-label fw-semibold" for="quote-date">Quote Date</label>
-                <input id="quote-date" type="date" name="next_follow_up_at" class="form-control <?= $hasError('next_follow_up_at') ? 'is-invalid' : '' ?>" value="<?= e((string) ($form['next_follow_up_at'] ?? '')) ?>" />
+                <label class="form-label fw-semibold" for="quote-date">Quote Date &amp; Time</label>
+                <input id="quote-date" type="datetime-local" name="next_follow_up_at" class="form-control <?= $hasError('next_follow_up_at') ? 'is-invalid' : '' ?>" value="<?= e((string) ($form['next_follow_up_at'] ?? '')) ?>" />
                 <?php if ($hasError('next_follow_up_at')): ?><div class="invalid-feedback d-block"><?= e($fieldError('next_follow_up_at')) ?></div><?php endif; ?>
             </div>
 

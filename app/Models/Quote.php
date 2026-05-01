@@ -57,7 +57,8 @@ final class Quote
 
         $sql = 'SELECT
                     q.*,
-                    COALESCE(NULLIF(TRIM(CONCAT_WS(" ", c.first_name, c.last_name)), ""), NULLIF(c.company_name, ""), CONCAT("Client #", c.id)) AS client_name
+                    COALESCE(NULLIF(TRIM(CONCAT_WS(" ", c.first_name, c.last_name)), ""), NULLIF(c.company_name, ""), CONCAT("Client #", c.id)) AS client_name,
+                    COALESCE(c.phone, "") AS client_phone
                 FROM quotes q
                 INNER JOIN clients c ON c.id = q.client_id
                     AND c.business_id = q.business_id
@@ -253,6 +254,35 @@ final class Quote
         $params['quote_id'] = $quoteId;
         $stmt = Database::connection()->prepare($sql);
         $stmt->execute($params);
+        return $stmt->rowCount() > 0;
+    }
+
+    public static function updateStatus(int $businessId, int $quoteId, string $status, int $actorUserId): bool
+    {
+        if (!SchemaInspector::hasTable('quotes') || $quoteId <= 0) {
+            return false;
+        }
+
+        $normalizedStatus = strtolower(trim($status));
+        if (!in_array($normalizedStatus, self::statusOptions(), true)) {
+            return false;
+        }
+
+        $stmt = Database::connection()->prepare(
+            'UPDATE quotes
+             SET status = :status,
+                 updated_by = :updated_by,
+                 updated_at = NOW()
+             WHERE business_id = :business_id
+               AND id = :quote_id
+               AND deleted_at IS NULL'
+        );
+        $stmt->bindValue(':status', $normalizedStatus);
+        $stmt->bindValue(':updated_by', $actorUserId > 0 ? $actorUserId : null, $actorUserId > 0 ? \PDO::PARAM_INT : \PDO::PARAM_NULL);
+        $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
+        $stmt->bindValue(':quote_id', $quoteId, \PDO::PARAM_INT);
+        $stmt->execute();
+
         return $stmt->rowCount() > 0;
     }
 

@@ -23,7 +23,7 @@ final class EventFeed
 
         $sources = self::parseCsv((string) ($filters['sources'] ?? ''));
         if ($sources === []) {
-            $sources = ['tasks', 'jobs', 'events', 'deliveries'];
+            $sources = ['tasks', 'jobs', 'events', 'deliveries', 'quotes'];
         }
         $types = self::parseCsv((string) ($filters['types'] ?? ''));
         $q = trim((string) ($filters['q'] ?? ''));
@@ -40,6 +40,103 @@ final class EventFeed
         }
         if (in_array('deliveries', $sources, true)) {
             $events = array_merge($events, self::deliveryEvents($businessId, $start, $end, $q));
+        }
+        if (in_array('quotes', $sources, true)) {
+            $events = array_merge($events, self::quoteFollowUpEvents($businessId, $start, $end, $q));
+        }
+
+        return $events;
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private static function quoteFollowUpEvents(int $businessId, string $start, string $end, string $q): array
+    {
+        if (!SchemaInspector::hasTable('quotes') || !SchemaInspector::hasTable('clients')) {
+            return [];
+        }
+
+        $searchWhere = $q !== ''
+            ? 'AND (
+                COALESCE(q.title, "") LIKE :q
+                OR COALESCE(q.notes, "") LIKE :q
+                OR COALESCE(NULLIF(TRIM(CONCAT_WS(" ", c.first_name, c.last_name)), ""), NULLIF(c.company_name, ""), CONCAT("Client #", c.id)) LIKE :q
+                OR CAST(q.id AS CHAR) LIKE :q
+            )'
+            : '';
+
+        $sql = "SELECT
+                    q.id,
+                    q.title,
+                    q.next_follow_up_at,
+                    LOWER(COALESCE(q.status, 'new')) AS status_key,
+                    COALESCE(NULLIF(TRIM(CONCAT_WS(' ', c.first_name, c.last_name)), ''), NULLIF(c.company_name, ''), CONCAT('Client #', c.id)) AS client_name,
+                    COALESCE(c.phone, '') AS client_phone
+                FROM quotes q
+                INNER JOIN clients c ON c.id = q.client_id
+                    AND c.business_id = q.business_id
+                    AND c.deleted_at IS NULL
+                WHERE q.business_id = :business_id
+                  AND q.deleted_at IS NULL
+                  AND q.next_follow_up_at IS NOT NULL
+                  AND q.next_follow_up_at >= :start_at
+                  AND q.next_follow_up_at < :end_at
+                  AND LOWER(COALESCE(q.status, '')) IN ('new', 'sent', 'follow_up')
+                  {$searchWhere}
+                ORDER BY q.next_follow_up_at ASC, q.id ASC
+                LIMIT 2000";
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
+        $stmt->bindValue(':start_at', $start);
+        $stmt->bindValue(':end_at', $end);
+        if ($q !== '') {
+            $stmt->bindValue(':q', '%' . $q . '%');
+        }
+        $stmt->execute();
+
+        $rows = $stmt->fetchAll();
+        if (!is_array($rows)) {
+            return [];
+        }
+
+        $events = [];
+        foreach ($rows as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+
+            $id = (int) ($row['id'] ?? 0);
+            $followUpAt = trim((string) ($row['next_follow_up_at'] ?? ''));
+            if ($id <= 0 || $followUpAt === '') {
+                continue;
+            }
+
+            $clientName = trim((string) ($row['client_name'] ?? ''));
+            $clientPhone = trim((string) ($row['client_phone'] ?? ''));
+            $title = trim((string) ($row['title'] ?? ''));
+            if ($title === '') {
+                $title = 'Quote #' . (string) $id;
+            }
+
+            $color = '#db2777';
+
+            $events[] = [
+                'id' => 'quote:' . $id,
+                'title' => $title,
+                'start' => self::toIso($followUpAt),
+                'allDay' => false,
+                'backgroundColor' => $color,
+                'borderColor' => $color,
+                'url' => url('/quotes/' . (string) $id),
+                'editable' => false,
+                'extendedProps' => [
+                    'customerName' => $clientName,
+                    'customerPhone' => $clientPhone,
+                    'eventType' => 'Quote',
+                ],
+            ];
         }
 
         return $events;

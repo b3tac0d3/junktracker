@@ -3,8 +3,12 @@ $quote = is_array($quote ?? null) ? $quote : [];
 $estimates = is_array($estimates ?? null) ? $estimates : [];
 $quoteId = (int) ($quote['id'] ?? 0);
 $clientName = trim((string) ($quote['client_name'] ?? '')) ?: '—';
+$clientId = (int) ($quote['client_id'] ?? 0);
+$clientPhone = trim((string) ($quote['client_phone'] ?? ''));
+$clientPhoneHref = phone_tel_href($clientPhone);
 $status = strtolower(trim((string) ($quote['status'] ?? 'new')));
 $statusLabel = ucwords(str_replace('_', ' ', $status));
+$statusOptions = is_array($statusOptions ?? null) ? $statusOptions : \App\Models\Quote::statusOptions();
 $followUpAt = trim((string) ($quote['next_follow_up_at'] ?? ''));
 $followUpTs = $followUpAt !== '' ? strtotime($followUpAt) : false;
 $convertedJobId = (int) ($quote['converted_job_id'] ?? 0);
@@ -39,16 +43,56 @@ $mapsAddressUrl = maps_directions_url_from_parts([
 <div class="row g-3">
     <div class="col-12 col-lg-7">
         <section class="card index-card">
-            <div class="card-header index-card-header">
+            <div class="card-header index-card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
                 <strong><i class="fas fa-file-signature me-2"></i>Quote Details</strong>
+                <?php if ($statusOptions !== []): ?>
+                    <form method="post" action="<?= e(url('/quotes/' . (string) $quoteId . '/quick-status')) ?>" class="d-flex flex-wrap align-items-center gap-2">
+                        <?= csrf_field() ?>
+                        <label class="small text-muted mb-0 fw-semibold" for="quote-quick-status">Status</label>
+                        <select
+                            id="quote-quick-status"
+                            name="status"
+                            class="form-select form-select-sm"
+                            style="width: auto; min-width: 10rem;"
+                            aria-label="Quote status"
+                            onchange="this.form.submit()"
+                        >
+                            <?php foreach ($statusOptions as $opt): ?>
+                                <?php $opt = strtolower(trim((string) $opt)); ?>
+                                <?php if ($opt === '') {
+                                    continue;
+                                } ?>
+                                <option value="<?= e($opt) ?>" <?= $status === $opt ? 'selected' : '' ?>><?= e(ucwords(str_replace('_', ' ', $opt))) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </form>
+                <?php endif; ?>
             </div>
             <div class="card-body">
                 <dl class="row mb-0">
+                    <dt class="col-sm-4">Client</dt>
+                    <dd class="col-sm-8">
+                        <?php if ($clientId > 0 && $clientName !== '—'): ?>
+                            <a href="<?= e(url('/clients/' . (string) $clientId)) ?>"><?= e($clientName) ?></a>
+                        <?php else: ?>
+                            <?= e($clientName) ?>
+                        <?php endif; ?>
+                    </dd>
+
+                    <dt class="col-sm-4">Phone</dt>
+                    <dd class="col-sm-8">
+                        <?php if ($clientPhoneHref !== ''): ?>
+                            <a href="<?= e($clientPhoneHref) ?>"><?= e(format_phone($clientPhone)) ?></a>
+                        <?php else: ?>
+                            <?= e($clientPhone !== '' ? format_phone($clientPhone) : '—') ?>
+                        <?php endif; ?>
+                    </dd>
+
                     <dt class="col-sm-4">Service Type</dt>
                     <dd class="col-sm-8"><?= e(trim((string) ($quote['service_type'] ?? '')) ?: '—') ?></dd>
 
                     <dt class="col-sm-4">Quote Date</dt>
-                    <dd class="col-sm-8"><?= e($followUpTs === false ? '—' : date('m/d/Y', $followUpTs)) ?></dd>
+                    <dd class="col-sm-8"><?= e($followUpTs === false ? '—' : date('m/d/Y g:i A', $followUpTs)) ?></dd>
 
                     <dt class="col-sm-4">Address</dt>
                     <?php

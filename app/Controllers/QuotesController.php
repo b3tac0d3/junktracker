@@ -127,10 +127,16 @@ final class QuotesController extends Controller
         }
 
         $estimates = Quote::estimatesByQuote($businessId, $quoteId);
+        $statusOptions = Quote::statusOptions();
+        $currentStatus = strtolower(trim((string) ($quote['status'] ?? 'new')));
+        if ($currentStatus !== '' && !in_array($currentStatus, $statusOptions, true)) {
+            $statusOptions = array_values(array_unique(array_merge([$currentStatus], $statusOptions)));
+        }
         $this->render('quotes/show', [
             'pageTitle' => 'Quote',
             'quote' => $quote,
             'estimates' => $estimates,
+            'statusOptions' => $statusOptions,
         ]);
     }
 
@@ -230,6 +236,54 @@ final class QuotesController extends Controller
         redirect('/jobs/' . (string) $jobId);
     }
 
+    public function quickStatus(array $params): void
+    {
+        require_business_role(['general_user', 'admin']);
+
+        $quoteId = (int) ($params['id'] ?? 0);
+        if ($quoteId <= 0) {
+            flash('error', 'Quote not found.');
+            redirect('/quotes');
+        }
+
+        if (!verify_csrf($_POST['csrf_token'] ?? null)) {
+            flash('error', 'Session expired. Please try again.');
+            redirect('/quotes/' . (string) $quoteId);
+        }
+
+        $businessId = current_business_id();
+        $quote = Quote::findForBusiness($businessId, $quoteId);
+        if ($quote === null) {
+            flash('error', 'Quote not found.');
+            redirect('/quotes');
+        }
+
+        $status = strtolower(trim((string) ($_POST['status'] ?? '')));
+        $allowed = Quote::statusOptions();
+        if (!in_array($status, $allowed, true)) {
+            flash('error', 'Choose a valid status.');
+            redirect('/quotes/' . (string) $quoteId);
+        }
+
+        $current = strtolower(trim((string) ($quote['status'] ?? 'new')));
+        if ($status === $current) {
+            redirect('/quotes/' . (string) $quoteId);
+        }
+
+        $actor = (int) (auth_user_id() ?? 0);
+        if (Quote::updateStatus($businessId, $quoteId, $status, $actor)) {
+            AuditLog::write('quote_status_updated', 'quotes', $quoteId, $businessId, $actor, [
+                'from_status' => $current,
+                'to_status' => $status,
+            ]);
+            flash('success', 'Quote status updated.');
+        } else {
+            flash('error', 'Could not update status.');
+        }
+
+        redirect('/quotes/' . (string) $quoteId);
+    }
+
     private function defaultForm(): array
     {
         return [
@@ -278,7 +332,7 @@ final class QuotesController extends Controller
             'status' => strtolower(trim((string) ($quote['status'] ?? 'new'))),
             'service_type' => trim((string) ($quote['service_type'] ?? '')),
             'notes' => trim((string) ($quote['notes'] ?? '')),
-            'next_follow_up_at' => $this->toInputDate((string) ($quote['next_follow_up_at'] ?? '')),
+            'next_follow_up_at' => $this->toInputDateTimeLocal((string) ($quote['next_follow_up_at'] ?? '')),
             'lost_reason' => trim((string) ($quote['lost_reason'] ?? '')),
             'address_line1' => trim((string) ($quote['address_line1'] ?? '')),
             'address_line2' => trim((string) ($quote['address_line2'] ?? '')),
@@ -289,14 +343,14 @@ final class QuotesController extends Controller
         ];
     }
 
-    private function toInputDate(string $value): string
+    private function toInputDateTimeLocal(string $value): string
     {
         $value = trim($value);
         if ($value === '') {
             return '';
         }
         $ts = strtotime($value);
-        return $ts === false ? '' : date('Y-m-d', $ts);
+        return $ts === false ? '' : date('Y-m-d\TH:i', $ts);
     }
 }
 

@@ -95,7 +95,7 @@ foreach ($statusOptionsRaw as $opt) {
                                 </div>
                                 <div class="record-field">
                                     <span class="record-label">Quote Date</span>
-                                    <span class="record-value"><?= e($followTs === false ? '—' : date('m/d/Y', $followTs)) ?></span>
+                                    <span class="record-value"><?= e($followTs === false ? '—' : date('m/d/Y g:i A', $followTs)) ?></span>
                                 </div>
                             </div>
                         </a>
