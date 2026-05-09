@@ -1,0 +1,20 @@
+diff --git a/app/Models/Invoice.php b/app/Models/Invoice.php
+index b1ec817..ed6b155 100644
+--- a/app/Models/Invoice.php
++++ b/app/Models/Invoice.php
+@@ -391,6 +391,7 @@ final class Invoice
+         $internalNoteSql = SchemaInspector::hasColumn('invoices', 'internal_note') ? 'i.internal_note' : 'NULL';
+         $clientIdSql = SchemaInspector::hasColumn('invoices', 'client_id') ? 'i.client_id' : 'NULL';
+         $jobIdSql = SchemaInspector::hasColumn('invoices', 'job_id') ? 'i.job_id' : 'NULL';
++        $quoteIdSql = SchemaInspector::hasColumn('invoices', 'quote_id') ? 'i.quote_id' : 'NULL';
+ 
+         $joinSql = '';
+         $clientNameSql = "'—'";
+@@ -441,6 +442,7 @@ final class Invoice
+                     {$internalNoteSql} AS internal_note,
+                     {$clientIdSql} AS client_id,
+                     {$jobIdSql} AS job_id,
++                    {$quoteIdSql} AS quote_id,
+                     {$clientNameSql} AS client_name,
+                     {$jobTitleSql} AS job_title,
+                     {$jobAddress1Sql} AS job_address_line1,
