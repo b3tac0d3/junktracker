@@ -33,9 +33,6 @@ $jobId = (int) ($job['id'] ?? 0);
 $clientId = (int) ($job['client_id'] ?? 0);
 $estimateCreateUrl = url('/billing/create') . '?type=estimate&from=job&job_id=' . (string) $jobId . '&client_id=' . (string) $clientId;
 $invoiceCreateUrl = url('/billing/create') . '?type=invoice&from=job&job_id=' . (string) $jobId . '&client_id=' . (string) $clientId;
-$quoteCreateUrl = $clientId > 0
-    ? (url('/quotes/create') . '?client_id=' . (string) $clientId)
-    : url('/quotes/create');
 $estimateDocs = is_array($documents['estimates'] ?? null) ? $documents['estimates'] : [];
 $invoiceDocs = is_array($documents['invoices'] ?? null) ? $documents['invoices'] : [];
 $paymentDocs = is_array($documents['payments'] ?? null) ? $documents['payments'] : [];
@@ -117,7 +114,6 @@ $formatDuration = static function (int $minutes): string {
                 <li><a class="dropdown-item" href="<?= e(url('/jobs/' . (string) $jobId . '/edit')) ?>"><i class="fas fa-pen me-2"></i>Edit Job</a></li>
                 <li><a class="dropdown-item" href="<?= e($timeEntryCreateUrl) ?>"><i class="fas fa-clock me-2"></i>Add Time Entry</a></li>
                 <li><a class="dropdown-item" href="<?= e($employeeAddUrl) ?>"><i class="fas fa-user-plus me-2"></i>Add Employee</a></li>
-                <li><a class="dropdown-item" href="<?= e($quoteCreateUrl) ?>"><i class="fas fa-scroll me-2"></i>Add Quote</a></li>
                 <li><a class="dropdown-item" href="<?= e($estimateCreateUrl) ?>"><i class="fas fa-file-signature me-2"></i>Add Estimate</a></li>
                 <li><a class="dropdown-item" href="<?= e($invoiceCreateUrl) ?>"><i class="fas fa-file-invoice me-2"></i>Add Invoice</a></li>
                 <li><a class="dropdown-item" href="<?= e($paymentCreateUrl) ?>"><i class="fas fa-money-check-dollar me-2"></i>Add Payment</a></li>

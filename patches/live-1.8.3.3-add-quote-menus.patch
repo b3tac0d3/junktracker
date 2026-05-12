@@ -14,28 +14,6 @@ index e0b91b3..ce7a28f 100644
                  <li>
                      <a class="dropdown-item" href="<?= e(url('/purchases/create') . '?client_id=' . (string) ((int) ($client['id'] ?? 0))) ?>">
                          <i class="fas fa-cart-arrow-down me-2"></i>Add Purchase
-diff --git a/app/Views/jobs/show.php b/app/Views/jobs/show.php
-index cab5c40..56ffca5 100644
---- a/app/Views/jobs/show.php
-+++ b/app/Views/jobs/show.php
-@@ -33,6 +33,9 @@ $jobId = (int) ($job['id'] ?? 0);
- $clientId = (int) ($job['client_id'] ?? 0);
- $estimateCreateUrl = url('/billing/create') . '?type=estimate&from=job&job_id=' . (string) $jobId . '&client_id=' . (string) $clientId;
- $invoiceCreateUrl = url('/billing/create') . '?type=invoice&from=job&job_id=' . (string) $jobId . '&client_id=' . (string) $clientId;
-+$quoteCreateUrl = $clientId > 0
-+    ? (url('/quotes/create') . '?client_id=' . (string) $clientId)
-+    : url('/quotes/create');
- $estimateDocs = is_array($documents['estimates'] ?? null) ? $documents['estimates'] : [];
- $invoiceDocs = is_array($documents['invoices'] ?? null) ? $documents['invoices'] : [];
- $paymentDocs = is_array($documents['payments'] ?? null) ? $documents['payments'] : [];
-@@ -114,6 +117,7 @@ $formatDuration = static function (int $minutes): string {
-                 <li><a class="dropdown-item" href="<?= e(url('/jobs/' . (string) $jobId . '/edit')) ?>"><i class="fas fa-pen me-2"></i>Edit Job</a></li>
-                 <li><a class="dropdown-item" href="<?= e($timeEntryCreateUrl) ?>"><i class="fas fa-clock me-2"></i>Add Time Entry</a></li>
-                 <li><a class="dropdown-item" href="<?= e($employeeAddUrl) ?>"><i class="fas fa-user-plus me-2"></i>Add Employee</a></li>
-+                <li><a class="dropdown-item" href="<?= e($quoteCreateUrl) ?>"><i class="fas fa-scroll me-2"></i>Add Quote</a></li>
-                 <li><a class="dropdown-item" href="<?= e($estimateCreateUrl) ?>"><i class="fas fa-file-signature me-2"></i>Add Estimate</a></li>
-                 <li><a class="dropdown-item" href="<?= e($invoiceCreateUrl) ?>"><i class="fas fa-file-invoice me-2"></i>Add Invoice</a></li>
-                 <li><a class="dropdown-item" href="<?= e($paymentCreateUrl) ?>"><i class="fas fa-money-check-dollar me-2"></i>Add Payment</a></li>
 diff --git a/app/Views/layouts/main.php b/app/Views/layouts/main.php
 index e2bf2e0..e40a9e2 100644
 --- a/app/Views/layouts/main.php
@@ -87,10 +65,10 @@ index b2c8943..8e4df58 100644
  
 diff --git a/docs/releases/live-1.8.3.3-beta.md b/docs/releases/live-1.8.3.3-beta.md
 new file mode 100644
-index 0000000..8038089
+index 0000000..b77928f
 --- /dev/null
 +++ b/docs/releases/live-1.8.3.3-beta.md
-@@ -0,0 +1,34 @@
+@@ -0,0 +1,32 @@
 +# Live Release 1.8.3.3-beta
 +
 +Date: 2026-05-12
@@ -99,13 +77,11 @@ index 0000000..8038089
 +
 +- **Navigation:** **Add Quote** in the header quick-add (+) menu (`/quotes/create`).
 +- **Client record:** **Add Quote** in the client **Actions** menu, with `client_id` prefilled.
-+- **Job record:** **Add Quote** in the job **Actions** menu, with the job’s client prefilled when available.
 +
 +## Changed files
 +
 +- `app/Views/layouts/main.php`
 +- `app/Views/clients/show.php`
-+- `app/Views/jobs/show.php`
 +- `config/app.php` (version `1.8.3.3-beta`)
 +- `docs/deploy-checklist.md`, `docs/releases/live-1.8.3.3-beta.md`
 +- `patches/live-1.8.3.3-add-quote-menus.patch` (optional hotfix apply)
@@ -124,4 +100,4 @@ index 0000000..8038089
 +
 +## Ops notes
 +
-+- Smoke test: open **Actions** on a client and a job — **Add Quote** appears and opens the quote form with the expected client.
++- Smoke test: header **+** menu and client **Actions** — **Add Quote** opens the quote form; use the client menu for a prefilled `client_id`.
