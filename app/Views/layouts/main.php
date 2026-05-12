@@ -68,7 +68,7 @@ $navNotifications = is_array($navNotifications ?? null) ? $navNotifications : ['
                     >
                         <i class="fas fa-search fa-fw" aria-hidden="true"></i>
                     </a>
-                    <div class="dropdown-menu dropdown-menu-end p-2" aria-labelledby="mobileSearchDropdown" style="min-width: 280px;">
+                    <div class="dropdown-menu dropdown-menu-end p-2 jt-mobile-search-menu" aria-labelledby="mobileSearchDropdown">
                         <form method="get" action="<?= e(url('/search')) ?>">
                             <div class="input-group input-group-sm">
                                 <input class="form-control" type="text" name="global_q" value="<?= e($globalSearchQuery) ?>" placeholder="Search..." aria-label="Search" autocomplete="off" />
@@ -150,6 +150,7 @@ $navNotifications = is_array($navNotifications ?? null) ? $navNotifications : ['
                     <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="quickAddDropdown">
                         <li><a class="dropdown-item" href="<?= e(url('/jobs/create')) ?>"><i class="fas fa-briefcase me-2"></i>Add Job</a></li>
                         <li><a class="dropdown-item" href="<?= e(url('/clients/create')) ?>"><i class="fas fa-users me-2"></i>Add Client</a></li>
+                        <li><a class="dropdown-item" href="<?= e(url('/quotes/create')) ?>"><i class="fas fa-file-signature me-2"></i>Add Quote</a></li>
                         <li><a class="dropdown-item" href="<?= e(url('/deliveries/create')) ?>"><i class="fas fa-truck me-2"></i>Add Delivery</a></li>
                         <li><a class="dropdown-item" href="<?= e(url('/tasks')) ?>"><i class="fas fa-list-check me-2"></i>Add Task</a></li>
                         <li><a class="dropdown-item" href="<?= e(url('/sales/create')) ?>"><i class="fas fa-sack-dollar me-2"></i>Add Sale</a></li>

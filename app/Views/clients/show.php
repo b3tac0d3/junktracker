@@ -116,6 +116,11 @@ $isInactive = $clientStatus === 'inactive' || (array_key_exists('is_active', $cl
                     </a>
                 </li>
                 <li>
+                    <a class="dropdown-item" href="<?= e(url('/quotes/create') . '?client_id=' . (string) ((int) ($client['id'] ?? 0))) ?>">
+                        <i class="fas fa-file-signature me-2"></i>Add Quote
+                    </a>
+                </li>
+                <li>
                     <a class="dropdown-item" href="<?= e(url('/purchases/create') . '?client_id=' . (string) ((int) ($client['id'] ?? 0))) ?>">
                         <i class="fas fa-cart-arrow-down me-2"></i>Add Purchase
                     </a>
