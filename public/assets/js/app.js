@@ -1,4 +1,30 @@
 window.addEventListener('DOMContentLoaded', () => {
+    if (document.body.classList.contains('jt-app-authenticated')) {
+        document.querySelectorAll('form:not([data-allow-autocomplete])').forEach((form) => {
+            form.setAttribute('autocomplete', 'off');
+            form.setAttribute('data-form-type', 'other');
+            form.querySelectorAll('input, textarea, select').forEach((field) => {
+                const type = (field.getAttribute('type') || '').toLowerCase();
+                if (type === 'hidden' || type === 'submit' || type === 'button' || type === 'checkbox' || type === 'radio') {
+                    return;
+                }
+                const existing = (field.getAttribute('autocomplete') || '').toLowerCase();
+                if (type === 'password') {
+                    if (existing === '' || existing === 'off') {
+                        field.setAttribute('autocomplete', 'new-password');
+                    }
+                    return;
+                }
+                if (existing === '' || existing === 'off') {
+                    field.setAttribute('autocomplete', 'off');
+                }
+                field.setAttribute('data-1p-ignore', 'true');
+                field.setAttribute('data-lpignore', 'true');
+                field.setAttribute('data-dashlane-ignore', 'true');
+            });
+        });
+    }
+
     const alerts = document.querySelectorAll('.alert:not(.alert-persistent)');
     alerts.forEach((el) => {
         setTimeout(() => {

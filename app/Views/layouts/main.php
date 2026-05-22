@@ -27,7 +27,7 @@ $navNotifications = is_array($navNotifications ?? null) ? $navNotifications : ['
     <link href="<?= e(asset('css/jt-theme.css')) ?>" rel="stylesheet" />
     <script src="https://use.fontawesome.com/releases/v6.3.0/js/all.js" crossorigin="anonymous"></script>
 </head>
-<body class="sb-nav-fixed">
+<body class="sb-nav-fixed<?= !$publicPage ? ' jt-app-authenticated' : '' ?>">
 <?php if ($publicPage): ?>
     <main class="container py-5">
         <?php if ($success = flash('success')): ?><div class="alert alert-success"><?= e($success) ?></div><?php endif; ?>
