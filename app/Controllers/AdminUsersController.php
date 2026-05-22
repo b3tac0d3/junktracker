@@ -125,15 +125,7 @@ final class AdminUsersController extends Controller
         }
 
         $inviteSent = $this->sendInviteEmail($form, $temporaryPassword, $isSiteAdminGlobal);
-        if ($inviteSent) {
-            flash('success', $isSiteAdminGlobal
-                ? 'Site admin added and invite email sent.'
-                : 'User added and invite email sent.');
-        } else {
-            flash('error', $isSiteAdminGlobal
-                ? 'Site admin added, but the invite email could not be sent. Use Resend Invite after mail is configured.'
-                : 'User added, but the invite email could not be sent. Use Resend Invite after mail is configured.');
-        }
+        $this->flashInviteDeliveryResult($inviteSent, $isSiteAdminGlobal);
         redirect('/admin/users');
     }
 
@@ -293,11 +285,7 @@ final class AdminUsersController extends Controller
         $actorId = (int) (auth_user_id() ?? 0);
         User::resendInvitation((int) ($targetUser['id'] ?? 0), password_hash($temporaryPassword, PASSWORD_DEFAULT), $actorId);
         $inviteSent = $this->sendInviteEmail($targetUser, $temporaryPassword, $this->isGlobalSiteAdminContext());
-        if ($inviteSent) {
-            flash('success', 'Invite resent.');
-        } else {
-            flash('error', 'Invite was reset, but the email could not be sent. Check mail configuration and try again.');
-        }
+        $this->flashInviteResendResult($inviteSent);
         redirect('/admin/users/' . (string) ((int) ($targetUser['id'] ?? 0)) . '/edit');
     }
 
@@ -350,12 +338,7 @@ final class AdminUsersController extends Controller
         }
 
         $sent = $this->sendPasswordResetEmail($targetUser, $token);
-        if ($sent) {
-            flash('success', 'Password reset link sent.');
-        } else {
-            flash('error', 'Password reset link was generated, but the email could not be sent.');
-        }
-
+        $this->flashPasswordResetDeliveryResult($sent);
         redirect('/admin/users/' . (string) ((int) ($targetUser['id'] ?? 0)) . '/edit');
     }
 
@@ -558,5 +541,51 @@ final class AdminUsersController extends Controller
         ]);
 
         return Mailer::send($email, $subject, $body);
+    }
+
+    private function flashInviteDeliveryResult(bool $sent, bool $isSiteAdminGlobal): void
+    {
+        $label = $isSiteAdminGlobal ? 'Site admin' : 'User';
+        if (!Mailer::sendsExternally()) {
+            flash('error', $label . ' added, but no invite email was sent — mail is in log-only mode. Set app.env to production on the server, or add config/mail.local.php with transport mail.');
+            return;
+        }
+
+        if ($sent) {
+            flash('success', $label . ' added and invite email sent.');
+            return;
+        }
+
+        flash('error', $label . ' added, but the invite email could not be sent. Check server mail settings and use Resend Invite.');
+    }
+
+    private function flashInviteResendResult(bool $sent): void
+    {
+        if (!Mailer::sendsExternally()) {
+            flash('error', 'Invite was reset, but no email was sent — mail is in log-only mode. Configure mail transport on the server first.');
+            return;
+        }
+
+        if ($sent) {
+            flash('success', 'Invite resent.');
+            return;
+        }
+
+        flash('error', 'Invite was reset, but the email could not be sent. Check mail configuration and try again.');
+    }
+
+    private function flashPasswordResetDeliveryResult(bool $sent): void
+    {
+        if (!Mailer::sendsExternally()) {
+            flash('error', 'Password reset link was generated, but no email was sent — mail is in log-only mode. Configure mail transport on the server first.');
+            return;
+        }
+
+        if ($sent) {
+            flash('success', 'Password reset link sent.');
+            return;
+        }
+
+        flash('error', 'Password reset link was generated, but the email could not be sent.');
     }
 }

@@ -6,6 +6,11 @@ namespace Core;
 
 final class Mailer
 {
+    public static function deliversExternally(): bool
+    {
+        return trim((string) \config('mail.transport', 'log')) !== 'log';
+    }
+
     public static function send(string $to, string $subject, string $body): bool
     {
         $to = trim($to);
@@ -32,7 +37,14 @@ final class Mailer
             return true;
         }
 
-        $sent = @mail($to, $subject, $body, implode("\r\n", $headers));
+        $additionalParams = '';
+        if ($fromAddress !== '') {
+            $additionalParams = '-f ' . escapeshellarg($fromAddress);
+        }
+
+        $sent = $additionalParams !== ''
+            ? @mail($to, $subject, $body, implode("\r\n", $headers), $additionalParams)
+            : @mail($to, $subject, $body, implode("\r\n", $headers));
         self::log($to, $subject, $body, $sent, $transport);
         return $sent;
     }
@@ -74,9 +86,21 @@ final class Mailer
             return true;
         }
 
-        $sent = @mail($to, $subject, $body, implode("\r\n", $headers));
+        $additionalParams = '';
+        if ($fromAddress !== '') {
+            $additionalParams = '-f ' . escapeshellarg($fromAddress);
+        }
+
+        $sent = $additionalParams !== ''
+            ? @mail($to, $subject, $body, implode("\r\n", $headers), $additionalParams)
+            : @mail($to, $subject, $body, implode("\r\n", $headers));
         self::log($to, $subject, $plain, $sent, $transport);
         return $sent;
+    }
+
+    public static function sendsExternally(): bool
+    {
+        return trim((string) \config('mail.transport', 'log')) !== 'log';
     }
 
     private static function log(string $to, string $subject, string $body, bool $ok, string $transport = 'mail'): void

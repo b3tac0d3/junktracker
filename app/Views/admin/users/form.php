@@ -41,7 +41,15 @@ $invitationPending = !$isCreate && $invitedAt !== '' && $invitationAcceptedAt ==
 $invitationStatus = $isCreate
     ? ''
     : ($invitationAcceptedAt !== '' ? 'Accepted' : ($invitationExpired ? 'Expired' : ($invitedAt !== '' ? 'Pending' : 'Accepted')));
+$mailTransport = trim((string) config('mail.transport', 'log'));
+$mailLogOnly = $mailTransport === 'log';
 ?>
+
+<?php if ($mailLogOnly): ?>
+<div class="alert alert-warning mb-3" role="alert">
+    <strong>Email is in log-only mode.</strong> Invites are not emailed until mail transport is configured on the server.
+</div>
+<?php endif; ?>
 
 <div class="page-header d-flex flex-wrap align-items-end justify-content-between gap-2">
     <div>

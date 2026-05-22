@@ -17,7 +17,15 @@ $displayName = static function (array $row): string {
 
     return trim((string) ($row['email'] ?? '')) !== '' ? (string) $row['email'] : ('User #' . (string) ((int) ($row['id'] ?? 0)));
 };
+$mailTransport = trim((string) config('mail.transport', 'log'));
+$mailLogOnly = $mailTransport === 'log';
 ?>
+
+<?php if ($mailLogOnly): ?>
+<div class="alert alert-warning mb-3" role="alert">
+    <strong>Email is in log-only mode.</strong> User invites and password resets are written to <code>storage/logs/mail-*.log</code> but are not emailed until the server uses mail transport (<code>app.env = production</code> or <code>config/mail.local.php</code>).
+</div>
+<?php endif; ?>
 
 <div class="page-header d-flex flex-wrap align-items-end justify-content-between gap-2">
     <div>

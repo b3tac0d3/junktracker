@@ -2,10 +2,19 @@
 
 declare(strict_types=1);
 
-$env = (string) (require __DIR__ . '/app.php')['env'];
+$app = require __DIR__ . '/app.php';
+$env = (string) ($app['env'] ?? 'local');
 
-return [
-    'transport' => $env === 'production' ? 'mail' : 'log',
+$envTransport = getenv('JUNKTRACKER_MAIL_TRANSPORT');
+$transport = 'log';
+if (is_string($envTransport) && trim($envTransport) !== '') {
+    $transport = strtolower(trim($envTransport));
+} elseif ($env === 'production') {
+    $transport = 'mail';
+}
+
+$config = [
+    'transport' => $transport,
     'from_address' => 'no-reply@junktracker.jimmysjunk.com',
     'from_name' => 'JunkTracker',
     'invite_subject' => 'Your JunkTracker invite',
@@ -15,3 +24,12 @@ return [
     'payment_receipt_subject' => 'Payment receipt',
     'daily_digest_subject' => 'JunkTracker daily digest',
 ];
+
+$localOverride = __DIR__ . '/mail.local.php';
+if (is_file($localOverride)) {
+    /** @var array<string, mixed> $override */
+    $override = require $localOverride;
+    $config = array_merge($config, $override);
+}
+
+return $config;
