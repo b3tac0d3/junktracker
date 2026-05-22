@@ -21,10 +21,10 @@ final class EstateSale
     public static function clientSplitTypeOptions(): array
     {
         return [
-            self::SPLIT_GROSS_TOTAL => 'Split gross total',
-            self::SPLIT_NET => 'Split net',
-            self::SPLIT_LESS_LABOR => 'Less labor',
-            self::SPLIT_NET_TOTAL => 'Split net total',
+            self::SPLIT_GROSS_TOTAL => 'Split gross total (% of sales)',
+            self::SPLIT_NET => 'Split net (% sales − expenses)',
+            self::SPLIT_LESS_LABOR => 'Less labor (% sales − labor)',
+            self::SPLIT_NET_TOTAL => 'Split net total (% sales − exp − labor)',
         ];
     }
 
@@ -38,10 +38,10 @@ final class EstateSale
     public static function clientSplitTypeHelpText(string $value): string
     {
         return match (self::normalizeClientSplitType($value)) {
-            self::SPLIT_NET => 'Client share = (total sales − expenses) × client %. Our share = remainder of that net amount.',
-            self::SPLIT_LESS_LABOR => 'Client share = (total sales − labor) × client %. Our share = total sales − client share − expenses − labor.',
-            self::SPLIT_NET_TOTAL => 'Client share = (total sales − expenses − labor) × client %. Our share = remainder of that net total.',
-            default => 'Client share = total sales × client %. Our share = total sales − client share − expenses.',
+            self::SPLIT_NET => 'Example: 60% net after expenses on $10,000 sales with $2,000 expenses → client gets 60% of $8,000 = $4,800; we keep the rest of that net amount.',
+            self::SPLIT_LESS_LABOR => 'Example: 60% on $10,000 sales with $1,500 labor → client gets 60% of $8,500 = $5,100; we keep sales minus client share, expenses, and labor.',
+            self::SPLIT_NET_TOTAL => 'Example: 60% net total on $10,000 sales with $2,000 expenses and $1,500 labor → client gets 60% of $6,500 = $3,900; we keep the rest of that net total.',
+            default => 'Example: 60% of $10,000 gross sales → client gets $6,000; we keep sales minus client share and then pay expenses from our share.',
         };
     }
 

@@ -1,0 +1,62 @@
+diff --git a/app/Models/EstateSale.php b/app/Models/EstateSale.php
+index 5248db4..d1b2a90 100644
+--- a/app/Models/EstateSale.php
++++ b/app/Models/EstateSale.php
+@@ -21,10 +21,10 @@ final class EstateSale
+     public static function clientSplitTypeOptions(): array
+     {
+         return [
+-            self::SPLIT_GROSS_TOTAL => 'Split gross total',
+-            self::SPLIT_NET => 'Split net',
+-            self::SPLIT_LESS_LABOR => 'Less labor',
+-            self::SPLIT_NET_TOTAL => 'Split net total',
++            self::SPLIT_GROSS_TOTAL => 'Split gross total (% of sales)',
++            self::SPLIT_NET => 'Split net (% sales − expenses)',
++            self::SPLIT_LESS_LABOR => 'Less labor (% sales − labor)',
++            self::SPLIT_NET_TOTAL => 'Split net total (% sales − exp − labor)',
+         ];
+     }
+ 
+@@ -38,10 +38,10 @@ final class EstateSale
+     public static function clientSplitTypeHelpText(string $value): string
+     {
+         return match (self::normalizeClientSplitType($value)) {
+-            self::SPLIT_NET => 'Client share = (total sales − expenses) × client %. Our share = remainder of that net amount.',
+-            self::SPLIT_LESS_LABOR => 'Client share = (total sales − labor) × client %. Our share = total sales − client share − expenses − labor.',
+-            self::SPLIT_NET_TOTAL => 'Client share = (total sales − expenses − labor) × client %. Our share = remainder of that net total.',
+-            default => 'Client share = total sales × client %. Our share = total sales − client share − expenses.',
++            self::SPLIT_NET => 'Example: 60% net after expenses on $10,000 sales with $2,000 expenses → client gets 60% of $8,000 = $4,800; we keep the rest of that net amount.',
++            self::SPLIT_LESS_LABOR => 'Example: 60% on $10,000 sales with $1,500 labor → client gets 60% of $8,500 = $5,100; we keep sales minus client share, expenses, and labor.',
++            self::SPLIT_NET_TOTAL => 'Example: 60% net total on $10,000 sales with $2,000 expenses and $1,500 labor → client gets 60% of $6,500 = $3,900; we keep the rest of that net total.',
++            default => 'Example: 60% of $10,000 gross sales → client gets $6,000; we keep sales minus client share and then pay expenses from our share.',
+         };
+     }
+ 
+diff --git a/config/app.php b/config/app.php
+index b0c966d..c06a01c 100644
+--- a/config/app.php
++++ b/config/app.php
+@@ -4,7 +4,7 @@ declare(strict_types=1);
+ 
+ return [
+     'name' => 'JunkTracker',
+-    'version' => '1.9.0-beta',
++    'version' => '1.9.0.1-beta',
+     'env' => 'local',
+     'url' => 'http://localhost/junktracker',
+     'timezone' => 'America/New_York',
+diff --git a/docs/deploy-checklist.md b/docs/deploy-checklist.md
+index 0ac768f..8cba8bd 100644
+--- a/docs/deploy-checklist.md
++++ b/docs/deploy-checklist.md
+@@ -2,8 +2,8 @@
+ 
+ Short list to keep releases predictable. Pair with delta bundles from `scripts/build-live-release.sh` and version tags.
+ 
+-**Latest release notes:** [releases/live-1.9.0-beta.md](./releases/live-1.9.0-beta.md) (Estate Sales module, quote conversions, and grouped sidebar navigation).  
+-**Earlier:** [releases/live-1.8.3.3-beta.md](./releases/live-1.8.3.3-beta.md), [releases/live-1.8.3.2-beta.md](./releases/live-1.8.3.2-beta.md), [releases/live-1.8.3.1-beta.md](./releases/live-1.8.3.1-beta.md), [releases/live-1.8.3-beta.md](./releases/live-1.8.3-beta.md), [releases/live-1.8.2.3-beta.md](./releases/live-1.8.2.3-beta.md), [releases/live-1.8.2.2-beta.md](./releases/live-1.8.2.2-beta.md), [releases/live-1.8.2.1-beta.md](./releases/live-1.8.2.1-beta.md), [releases/live-1.8.2-beta.md](./releases/live-1.8.2-beta.md), [releases/live-1.8.1-beta.md](./releases/live-1.8.1-beta.md), [releases/live-1.8.0-beta.md](./releases/live-1.8.0-beta.md), [releases/live-1.7.2.md](./releases/live-1.7.2.md), [releases/live-1.7.0.md](./releases/live-1.7.0.md), [releases/live-1.6.4-beta.md](./releases/live-1.6.4-beta.md), [releases/live-1.6.3-beta.md](./releases/live-1.6.3-beta.md), [releases/live-1.6.2-beta.md](./releases/live-1.6.2-beta.md), [releases/live-1.6.1-beta.md](./releases/live-1.6.1-beta.md), [releases/live-1.6.0.md](./releases/live-1.6.0.md), [releases/live-1.5.3.md](./releases/live-1.5.3.md).
++**Latest release notes:** [releases/live-1.9.0.1-beta.md](./releases/live-1.9.0.1-beta.md) (Clearer estate sale split basis labels).  
++**Earlier:** [releases/live-1.9.0-beta.md](./releases/live-1.9.0-beta.md), [releases/live-1.8.3.3-beta.md](./releases/live-1.8.3.3-beta.md), [releases/live-1.8.3.2-beta.md](./releases/live-1.8.3.2-beta.md), [releases/live-1.8.3.1-beta.md](./releases/live-1.8.3.1-beta.md), [releases/live-1.8.3-beta.md](./releases/live-1.8.3-beta.md), [releases/live-1.8.2.3-beta.md](./releases/live-1.8.2.3-beta.md), [releases/live-1.8.2.2-beta.md](./releases/live-1.8.2.2-beta.md), [releases/live-1.8.2.1-beta.md](./releases/live-1.8.2.1-beta.md), [releases/live-1.8.2-beta.md](./releases/live-1.8.2-beta.md), [releases/live-1.8.1-beta.md](./releases/live-1.8.1-beta.md), [releases/live-1.8.0-beta.md](./releases/live-1.8.0-beta.md), [releases/live-1.7.2.md](./releases/live-1.7.2.md), [releases/live-1.7.0.md](./releases/live-1.7.0.md), [releases/live-1.6.4-beta.md](./releases/live-1.6.4-beta.md), [releases/live-1.6.3-beta.md](./releases/live-1.6.3-beta.md), [releases/live-1.6.2-beta.md](./releases/live-1.6.2-beta.md), [releases/live-1.6.1-beta.md](./releases/live-1.6.1-beta.md), [releases/live-1.6.0.md](./releases/live-1.6.0.md), [releases/live-1.5.3.md](./releases/live-1.5.3.md).
+ 
+ ### Beta-live naming convention (standard)
+ 
