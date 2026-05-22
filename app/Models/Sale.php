@@ -16,6 +16,10 @@ final class Sale
         return ['shop', 'ebay', 'scrap', 'b2b', EstateSale::ON_SITE_SALE_TYPE];
     }
 
+    public const ESTATE_SCOPE_ALL = 'all';
+    public const ESTATE_SCOPE_GENERAL = 'general';
+    public const ESTATE_SCOPE_ESTATE_ONLY = 'estate_only';
+
     public static function indexList(
         int $businessId,
         string $search = '',
@@ -25,7 +29,8 @@ final class Sale
         int $limit = 25,
         int $offset = 0,
         string $sortBy = 'date',
-        string $sortDir = 'desc'
+        string $sortDir = 'desc',
+        string $estateSaleScope = self::ESTATE_SCOPE_ALL
     ): array
     {
         if (!SchemaInspector::hasTable('sales')) {
@@ -66,9 +71,25 @@ final class Sale
             $purchaseTitleSql = self::purchaseTitleExpr();
         }
 
+        $estateSaleScope = self::normalizeEstateSaleScope($estateSaleScope);
+        $estateSaleIdSql = SchemaInspector::hasColumn('sales', 'estate_sale_id') ? 's.estate_sale_id' : 'NULL';
+        $estateSaleTitleSql = 'NULL';
+        $estateCustomerNameSql = 'NULL';
+        if ($estateSaleScope === self::ESTATE_SCOPE_ESTATE_ONLY && SchemaInspector::hasColumn('sales', 'estate_sale_id')) {
+            if (SchemaInspector::hasTable('estate_sales')) {
+                $joins[] = self::estateSaleJoinSql();
+                $estateSaleTitleSql = self::estateSaleTitleExpr();
+            }
+            if (SchemaInspector::hasColumn('sales', 'estate_sale_customer_id') && SchemaInspector::hasTable('estate_sale_customers')) {
+                $joins[] = self::estateSaleCustomerJoinSql();
+                $estateCustomerNameSql = self::estateSaleCustomerNameExpr();
+            }
+        }
+
         $where = [];
         $where[] = SchemaInspector::hasColumn('sales', 'business_id') ? 's.business_id = :business_id' : '1=1';
         $where[] = SchemaInspector::hasColumn('sales', 'deleted_at') ? 's.deleted_at IS NULL' : '1=1';
+        self::appendEstateSaleScopeCondition($where, $estateSaleScope);
         if ($type !== '' && SchemaInspector::hasColumn('sales', 'sale_type')) {
             $where[] = 's.sale_type = :sale_type';
         }
@@ -106,6 +127,12 @@ final class Sale
         if ($purchaseTitleSql !== 'NULL') {
             $addSearch($purchaseTitleSql);
         }
+        if ($estateSaleTitleSql !== 'NULL') {
+            $addSearch($estateSaleTitleSql);
+        }
+        if ($estateCustomerNameSql !== 'NULL') {
+            $addSearch($estateCustomerNameSql);
+        }
 
         $where[] = '(' . implode(' OR ', $searchParts) . ')';
 
@@ -121,7 +148,10 @@ final class Sale
                     {$jobIdSql} AS job_id,
                     {$jobTitleSql} AS job_title,
                     {$purchaseIdSql} AS purchase_id,
-                    {$purchaseTitleSql} AS purchase_title
+                    {$purchaseTitleSql} AS purchase_title,
+                    {$estateSaleIdSql} AS estate_sale_id,
+                    {$estateSaleTitleSql} AS estate_sale_title,
+                    {$estateCustomerNameSql} AS estate_customer_name
                 FROM sales s\n";
 
         if ($joins !== []) {
@@ -135,6 +165,8 @@ final class Sale
             'date' => "{$sortDateExpr} {$sortDir}, s.id {$sortDir}",
             'id' => "s.id {$sortDir}",
             'client_name' => "{$clientNameSql} {$sortDir}, s.id {$sortDir}",
+            'estate_sale_title' => "{$estateSaleTitleSql} {$sortDir}, s.id {$sortDir}",
+            'customer_name' => "{$estateCustomerNameSql} {$sortDir}, s.id {$sortDir}",
         ];
         $orderBy = $sortMap[$sortBy] ?? $sortMap['date'];
 
@@ -143,31 +175,17 @@ final class Sale
         $sql .= "LIMIT :row_limit\n";
         $sql .= 'OFFSET :row_offset';
 
-        $stmt = Database::connection()->prepare($sql);
-        if (SchemaInspector::hasColumn('sales', 'business_id')) {
-            $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
-        }
-        if ($type !== '' && SchemaInspector::hasColumn('sales', 'sale_type')) {
-            $stmt->bindValue(':sale_type', $type);
-        }
-        if ($fromDate !== '') {
-            $stmt->bindValue(':from_date', $fromDate);
-        }
-        if ($toDate !== '') {
-            $stmt->bindValue(':to_date', $toDate);
-        }
-        foreach ($bind as $placeholder => $value) {
-            $stmt->bindValue($placeholder, $value);
-        }
-        $stmt->bindValue(':row_limit', max(1, min($limit, 1000)), \PDO::PARAM_INT);
-        $stmt->bindValue(':row_offset', max(0, $offset), \PDO::PARAM_INT);
-        $stmt->execute();
-
-        $rows = $stmt->fetchAll();
-        return is_array($rows) ? $rows : [];
+        return self::fetchIndexRows($sql, $businessId, $type, $fromDate, $toDate, $bind, $limit, $offset);
     }
 
-    public static function indexCount(int $businessId, string $search = '', string $type = '', string $fromDate = '', string $toDate = ''): int
+    public static function indexCount(
+        int $businessId,
+        string $search = '',
+        string $type = '',
+        string $fromDate = '',
+        string $toDate = '',
+        string $estateSaleScope = self::ESTATE_SCOPE_ALL
+    ): int
     {
         if (!SchemaInspector::hasTable('sales')) {
             return 0;
@@ -201,9 +219,24 @@ final class Sale
             $purchaseTitleSql = self::purchaseTitleExpr();
         }
 
+        $estateSaleScope = self::normalizeEstateSaleScope($estateSaleScope);
+        $estateSaleTitleSql = 'NULL';
+        $estateCustomerNameSql = 'NULL';
+        if ($estateSaleScope === self::ESTATE_SCOPE_ESTATE_ONLY && SchemaInspector::hasColumn('sales', 'estate_sale_id')) {
+            if (SchemaInspector::hasTable('estate_sales')) {
+                $joins[] = self::estateSaleJoinSql();
+                $estateSaleTitleSql = self::estateSaleTitleExpr();
+            }
+            if (SchemaInspector::hasColumn('sales', 'estate_sale_customer_id') && SchemaInspector::hasTable('estate_sale_customers')) {
+                $joins[] = self::estateSaleCustomerJoinSql();
+                $estateCustomerNameSql = self::estateSaleCustomerNameExpr();
+            }
+        }
+
         $where = [];
         $where[] = SchemaInspector::hasColumn('sales', 'business_id') ? 's.business_id = :business_id' : '1=1';
         $where[] = SchemaInspector::hasColumn('sales', 'deleted_at') ? 's.deleted_at IS NULL' : '1=1';
+        self::appendEstateSaleScopeCondition($where, $estateSaleScope);
         if ($type !== '' && SchemaInspector::hasColumn('sales', 'sale_type')) {
             $where[] = 's.sale_type = :sale_type';
         }
@@ -240,6 +273,12 @@ final class Sale
         if ($purchaseTitleSql !== 'NULL') {
             $addSearch($purchaseTitleSql);
         }
+        if ($estateSaleTitleSql !== 'NULL') {
+            $addSearch($estateSaleTitleSql);
+        }
+        if ($estateCustomerNameSql !== 'NULL') {
+            $addSearch($estateCustomerNameSql);
+        }
 
         $where[] = '(' . implode(' OR ', $searchParts) . ')';
 
@@ -271,16 +310,18 @@ final class Sale
         return (int) $stmt->fetchColumn();
     }
 
-    public static function typeOptions(int $businessId): array
+    public static function typeOptions(int $businessId, string $estateSaleScope = self::ESTATE_SCOPE_ALL): array
     {
         if (!SchemaInspector::hasTable('sales') || !SchemaInspector::hasColumn('sales', 'sale_type')) {
             return self::baseTypeOptions();
         }
 
+        $estateSaleScope = self::normalizeEstateSaleScope($estateSaleScope);
         $where = [];
         $where[] = SchemaInspector::hasColumn('sales', 'business_id') ? 'business_id = :business_id' : '1=1';
         $where[] = SchemaInspector::hasColumn('sales', 'deleted_at') ? 'deleted_at IS NULL' : '1=1';
         $where[] = "COALESCE(sale_type, '') <> ''";
+        self::appendEstateSaleScopeCondition($where, $estateSaleScope, '');
 
         $sql = 'SELECT DISTINCT sale_type
                 FROM sales
@@ -372,7 +413,7 @@ final class Sale
         return (int) Database::connection()->lastInsertId();
     }
 
-    public static function summary(int $businessId): array
+    public static function summary(int $businessId, string $estateSaleScope = self::ESTATE_SCOPE_ALL): array
     {
         if (!SchemaInspector::hasTable('sales')) {
             return [
@@ -384,6 +425,7 @@ final class Sale
             ];
         }
 
+        $estateSaleScope = self::normalizeEstateSaleScope($estateSaleScope);
         $grossSql = SchemaInspector::hasColumn('sales', 'gross_amount')
             ? 'COALESCE(s.gross_amount, 0)'
             : (SchemaInspector::hasColumn('sales', 'amount') ? 'COALESCE(s.amount, 0)' : '0');
@@ -395,6 +437,7 @@ final class Sale
         $where = [];
         $where[] = SchemaInspector::hasColumn('sales', 'business_id') ? 's.business_id = :business_id' : '1=1';
         $where[] = SchemaInspector::hasColumn('sales', 'deleted_at') ? 's.deleted_at IS NULL' : '1=1';
+        self::appendEstateSaleScopeCondition($where, $estateSaleScope);
 
         $sql = "SELECT
                     COUNT(*) AS total_count,
@@ -797,6 +840,7 @@ final class Sale
         if (SchemaInspector::hasColumn('sales', 'deleted_at')) {
             $where[] = 's.deleted_at IS NULL';
         }
+        self::appendEstateSaleScopeCondition($where, self::ESTATE_SCOPE_GENERAL);
 
         $sql = "SELECT
                     COUNT(*) AS row_count,
@@ -850,6 +894,7 @@ final class Sale
         if (SchemaInspector::hasColumn('sales', 'deleted_at')) {
             $where[] = 's.deleted_at IS NULL';
         }
+        self::appendEstateSaleScopeCondition($where, self::ESTATE_SCOPE_GENERAL);
 
         $sql = "SELECT
                     s.id,
@@ -992,6 +1037,115 @@ final class Sale
 
         $rows = $stmt->fetchAll();
         return is_array($rows) ? $rows : [];
+    }
+
+    /**
+     * @param array<string, mixed> $bind
+     * @return array<int, array<string, mixed>>
+     */
+    private static function fetchIndexRows(
+        string $sql,
+        int $businessId,
+        string $type,
+        string $fromDate,
+        string $toDate,
+        array $bind,
+        int $limit,
+        int $offset
+    ): array {
+        $stmt = Database::connection()->prepare($sql);
+        if (SchemaInspector::hasColumn('sales', 'business_id')) {
+            $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
+        }
+        if ($type !== '' && SchemaInspector::hasColumn('sales', 'sale_type')) {
+            $stmt->bindValue(':sale_type', $type);
+        }
+        if ($fromDate !== '') {
+            $stmt->bindValue(':from_date', $fromDate);
+        }
+        if ($toDate !== '') {
+            $stmt->bindValue(':to_date', $toDate);
+        }
+        foreach ($bind as $placeholder => $value) {
+            $stmt->bindValue($placeholder, $value);
+        }
+        $stmt->bindValue(':row_limit', max(1, min($limit, 1000)), \PDO::PARAM_INT);
+        $stmt->bindValue(':row_offset', max(0, $offset), \PDO::PARAM_INT);
+        $stmt->execute();
+
+        $rows = $stmt->fetchAll();
+        return is_array($rows) ? $rows : [];
+    }
+
+    private static function normalizeEstateSaleScope(string $scope): string
+    {
+        $scope = strtolower(trim($scope));
+        if ($scope === self::ESTATE_SCOPE_GENERAL || $scope === self::ESTATE_SCOPE_ESTATE_ONLY) {
+            return $scope;
+        }
+
+        return self::ESTATE_SCOPE_ALL;
+    }
+
+    /**
+     * @param array<int, string> $where
+     */
+    private static function appendEstateSaleScopeCondition(array &$where, string $scope, string $alias = 's'): void
+    {
+        if (!SchemaInspector::hasColumn('sales', 'estate_sale_id')) {
+            return;
+        }
+
+        $scope = self::normalizeEstateSaleScope($scope);
+        $column = $alias !== '' ? $alias . '.estate_sale_id' : 'estate_sale_id';
+        if ($scope === self::ESTATE_SCOPE_GENERAL) {
+            $where[] = "({$column} IS NULL OR {$column} = 0)";
+            return;
+        }
+
+        if ($scope === self::ESTATE_SCOPE_ESTATE_ONLY) {
+            $where[] = "{$column} IS NOT NULL AND {$column} > 0";
+        }
+    }
+
+    private static function estateSaleJoinSql(): string
+    {
+        $join = 'LEFT JOIN estate_sales es ON es.id = s.estate_sale_id';
+        if (SchemaInspector::hasColumn('estate_sales', 'deleted_at')) {
+            $join .= ' AND es.deleted_at IS NULL';
+        }
+        if (SchemaInspector::hasColumn('estate_sales', 'business_id') && SchemaInspector::hasColumn('sales', 'business_id')) {
+            $join .= ' AND es.business_id = s.business_id';
+        }
+
+        return $join;
+    }
+
+    private static function estateSaleCustomerJoinSql(): string
+    {
+        $join = 'LEFT JOIN estate_sale_customers esc ON esc.id = s.estate_sale_customer_id';
+        if (SchemaInspector::hasColumn('estate_sale_customers', 'deleted_at')) {
+            $join .= ' AND esc.deleted_at IS NULL';
+        }
+        if (SchemaInspector::hasColumn('estate_sale_customers', 'business_id') && SchemaInspector::hasColumn('sales', 'business_id')) {
+            $join .= ' AND esc.business_id = s.business_id';
+        }
+
+        return $join;
+    }
+
+    private static function estateSaleTitleExpr(): string
+    {
+        if (SchemaInspector::hasColumn('estate_sales', 'title')) {
+            return "COALESCE(NULLIF(TRIM(es.title), ''), CONCAT('Estate Sale #', es.id))";
+        }
+
+        return "CONCAT('Estate Sale #', es.id)";
+    }
+
+    private static function estateSaleCustomerNameExpr(): string
+    {
+        return "COALESCE(NULLIF(TRIM(CONCAT_WS(' ', esc.first_name, esc.last_name)), ''), CONCAT('Customer #', esc.id))";
     }
 
     private static function saleNameExpr(string $alias = 's'): string

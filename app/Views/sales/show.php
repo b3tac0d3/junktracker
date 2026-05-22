@@ -6,9 +6,9 @@ $saleEditUrl = $estateSaleId > 0
     ? url('/estate-sales/' . (string) $estateSaleId . '/sales/' . (string) $saleId . '/edit')
     : url('/sales/' . (string) $saleId . '/edit');
 $backUrl = $estateSaleId > 0
-    ? url('/estate-sales/' . (string) $estateSaleId . '?tab=sales')
+    ? url('/estate-sale-records')
     : url('/sales');
-$backLabel = $estateSaleId > 0 ? 'Back to Estate Sale' : 'Back to Sales';
+$backLabel = $estateSaleId > 0 ? 'Back to Estate Sale Records' : 'Back to Sales';
 
 $displayName = trim((string) ($sale['name'] ?? ''));
 if ($displayName === '') {

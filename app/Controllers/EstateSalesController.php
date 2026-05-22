@@ -76,6 +76,64 @@ final class EstateSalesController extends Controller
         ]);
     }
 
+    public function records(): void
+    {
+        require_business_role(['general_user', 'admin']);
+
+        $search = trim((string) ($_GET['q'] ?? ''));
+        $sortBy = strtolower(trim((string) ($_GET['sort_by'] ?? 'date')));
+        $sortDir = strtolower(trim((string) ($_GET['sort_dir'] ?? 'desc')));
+        if (!in_array($sortBy, ['date', 'id', 'customer_name', 'estate_sale_title'], true)) {
+            $sortBy = 'date';
+        }
+        if (!in_array($sortDir, ['asc', 'desc'], true)) {
+            $sortDir = 'desc';
+        }
+
+        $fromDate = $this->normalizeDateFilter((string) ($_GET['from'] ?? date('Y-01-01')));
+        $toDate = $this->normalizeDateFilter((string) ($_GET['to'] ?? date('Y-m-d')));
+        if ($fromDate !== '' && $toDate !== '' && strtotime($fromDate) > strtotime($toDate)) {
+            [$fromDate, $toDate] = [$toDate, $fromDate];
+        }
+
+        $businessId = current_business_id();
+        $perPage = pagination_per_page($_GET['per_page'] ?? null);
+        $page = pagination_current_page($_GET['page'] ?? null);
+        $totalRows = Sale::indexCount($businessId, $search, '', $fromDate, $toDate, Sale::ESTATE_SCOPE_ESTATE_ONLY);
+        $totalPages = pagination_total_pages($totalRows, $perPage);
+        if ($page > $totalPages) {
+            $page = $totalPages;
+        }
+        $offset = pagination_offset($page, $perPage);
+
+        $records = Sale::indexList(
+            $businessId,
+            $search,
+            '',
+            $fromDate,
+            $toDate,
+            $perPage,
+            $offset,
+            $sortBy,
+            $sortDir,
+            Sale::ESTATE_SCOPE_ESTATE_ONLY
+        );
+        $summary = Sale::summary($businessId, Sale::ESTATE_SCOPE_ESTATE_ONLY);
+        $pagination = pagination_meta($page, $perPage, $totalRows, count($records));
+
+        $this->render('estate-sales/records', [
+            'pageTitle' => 'Estate Sale Records',
+            'search' => $search,
+            'sortBy' => $sortBy,
+            'sortDir' => $sortDir,
+            'fromDate' => $fromDate,
+            'toDate' => $toDate,
+            'records' => $records,
+            'summary' => $summary,
+            'pagination' => $pagination,
+        ]);
+    }
+
     public function create(): void
     {
         require_business_role(['general_user', 'admin']);

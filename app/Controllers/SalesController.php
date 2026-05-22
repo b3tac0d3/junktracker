@@ -37,18 +37,18 @@ final class SalesController extends Controller
 
         $perPage = pagination_per_page($_GET['per_page'] ?? null);
         $page = pagination_current_page($_GET['page'] ?? null);
-        $totalRows = Sale::indexCount($businessId, $search, $type, $fromDate, $toDate);
+        $totalRows = Sale::indexCount($businessId, $search, $type, $fromDate, $toDate, Sale::ESTATE_SCOPE_GENERAL);
         $totalPages = pagination_total_pages($totalRows, $perPage);
         if ($page > $totalPages) {
             $page = $totalPages;
         }
         $offset = pagination_offset($page, $perPage);
 
-        $sales = Sale::indexList($businessId, $search, $type, $fromDate, $toDate, $perPage, $offset, $sortBy, $sortDir);
-        $summary = Sale::summary($businessId);
+        $sales = Sale::indexList($businessId, $search, $type, $fromDate, $toDate, $perPage, $offset, $sortBy, $sortDir, Sale::ESTATE_SCOPE_GENERAL);
+        $summary = Sale::summary($businessId, Sale::ESTATE_SCOPE_GENERAL);
         $typeOptions = FormSelectValue::optionsForSection($businessId, 'sale_type');
         if ($typeOptions === []) {
-            $typeOptions = Sale::typeOptions($businessId);
+            $typeOptions = Sale::typeOptions($businessId, Sale::ESTATE_SCOPE_GENERAL);
         }
         $pagination = pagination_meta($page, $perPage, $totalRows, count($sales));
 

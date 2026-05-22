@@ -80,7 +80,7 @@ final class SearchController extends Controller
                     $results['tasks'] = Task::indexList($businessId, $query, '', $limit, 0);
                     $searchFromDate = '';
                     $searchToDate = '';
-                    $results['sales'] = Sale::indexList($businessId, $query, '', $searchFromDate, $searchToDate, $limit, 0);
+                    $results['sales'] = Sale::indexList($businessId, $query, '', $searchFromDate, $searchToDate, $limit, 0, 'date', 'desc', Sale::ESTATE_SCOPE_GENERAL);
                     $results['purchases'] = Purchase::indexList($businessId, $query, '', $searchFromDate, $searchToDate, $limit, 0);
                     $results['billing'] = Invoice::indexList($businessId, $query, '', $limit, 0);
                     $results['expenses'] = Expense::indexList($businessId, $query, 'all', $limit, 0);
@@ -90,7 +90,7 @@ final class SearchController extends Controller
                     $totals['bolo_matches'] = ClientBoloProfile::searchMatchesCount($businessId, $query);
                     $totals['jobs'] = Job::indexCount($businessId, $query, '');
                     $totals['tasks'] = Task::indexCount($businessId, $query, '');
-                    $totals['sales'] = Sale::indexCount($businessId, $query, '');
+                    $totals['sales'] = Sale::indexCount($businessId, $query, '', '', '', Sale::ESTATE_SCOPE_GENERAL);
                     $totals['purchases'] = Purchase::indexCount($businessId, $query, '');
                     $totals['billing'] = Invoice::indexCount($businessId, $query, '');
                     $totals['expenses'] = Expense::indexCount($businessId, $query, 'all');

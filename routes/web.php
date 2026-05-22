@@ -204,6 +204,8 @@ $router->post('/portal/{token}/approve', [ClientPortalController::class, 'approv
 
 $router->get('/cron/daily-digest', [CronController::class, 'dailyDigest']);
 
+$router->get('/estate-sale-records', [EstateSalesController::class, 'records']);
+
 $router->get('/estate-sales', [EstateSalesController::class, 'index']);
 $router->get('/estate-sales/create', [EstateSalesController::class, 'create']);
 $router->post('/estate-sales', [EstateSalesController::class, 'store']);

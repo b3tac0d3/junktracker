@@ -241,6 +241,7 @@ $navNotifications = is_array($navNotifications ?? null) ? $navNotifications : ['
                                     <nav class="sb-sidenav-menu-nested nav">
                                         <a class="nav-link jt-nav-sublink" href="<?= e(url('/sales')) ?>">Sales</a>
                                         <a class="nav-link jt-nav-sublink" href="<?= e(url('/estate-sales')) ?>">Estate Sales</a>
+                                        <a class="nav-link jt-nav-sublink" href="<?= e(url('/estate-sale-records')) ?>">Estate Sale Records</a>
                                         <a class="nav-link jt-nav-sublink" href="<?= e(url('/purchases')) ?>">Purchases</a>
                                     </nav>
                                 </div>

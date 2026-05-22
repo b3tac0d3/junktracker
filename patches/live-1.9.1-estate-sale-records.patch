@@ -1,0 +1,756 @@
+diff --git a/app/Controllers/EstateSalesController.php b/app/Controllers/EstateSalesController.php
+index b358730..f5007cf 100644
+--- a/app/Controllers/EstateSalesController.php
++++ b/app/Controllers/EstateSalesController.php
+@@ -76,6 +76,64 @@ final class EstateSalesController extends Controller
+         ]);
+     }
+ 
++    public function records(): void
++    {
++        require_business_role(['general_user', 'admin']);
++
++        $search = trim((string) ($_GET['q'] ?? ''));
++        $sortBy = strtolower(trim((string) ($_GET['sort_by'] ?? 'date')));
++        $sortDir = strtolower(trim((string) ($_GET['sort_dir'] ?? 'desc')));
++        if (!in_array($sortBy, ['date', 'id', 'customer_name', 'estate_sale_title'], true)) {
++            $sortBy = 'date';
++        }
++        if (!in_array($sortDir, ['asc', 'desc'], true)) {
++            $sortDir = 'desc';
++        }
++
++        $fromDate = $this->normalizeDateFilter((string) ($_GET['from'] ?? date('Y-01-01')));
++        $toDate = $this->normalizeDateFilter((string) ($_GET['to'] ?? date('Y-m-d')));
++        if ($fromDate !== '' && $toDate !== '' && strtotime($fromDate) > strtotime($toDate)) {
++            [$fromDate, $toDate] = [$toDate, $fromDate];
++        }
++
++        $businessId = current_business_id();
++        $perPage = pagination_per_page($_GET['per_page'] ?? null);
++        $page = pagination_current_page($_GET['page'] ?? null);
++        $totalRows = Sale::indexCount($businessId, $search, '', $fromDate, $toDate, Sale::ESTATE_SCOPE_ESTATE_ONLY);
++        $totalPages = pagination_total_pages($totalRows, $perPage);
++        if ($page > $totalPages) {
++            $page = $totalPages;
++        }
++        $offset = pagination_offset($page, $perPage);
++
++        $records = Sale::indexList(
++            $businessId,
++            $search,
++            '',
++            $fromDate,
++            $toDate,
++            $perPage,
++            $offset,
++            $sortBy,
++            $sortDir,
++            Sale::ESTATE_SCOPE_ESTATE_ONLY
++        );
++        $summary = Sale::summary($businessId, Sale::ESTATE_SCOPE_ESTATE_ONLY);
++        $pagination = pagination_meta($page, $perPage, $totalRows, count($records));
++
++        $this->render('estate-sales/records', [
++            'pageTitle' => 'Estate Sale Records',
++            'search' => $search,
++            'sortBy' => $sortBy,
++            'sortDir' => $sortDir,
++            'fromDate' => $fromDate,
++            'toDate' => $toDate,
++            'records' => $records,
++            'summary' => $summary,
++            'pagination' => $pagination,
++        ]);
++    }
++
+     public function create(): void
+     {
+         require_business_role(['general_user', 'admin']);
+diff --git a/app/Controllers/SalesController.php b/app/Controllers/SalesController.php
+index 01f174a..d60dcb6 100644
+--- a/app/Controllers/SalesController.php
++++ b/app/Controllers/SalesController.php
+@@ -37,18 +37,18 @@ final class SalesController extends Controller
+ 
+         $perPage = pagination_per_page($_GET['per_page'] ?? null);
+         $page = pagination_current_page($_GET['page'] ?? null);
+-        $totalRows = Sale::indexCount($businessId, $search, $type, $fromDate, $toDate);
++        $totalRows = Sale::indexCount($businessId, $search, $type, $fromDate, $toDate, Sale::ESTATE_SCOPE_GENERAL);
+         $totalPages = pagination_total_pages($totalRows, $perPage);
+         if ($page > $totalPages) {
+             $page = $totalPages;
+         }
+         $offset = pagination_offset($page, $perPage);
+ 
+-        $sales = Sale::indexList($businessId, $search, $type, $fromDate, $toDate, $perPage, $offset, $sortBy, $sortDir);
+-        $summary = Sale::summary($businessId);
++        $sales = Sale::indexList($businessId, $search, $type, $fromDate, $toDate, $perPage, $offset, $sortBy, $sortDir, Sale::ESTATE_SCOPE_GENERAL);
++        $summary = Sale::summary($businessId, Sale::ESTATE_SCOPE_GENERAL);
+         $typeOptions = FormSelectValue::optionsForSection($businessId, 'sale_type');
+         if ($typeOptions === []) {
+-            $typeOptions = Sale::typeOptions($businessId);
++            $typeOptions = Sale::typeOptions($businessId, Sale::ESTATE_SCOPE_GENERAL);
+         }
+         $pagination = pagination_meta($page, $perPage, $totalRows, count($sales));
+ 
+diff --git a/app/Controllers/SearchController.php b/app/Controllers/SearchController.php
+index d1675b9..74bf641 100644
+--- a/app/Controllers/SearchController.php
++++ b/app/Controllers/SearchController.php
+@@ -80,7 +80,7 @@ final class SearchController extends Controller
+                     $results['tasks'] = Task::indexList($businessId, $query, '', $limit, 0);
+                     $searchFromDate = '';
+                     $searchToDate = '';
+-                    $results['sales'] = Sale::indexList($businessId, $query, '', $searchFromDate, $searchToDate, $limit, 0);
++                    $results['sales'] = Sale::indexList($businessId, $query, '', $searchFromDate, $searchToDate, $limit, 0, 'date', 'desc', Sale::ESTATE_SCOPE_GENERAL);
+                     $results['purchases'] = Purchase::indexList($businessId, $query, '', $searchFromDate, $searchToDate, $limit, 0);
+                     $results['billing'] = Invoice::indexList($businessId, $query, '', $limit, 0);
+                     $results['expenses'] = Expense::indexList($businessId, $query, 'all', $limit, 0);
+@@ -90,7 +90,7 @@ final class SearchController extends Controller
+                     $totals['bolo_matches'] = ClientBoloProfile::searchMatchesCount($businessId, $query);
+                     $totals['jobs'] = Job::indexCount($businessId, $query, '');
+                     $totals['tasks'] = Task::indexCount($businessId, $query, '');
+-                    $totals['sales'] = Sale::indexCount($businessId, $query, '');
++                    $totals['sales'] = Sale::indexCount($businessId, $query, '', '', '', Sale::ESTATE_SCOPE_GENERAL);
+                     $totals['purchases'] = Purchase::indexCount($businessId, $query, '');
+                     $totals['billing'] = Invoice::indexCount($businessId, $query, '');
+                     $totals['expenses'] = Expense::indexCount($businessId, $query, 'all');
+diff --git a/app/Models/Sale.php b/app/Models/Sale.php
+index acb3a5c..326015c 100644
+--- a/app/Models/Sale.php
++++ b/app/Models/Sale.php
+@@ -16,6 +16,10 @@ final class Sale
+         return ['shop', 'ebay', 'scrap', 'b2b', EstateSale::ON_SITE_SALE_TYPE];
+     }
+ 
++    public const ESTATE_SCOPE_ALL = 'all';
++    public const ESTATE_SCOPE_GENERAL = 'general';
++    public const ESTATE_SCOPE_ESTATE_ONLY = 'estate_only';
++
+     public static function indexList(
+         int $businessId,
+         string $search = '',
+@@ -25,7 +29,8 @@ final class Sale
+         int $limit = 25,
+         int $offset = 0,
+         string $sortBy = 'date',
+-        string $sortDir = 'desc'
++        string $sortDir = 'desc',
++        string $estateSaleScope = self::ESTATE_SCOPE_ALL
+     ): array
+     {
+         if (!SchemaInspector::hasTable('sales')) {
+@@ -66,9 +71,25 @@ final class Sale
+             $purchaseTitleSql = self::purchaseTitleExpr();
+         }
+ 
++        $estateSaleScope = self::normalizeEstateSaleScope($estateSaleScope);
++        $estateSaleIdSql = SchemaInspector::hasColumn('sales', 'estate_sale_id') ? 's.estate_sale_id' : 'NULL';
++        $estateSaleTitleSql = 'NULL';
++        $estateCustomerNameSql = 'NULL';
++        if ($estateSaleScope === self::ESTATE_SCOPE_ESTATE_ONLY && SchemaInspector::hasColumn('sales', 'estate_sale_id')) {
++            if (SchemaInspector::hasTable('estate_sales')) {
++                $joins[] = self::estateSaleJoinSql();
++                $estateSaleTitleSql = self::estateSaleTitleExpr();
++            }
++            if (SchemaInspector::hasColumn('sales', 'estate_sale_customer_id') && SchemaInspector::hasTable('estate_sale_customers')) {
++                $joins[] = self::estateSaleCustomerJoinSql();
++                $estateCustomerNameSql = self::estateSaleCustomerNameExpr();
++            }
++        }
++
+         $where = [];
+         $where[] = SchemaInspector::hasColumn('sales', 'business_id') ? 's.business_id = :business_id' : '1=1';
+         $where[] = SchemaInspector::hasColumn('sales', 'deleted_at') ? 's.deleted_at IS NULL' : '1=1';
++        self::appendEstateSaleScopeCondition($where, $estateSaleScope);
+         if ($type !== '' && SchemaInspector::hasColumn('sales', 'sale_type')) {
+             $where[] = 's.sale_type = :sale_type';
+         }
+@@ -106,6 +127,12 @@ final class Sale
+         if ($purchaseTitleSql !== 'NULL') {
+             $addSearch($purchaseTitleSql);
+         }
++        if ($estateSaleTitleSql !== 'NULL') {
++            $addSearch($estateSaleTitleSql);
++        }
++        if ($estateCustomerNameSql !== 'NULL') {
++            $addSearch($estateCustomerNameSql);
++        }
+ 
+         $where[] = '(' . implode(' OR ', $searchParts) . ')';
+ 
+@@ -121,7 +148,10 @@ final class Sale
+                     {$jobIdSql} AS job_id,
+                     {$jobTitleSql} AS job_title,
+                     {$purchaseIdSql} AS purchase_id,
+-                    {$purchaseTitleSql} AS purchase_title
++                    {$purchaseTitleSql} AS purchase_title,
++                    {$estateSaleIdSql} AS estate_sale_id,
++                    {$estateSaleTitleSql} AS estate_sale_title,
++                    {$estateCustomerNameSql} AS estate_customer_name
+                 FROM sales s\n";
+ 
+         if ($joins !== []) {
+@@ -135,6 +165,8 @@ final class Sale
+             'date' => "{$sortDateExpr} {$sortDir}, s.id {$sortDir}",
+             'id' => "s.id {$sortDir}",
+             'client_name' => "{$clientNameSql} {$sortDir}, s.id {$sortDir}",
++            'estate_sale_title' => "{$estateSaleTitleSql} {$sortDir}, s.id {$sortDir}",
++            'customer_name' => "{$estateCustomerNameSql} {$sortDir}, s.id {$sortDir}",
+         ];
+         $orderBy = $sortMap[$sortBy] ?? $sortMap['date'];
+ 
+@@ -143,31 +175,17 @@ final class Sale
+         $sql .= "LIMIT :row_limit\n";
+         $sql .= 'OFFSET :row_offset';
+ 
+-        $stmt = Database::connection()->prepare($sql);
+-        if (SchemaInspector::hasColumn('sales', 'business_id')) {
+-            $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
+-        }
+-        if ($type !== '' && SchemaInspector::hasColumn('sales', 'sale_type')) {
+-            $stmt->bindValue(':sale_type', $type);
+-        }
+-        if ($fromDate !== '') {
+-            $stmt->bindValue(':from_date', $fromDate);
+-        }
+-        if ($toDate !== '') {
+-            $stmt->bindValue(':to_date', $toDate);
+-        }
+-        foreach ($bind as $placeholder => $value) {
+-            $stmt->bindValue($placeholder, $value);
+-        }
+-        $stmt->bindValue(':row_limit', max(1, min($limit, 1000)), \PDO::PARAM_INT);
+-        $stmt->bindValue(':row_offset', max(0, $offset), \PDO::PARAM_INT);
+-        $stmt->execute();
+-
+-        $rows = $stmt->fetchAll();
+-        return is_array($rows) ? $rows : [];
++        return self::fetchIndexRows($sql, $businessId, $type, $fromDate, $toDate, $bind, $limit, $offset);
+     }
+ 
+-    public static function indexCount(int $businessId, string $search = '', string $type = '', string $fromDate = '', string $toDate = ''): int
++    public static function indexCount(
++        int $businessId,
++        string $search = '',
++        string $type = '',
++        string $fromDate = '',
++        string $toDate = '',
++        string $estateSaleScope = self::ESTATE_SCOPE_ALL
++    ): int
+     {
+         if (!SchemaInspector::hasTable('sales')) {
+             return 0;
+@@ -201,9 +219,24 @@ final class Sale
+             $purchaseTitleSql = self::purchaseTitleExpr();
+         }
+ 
++        $estateSaleScope = self::normalizeEstateSaleScope($estateSaleScope);
++        $estateSaleTitleSql = 'NULL';
++        $estateCustomerNameSql = 'NULL';
++        if ($estateSaleScope === self::ESTATE_SCOPE_ESTATE_ONLY && SchemaInspector::hasColumn('sales', 'estate_sale_id')) {
++            if (SchemaInspector::hasTable('estate_sales')) {
++                $joins[] = self::estateSaleJoinSql();
++                $estateSaleTitleSql = self::estateSaleTitleExpr();
++            }
++            if (SchemaInspector::hasColumn('sales', 'estate_sale_customer_id') && SchemaInspector::hasTable('estate_sale_customers')) {
++                $joins[] = self::estateSaleCustomerJoinSql();
++                $estateCustomerNameSql = self::estateSaleCustomerNameExpr();
++            }
++        }
++
+         $where = [];
+         $where[] = SchemaInspector::hasColumn('sales', 'business_id') ? 's.business_id = :business_id' : '1=1';
+         $where[] = SchemaInspector::hasColumn('sales', 'deleted_at') ? 's.deleted_at IS NULL' : '1=1';
++        self::appendEstateSaleScopeCondition($where, $estateSaleScope);
+         if ($type !== '' && SchemaInspector::hasColumn('sales', 'sale_type')) {
+             $where[] = 's.sale_type = :sale_type';
+         }
+@@ -240,6 +273,12 @@ final class Sale
+         if ($purchaseTitleSql !== 'NULL') {
+             $addSearch($purchaseTitleSql);
+         }
++        if ($estateSaleTitleSql !== 'NULL') {
++            $addSearch($estateSaleTitleSql);
++        }
++        if ($estateCustomerNameSql !== 'NULL') {
++            $addSearch($estateCustomerNameSql);
++        }
+ 
+         $where[] = '(' . implode(' OR ', $searchParts) . ')';
+ 
+@@ -271,16 +310,18 @@ final class Sale
+         return (int) $stmt->fetchColumn();
+     }
+ 
+-    public static function typeOptions(int $businessId): array
++    public static function typeOptions(int $businessId, string $estateSaleScope = self::ESTATE_SCOPE_ALL): array
+     {
+         if (!SchemaInspector::hasTable('sales') || !SchemaInspector::hasColumn('sales', 'sale_type')) {
+             return self::baseTypeOptions();
+         }
+ 
++        $estateSaleScope = self::normalizeEstateSaleScope($estateSaleScope);
+         $where = [];
+         $where[] = SchemaInspector::hasColumn('sales', 'business_id') ? 'business_id = :business_id' : '1=1';
+         $where[] = SchemaInspector::hasColumn('sales', 'deleted_at') ? 'deleted_at IS NULL' : '1=1';
+         $where[] = "COALESCE(sale_type, '') <> ''";
++        self::appendEstateSaleScopeCondition($where, $estateSaleScope, '');
+ 
+         $sql = 'SELECT DISTINCT sale_type
+                 FROM sales
+@@ -372,7 +413,7 @@ final class Sale
+         return (int) Database::connection()->lastInsertId();
+     }
+ 
+-    public static function summary(int $businessId): array
++    public static function summary(int $businessId, string $estateSaleScope = self::ESTATE_SCOPE_ALL): array
+     {
+         if (!SchemaInspector::hasTable('sales')) {
+             return [
+@@ -384,6 +425,7 @@ final class Sale
+             ];
+         }
+ 
++        $estateSaleScope = self::normalizeEstateSaleScope($estateSaleScope);
+         $grossSql = SchemaInspector::hasColumn('sales', 'gross_amount')
+             ? 'COALESCE(s.gross_amount, 0)'
+             : (SchemaInspector::hasColumn('sales', 'amount') ? 'COALESCE(s.amount, 0)' : '0');
+@@ -395,6 +437,7 @@ final class Sale
+         $where = [];
+         $where[] = SchemaInspector::hasColumn('sales', 'business_id') ? 's.business_id = :business_id' : '1=1';
+         $where[] = SchemaInspector::hasColumn('sales', 'deleted_at') ? 's.deleted_at IS NULL' : '1=1';
++        self::appendEstateSaleScopeCondition($where, $estateSaleScope);
+ 
+         $sql = "SELECT
+                     COUNT(*) AS total_count,
+@@ -797,6 +840,7 @@ final class Sale
+         if (SchemaInspector::hasColumn('sales', 'deleted_at')) {
+             $where[] = 's.deleted_at IS NULL';
+         }
++        self::appendEstateSaleScopeCondition($where, self::ESTATE_SCOPE_GENERAL);
+ 
+         $sql = "SELECT
+                     COUNT(*) AS row_count,
+@@ -850,6 +894,7 @@ final class Sale
+         if (SchemaInspector::hasColumn('sales', 'deleted_at')) {
+             $where[] = 's.deleted_at IS NULL';
+         }
++        self::appendEstateSaleScopeCondition($where, self::ESTATE_SCOPE_GENERAL);
+ 
+         $sql = "SELECT
+                     s.id,
+@@ -994,6 +1039,115 @@ final class Sale
+         return is_array($rows) ? $rows : [];
+     }
+ 
++    /**
++     * @param array<string, mixed> $bind
++     * @return array<int, array<string, mixed>>
++     */
++    private static function fetchIndexRows(
++        string $sql,
++        int $businessId,
++        string $type,
++        string $fromDate,
++        string $toDate,
++        array $bind,
++        int $limit,
++        int $offset
++    ): array {
++        $stmt = Database::connection()->prepare($sql);
++        if (SchemaInspector::hasColumn('sales', 'business_id')) {
++            $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
++        }
++        if ($type !== '' && SchemaInspector::hasColumn('sales', 'sale_type')) {
++            $stmt->bindValue(':sale_type', $type);
++        }
++        if ($fromDate !== '') {
++            $stmt->bindValue(':from_date', $fromDate);
++        }
++        if ($toDate !== '') {
++            $stmt->bindValue(':to_date', $toDate);
++        }
++        foreach ($bind as $placeholder => $value) {
++            $stmt->bindValue($placeholder, $value);
++        }
++        $stmt->bindValue(':row_limit', max(1, min($limit, 1000)), \PDO::PARAM_INT);
++        $stmt->bindValue(':row_offset', max(0, $offset), \PDO::PARAM_INT);
++        $stmt->execute();
++
++        $rows = $stmt->fetchAll();
++        return is_array($rows) ? $rows : [];
++    }
++
++    private static function normalizeEstateSaleScope(string $scope): string
++    {
++        $scope = strtolower(trim($scope));
++        if ($scope === self::ESTATE_SCOPE_GENERAL || $scope === self::ESTATE_SCOPE_ESTATE_ONLY) {
++            return $scope;
++        }
++
++        return self::ESTATE_SCOPE_ALL;
++    }
++
++    /**
++     * @param array<int, string> $where
++     */
++    private static function appendEstateSaleScopeCondition(array &$where, string $scope, string $alias = 's'): void
++    {
++        if (!SchemaInspector::hasColumn('sales', 'estate_sale_id')) {
++            return;
++        }
++
++        $scope = self::normalizeEstateSaleScope($scope);
++        $column = $alias !== '' ? $alias . '.estate_sale_id' : 'estate_sale_id';
++        if ($scope === self::ESTATE_SCOPE_GENERAL) {
++            $where[] = "({$column} IS NULL OR {$column} = 0)";
++            return;
++        }
++
++        if ($scope === self::ESTATE_SCOPE_ESTATE_ONLY) {
++            $where[] = "{$column} IS NOT NULL AND {$column} > 0";
++        }
++    }
++
++    private static function estateSaleJoinSql(): string
++    {
++        $join = 'LEFT JOIN estate_sales es ON es.id = s.estate_sale_id';
++        if (SchemaInspector::hasColumn('estate_sales', 'deleted_at')) {
++            $join .= ' AND es.deleted_at IS NULL';
++        }
++        if (SchemaInspector::hasColumn('estate_sales', 'business_id') && SchemaInspector::hasColumn('sales', 'business_id')) {
++            $join .= ' AND es.business_id = s.business_id';
++        }
++
++        return $join;
++    }
++
++    private static function estateSaleCustomerJoinSql(): string
++    {
++        $join = 'LEFT JOIN estate_sale_customers esc ON esc.id = s.estate_sale_customer_id';
++        if (SchemaInspector::hasColumn('estate_sale_customers', 'deleted_at')) {
++            $join .= ' AND esc.deleted_at IS NULL';
++        }
++        if (SchemaInspector::hasColumn('estate_sale_customers', 'business_id') && SchemaInspector::hasColumn('sales', 'business_id')) {
++            $join .= ' AND esc.business_id = s.business_id';
++        }
++
++        return $join;
++    }
++
++    private static function estateSaleTitleExpr(): string
++    {
++        if (SchemaInspector::hasColumn('estate_sales', 'title')) {
++            return "COALESCE(NULLIF(TRIM(es.title), ''), CONCAT('Estate Sale #', es.id))";
++        }
++
++        return "CONCAT('Estate Sale #', es.id)";
++    }
++
++    private static function estateSaleCustomerNameExpr(): string
++    {
++        return "COALESCE(NULLIF(TRIM(CONCAT_WS(' ', esc.first_name, esc.last_name)), ''), CONCAT('Customer #', esc.id))";
++    }
++
+     private static function saleNameExpr(string $alias = 's'): string
+     {
+         return SchemaInspector::hasColumn('sales', 'name') ? $alias . '.name' : "CONCAT('Sale #', {$alias}.id)";
+diff --git a/app/Views/estate-sales/records.php b/app/Views/estate-sales/records.php
+new file mode 100644
+index 0000000..5d203ba
+--- /dev/null
++++ b/app/Views/estate-sales/records.php
+@@ -0,0 +1,162 @@
++<?php
++$search = trim((string) ($search ?? ''));
++$sortBy = strtolower(trim((string) ($sortBy ?? 'date')));
++$sortDir = strtolower(trim((string) ($sortDir ?? 'desc')));
++$fromDate = trim((string) ($fromDate ?? date('Y-01-01')));
++$toDate = trim((string) ($toDate ?? date('Y-m-d')));
++$records = is_array($records ?? null) ? $records : [];
++$summary = is_array($summary ?? null) ? $summary : [];
++$pagination = is_array($pagination ?? null) ? $pagination : pagination_meta(1, 25, count($records), count($records));
++$perPage = (int) ($pagination['per_page'] ?? 25);
++
++$formatSaleDate = static function (?string $value): string {
++    $raw = trim((string) ($value ?? ''));
++    if ($raw === '') {
++        return '—';
++    }
++
++    $ts = strtotime($raw);
++    if ($ts === false) {
++        return '—';
++    }
++
++    return date('m/d/Y', $ts);
++};
++?>
++
++<div class="page-header d-flex flex-wrap align-items-end justify-content-between gap-2">
++    <div>
++        <h1>Estate Sale Records</h1>
++        <p class="muted">On-site transactions from estate sales — separate from your main sales list</p>
++    </div>
++    <div>
++        <a class="btn btn-outline-secondary" href="<?= e(url('/estate-sales')) ?>"><i class="fas fa-store me-2"></i>Estate Sales</a>
++    </div>
++</div>
++
++<section class="card index-card mb-3">
++    <div class="card-body">
++        <div class="record-row-fields record-row-fields-4">
++            <div class="record-field">
++                <span class="record-label">Gross MTD</span>
++                <span class="record-value">$<?= e(number_format((float) ($summary['gross_mtd'] ?? 0), 2)) ?></span>
++            </div>
++            <div class="record-field">
++                <span class="record-label">Net MTD</span>
++                <span class="record-value">$<?= e(number_format((float) ($summary['net_mtd'] ?? 0), 2)) ?></span>
++            </div>
++            <div class="record-field">
++                <span class="record-label">Gross YTD</span>
++                <span class="record-value">$<?= e(number_format((float) ($summary['gross_ytd'] ?? 0), 2)) ?></span>
++            </div>
++            <div class="record-field">
++                <span class="record-label">Net YTD</span>
++                <span class="record-value">$<?= e(number_format((float) ($summary['net_ytd'] ?? 0), 2)) ?></span>
++            </div>
++        </div>
++    </div>
++</section>
++
++<section class="card index-card mb-3">
++    <div class="card-header index-card-header">
++        <strong><i class="fas fa-filter me-2"></i>Filters</strong>
++    </div>
++    <div class="card-body">
++        <form method="get" action="<?= e(url('/estate-sale-records')) ?>" class="d-flex flex-column gap-3">
++            <input type="hidden" name="page" value="1">
++            <input type="hidden" name="per_page" value="<?= e((string) $perPage) ?>">
++            <div class="row g-3 align-items-end">
++                <div class="col-12 col-md-5">
++                    <label class="form-label fw-semibold" for="estate-sale-records-search">Search</label>
++                    <input id="estate-sale-records-search" class="form-control" name="q" value="<?= e($search) ?>" placeholder="Search by item, customer, estate sale, notes, or id…" />
++                </div>
++                <div class="col-12 col-md-4">
++                    <label class="form-label fw-semibold" for="estate-sale-records-sort-by">Sort By</label>
++                    <select id="estate-sale-records-sort-by" class="form-select" name="sort_by">
++                        <option value="date" <?= $sortBy === 'date' ? 'selected' : '' ?>>Date</option>
++                        <option value="id" <?= $sortBy === 'id' ? 'selected' : '' ?>>ID</option>
++                        <option value="estate_sale_title" <?= $sortBy === 'estate_sale_title' ? 'selected' : '' ?>>Estate Sale</option>
++                        <option value="customer_name" <?= $sortBy === 'customer_name' ? 'selected' : '' ?>>Customer</option>
++                    </select>
++                </div>
++                <div class="col-12 col-md-3">
++                    <label class="form-label fw-semibold" for="estate-sale-records-sort-dir">Sort Order</label>
++                    <select id="estate-sale-records-sort-dir" class="form-select" name="sort_dir">
++                        <option value="desc" <?= $sortDir === 'desc' ? 'selected' : '' ?>>Descending</option>
++                        <option value="asc" <?= $sortDir === 'asc' ? 'selected' : '' ?>>Ascending</option>
++                    </select>
++                </div>
++            </div>
++            <div class="row g-3 align-items-end">
++                <div class="col-6 col-md-4 col-lg-3">
++                    <label class="form-label fw-semibold" for="estate-sale-records-from-date">From</label>
++                    <input id="estate-sale-records-from-date" class="form-control" type="date" name="from" value="<?= e($fromDate) ?>" />
++                </div>
++                <div class="col-6 col-md-4 col-lg-3">
++                    <label class="form-label fw-semibold" for="estate-sale-records-to-date">To</label>
++                    <input id="estate-sale-records-to-date" class="form-control" type="date" name="to" value="<?= e($toDate) ?>" />
++                </div>
++                <div class="col-12 col-md-12 col-lg-6 d-grid d-md-flex gap-2">
++                    <button class="btn btn-primary flex-fill" type="submit">Apply</button>
++                    <a class="btn btn-outline-secondary flex-fill" href="<?= e(url('/estate-sale-records')) ?>">Clear</a>
++                </div>
++            </div>
++        </form>
++    </div>
++</section>
++
++<section class="card index-card">
++    <div class="card-header index-card-header d-flex align-items-center justify-content-between">
++        <strong><i class="fas fa-receipt me-2"></i>Records List</strong>
++        <span class="small muted"><?= e((string) ((int) ($pagination['total_rows'] ?? count($records)))) ?> record(s)</span>
++    </div>
++    <div class="card-body p-2 p-lg-3">
++        <?php
++        $basePath = '/estate-sale-records';
++        require base_path('app/Views/components/index_pagination.php');
++        ?>
++        <?php if ($records === []): ?>
++            <div class="record-empty">No estate sale records found for the current filter.</div>
++        <?php else: ?>
++            <div class="record-list-simple">
++                <?php foreach ($records as $record): ?>
++                    <?php
++                    $recordId = (int) ($record['id'] ?? 0);
++                    $estateSaleId = (int) ($record['estate_sale_id'] ?? 0);
++                    $recordUrl = url('/sales/' . (string) $recordId);
++                    $estateSaleUrl = $estateSaleId > 0 ? url('/estate-sales/' . (string) $estateSaleId) : '';
++                    ?>
++                    <article class="record-row-simple">
++                        <a class="record-row-link" href="<?= e($recordUrl) ?>">
++                            <div class="record-row-main">
++                                <h3 class="record-title-simple"><?= e(trim((string) ($record['name'] ?? '')) !== '' ? (string) $record['name'] : ('Sale #' . (string) $recordId)) ?></h3>
++                            </div>
++                            <div class="record-row-fields record-row-fields-5">
++                                <div class="record-field">
++                                    <span class="record-label">Date</span>
++                                    <span class="record-value"><?= e($formatSaleDate((string) ($record['sale_date'] ?? ''))) ?></span>
++                                </div>
++                                <div class="record-field">
++                                    <span class="record-label">Gross</span>
++                                    <span class="record-value">$<?= e(number_format((float) ($record['gross_amount'] ?? 0), 2)) ?></span>
++                                </div>
++                                <div class="record-field">
++                                    <span class="record-label">Net</span>
++                                    <span class="record-value">$<?= e(number_format((float) ($record['net_amount'] ?? 0), 2)) ?></span>
++                                </div>
++                                <div class="record-field">
++                                    <span class="record-label">Estate Sale</span>
++                                    <span class="record-value"><?= e(trim((string) ($record['estate_sale_title'] ?? '')) ?: '—') ?></span>
++                                </div>
++                                <div class="record-field">
++                                    <span class="record-label">Customer</span>
++                                    <span class="record-value"><?= e(trim((string) ($record['estate_customer_name'] ?? '')) ?: '—') ?></span>
++                                </div>
++                            </div>
++                        </a>
++                    </article>
++                <?php endforeach; ?>
++            </div>
++        <?php endif; ?>
++    </div>
++</section>
+diff --git a/app/Views/layouts/main.php b/app/Views/layouts/main.php
+index 3ae8469..7aa8d20 100644
+--- a/app/Views/layouts/main.php
++++ b/app/Views/layouts/main.php
+@@ -241,6 +241,7 @@ $navNotifications = is_array($navNotifications ?? null) ? $navNotifications : ['
+                                     <nav class="sb-sidenav-menu-nested nav">
+                                         <a class="nav-link jt-nav-sublink" href="<?= e(url('/sales')) ?>">Sales</a>
+                                         <a class="nav-link jt-nav-sublink" href="<?= e(url('/estate-sales')) ?>">Estate Sales</a>
++                                        <a class="nav-link jt-nav-sublink" href="<?= e(url('/estate-sale-records')) ?>">Estate Sale Records</a>
+                                         <a class="nav-link jt-nav-sublink" href="<?= e(url('/purchases')) ?>">Purchases</a>
+                                     </nav>
+                                 </div>
+diff --git a/app/Views/sales/index.php b/app/Views/sales/index.php
+index f41d7b0..4a51256 100644
+--- a/app/Views/sales/index.php
++++ b/app/Views/sales/index.php
+@@ -29,7 +29,7 @@ $formatSaleDate = static function (?string $value): string {
+ <div class="page-header d-flex flex-wrap align-items-end justify-content-between gap-2">
+     <div>
+         <h1>Sales</h1>
+-        <p class="muted">Sales history and margin summary</p>
++        <p class="muted">Shop, job, and other sales — estate on-site transactions are on Estate Sale Records</p>
+     </div>
+     <div>
+         <a class="btn btn-primary" href="<?= e(url('/sales/create')) ?>"><i class="fas fa-plus me-2"></i>Add Sale</a>
+diff --git a/app/Views/sales/show.php b/app/Views/sales/show.php
+index 6a53d32..37b59df 100644
+--- a/app/Views/sales/show.php
++++ b/app/Views/sales/show.php
+@@ -6,9 +6,9 @@ $saleEditUrl = $estateSaleId > 0
+     ? url('/estate-sales/' . (string) $estateSaleId . '/sales/' . (string) $saleId . '/edit')
+     : url('/sales/' . (string) $saleId . '/edit');
+ $backUrl = $estateSaleId > 0
+-    ? url('/estate-sales/' . (string) $estateSaleId . '?tab=sales')
++    ? url('/estate-sale-records')
+     : url('/sales');
+-$backLabel = $estateSaleId > 0 ? 'Back to Estate Sale' : 'Back to Sales';
++$backLabel = $estateSaleId > 0 ? 'Back to Estate Sale Records' : 'Back to Sales';
+ 
+ $displayName = trim((string) ($sale['name'] ?? ''));
+ if ($displayName === '') {
+diff --git a/config/app.php b/config/app.php
+index c06a01c..f66273c 100644
+--- a/config/app.php
++++ b/config/app.php
+@@ -4,7 +4,7 @@ declare(strict_types=1);
+ 
+ return [
+     'name' => 'JunkTracker',
+-    'version' => '1.9.0.1-beta',
++    'version' => '1.9.1-beta',
+     'env' => 'local',
+     'url' => 'http://localhost/junktracker',
+     'timezone' => 'America/New_York',
+diff --git a/docs/deploy-checklist.md b/docs/deploy-checklist.md
+index 8cba8bd..4ba4d06 100644
+--- a/docs/deploy-checklist.md
++++ b/docs/deploy-checklist.md
+@@ -2,8 +2,8 @@
+ 
+ Short list to keep releases predictable. Pair with delta bundles from `scripts/build-live-release.sh` and version tags.
+ 
+-**Latest release notes:** [releases/live-1.9.0.1-beta.md](./releases/live-1.9.0.1-beta.md) (Clearer estate sale split basis labels).  
+-**Earlier:** [releases/live-1.9.0-beta.md](./releases/live-1.9.0-beta.md), [releases/live-1.8.3.3-beta.md](./releases/live-1.8.3.3-beta.md), [releases/live-1.8.3.2-beta.md](./releases/live-1.8.3.2-beta.md), [releases/live-1.8.3.1-beta.md](./releases/live-1.8.3.1-beta.md), [releases/live-1.8.3-beta.md](./releases/live-1.8.3-beta.md), [releases/live-1.8.2.3-beta.md](./releases/live-1.8.2.3-beta.md), [releases/live-1.8.2.2-beta.md](./releases/live-1.8.2.2-beta.md), [releases/live-1.8.2.1-beta.md](./releases/live-1.8.2.1-beta.md), [releases/live-1.8.2-beta.md](./releases/live-1.8.2-beta.md), [releases/live-1.8.1-beta.md](./releases/live-1.8.1-beta.md), [releases/live-1.8.0-beta.md](./releases/live-1.8.0-beta.md), [releases/live-1.7.2.md](./releases/live-1.7.2.md), [releases/live-1.7.0.md](./releases/live-1.7.0.md), [releases/live-1.6.4-beta.md](./releases/live-1.6.4-beta.md), [releases/live-1.6.3-beta.md](./releases/live-1.6.3-beta.md), [releases/live-1.6.2-beta.md](./releases/live-1.6.2-beta.md), [releases/live-1.6.1-beta.md](./releases/live-1.6.1-beta.md), [releases/live-1.6.0.md](./releases/live-1.6.0.md), [releases/live-1.5.3.md](./releases/live-1.5.3.md).
++**Latest release notes:** [releases/live-1.9.1-beta.md](./releases/live-1.9.1-beta.md) (Separate estate sale records from general sales list).  
++**Earlier:** [releases/live-1.9.0.1-beta.md](./releases/live-1.9.0.1-beta.md), [releases/live-1.9.0-beta.md](./releases/live-1.9.0-beta.md), [releases/live-1.8.3.3-beta.md](./releases/live-1.8.3.3-beta.md), [releases/live-1.8.3.2-beta.md](./releases/live-1.8.3.2-beta.md), [releases/live-1.8.3.1-beta.md](./releases/live-1.8.3.1-beta.md), [releases/live-1.8.3-beta.md](./releases/live-1.8.3-beta.md), [releases/live-1.8.2.3-beta.md](./releases/live-1.8.2.3-beta.md), [releases/live-1.8.2.2-beta.md](./releases/live-1.8.2.2-beta.md), [releases/live-1.8.2.1-beta.md](./releases/live-1.8.2.1-beta.md), [releases/live-1.8.2-beta.md](./releases/live-1.8.2-beta.md), [releases/live-1.8.1-beta.md](./releases/live-1.8.1-beta.md), [releases/live-1.8.0-beta.md](./releases/live-1.8.0-beta.md), [releases/live-1.7.2.md](./releases/live-1.7.2.md), [releases/live-1.7.0.md](./releases/live-1.7.0.md), [releases/live-1.6.4-beta.md](./releases/live-1.6.4-beta.md), [releases/live-1.6.3-beta.md](./releases/live-1.6.3-beta.md), [releases/live-1.6.2-beta.md](./releases/live-1.6.2-beta.md), [releases/live-1.6.1-beta.md](./releases/live-1.6.1-beta.md), [releases/live-1.6.0.md](./releases/live-1.6.0.md), [releases/live-1.5.3.md](./releases/live-1.5.3.md).
+ 
+ ### Beta-live naming convention (standard)
+ 
+diff --git a/docs/releases/live-1.9.1-beta.md b/docs/releases/live-1.9.1-beta.md
+new file mode 100644
+index 0000000..fc23380
+--- /dev/null
++++ b/docs/releases/live-1.9.1-beta.md
+@@ -0,0 +1,41 @@
++# Live Release 1.9.1-beta
++
++Date: 2026-05-21
++
++## Highlights
++
++- **Sales list:** Estate on-site transactions no longer appear on the general **Sales** list — keeps that view focused on larger/shop/job sales.
++- **Estate Sale Records:** New page at `/estate-sale-records` — same layout as Sales (summary, filters, searchable list) but only estate-sale-linked transactions, with estate sale name and customer columns.
++- **Navigation:** **Sales → Estate Sale Records** in the sidebar.
++- **Metrics:** Dashboard, reports, and estate sale financials still include all sales totals (unchanged).
++
++## Changed files
++
++- `app/Models/Sale.php`
++- `app/Controllers/EstateSalesController.php`
++- `app/Controllers/SalesController.php`
++- `app/Controllers/SearchController.php`
++- `app/Views/estate-sales/records.php` (new)
++- `app/Views/sales/index.php`, `app/Views/sales/show.php`
++- `app/Views/layouts/main.php`
++- `routes/web.php`
++- `config/app.php` (version `1.9.1-beta`)
++- `docs/deploy-checklist.md`, `docs/releases/live-1.9.1-beta.md`
++- `patches/live-1.9.1-estate-sale-records.patch` (optional hotfix apply)
++
++## Database migrations in this release
++
++No new database migrations are required for 1.9.1-beta.
++
++## Patch-only deploy (FTP / manual upload)
++
++From the project root:
++
++`patch -p1 < patches/live-1.9.1-estate-sale-records.patch`
++
++Or copy the files listed above from this bundle’s `upload/` tree.
++
++## Ops notes
++
++- Smoke test: **Sales** — confirm estate on-site items are gone; **Sales → Estate Sale Records** — confirm they appear with search/sort; open one record and verify **Back to Estate Sale Records**.
++- Dashboard/reports totals should match pre-release (all sales still counted in metrics).
+diff --git a/routes/web.php b/routes/web.php
+index 361c7c1..a7a9c13 100644
+--- a/routes/web.php
++++ b/routes/web.php
+@@ -204,6 +204,8 @@ $router->post('/portal/{token}/approve', [ClientPortalController::class, 'approv
+ 
+ $router->get('/cron/daily-digest', [CronController::class, 'dailyDigest']);
+ 
++$router->get('/estate-sale-records', [EstateSalesController::class, 'records']);
++
+ $router->get('/estate-sales', [EstateSalesController::class, 'index']);
+ $router->get('/estate-sales/create', [EstateSalesController::class, 'create']);
+ $router->post('/estate-sales', [EstateSalesController::class, 'store']);
