@@ -12,7 +12,7 @@ final class DepositsController extends Controller
 {
     public function index(): void
     {
-        require_business_role(['general_user', 'admin']);
+        require_financial_access();
 
         if (!BankDeposit::isAvailable()) {
             flash('error', 'Deposits require the latest database migration.');
@@ -30,7 +30,7 @@ final class DepositsController extends Controller
 
     public function create(): void
     {
-        require_business_role(['general_user', 'admin']);
+        require_financial_access();
 
         if (!BankDeposit::isAvailable()) {
             flash('error', 'Deposits require the latest database migration.');
@@ -50,7 +50,7 @@ final class DepositsController extends Controller
 
     public function store(): void
     {
-        require_business_role(['general_user', 'admin']);
+        require_financial_access();
 
         if (!BankDeposit::isAvailable() || !verify_csrf($_POST['csrf_token'] ?? null)) {
             flash('error', 'Session expired or deposits unavailable.');
@@ -94,7 +94,7 @@ final class DepositsController extends Controller
 
     public function show(array $params): void
     {
-        require_business_role(['general_user', 'admin']);
+        require_financial_access();
 
         $id = (int) ($params['id'] ?? 0);
         $businessId = current_business_id();
@@ -125,7 +125,7 @@ final class DepositsController extends Controller
 
     public function linkPayment(array $params): void
     {
-        require_business_role(['general_user', 'admin']);
+        require_financial_access();
 
         if (!verify_csrf($_POST['csrf_token'] ?? null)) {
             flash('error', 'Session expired.');
@@ -152,7 +152,7 @@ final class DepositsController extends Controller
 
     public function unlinkPayment(array $params): void
     {
-        require_business_role(['general_user', 'admin']);
+        require_financial_access();
 
         if (!verify_csrf($_POST['csrf_token'] ?? null)) {
             flash('error', 'Session expired.');

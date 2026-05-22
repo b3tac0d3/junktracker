@@ -78,22 +78,26 @@ final class SearchController extends Controller
                     $results['bolo_matches'] = ClientBoloProfile::searchMatches($businessId, $query, $limit);
                     $results['jobs'] = Job::indexList($businessId, $query, '', '', $limit, 0);
                     $results['tasks'] = Task::indexList($businessId, $query, '', $limit, 0);
-                    $searchFromDate = '';
-                    $searchToDate = '';
-                    $results['sales'] = Sale::indexList($businessId, $query, '', $searchFromDate, $searchToDate, $limit, 0, 'date', 'desc', Sale::ESTATE_SCOPE_GENERAL);
-                    $results['purchases'] = Purchase::indexList($businessId, $query, '', $searchFromDate, $searchToDate, $limit, 0);
-                    $results['billing'] = Invoice::indexList($businessId, $query, '', $limit, 0);
-                    $results['expenses'] = Expense::indexList($businessId, $query, 'all', $limit, 0);
+                    if (can_view_financials()) {
+                        $searchFromDate = '';
+                        $searchToDate = '';
+                        $results['sales'] = Sale::indexList($businessId, $query, '', $searchFromDate, $searchToDate, $limit, 0, 'date', 'desc', Sale::ESTATE_SCOPE_GENERAL);
+                        $results['purchases'] = Purchase::indexList($businessId, $query, '', $searchFromDate, $searchToDate, $limit, 0);
+                        $results['billing'] = Invoice::indexList($businessId, $query, '', $limit, 0);
+                        $results['expenses'] = Expense::indexList($businessId, $query, 'all', $limit, 0);
+                    }
                     $results['time_entries'] = TimeEntry::indexList($businessId, $query, '', $limit, 0, null);
 
                     $totals['clients'] = Client::indexCount($businessId, $query);
                     $totals['bolo_matches'] = ClientBoloProfile::searchMatchesCount($businessId, $query);
                     $totals['jobs'] = Job::indexCount($businessId, $query, '');
                     $totals['tasks'] = Task::indexCount($businessId, $query, '');
-                    $totals['sales'] = Sale::indexCount($businessId, $query, '', '', '', Sale::ESTATE_SCOPE_GENERAL);
-                    $totals['purchases'] = Purchase::indexCount($businessId, $query, '');
-                    $totals['billing'] = Invoice::indexCount($businessId, $query, '');
-                    $totals['expenses'] = Expense::indexCount($businessId, $query, 'all');
+                    if (can_view_financials()) {
+                        $totals['sales'] = Sale::indexCount($businessId, $query, '', '', '', Sale::ESTATE_SCOPE_GENERAL);
+                        $totals['purchases'] = Purchase::indexCount($businessId, $query, '');
+                        $totals['billing'] = Invoice::indexCount($businessId, $query, '');
+                        $totals['expenses'] = Expense::indexCount($businessId, $query, 'all');
+                    }
                     $totals['time_entries'] = TimeEntry::indexCount($businessId, $query, '', null);
                 }
             }

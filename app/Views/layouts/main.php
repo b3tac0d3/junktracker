@@ -9,6 +9,7 @@ $isGlobalSiteAdminContext = is_site_admin() && $businessId <= 0;
 $isPunchOnlyWorkspace = !$publicPage && !$isGlobalSiteAdminContext && $workspaceRole === 'punch_only';
 $canAccessBusinessAdmin = !$isGlobalSiteAdminContext && (is_site_admin() || $workspaceRole === 'admin');
 $canManageUsers = is_site_admin() || (!$isGlobalSiteAdminContext && $workspaceRole === 'admin');
+$canViewFinancials = !$isGlobalSiteAdminContext && can_view_financials();
 $globalSearchQuery = trim((string) ($_GET['global_q'] ?? ''));
 $navNotifications = is_array($navNotifications ?? null) ? $navNotifications : ['items' => [], 'total' => 0];
 ?>
@@ -153,10 +154,14 @@ $navNotifications = is_array($navNotifications ?? null) ? $navNotifications : ['
                         <li><a class="dropdown-item" href="<?= e(url('/quotes/create')) ?>"><i class="fas fa-file-signature me-2"></i>Add Quote</a></li>
                         <li><a class="dropdown-item" href="<?= e(url('/deliveries/create')) ?>"><i class="fas fa-truck me-2"></i>Add Delivery</a></li>
                         <li><a class="dropdown-item" href="<?= e(url('/tasks')) ?>"><i class="fas fa-list-check me-2"></i>Add Task</a></li>
+                        <?php if ($canViewFinancials): ?>
                         <li><a class="dropdown-item" href="<?= e(url('/sales/create')) ?>"><i class="fas fa-sack-dollar me-2"></i>Add Sale</a></li>
+                        <?php endif; ?>
                         <li><a class="dropdown-item" href="<?= e(url('/estate-sales/create')) ?>"><i class="fas fa-store me-2"></i>Add Estate Sale</a></li>
+                        <?php if ($canViewFinancials): ?>
                         <li><a class="dropdown-item" href="<?= e(url('/purchases/create')) ?>"><i class="fas fa-cart-arrow-down me-2"></i>Add Purchase</a></li>
                         <li><a class="dropdown-item" href="<?= e(url('/expenses/create')) ?>"><i class="fas fa-receipt me-2"></i>Add Expense</a></li>
+                        <?php endif; ?>
                     </ul>
                 </li>
             <?php endif; ?>
@@ -232,6 +237,7 @@ $navNotifications = is_array($navNotifications ?? null) ? $navNotifications : ['
                                     </nav>
                                 </div>
 
+                                <?php if ($canViewFinancials): ?>
                                 <a class="nav-link collapsed" href="#" data-bs-toggle="collapse" data-bs-target="#collapseNavSales" aria-expanded="false" aria-controls="collapseNavSales">
                                     <div class="sb-nav-link-icon"><i class="fas fa-sack-dollar"></i></div>
                                     Sales
@@ -245,6 +251,12 @@ $navNotifications = is_array($navNotifications ?? null) ? $navNotifications : ['
                                         <a class="nav-link jt-nav-sublink" href="<?= e(url('/purchases')) ?>">Purchases</a>
                                     </nav>
                                 </div>
+                                <?php else: ?>
+                                <a class="nav-link" href="<?= e(url('/estate-sales')) ?>">
+                                    <div class="sb-nav-link-icon"><i class="fas fa-store"></i></div>
+                                    Estate Sales
+                                </a>
+                                <?php endif; ?>
 
                                 <a class="nav-link collapsed" href="#" data-bs-toggle="collapse" data-bs-target="#collapseNavOperations" aria-expanded="false" aria-controls="collapseNavOperations">
                                     <div class="sb-nav-link-icon"><i class="fas fa-truck"></i></div>
@@ -259,6 +271,7 @@ $navNotifications = is_array($navNotifications ?? null) ? $navNotifications : ['
                                     </nav>
                                 </div>
 
+                                <?php if ($canViewFinancials): ?>
                                 <a class="nav-link collapsed" href="#" data-bs-toggle="collapse" data-bs-target="#collapseNavFinance" aria-expanded="false" aria-controls="collapseNavFinance">
                                     <div class="sb-nav-link-icon"><i class="fas fa-file-invoice-dollar"></i></div>
                                     Finance
@@ -270,6 +283,7 @@ $navNotifications = is_array($navNotifications ?? null) ? $navNotifications : ['
                                         <a class="nav-link jt-nav-sublink" href="<?= e(url('/expenses')) ?>">Expenses</a>
                                     </nav>
                                 </div>
+                                <?php endif; ?>
 
                                 <a class="nav-link collapsed" href="#" data-bs-toggle="collapse" data-bs-target="#collapseTimeTracking" aria-expanded="false" aria-controls="collapseTimeTracking">
                                     <div class="sb-nav-link-icon"><i class="fas fa-stopwatch"></i></div>
@@ -283,11 +297,13 @@ $navNotifications = is_array($navNotifications ?? null) ? $navNotifications : ['
                                     </nav>
                                 </div>
 
+                                <?php if ($canViewFinancials): ?>
                                 <div class="sb-sidenav-menu-heading">Insights</div>
                                 <a class="nav-link" href="<?= e(url('/reports')) ?>">
                                     <div class="sb-nav-link-icon"><i class="fas fa-chart-line"></i></div>
                                     Reports
                                 </a>
+                                <?php endif; ?>
                             <?php endif; ?>
 
                             <?php if ($canAccessBusinessAdmin): ?>

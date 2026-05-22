@@ -120,6 +120,7 @@ $isInactive = $clientStatus === 'inactive' || (array_key_exists('is_active', $cl
                         <i class="fas fa-file-signature me-2"></i>Add Quote
                     </a>
                 </li>
+                <?php if (can_view_financials()): ?>
                 <li>
                     <a class="dropdown-item" href="<?= e(url('/purchases/create') . '?client_id=' . (string) ((int) ($client['id'] ?? 0))) ?>">
                         <i class="fas fa-cart-arrow-down me-2"></i>Add Purchase
@@ -130,6 +131,7 @@ $isInactive = $clientStatus === 'inactive' || (array_key_exists('is_active', $cl
                         <i class="fas fa-hand-holding-usd me-2"></i>Add Sale
                     </a>
                 </li>
+                <?php endif; ?>
                 <li>
                     <a class="dropdown-item" href="<?= e(url('/tasks/create') . '?client_id=' . (string) ((int) ($client['id'] ?? 0))) ?>">
                         <i class="fas fa-list-check me-2"></i>Add Task
@@ -370,6 +372,7 @@ $isInactive = $clientStatus === 'inactive' || (array_key_exists('is_active', $cl
     </section>
 <?php endif; ?>
 
+<?php if (can_view_financials()): ?>
 <section class="card index-card mb-3">
     <div class="card-header index-card-header">
         <strong><i class="fas fa-chart-line me-2"></i>Lifetime Financial Summary</strong>
@@ -405,6 +408,7 @@ $isInactive = $clientStatus === 'inactive' || (array_key_exists('is_active', $cl
         </div>
     </div>
 </section>
+<?php endif; ?>
 
 <section class="card index-card mb-3">
     <div class="card-header index-card-header">
@@ -453,6 +457,7 @@ $isInactive = $clientStatus === 'inactive' || (array_key_exists('is_active', $cl
     </div>
 </section>
 
+<?php if (can_view_financials()): ?>
 <section class="card index-card mb-3">
     <div class="card-header index-card-header">
         <strong><i class="fas fa-sack-dollar me-2"></i>Sales</strong>
@@ -538,6 +543,7 @@ $isInactive = $clientStatus === 'inactive' || (array_key_exists('is_active', $cl
         <?php endif; ?>
     </div>
 </section>
+<?php endif; ?>
 
 <section class="card index-card">
     <div class="card-header index-card-header">

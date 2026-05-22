@@ -318,6 +318,29 @@ function require_business_role(array $roles): void
     }
 }
 
+function can_view_financials(): bool
+{
+    if (is_site_admin()) {
+        return true;
+    }
+
+    return workspace_role() === 'admin';
+}
+
+function require_financial_access(): void
+{
+    business_context_required();
+
+    if (is_site_admin()) {
+        return;
+    }
+
+    if (!can_view_financials()) {
+        \Core\ErrorHandler::renderHttpError(403, 'Access denied', 'Financial data and reports are limited to workspace admins.');
+        exit;
+    }
+}
+
 function format_datetime(?string $value): string
 {
     if ($value === null || trim($value) === '') {

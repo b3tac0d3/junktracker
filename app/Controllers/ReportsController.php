@@ -11,7 +11,7 @@ final class ReportsController extends Controller
 {
     public function index(): void
     {
-        require_business_role(['general_user', 'admin']);
+        require_financial_access();
 
         $this->render('reports/index', [
             'pageTitle' => 'Reports',
@@ -20,7 +20,7 @@ final class ReportsController extends Controller
 
     public function income(): void
     {
-        require_business_role(['general_user', 'admin']);
+        require_financial_access();
 
         [$fromDate, $toDate] = $this->resolveDateRange();
         $businessId = current_business_id();
@@ -36,7 +36,7 @@ final class ReportsController extends Controller
 
     public function jobsReport(): void
     {
-        require_business_role(['general_user', 'admin']);
+        require_financial_access();
 
         [$fromDate, $toDate] = $this->resolveDateRange();
         $businessId = current_business_id();
@@ -56,7 +56,7 @@ final class ReportsController extends Controller
 
     public function salesReport(): void
     {
-        require_business_role(['general_user', 'admin']);
+        require_financial_access();
 
         [$fromDate, $toDate] = $this->resolveDateRange();
         $businessId = current_business_id();
@@ -74,7 +74,7 @@ final class ReportsController extends Controller
 
     public function purchasesReport(): void
     {
-        require_business_role(['general_user', 'admin']);
+        require_financial_access();
 
         [$fromDate, $toDate] = $this->resolveDateRange();
         $businessId = current_business_id();
@@ -92,7 +92,7 @@ final class ReportsController extends Controller
 
     public function expensesReport(): void
     {
-        require_business_role(['general_user', 'admin']);
+        require_financial_access();
 
         [$fromDate, $toDate] = $this->resolveDateRange();
         $businessId = current_business_id();
@@ -108,7 +108,7 @@ final class ReportsController extends Controller
 
     public function serviceReport(): void
     {
-        require_business_role(['general_user', 'admin']);
+        require_financial_access();
 
         [$fromDate, $toDate] = $this->resolveDateRange();
         $businessId = current_business_id();
@@ -126,7 +126,7 @@ final class ReportsController extends Controller
 
     public function exportIncomeCsv(): void
     {
-        require_business_role(['general_user', 'admin']);
+        require_financial_access();
 
         [$fromDate, $toDate] = $this->resolveDateRange();
         $businessId = current_business_id();
@@ -253,7 +253,7 @@ final class ReportsController extends Controller
 
     public function exportJobsCsv(): void
     {
-        require_business_role(['general_user', 'admin']);
+        require_financial_access();
 
         [$fromDate, $toDate] = $this->resolveDateRange();
         $businessId = current_business_id();
@@ -291,7 +291,7 @@ final class ReportsController extends Controller
 
     public function exportSalesCsv(): void
     {
-        require_business_role(['general_user', 'admin']);
+        require_financial_access();
 
         [$fromDate, $toDate] = $this->resolveDateRange();
         $businessId = current_business_id();
@@ -330,7 +330,7 @@ final class ReportsController extends Controller
 
     public function exportPurchasesCsv(): void
     {
-        require_business_role(['general_user', 'admin']);
+        require_financial_access();
 
         [$fromDate, $toDate] = $this->resolveDateRange();
         $businessId = current_business_id();
@@ -369,7 +369,7 @@ final class ReportsController extends Controller
 
     public function exportExpensesCsv(): void
     {
-        require_business_role(['general_user', 'admin']);
+        require_financial_access();
 
         [$fromDate, $toDate] = $this->resolveDateRange();
         $businessId = current_business_id();
@@ -412,7 +412,7 @@ final class ReportsController extends Controller
 
     public function exportServiceCsv(): void
     {
-        require_business_role(['general_user', 'admin']);
+        require_financial_access();
 
         [$fromDate, $toDate] = $this->resolveDateRange();
         $businessId = current_business_id();

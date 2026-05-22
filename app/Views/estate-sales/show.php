@@ -54,6 +54,7 @@ $customersLeftCount = (int) ($customerPresence['left'] ?? 0);
 $customersSeenCount = (int) ($customerPresence['total_seen'] ?? 0);
 $customersTotalCount = (int) ($customerPresence['total'] ?? $customerCount);
 $customersStatusFilter = \App\Models\EstateSale::normalizeCustomersStatusFilter($customersStatusFilter ?? null);
+$canViewFinancials = can_view_financials();
 
 $customerFilterUrl = static function (string $status) use ($estateSaleId): string {
     $params = ['tab' => 'customers'];
@@ -286,6 +287,7 @@ $customerActionsMenu = static function (
                     <span class="estate-sale-tab-badge" data-count="<?= e((string) $salesCount) ?>"><?= e((string) $salesCount) ?></span>
                 </button>
             </li>
+            <?php if ($canViewFinancials): ?>
             <li class="nav-item" role="presentation">
                 <button
                     class="nav-link estate-sale-tab-link<?= $expensesTabActive ? ' active' : '' ?>"
@@ -303,6 +305,7 @@ $customerActionsMenu = static function (
                     <span class="estate-sale-tab-badge" id="estate-sale-expense-count" data-count="<?= e((string) $expenseCount) ?>"><?= e((string) $expenseCount) ?></span>
                 </button>
             </li>
+            <?php endif; ?>
             <li class="nav-item" role="presentation">
                 <button
                     class="nav-link estate-sale-tab-link<?= $laborTabActive ? ' active' : '' ?>"
@@ -371,6 +374,7 @@ $customerActionsMenu = static function (
                 <?php endif; ?>
             </div>
 
+            <?php if ($canViewFinancials): ?>
             <hr class="my-4">
 
             <div id="estate-sale-financial-summary">
@@ -426,6 +430,7 @@ $customerActionsMenu = static function (
                 </div>
                 <div class="form-text mt-2" id="estate-sale-split-help"><?= e($clientSplitHelpText) ?></div>
             </div>
+            <?php endif; ?>
         </div>
 
         <div
@@ -672,24 +677,29 @@ $customerActionsMenu = static function (
                         $saleDate = $formatSaleDate((string) ($sale['sale_date'] ?? ''));
                         $saleAmount = (float) ($sale['gross_amount'] ?? 0);
                         $customerName = trim((string) ($sale['customer_name'] ?? ''));
+                        $saleRowUrl = $canViewFinancials
+                            ? url('/sales/' . (string) $saleId)
+                            : url('/estate-sales/' . (string) $estateSaleId . '/sales/' . (string) $saleId . '/edit');
                         ?>
                         <article class="record-row-simple">
-                            <a class="record-row-link" href="<?= e(url('/sales/' . (string) $saleId)) ?>">
+                            <a class="record-row-link" href="<?= e($saleRowUrl) ?>">
                                 <div class="record-row-main">
                                     <h3 class="record-title-simple mb-1"><?= e($saleName) ?></h3>
                                     <?php if ($customerName !== ''): ?>
                                         <div class="small muted"><?= e($customerName) ?></div>
                                     <?php endif; ?>
                                 </div>
-                                <div class="record-row-fields record-row-fields-3 mt-2">
+                                <div class="record-row-fields record-row-fields-<?= $canViewFinancials ? '3' : '2' ?> mt-2">
                                     <div class="record-field">
                                         <span class="record-label">Date</span>
                                         <span class="record-value"><?= e($saleDate) ?></span>
                                     </div>
+                                    <?php if ($canViewFinancials): ?>
                                     <div class="record-field">
                                         <span class="record-label">Gross</span>
                                         <span class="record-value"><?= e($formatMoney($saleAmount)) ?></span>
                                     </div>
+                                    <?php endif; ?>
                                     <div class="record-field">
                                         <span class="record-label">Type</span>
                                         <span class="record-value"><?= e(trim((string) ($sale['sale_type'] ?? '')) ?: '—') ?></span>
@@ -702,6 +712,7 @@ $customerActionsMenu = static function (
             <?php endif; ?>
         </div>
 
+        <?php if ($canViewFinancials): ?>
         <div
             class="tab-pane fade<?= $expensesTabActive ? ' show active' : '' ?>"
             id="estate-sale-tab-expenses"
@@ -753,6 +764,7 @@ $customerActionsMenu = static function (
                 </div>
             <?php endif; ?>
         </div>
+        <?php endif; ?>
 
         <div
             class="tab-pane fade<?= $laborTabActive ? ' show active' : '' ?>"
@@ -761,7 +773,7 @@ $customerActionsMenu = static function (
             aria-labelledby="estate-sale-labor-tab"
             tabindex="0"
         >
-            <div class="record-row-fields record-row-fields-4 record-row-fields-mobile-2 mb-4">
+            <div class="record-row-fields record-row-fields-<?= $canViewFinancials ? '4' : '3' ?> record-row-fields-mobile-2 mb-4">
                 <div class="record-field">
                     <span class="record-label">Entries</span>
                     <span class="record-value"><?= e((string) ((int) ($timeSummary['entries'] ?? 0))) ?></span>
@@ -774,10 +786,12 @@ $customerActionsMenu = static function (
                     <span class="record-label">Total Hours</span>
                     <span class="record-value"><?= e(number_format((float) ($timeSummary['hours'] ?? 0), 2)) ?></span>
                 </div>
+                <?php if ($canViewFinancials): ?>
                 <div class="record-field">
                     <span class="record-label">Labor Cost</span>
                     <span class="record-value"><?= e($formatMoney($laborCost)) ?></span>
                 </div>
+                <?php endif; ?>
             </div>
 
             <div class="d-flex align-items-center justify-content-between mb-2">
@@ -807,8 +821,10 @@ $customerActionsMenu = static function (
                                 <li>In <?= e(format_datetime((string) ($entry['clock_in_at'] ?? null))) ?></li>
                                 <li>Out <?= e(format_datetime($clockOutAt !== '' ? $clockOutAt : null)) ?></li>
                                 <li><?= e($formatDuration($minutes)) ?></li>
+                                <?php if ($canViewFinancials): ?>
                                 <li>Rate $<?= e(number_format($hourlyRate, 2)) ?></li>
                                 <li>Cost $<?= e(number_format($entryLaborCost, 2)) ?></li>
+                                <?php endif; ?>
                                 <?php if ($clockOutAt === ''): ?><li><span class="badge text-bg-warning">Open</span></li><?php endif; ?>
                             </ul>
                         </li>

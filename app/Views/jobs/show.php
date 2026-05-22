@@ -286,6 +286,7 @@ $formatDuration = static function (int $minutes): string {
 </section>
 <?php endif; ?>
 
+<?php if (can_view_financials()): ?>
 <section class="card index-card mb-3">
     <div class="card-header index-card-header">
         <strong><i class="fas fa-chart-line me-2"></i>Financial Snapshot</strong>
@@ -545,6 +546,7 @@ $formatDuration = static function (int $minutes): string {
         <?php endif; ?>
     </div>
 </section>
+<?php endif; ?>
 
 <section class="card index-card">
     <div class="card-header index-card-header">
@@ -564,10 +566,12 @@ $formatDuration = static function (int $minutes): string {
                 <span class="record-label">Total Hours</span>
                 <span class="record-value"><?= e(number_format((float) ($timeSummary['hours'] ?? 0), 2)) ?></span>
             </div>
+            <?php if (can_view_financials()): ?>
             <div class="record-field">
                 <span class="record-label">Labor Cost</span>
                 <span class="record-value">$<?= e(number_format((float) ($financial['labor_cost'] ?? ($financial['labor'] ?? 0)), 2)) ?></span>
             </div>
+            <?php endif; ?>
         </div>
 
         <hr class="my-4">
@@ -596,8 +600,10 @@ $formatDuration = static function (int $minutes): string {
                             <li>In <?= e(format_datetime((string) ($entry['clock_in_at'] ?? null))) ?></li>
                             <li>Out <?= e(format_datetime($clockOutAt !== '' ? $clockOutAt : null)) ?></li>
                             <li><?= e($formatDuration($minutes)) ?></li>
+                            <?php if (can_view_financials()): ?>
                             <li>Rate $<?= e(number_format($hourlyRate, 2)) ?></li>
                             <li>Cost $<?= e(number_format($laborCost, 2)) ?></li>
+                            <?php endif; ?>
                             <?php if ($clockOutAt === ''): ?><li><span class="badge text-bg-warning">Open</span></li><?php endif; ?>
                         </ul>
                     </li>

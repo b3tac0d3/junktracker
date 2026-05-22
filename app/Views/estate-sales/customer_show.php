@@ -213,21 +213,27 @@ $canCheckOut = $checkInStatus === 'inside';
                     }
                     $saleId = (int) ($sale['id'] ?? 0);
                     $saleName = trim((string) ($sale['name'] ?? '')) ?: ('Sale #' . (string) $saleId);
+                    $canViewFinancials = can_view_financials();
+                    $saleRowUrl = $canViewFinancials
+                        ? url('/sales/' . (string) $saleId)
+                        : url('/estate-sales/' . (string) $estateSaleId . '/sales/' . (string) $saleId . '/edit');
                     ?>
                     <article class="record-row-simple">
-                        <a class="record-row-link" href="<?= e(url('/sales/' . (string) $saleId)) ?>">
+                        <a class="record-row-link" href="<?= e($saleRowUrl) ?>">
                             <div class="record-row-main">
                                 <h3 class="record-title-simple mb-1"><?= e($saleName) ?></h3>
                             </div>
-                            <div class="record-row-fields record-row-fields-3 mt-2">
+                            <div class="record-row-fields record-row-fields-<?= $canViewFinancials ? '3' : '2' ?> mt-2">
                                 <div class="record-field">
                                     <span class="record-label">Date</span>
                                     <span class="record-value"><?= e($formatSaleDate((string) ($sale['sale_date'] ?? ''))) ?></span>
                                 </div>
+                                <?php if ($canViewFinancials): ?>
                                 <div class="record-field">
                                     <span class="record-label">Amount</span>
                                     <span class="record-value"><?= e($formatMoney((float) ($sale['gross_amount'] ?? 0))) ?></span>
                                 </div>
+                                <?php endif; ?>
                                 <div class="record-field">
                                     <span class="record-label">Type</span>
                                     <span class="record-value"><?= e(trim((string) ($sale['sale_type'] ?? '')) ?: '—') ?></span>

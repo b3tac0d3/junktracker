@@ -92,6 +92,8 @@ $employeeDisplayName = static function (array $row): string {
     }
     return 'Employee #' . (string) ((int) ($row['id'] ?? 0));
 };
+
+$canViewFinancials = can_view_financials();
 ?>
 
 <div class="page-header">
@@ -99,6 +101,7 @@ $employeeDisplayName = static function (array $row): string {
     <p class="muted"><?= e($businessName) ?></p>
 </div>
 
+<?php if ($canViewFinancials): ?>
 <div class="kpi-grid">
     <a class="kpi-card kpi-card-link kpi-card--sales" href="<?= e(url('/sales')) ?>">
         <span>Sales MTD / YTD</span>
@@ -156,6 +159,7 @@ $employeeDisplayName = static function (array $row): string {
         </div>
     </div>
 </section>
+<?php endif; ?>
 
 <section class="card index-card shadow-sm mb-3" style="margin-top: 1em">
     <div class="card-header index-card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
@@ -400,7 +404,7 @@ $employeeDisplayName = static function (array $row): string {
                         ?>
                         <a class="simple-list-row simple-list-row-link" href="<?= e($quoteHref) ?>">
                             <span class="simple-list-title"><?= e($quoteTitle) ?></span>
-                            <span class="simple-list-meta"><?= e($quoteClient) ?> · <?= e($quoteStatusLabel) ?> · $<?= e(number_format($quoteTotal, 2)) ?> · <?= e($quoteDue) ?><?= e($quoteJobTitle !== '' ? ' · ' . $quoteJobTitle : '') ?></span>
+                            <span class="simple-list-meta"><?= e($quoteClient) ?> · <?= e($quoteStatusLabel) ?><?= $canViewFinancials ? ' · $' . e(number_format($quoteTotal, 2)) : '' ?> · <?= e($quoteDue) ?><?= e($quoteJobTitle !== '' ? ' · ' . $quoteJobTitle : '') ?></span>
                         </a>
                     <?php endforeach; ?>
                 </div>
@@ -438,6 +442,7 @@ $employeeDisplayName = static function (array $row): string {
         </div>
     </section>
 
+    <?php if ($canViewFinancials): ?>
     <section class="card index-card">
         <div class="card-header index-card-header d-flex align-items-center justify-content-between">
             <strong><i class="fas fa-sack-dollar me-2 jt-dashboard-icon--sales" aria-hidden="true"></i>Recent Sales (MTD)</strong>
@@ -496,8 +501,10 @@ $employeeDisplayName = static function (array $row): string {
             <?php endif; ?>
         </div>
     </section>
+    <?php endif; ?>
 </div>
 
+<?php if ($canViewFinancials): ?>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" crossorigin="anonymous"></script>
 <script>
 (function () {
@@ -588,3 +595,4 @@ $employeeDisplayName = static function (array $row): string {
     });
 })();
 </script>
+<?php endif; ?>

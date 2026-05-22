@@ -19,7 +19,7 @@ final class BillingController extends Controller
 {
     public function index(): void
     {
-        require_business_role(['general_user', 'admin']);
+        require_financial_access();
 
         $search = trim((string) ($_GET['q'] ?? ''));
         $status = strtolower(trim((string) ($_GET['status'] ?? '')));
@@ -79,7 +79,7 @@ final class BillingController extends Controller
 
     public function create(): void
     {
-        require_business_role(['general_user', 'admin']);
+        require_financial_access();
 
         $businessId = current_business_id();
         $clientOptions = Invoice::clientOptions($businessId);
@@ -177,7 +177,7 @@ final class BillingController extends Controller
 
     public function store(): void
     {
-        require_business_role(['general_user', 'admin']);
+        require_financial_access();
 
         if (!verify_csrf($_POST['csrf_token'] ?? null)) {
             flash('error', 'Session expired. Please try again.');
@@ -238,7 +238,7 @@ final class BillingController extends Controller
 
     public function edit(array $params): void
     {
-        require_business_role(['general_user', 'admin']);
+        require_financial_access();
 
         $invoiceId = (int) ($params['id'] ?? 0);
         if ($invoiceId <= 0) {
@@ -276,7 +276,7 @@ final class BillingController extends Controller
 
     public function update(array $params): void
     {
-        require_business_role(['general_user', 'admin']);
+        require_financial_access();
 
         $invoiceId = (int) ($params['id'] ?? 0);
         if ($invoiceId <= 0) {
@@ -351,7 +351,7 @@ final class BillingController extends Controller
 
     public function show(array $params): void
     {
-        require_business_role(['general_user', 'admin']);
+        require_financial_access();
 
         $invoiceId = (int) ($params['id'] ?? 0);
         if ($invoiceId <= 0) {
@@ -386,7 +386,7 @@ final class BillingController extends Controller
 
     public function document(array $params): void
     {
-        require_business_role(['general_user', 'admin']);
+        require_financial_access();
 
         $invoiceId = (int) ($params['id'] ?? 0);
         if ($invoiceId <= 0) {
@@ -428,7 +428,7 @@ final class BillingController extends Controller
 
     public function sendEmail(array $params): void
     {
-        require_business_role(['general_user', 'admin']);
+        require_financial_access();
 
         $invoiceId = (int) ($params['id'] ?? 0);
         if ($invoiceId <= 0 || !verify_csrf($_POST['csrf_token'] ?? null)) {
@@ -520,7 +520,7 @@ final class BillingController extends Controller
 
     public function issuePortalLink(array $params): void
     {
-        require_business_role(['general_user', 'admin']);
+        require_financial_access();
 
         $invoiceId = (int) ($params['id'] ?? 0);
         if ($invoiceId <= 0 || !verify_csrf($_POST['csrf_token'] ?? null)) {
@@ -554,7 +554,7 @@ final class BillingController extends Controller
 
     public function delete(array $params): void
     {
-        require_business_role(['general_user', 'admin']);
+        require_financial_access();
 
         $invoiceId = (int) ($params['id'] ?? 0);
         if ($invoiceId <= 0) {
@@ -602,7 +602,7 @@ final class BillingController extends Controller
 
     public function quickStatus(array $params): void
     {
-        require_business_role(['general_user', 'admin']);
+        require_financial_access();
 
         $invoiceId = (int) ($params['id'] ?? 0);
         if ($invoiceId <= 0) {
@@ -664,7 +664,7 @@ final class BillingController extends Controller
 
     public function createPayment(): void
     {
-        require_business_role(['general_user', 'admin']);
+        require_financial_access();
 
         $businessId = current_business_id();
         $jobId = max(0, (int) ($_GET['job_id'] ?? 0));
@@ -706,7 +706,7 @@ final class BillingController extends Controller
 
     public function storePayment(): void
     {
-        require_business_role(['general_user', 'admin']);
+        require_financial_access();
 
         if (!verify_csrf($_POST['csrf_token'] ?? null)) {
             flash('error', 'Session expired. Please try again.');
@@ -772,7 +772,7 @@ final class BillingController extends Controller
 
     public function showPayment(array $params): void
     {
-        require_business_role(['general_user', 'admin']);
+        require_financial_access();
 
         $paymentId = (int) ($params['id'] ?? 0);
         if ($paymentId <= 0) {
@@ -807,7 +807,7 @@ final class BillingController extends Controller
 
     public function deletePayment(array $params): void
     {
-        require_business_role(['general_user', 'admin']);
+        require_financial_access();
 
         $paymentId = (int) ($params['id'] ?? 0);
         if ($paymentId <= 0) {
@@ -856,7 +856,7 @@ final class BillingController extends Controller
 
     public function editPayment(array $params): void
     {
-        require_business_role(['general_user', 'admin']);
+        require_financial_access();
 
         $paymentId = (int) ($params['id'] ?? 0);
         if ($paymentId <= 0) {
@@ -902,7 +902,7 @@ final class BillingController extends Controller
 
     public function updatePayment(array $params): void
     {
-        require_business_role(['general_user', 'admin']);
+        require_financial_access();
 
         $paymentId = (int) ($params['id'] ?? 0);
         if ($paymentId <= 0) {

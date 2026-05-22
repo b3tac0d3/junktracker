@@ -136,7 +136,7 @@ $formatDt = static function (?string $value): string {
                             <div class="record-row-main">
                                 <h3 class="record-title-simple"><?= e($title) ?></h3>
                             </div>
-                            <div class="record-row-fields record-row-fields-5">
+                            <div class="record-row-fields record-row-fields-<?= can_view_financials() ? '5' : '3' ?>">
                                 <div class="record-field">
                                     <span class="record-label">Start</span>
                                     <span class="record-value"><?= e($formatDt((string) ($row['start_at'] ?? ''))) ?></span>
@@ -145,6 +145,7 @@ $formatDt = static function (?string $value): string {
                                     <span class="record-label">Status</span>
                                     <span class="record-value"><?= e($statusLabel($st)) ?></span>
                                 </div>
+                                <?php if (can_view_financials()): ?>
                                 <div class="record-field">
                                     <span class="record-label">Gross</span>
                                     <span class="record-value"><?= e('$' . number_format((float) ($row['gross_total'] ?? 0), 2)) ?></span>
@@ -153,6 +154,7 @@ $formatDt = static function (?string $value): string {
                                     <span class="record-label">Net</span>
                                     <span class="record-value"><?= ($row['net_total'] ?? null) !== null ? e('$' . number_format((float) $row['net_total'], 2)) : '—' ?></span>
                                 </div>
+                                <?php endif; ?>
                                 <div class="record-field">
                                     <span class="record-label">Customers</span>
                                     <span class="record-value"><?= e((string) $customerCount) ?></span>

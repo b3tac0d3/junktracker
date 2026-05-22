@@ -16,7 +16,7 @@ final class SalesController extends Controller
 {
     public function index(): void
     {
-        require_business_role(['general_user', 'admin']);
+        require_financial_access();
 
         $search = trim((string) ($_GET['q'] ?? ''));
         $type = trim((string) ($_GET['type'] ?? ''));
@@ -69,7 +69,7 @@ final class SalesController extends Controller
 
     public function create(): void
     {
-        require_business_role(['general_user', 'admin']);
+        require_financial_access();
 
         $businessId = current_business_id();
         $form = $this->defaultForm();
@@ -96,7 +96,7 @@ final class SalesController extends Controller
 
     public function clientSearch(): void
     {
-        require_business_role(['general_user', 'admin']);
+        require_financial_access();
 
         $businessId = current_business_id();
         $query = trim((string) ($_GET['q'] ?? ''));
@@ -123,7 +123,7 @@ final class SalesController extends Controller
 
     public function jobSearch(): void
     {
-        require_business_role(['general_user', 'admin']);
+        require_financial_access();
 
         $businessId = current_business_id();
         $query = trim((string) ($_GET['q'] ?? ''));
@@ -156,7 +156,7 @@ final class SalesController extends Controller
 
     public function purchaseSearch(): void
     {
-        require_business_role(['general_user', 'admin']);
+        require_financial_access();
 
         $businessId = current_business_id();
         $query = trim((string) ($_GET['q'] ?? ''));
@@ -190,7 +190,7 @@ final class SalesController extends Controller
 
     public function store(): void
     {
-        require_business_role(['general_user', 'admin']);
+        require_financial_access();
 
         if (!verify_csrf($_POST['csrf_token'] ?? null)) {
             flash('error', 'Session expired. Please try again.');
@@ -220,7 +220,7 @@ final class SalesController extends Controller
 
     public function show(array $params): void
     {
-        require_business_role(['general_user', 'admin']);
+        require_financial_access();
 
         $saleId = (int) ($params['id'] ?? 0);
         if ($saleId <= 0) {
@@ -244,7 +244,7 @@ final class SalesController extends Controller
 
     public function edit(array $params): void
     {
-        require_business_role(['general_user', 'admin']);
+        require_financial_access();
 
         $saleId = (int) ($params['id'] ?? 0);
         if ($saleId <= 0) {
@@ -282,7 +282,7 @@ final class SalesController extends Controller
 
     public function update(array $params): void
     {
-        require_business_role(['general_user', 'admin']);
+        require_financial_access();
 
         $saleId = (int) ($params['id'] ?? 0);
         if ($saleId <= 0) {
@@ -326,7 +326,7 @@ final class SalesController extends Controller
 
     public function delete(array $params): void
     {
-        require_business_role(['general_user', 'admin']);
+        require_financial_access();
 
         $saleId = (int) ($params['id'] ?? 0);
         if ($saleId <= 0) {

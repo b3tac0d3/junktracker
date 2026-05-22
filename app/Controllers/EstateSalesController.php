@@ -79,7 +79,7 @@ final class EstateSalesController extends Controller
 
     public function records(): void
     {
-        require_business_role(['general_user', 'admin']);
+        require_financial_access();
 
         $search = trim((string) ($_GET['q'] ?? ''));
         $sortBy = strtolower(trim((string) ($_GET['sort_by'] ?? 'date')));
@@ -207,6 +207,9 @@ final class EstateSalesController extends Controller
 
         $activeTab = strtolower(trim((string) ($_GET['tab'] ?? 'details')));
         if (!in_array($activeTab, ['details', 'customers', 'sales', 'expenses', 'labor'], true)) {
+            $activeTab = 'details';
+        }
+        if ($activeTab === 'expenses' && !can_view_financials()) {
             $activeTab = 'details';
         }
 
@@ -869,7 +872,7 @@ final class EstateSalesController extends Controller
 
     public function quickCreateExpense(array $params): void
     {
-        require_business_role(['general_user', 'admin']);
+        require_financial_access();
 
         if (!verify_csrf($_POST['csrf_token'] ?? null)) {
             $this->json(['ok' => false, 'error' => 'Session expired. Please reload and try again.'], 422);
@@ -931,7 +934,7 @@ final class EstateSalesController extends Controller
 
     public function removeExpense(array $params): void
     {
-        require_business_role(['general_user', 'admin']);
+        require_financial_access();
 
         if (!verify_csrf($_POST['csrf_token'] ?? null)) {
             flash('error', 'Session expired. Please try again.');

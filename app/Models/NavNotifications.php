@@ -42,7 +42,9 @@ final class NavNotifications
         $items = array_merge($items, self::myTasksDueToday($businessId, $userId));
         $items = array_merge($items, self::lateDeliveries($businessId));
         $items = array_merge($items, self::lateScheduledJobs($businessId));
-        $items = array_merge($items, self::overdueInvoices($businessId));
+        if (\can_view_financials()) {
+            $items = array_merge($items, self::overdueInvoices($businessId));
+        }
 
         usort($items, static function (array $a, array $b): int {
             return ((int) ($b['sort_key'] ?? 0)) <=> ((int) ($a['sort_key'] ?? 0));

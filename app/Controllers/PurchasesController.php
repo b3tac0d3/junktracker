@@ -15,7 +15,7 @@ final class PurchasesController extends Controller
 {
     public function index(): void
     {
-        require_business_role(['general_user', 'admin']);
+        require_financial_access();
 
         $search = trim((string) ($_GET['q'] ?? ''));
         $status = strtolower(trim((string) ($_GET['status'] ?? '')));
@@ -85,7 +85,7 @@ final class PurchasesController extends Controller
 
     public function create(): void
     {
-        require_business_role(['general_user', 'admin']);
+        require_financial_access();
 
         $businessId = current_business_id();
         $form = $this->defaultForm();
@@ -116,7 +116,7 @@ final class PurchasesController extends Controller
 
     public function clientSearch(): void
     {
-        require_business_role(['general_user', 'admin']);
+        require_financial_access();
 
         $businessId = current_business_id();
         $query = trim((string) ($_GET['q'] ?? ''));
@@ -144,7 +144,7 @@ final class PurchasesController extends Controller
 
     public function quickCreateClient(): void
     {
-        require_business_role(['general_user', 'admin']);
+        require_financial_access();
 
         if (!verify_csrf($_POST['csrf_token'] ?? null)) {
             $this->json(['ok' => false, 'error' => 'Session expired. Please reload and try again.'], 422);
@@ -224,7 +224,7 @@ final class PurchasesController extends Controller
 
     public function store(): void
     {
-        require_business_role(['general_user', 'admin']);
+        require_financial_access();
 
         if (!verify_csrf($_POST['csrf_token'] ?? null)) {
             flash('error', 'Session expired. Please try again.');
@@ -258,7 +258,7 @@ final class PurchasesController extends Controller
 
     public function show(array $params): void
     {
-        require_business_role(['general_user', 'admin']);
+        require_financial_access();
 
         $purchaseId = (int) ($params['id'] ?? 0);
         if ($purchaseId <= 0) {
@@ -292,7 +292,7 @@ final class PurchasesController extends Controller
 
     public function edit(array $params): void
     {
-        require_business_role(['general_user', 'admin']);
+        require_financial_access();
 
         $purchaseId = (int) ($params['id'] ?? 0);
         if ($purchaseId <= 0) {
@@ -323,7 +323,7 @@ final class PurchasesController extends Controller
 
     public function update(array $params): void
     {
-        require_business_role(['general_user', 'admin']);
+        require_financial_access();
 
         $purchaseId = (int) ($params['id'] ?? 0);
         if ($purchaseId <= 0) {
@@ -371,7 +371,7 @@ final class PurchasesController extends Controller
 
     public function delete(array $params): void
     {
-        require_business_role(['general_user', 'admin']);
+        require_financial_access();
 
         $purchaseId = (int) ($params['id'] ?? 0);
         if ($purchaseId <= 0) {

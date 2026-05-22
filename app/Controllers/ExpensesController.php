@@ -11,7 +11,7 @@ final class ExpensesController extends Controller
 {
     public function index(): void
     {
-        require_business_role(['general_user', 'admin']);
+        require_financial_access();
 
         $search = trim((string) ($_GET['q'] ?? ''));
         $scope = strtolower(trim((string) ($_GET['scope'] ?? 'all')));
@@ -53,7 +53,7 @@ final class ExpensesController extends Controller
 
     public function create(): void
     {
-        require_business_role(['general_user', 'admin']);
+        require_financial_access();
 
         $this->render('expenses/form', [
             'pageTitle' => 'Add General Expense',
@@ -66,7 +66,7 @@ final class ExpensesController extends Controller
 
     public function store(): void
     {
-        require_business_role(['general_user', 'admin']);
+        require_financial_access();
 
         if (!verify_csrf($_POST['csrf_token'] ?? null)) {
             flash('error', 'Session expired. Please try again.');
@@ -98,7 +98,7 @@ final class ExpensesController extends Controller
 
     public function show(array $params): void
     {
-        require_business_role(['general_user', 'admin']);
+        require_financial_access();
 
         $expenseId = (int) ($params['id'] ?? 0);
         if ($expenseId <= 0) {
@@ -122,7 +122,7 @@ final class ExpensesController extends Controller
 
     public function edit(array $params): void
     {
-        require_business_role(['general_user', 'admin']);
+        require_financial_access();
 
         $expense = $this->expenseOr404((int) ($params['id'] ?? 0));
         if ($expense === null) {
@@ -149,7 +149,7 @@ final class ExpensesController extends Controller
 
     public function update(array $params): void
     {
-        require_business_role(['general_user', 'admin']);
+        require_financial_access();
 
         $expense = $this->expenseOr404((int) ($params['id'] ?? 0));
         if ($expense === null) {
@@ -195,7 +195,7 @@ final class ExpensesController extends Controller
 
     public function delete(array $params): void
     {
-        require_business_role(['general_user', 'admin']);
+        require_financial_access();
 
         $expense = $this->expenseOr404((int) ($params['id'] ?? 0));
         if ($expense === null) {
