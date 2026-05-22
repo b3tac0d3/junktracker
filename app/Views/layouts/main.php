@@ -154,6 +154,7 @@ $navNotifications = is_array($navNotifications ?? null) ? $navNotifications : ['
                         <li><a class="dropdown-item" href="<?= e(url('/deliveries/create')) ?>"><i class="fas fa-truck me-2"></i>Add Delivery</a></li>
                         <li><a class="dropdown-item" href="<?= e(url('/tasks')) ?>"><i class="fas fa-list-check me-2"></i>Add Task</a></li>
                         <li><a class="dropdown-item" href="<?= e(url('/sales/create')) ?>"><i class="fas fa-sack-dollar me-2"></i>Add Sale</a></li>
+                        <li><a class="dropdown-item" href="<?= e(url('/estate-sales/create')) ?>"><i class="fas fa-store me-2"></i>Add Estate Sale</a></li>
                         <li><a class="dropdown-item" href="<?= e(url('/purchases/create')) ?>"><i class="fas fa-cart-arrow-down me-2"></i>Add Purchase</a></li>
                         <li><a class="dropdown-item" href="<?= e(url('/expenses/create')) ?>"><i class="fas fa-receipt me-2"></i>Add Expense</a></li>
                     </ul>
@@ -204,33 +205,88 @@ $navNotifications = is_array($navNotifications ?? null) ? $navNotifications : ['
                             <?php endif; ?>
 
                             <?php if (!$isGlobalSiteAdminContext): ?>
-                                <div class="sb-sidenav-menu-heading">Core</div>
-                                <a class="nav-link" href="<?= e(url('/clients')) ?>"><div class="sb-nav-link-icon"><i class="fas fa-users"></i></div>Clients</a>
-                                <a class="nav-link" href="<?= e(url('/networking')) ?>"><div class="sb-nav-link-icon"><i class="fas fa-address-book"></i></div>Networking</a>
-                                <a class="nav-link" href="<?= e(url('/jobs')) ?>"><div class="sb-nav-link-icon"><i class="fas fa-briefcase"></i></div>Jobs</a>
-                                <a class="nav-link" href="<?= e(url('/quotes')) ?>"><div class="sb-nav-link-icon"><i class="fas fa-file-signature"></i></div>Quotes</a>
-                                <a class="nav-link" href="<?= e(url('/sales')) ?>"><div class="sb-nav-link-icon"><i class="fas fa-sack-dollar"></i></div>Sales</a>
-                                <a class="nav-link" href="<?= e(url('/purchases')) ?>"><div class="sb-nav-link-icon"><i class="fas fa-cart-arrow-down"></i></div>Purchases</a>
-                                <a class="nav-link" href="<?= e(url('/deliveries')) ?>"><div class="sb-nav-link-icon"><i class="fas fa-truck"></i></div>Deliveries</a>
-                                <a class="nav-link" href="<?= e(url('/tasks')) ?>"><div class="sb-nav-link-icon"><i class="fas fa-list-check"></i></div>Tasks</a>
-                                <a class="nav-link" href="<?= e(url('/events')) ?>"><div class="sb-nav-link-icon"><i class="fas fa-calendar-days"></i></div>Events</a>
-                                <a class="nav-link" href="<?= e(url('/billing')) ?>"><div class="sb-nav-link-icon"><i class="fas fa-file-invoice-dollar"></i></div>Billing</a>
-                                <a class="nav-link" href="<?= e(url('/expenses')) ?>"><div class="sb-nav-link-icon"><i class="fas fa-receipt"></i></div>Expenses</a>
-                                <a class="nav-link collapsed" href="#" data-bs-toggle="collapse" data-bs-target="#collapseTimeTracking" aria-expanded="false" aria-controls="collapseCustomers">
+                                <a class="nav-link collapsed" href="#" data-bs-toggle="collapse" data-bs-target="#collapseNavPeople" aria-expanded="false" aria-controls="collapseNavPeople">
+                                    <div class="sb-nav-link-icon"><i class="fas fa-users"></i></div>
+                                    People
+                                    <div class="sb-sidenav-collapse-arrow"><i class="fas fa-angle-down"></i></div>
+                                </a>
+                                <div class="collapse" id="collapseNavPeople" data-bs-parent="#sidenavAccordion">
+                                    <nav class="sb-sidenav-menu-nested nav">
+                                        <a class="nav-link jt-nav-sublink" href="<?= e(url('/clients')) ?>">Clients</a>
+                                        <a class="nav-link jt-nav-sublink" href="<?= e(url('/networking')) ?>">Networking</a>
+                                        <?php if (\App\Models\ClientBoloProfile::isAvailable()): ?>
+                                            <a class="nav-link jt-nav-sublink" href="<?= e(url('/bolo')) ?>">BOLO</a>
+                                        <?php endif; ?>
+                                    </nav>
+                                </div>
+
+                                <a class="nav-link collapsed" href="#" data-bs-toggle="collapse" data-bs-target="#collapseNavWork" aria-expanded="false" aria-controls="collapseNavWork">
+                                    <div class="sb-nav-link-icon"><i class="fas fa-briefcase"></i></div>
+                                    Work
+                                    <div class="sb-sidenav-collapse-arrow"><i class="fas fa-angle-down"></i></div>
+                                </a>
+                                <div class="collapse" id="collapseNavWork" data-bs-parent="#sidenavAccordion">
+                                    <nav class="sb-sidenav-menu-nested nav">
+                                        <a class="nav-link jt-nav-sublink" href="<?= e(url('/quotes')) ?>">Quotes</a>
+                                        <a class="nav-link jt-nav-sublink" href="<?= e(url('/jobs')) ?>">Jobs</a>
+                                    </nav>
+                                </div>
+
+                                <a class="nav-link collapsed" href="#" data-bs-toggle="collapse" data-bs-target="#collapseNavSales" aria-expanded="false" aria-controls="collapseNavSales">
+                                    <div class="sb-nav-link-icon"><i class="fas fa-sack-dollar"></i></div>
+                                    Sales
+                                    <div class="sb-sidenav-collapse-arrow"><i class="fas fa-angle-down"></i></div>
+                                </a>
+                                <div class="collapse" id="collapseNavSales" data-bs-parent="#sidenavAccordion">
+                                    <nav class="sb-sidenav-menu-nested nav">
+                                        <a class="nav-link jt-nav-sublink" href="<?= e(url('/sales')) ?>">Sales</a>
+                                        <a class="nav-link jt-nav-sublink" href="<?= e(url('/estate-sales')) ?>">Estate Sales</a>
+                                        <a class="nav-link jt-nav-sublink" href="<?= e(url('/purchases')) ?>">Purchases</a>
+                                    </nav>
+                                </div>
+
+                                <a class="nav-link collapsed" href="#" data-bs-toggle="collapse" data-bs-target="#collapseNavOperations" aria-expanded="false" aria-controls="collapseNavOperations">
+                                    <div class="sb-nav-link-icon"><i class="fas fa-truck"></i></div>
+                                    Operations
+                                    <div class="sb-sidenav-collapse-arrow"><i class="fas fa-angle-down"></i></div>
+                                </a>
+                                <div class="collapse" id="collapseNavOperations" data-bs-parent="#sidenavAccordion">
+                                    <nav class="sb-sidenav-menu-nested nav">
+                                        <a class="nav-link jt-nav-sublink" href="<?= e(url('/deliveries')) ?>">Deliveries</a>
+                                        <a class="nav-link jt-nav-sublink" href="<?= e(url('/tasks')) ?>">Tasks</a>
+                                        <a class="nav-link jt-nav-sublink" href="<?= e(url('/events')) ?>">Events</a>
+                                    </nav>
+                                </div>
+
+                                <a class="nav-link collapsed" href="#" data-bs-toggle="collapse" data-bs-target="#collapseNavFinance" aria-expanded="false" aria-controls="collapseNavFinance">
+                                    <div class="sb-nav-link-icon"><i class="fas fa-file-invoice-dollar"></i></div>
+                                    Finance
+                                    <div class="sb-sidenav-collapse-arrow"><i class="fas fa-angle-down"></i></div>
+                                </a>
+                                <div class="collapse" id="collapseNavFinance" data-bs-parent="#sidenavAccordion">
+                                    <nav class="sb-sidenav-menu-nested nav">
+                                        <a class="nav-link jt-nav-sublink" href="<?= e(url('/billing')) ?>">Billing</a>
+                                        <a class="nav-link jt-nav-sublink" href="<?= e(url('/expenses')) ?>">Expenses</a>
+                                    </nav>
+                                </div>
+
+                                <a class="nav-link collapsed" href="#" data-bs-toggle="collapse" data-bs-target="#collapseTimeTracking" aria-expanded="false" aria-controls="collapseTimeTracking">
                                     <div class="sb-nav-link-icon"><i class="fas fa-stopwatch"></i></div>
                                     Time Tracking
                                     <div class="sb-sidenav-collapse-arrow"><i class="fas fa-angle-down"></i></div>
                                 </a>
-                                <div class="collapse" id="collapseTimeTracking" aria-labelledby="headingOne" data-bs-parent="#sidenavAccordion">
+                                <div class="collapse" id="collapseTimeTracking" data-bs-parent="#sidenavAccordion">
                                     <nav class="sb-sidenav-menu-nested nav">
-                                        <a class="nav-link" href="<?= e(url('/time-tracking')) ?>"><div class="sb-nav-link-icon"><i class="fas fa-clock-rotate-left"></i></div>Time Log</a>
-                                        <a class="nav-link" href="<?= e(url('/time-tracking/punch-board')) ?>"><div class="sb-nav-link-icon"><i class="fas fa-user-clock"></i></div>Punch Board</a>
+                                        <a class="nav-link jt-nav-sublink" href="<?= e(url('/time-tracking')) ?>">Time Log</a>
+                                        <a class="nav-link jt-nav-sublink" href="<?= e(url('/time-tracking/punch-board')) ?>">Punch Board</a>
                                     </nav>
                                 </div>
-                                <?php if (\App\Models\ClientBoloProfile::isAvailable()): ?>
-                                    <a class="nav-link" href="<?= e(url('/bolo')) ?>"><div class="sb-nav-link-icon"><i class="fas fa-binoculars"></i></div>BOLO</a>
-                                <?php endif; ?>
-                                <a class="nav-link" href="<?= e(url('/reports')) ?>"><div class="sb-nav-link-icon"><i class="fas fa-chart-line"></i></div>Reports</a>
+
+                                <div class="sb-sidenav-menu-heading">Insights</div>
+                                <a class="nav-link" href="<?= e(url('/reports')) ?>">
+                                    <div class="sb-nav-link-icon"><i class="fas fa-chart-line"></i></div>
+                                    Reports
+                                </a>
                             <?php endif; ?>
 
                             <?php if ($canAccessBusinessAdmin): ?>

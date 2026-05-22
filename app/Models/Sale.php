@@ -13,7 +13,7 @@ final class Sale
      */
     public static function baseTypeOptions(): array
     {
-        return ['shop', 'ebay', 'scrap', 'b2b'];
+        return ['shop', 'ebay', 'scrap', 'b2b', EstateSale::ON_SITE_SALE_TYPE];
     }
 
     public static function indexList(
@@ -350,6 +350,12 @@ final class Sale
         if (SchemaInspector::hasColumn('sales', 'purchase_id')) {
             $append('purchase_id', ':purchase_id', $payload['purchase_id'] ?? null);
         }
+        if (SchemaInspector::hasColumn('sales', 'estate_sale_id')) {
+            $append('estate_sale_id', ':estate_sale_id', $payload['estate_sale_id'] ?? null);
+        }
+        if (SchemaInspector::hasColumn('sales', 'estate_sale_customer_id')) {
+            $append('estate_sale_customer_id', ':estate_sale_customer_id', $payload['estate_sale_customer_id'] ?? null);
+        }
         if (SchemaInspector::hasColumn('sales', 'created_by')) {
             $append('created_by', ':created_by', $actorUserId > 0 ? $actorUserId : null);
         }
@@ -430,6 +436,10 @@ final class Sale
         $clientIdSql = self::saleClientIdExpr();
         $jobIdSql = self::saleJobIdExpr();
         $purchaseIdSql = self::salePurchaseIdExpr();
+        $estateSaleIdSql = SchemaInspector::hasColumn('sales', 'estate_sale_id') ? 's.estate_sale_id' : 'NULL AS estate_sale_id';
+        $estateSaleCustomerIdSql = SchemaInspector::hasColumn('sales', 'estate_sale_customer_id')
+            ? 's.estate_sale_customer_id'
+            : 'NULL AS estate_sale_customer_id';
         $createdAtSql = SchemaInspector::hasColumn('sales', 'created_at') ? 's.created_at' : 'NULL';
         $updatedAtSql = SchemaInspector::hasColumn('sales', 'updated_at') ? 's.updated_at' : 'NULL';
         $clientNameSql = 'NULL';
@@ -469,6 +479,8 @@ final class Sale
                     {$jobTitleSql} AS job_title,
                     {$purchaseIdSql} AS purchase_id,
                     {$purchaseTitleSql} AS purchase_title,
+                    {$estateSaleIdSql} AS estate_sale_id,
+                    {$estateSaleCustomerIdSql} AS estate_sale_customer_id,
                     {$createdAtSql} AS created_at,
                     {$updatedAtSql} AS updated_at
                 FROM sales s\n";
@@ -536,6 +548,12 @@ final class Sale
         }
         if (SchemaInspector::hasColumn('sales', 'purchase_id')) {
             $append('purchase_id', 'purchase_id', $payload['purchase_id'] ?? null);
+        }
+        if (SchemaInspector::hasColumn('sales', 'estate_sale_id')) {
+            $append('estate_sale_id', 'estate_sale_id', $payload['estate_sale_id'] ?? null);
+        }
+        if (SchemaInspector::hasColumn('sales', 'estate_sale_customer_id')) {
+            $append('estate_sale_customer_id', 'estate_sale_customer_id', $payload['estate_sale_customer_id'] ?? null);
         }
         if (SchemaInspector::hasColumn('sales', 'updated_by')) {
             $append('updated_by', 'updated_by', $actorUserId > 0 ? $actorUserId : null);

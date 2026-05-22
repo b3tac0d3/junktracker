@@ -72,6 +72,21 @@ final class FormSelectValue
                     ],
                 ],
             ],
+            'estate_sales' => [
+                'label' => 'Estate Sales',
+                'sections' => [
+                    'estate_sale_status' => [
+                        'label' => 'Estate Sale Status',
+                        'hint' => 'Used on estate sale forms and filters.',
+                        'defaults' => ['scheduled', 'active', 'complete', 'cancelled'],
+                    ],
+                    'estate_sale_expense_category' => [
+                        'label' => 'Estate Sale Expense Category',
+                        'hint' => 'Used when tracking estate sale expenses.',
+                        'defaults' => ['Advertising', 'Setup', 'Supplies', 'Labor', 'Utilities', 'Other'],
+                    ],
+                ],
+            ],
             'tasks' => [
                 'label' => 'Tasks',
                 'sections' => [

@@ -47,6 +47,8 @@ if ($selectedEmployeeName === '' && $selectedEmployeeId > 0 && isset($employeeMa
 }
 
 $selectedJobId = (int) ($form['job_id'] ?? 0);
+$selectedEstateSaleId = (int) ($form['estate_sale_id'] ?? 0);
+$selectedEstateSaleTitle = trim((string) ($form['estate_sale_title'] ?? ''));
 $jobSelRaw = trim((string) ($form['job_selection'] ?? ''));
 if ($jobSelRaw !== 'shop_time' && $jobSelRaw !== 'general_labor' && $jobSelRaw !== '') {
     $parsedFromSelection = (int) $jobSelRaw;
@@ -147,6 +149,12 @@ if (!$hasJobOption && $selectedJobId > 0) {
 
             <div class="col-12 col-lg-6">
                 <label class="form-label fw-semibold" for="entry-job-selection">Job</label>
+                <?php if ($selectedEstateSaleId > 0): ?>
+                    <input type="hidden" name="estate_sale_id" value="<?= e((string) $selectedEstateSaleId) ?>" />
+                    <input type="hidden" name="estate_sale_title" value="<?= e($selectedEstateSaleTitle) ?>" />
+                    <input id="entry-estate-sale-title" class="form-control" value="<?= e($selectedEstateSaleTitle !== '' ? $selectedEstateSaleTitle : ('Estate Sale #' . (string) $selectedEstateSaleId)) ?>" readonly />
+                    <div class="small muted mt-1">Time will be linked to this estate sale.</div>
+                <?php else: ?>
                 <select id="entry-job-selection" name="job_selection" class="form-select<?= $hasError('job_id') ? ' is-invalid' : '' ?>">
                     <?php foreach ($jobSelectOptions as $option): ?>
                         <option value="<?= e((string) ($option['value'] ?? '')) ?>"<?= (string) ($option['value'] ?? '') === $selectedJobSelection ? ' selected' : '' ?>><?= e((string) ($option['label'] ?? '')) ?></option>
@@ -154,6 +162,7 @@ if (!$hasJobOption && $selectedJobId > 0) {
                 </select>
                 <div class="small muted mt-1">Choose an active job or one of the built-in non-job types.</div>
                 <?php if ($hasError('job_id')): ?><div class="invalid-feedback d-block"><?= e($fieldError('job_id')) ?></div><?php endif; ?>
+                <?php endif; ?>
             </div>
 
             <div class="col-12 col-lg-6">

@@ -125,7 +125,7 @@ $employeeDisplayName = static function (array $row): string {
         <strong>$<?= e(number_format((float) ($receivables['payments_due'] ?? 0), 2)) ?></strong>
         <small><?= e((string) ((int) ($receivables['open_invoices'] ?? 0))) ?> open invoice(s)</small>
     </a>
-    <a class="kpi-card kpi-card-link" href="<?= e(url('/reports')) ?>">
+    <a class="kpi-card kpi-card-link kpi-card-full-width" href="<?= e(url('/reports')) ?>">
         <span>Profit YTD</span>
         <strong>$<?= e(number_format($profitYtd, 2)) ?><span class="kpi-card-subamount"> ($<?= e(number_format($ytdNetMinusPurchases, 2)) ?>)</span></strong>
         <small>Net YTD less expenses · After purchase costs (YTD) in parentheses</small>

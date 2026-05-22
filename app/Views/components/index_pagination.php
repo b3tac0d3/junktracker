@@ -12,7 +12,10 @@ $totalPages = max(1, (int) ($pagination['total_pages'] ?? 1));
 $from = max(0, (int) ($pagination['from'] ?? 0));
 $to = max(0, (int) ($pagination['to'] ?? 0));
 $visiblePages = pagination_visible_pages($page, $totalPages);
-$queryParams = current_query_params(['page', 'per_page']);
+$pageParam = (string) ($pageParam ?? 'page');
+$perPageParam = (string) ($perPageParam ?? 'per_page');
+$fixedQueryParams = is_array($fixedQueryParams ?? null) ? $fixedQueryParams : [];
+$queryParams = array_merge(current_query_params([$pageParam, $perPageParam]), $fixedQueryParams);
 ?>
 
 <div class="index-pagination d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-2 mb-3">
@@ -20,9 +23,9 @@ $queryParams = current_query_params(['page', 'per_page']);
         <?php foreach ($queryParams as $name => $value): ?>
             <input type="hidden" name="<?= e($name) ?>" value="<?= e($value) ?>">
         <?php endforeach; ?>
-        <input type="hidden" name="page" value="1">
-        <label class="small text-muted fw-semibold" for="index-per-page">Rows</label>
-        <select id="index-per-page" name="per_page" class="form-select form-select-sm w-auto" onchange="this.form.submit()">
+        <input type="hidden" name="<?= e($pageParam) ?>" value="1">
+        <label class="small text-muted fw-semibold" for="index-per-page-<?= e($pageParam) ?>">Rows</label>
+        <select id="index-per-page-<?= e($pageParam) ?>" name="<?= e($perPageParam) ?>" class="form-select form-select-sm w-auto" onchange="this.form.submit()">
             <?php foreach (pagination_per_page_options() as $option): ?>
                 <option value="<?= e((string) $option) ?>" <?= $perPage === $option ? 'selected' : '' ?>><?= e((string) $option) ?></option>
             <?php endforeach; ?>
@@ -44,7 +47,7 @@ $queryParams = current_query_params(['page', 'per_page']);
                         <?php if ($prevDisabled): ?>
                             <span class="page-link">Prev</span>
                         <?php else: ?>
-                            <a class="page-link" href="<?= e(url($basePath) . query_with(['page' => $page - 1, 'per_page' => $perPage])) ?>">Prev</a>
+                            <a class="page-link" href="<?= e(url($basePath) . query_with(array_merge([$pageParam => $page - 1, $perPageParam => $perPage], $fixedQueryParams))) ?>">Prev</a>
                         <?php endif; ?>
                     </li>
                     <?php foreach ($visiblePages as $pageNumber): ?>
@@ -52,7 +55,7 @@ $queryParams = current_query_params(['page', 'per_page']);
                             <?php if ($pageNumber === $page): ?>
                                 <span class="page-link"><?= e((string) $pageNumber) ?></span>
                             <?php else: ?>
-                                <a class="page-link" href="<?= e(url($basePath) . query_with(['page' => $pageNumber, 'per_page' => $perPage])) ?>"><?= e((string) $pageNumber) ?></a>
+                                <a class="page-link" href="<?= e(url($basePath) . query_with(array_merge([$pageParam => $pageNumber, $perPageParam => $perPage], $fixedQueryParams))) ?>"><?= e((string) $pageNumber) ?></a>
                             <?php endif; ?>
                         </li>
                     <?php endforeach; ?>
@@ -60,7 +63,7 @@ $queryParams = current_query_params(['page', 'per_page']);
                         <?php if ($nextDisabled): ?>
                             <span class="page-link">Next</span>
                         <?php else: ?>
-                            <a class="page-link" href="<?= e(url($basePath) . query_with(['page' => $page + 1, 'per_page' => $perPage])) ?>">Next</a>
+                            <a class="page-link" href="<?= e(url($basePath) . query_with(array_merge([$pageParam => $page + 1, $perPageParam => $perPage], $fixedQueryParams))) ?>">Next</a>
                         <?php endif; ?>
                     </li>
                 </ul>

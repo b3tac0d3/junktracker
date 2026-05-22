@@ -12,6 +12,9 @@ $statusOptions = is_array($statusOptions ?? null) ? $statusOptions : \App\Models
 $followUpAt = trim((string) ($quote['next_follow_up_at'] ?? ''));
 $followUpTs = $followUpAt !== '' ? strtotime($followUpAt) : false;
 $convertedJobId = (int) ($quote['converted_job_id'] ?? 0);
+$convertedEstateSaleId = (int) ($quote['converted_estate_sale_id'] ?? 0);
+$convertedPurchaseId = (int) ($quote['converted_purchase_id'] ?? 0);
+$quoteConverted = \App\Models\Quote::hasConversion($quote);
 $mapsAddressUrl = maps_directions_url_from_parts([
     (string) ($quote['address_line1'] ?? ''),
     (string) ($quote['address_line2'] ?? ''),
@@ -26,17 +29,68 @@ $mapsAddressUrl = maps_directions_url_from_parts([
         <h1><?= e(trim((string) ($quote['title'] ?? 'Quote #' . (string) $quoteId))) ?></h1>
         <p class="muted"><?= e($clientName) ?> · <?= e($statusLabel) ?></p>
     </div>
-    <div class="d-flex gap-2">
-        <a class="btn btn-outline-secondary" href="<?= e(url('/quotes')) ?>">Back to Quotes</a>
-        <a class="btn btn-outline-primary" href="<?= e(url('/quotes/' . (string) $quoteId . '/edit')) ?>">Edit</a>
-        <?php if ($convertedJobId <= 0): ?>
-            <form method="post" action="<?= e(url('/quotes/' . (string) $quoteId . '/convert-to-job')) ?>" onsubmit="return confirm('Convert this quote into a job?');">
-                <?= csrf_field() ?>
-                <button class="btn btn-primary" type="submit"><i class="fas fa-briefcase me-2"></i>Convert to Job</button>
-            </form>
-        <?php else: ?>
-            <a class="btn btn-success" href="<?= e(url('/jobs/' . (string) $convertedJobId)) ?>">Open Job</a>
-        <?php endif; ?>
+    <div class="jt-page-header-actions d-grid gap-2 d-md-flex d-md-flex-wrap justify-content-md-end align-items-md-center">
+        <div class="dropdown w-100 w-md-auto">
+            <button class="btn btn-primary dropdown-toggle w-100" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                <i class="fas fa-ellipsis-h me-2"></i>Actions
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end">
+                <li>
+                    <a class="dropdown-item" href="<?= e(url('/quotes/' . (string) $quoteId . '/edit')) ?>">
+                        <i class="fas fa-pen me-2"></i>Edit
+                    </a>
+                </li>
+                <?php if (!$quoteConverted): ?>
+                    <li>
+                        <form method="post" action="<?= e(url('/quotes/' . (string) $quoteId . '/convert-to-job')) ?>" class="m-0" onsubmit="return confirm('Convert this quote into a job?');">
+                            <?= csrf_field() ?>
+                            <button type="submit" class="dropdown-item">
+                                <i class="fas fa-briefcase me-2"></i>Convert to Job
+                            </button>
+                        </form>
+                    </li>
+                    <li>
+                        <form method="post" action="<?= e(url('/quotes/' . (string) $quoteId . '/convert-to-estate-sale')) ?>" class="m-0" onsubmit="return confirm('Convert this quote into an estate sale? Any linked estimates will be removed from reports.');">
+                            <?= csrf_field() ?>
+                            <button type="submit" class="dropdown-item">
+                                <i class="fas fa-store me-2"></i>Convert to Estate Sale
+                            </button>
+                        </form>
+                    </li>
+                    <li>
+                        <form method="post" action="<?= e(url('/quotes/' . (string) $quoteId . '/convert-to-purchase')) ?>" class="m-0" onsubmit="return confirm('Convert this quote into a purchase? Any linked estimates will be removed from reports.');">
+                            <?= csrf_field() ?>
+                            <button type="submit" class="dropdown-item">
+                                <i class="fas fa-shopping-cart me-2"></i>Convert to Purchase
+                            </button>
+                        </form>
+                    </li>
+                <?php else: ?>
+                    <?php if ($convertedJobId > 0): ?>
+                        <li>
+                            <a class="dropdown-item" href="<?= e(url('/jobs/' . (string) $convertedJobId)) ?>">
+                                <i class="fas fa-briefcase me-2"></i>Open Job
+                            </a>
+                        </li>
+                    <?php endif; ?>
+                    <?php if ($convertedEstateSaleId > 0): ?>
+                        <li>
+                            <a class="dropdown-item" href="<?= e(url('/estate-sales/' . (string) $convertedEstateSaleId)) ?>">
+                                <i class="fas fa-store me-2"></i>Open Estate Sale
+                            </a>
+                        </li>
+                    <?php endif; ?>
+                    <?php if ($convertedPurchaseId > 0): ?>
+                        <li>
+                            <a class="dropdown-item" href="<?= e(url('/purchases/' . (string) $convertedPurchaseId)) ?>">
+                                <i class="fas fa-shopping-cart me-2"></i>Open Purchase
+                            </a>
+                        </li>
+                    <?php endif; ?>
+                <?php endif; ?>
+            </ul>
+        </div>
+        <a class="btn btn-outline-secondary w-100 w-md-auto" href="<?= e(url('/quotes')) ?>">Back to Quotes</a>
     </div>
 </div>
 

@@ -213,7 +213,20 @@ h1, h2, h3 {
 .sb-sidenav-dark .sb-sidenav-menu .nav-link.jt-nav-sublink {
   padding-left: 2.35rem;
   font-size: 0.9rem;
-  opacity: 0.9;
+  opacity: 0.92;
+}
+
+.sb-sidenav-dark .sb-sidenav-menu .nav-link.jt-nav-sublink.active {
+  opacity: 1;
+}
+
+.sb-sidenav-dark .sb-sidenav-menu .nav-link[data-bs-toggle='collapse']:not(.collapsed) {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.sb-sidenav-dark .sb-sidenav-menu .sb-sidenav-menu-nested .nav-link.active::before {
+  left: 0.35rem;
+  width: 3px;
 }
 
 .sb-sidenav-dark .sb-sidenav-menu .sb-sidenav-menu-heading {
@@ -278,6 +291,10 @@ h1, h2, h3 {
 @media (min-width: 768px) {
   .kpi-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .kpi-grid .kpi-card-full-width {
+    grid-column: 1 / -1;
   }
 }
 
@@ -351,9 +368,34 @@ h1, h2, h3 {
   overflow-y: auto;
 }
 
+.jt-mobile-search-menu {
+  min-width: 17.5rem;
+}
+
 .jt-notification-item:hover,
 .jt-notification-item:focus {
   background: #f1f5ff;
+}
+
+@media (max-width: 767.98px) {
+  .jt-mobile-search-menu,
+  .jt-notifications-menu {
+    position: fixed !important;
+    left: 0.5rem !important;
+    right: 0.5rem !important;
+    width: auto !important;
+    min-width: 0 !important;
+    max-width: none !important;
+  }
+
+  .jt-mobile-search-menu {
+    top: 3.6rem !important;
+  }
+
+  .jt-notifications-menu {
+    top: 3.6rem !important;
+    max-height: min(70vh, calc(100vh - 4.5rem));
+  }
 }
 
 /* Bell icon + count: anchor badge to the icon, not the whole nav hit area */
@@ -534,6 +576,30 @@ main .card.index-card-overflow-visible .card-body {
 
 .index-card-header strong i {
   margin-right: .35rem;
+}
+
+.index-card-tabs {
+  border-bottom: 0;
+  gap: .25rem;
+}
+
+.index-card-tabs .nav-link {
+  border: 1px solid transparent;
+  border-bottom: 0;
+  color: #475569;
+  font-weight: 600;
+}
+
+.index-card-tabs .nav-link:hover,
+.index-card-tabs .nav-link:focus {
+  border-color: rgba(214, 224, 255, 0.9);
+  color: #1e293b;
+}
+
+.index-card-tabs .nav-link.active {
+  background: #fff;
+  border-color: rgba(214, 224, 255, 0.9);
+  color: #1e40af;
 }
 
 /* Reports-specific accents */
@@ -827,14 +893,38 @@ a.admin-nav-tile:focus {
   font-weight: 800;
 }
 
-.index-card-header a {
+.index-card-header a:not(.btn) {
   color: #1d4ed8;
 }
 
-.index-card-header a:hover,
-.index-card-header a:focus {
+.index-card-header a:not(.btn):hover,
+.index-card-header a:not(.btn):focus {
   color: #1e40af;
   text-decoration: underline;
+}
+
+.index-card-header a.btn,
+.index-card-header a.btn:hover,
+.index-card-header a.btn:focus {
+  color: #fff;
+  text-decoration: none;
+}
+
+#estate-sale-customer-status-filters .btn-primary .badge.bg-light {
+  background-color: rgba(255, 255, 255, 0.92) !important;
+  color: #1e293b !important;
+}
+
+/* Fixed icon column so action dropdown labels line up */
+.dropdown-menu .dropdown-item > i:first-child {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  min-width: 1.25rem;
+  margin-right: 0.625rem !important;
+  text-align: center;
+  flex-shrink: 0;
 }
 
 .record-empty {

@@ -23,7 +23,7 @@ final class EventFeed
 
         $sources = self::parseCsv((string) ($filters['sources'] ?? ''));
         if ($sources === []) {
-            $sources = ['tasks', 'jobs', 'events', 'deliveries', 'quotes'];
+            $sources = ['tasks', 'jobs', 'events', 'deliveries', 'quotes', 'estate_sales'];
         }
         $types = self::parseCsv((string) ($filters['types'] ?? ''));
         $q = trim((string) ($filters['q'] ?? ''));
@@ -43,6 +43,114 @@ final class EventFeed
         }
         if (in_array('quotes', $sources, true)) {
             $events = array_merge($events, self::quoteFollowUpEvents($businessId, $start, $end, $q));
+        }
+        if (in_array('estate_sales', $sources, true)) {
+            $events = array_merge($events, self::estateSaleEvents($businessId, $start, $end, $q));
+        }
+
+        return $events;
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private static function estateSaleEvents(int $businessId, string $start, string $end, string $q): array
+    {
+        if (!SchemaInspector::hasTable('estate_sales')) {
+            return [];
+        }
+
+        $hasAddr2 = SchemaInspector::hasColumn('estate_sales', 'address_line2');
+        $addr2Or = $hasAddr2 ? ' OR COALESCE(es.address_line2, "") LIKE :q' : '';
+
+        $searchWhere = $q !== ''
+            ? 'AND (
+                COALESCE(es.title, "") LIKE :q
+                OR COALESCE(es.address_line1, "") LIKE :q'
+                . $addr2Or . '
+                OR COALESCE(es.city, "") LIKE :q
+                OR COALESCE(es.notes, "") LIKE :q
+                OR CAST(es.id AS CHAR) LIKE :q
+            )'
+            : '';
+
+        $sql = "SELECT
+                    es.id,
+                    es.title,
+                    es.start_at,
+                    es.end_at,
+                    LOWER(es.status) AS status_key,
+                    es.city,
+                    es.state
+                FROM estate_sales es
+                WHERE es.business_id = :business_id
+                  AND es.deleted_at IS NULL
+                  AND es.start_at IS NOT NULL
+                  AND es.start_at >= :start_at
+                  AND es.start_at < :end_at
+                  {$searchWhere}
+                ORDER BY es.start_at ASC, es.id ASC
+                LIMIT 2000";
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
+        $stmt->bindValue(':start_at', $start);
+        $stmt->bindValue(':end_at', $end);
+        if ($q !== '') {
+            $stmt->bindValue(':q', '%' . $q . '%');
+        }
+        $stmt->execute();
+
+        $rows = $stmt->fetchAll();
+        if (!is_array($rows)) {
+            return [];
+        }
+
+        $events = [];
+        foreach ($rows as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+
+            $id = (int) ($row['id'] ?? 0);
+            $startAt = trim((string) ($row['start_at'] ?? ''));
+            if ($id <= 0 || $startAt === '') {
+                continue;
+            }
+
+            $status = (string) ($row['status_key'] ?? 'scheduled');
+            $color = match ($status) {
+                'active' => '#15803d',
+                'complete' => '#64748b',
+                'cancelled' => '#991b1b',
+                default => '#9333ea',
+            };
+
+            $title = trim((string) ($row['title'] ?? ''));
+            if ($title === '') {
+                $title = 'Estate Sale #' . (string) $id;
+            }
+
+            $city = trim((string) ($row['city'] ?? ''));
+            $state = trim((string) ($row['state'] ?? ''));
+            $location = trim(implode(', ', array_filter([$city, $state], static fn (string $v): bool => $v !== '')));
+            $endAt = trim((string) ($row['end_at'] ?? ''));
+
+            $events[] = [
+                'id' => 'estate_sale:' . $id,
+                'title' => $title,
+                'start' => self::toIso($startAt),
+                'end' => $endAt !== '' ? self::toIso($endAt) : null,
+                'allDay' => false,
+                'backgroundColor' => $color,
+                'borderColor' => $color,
+                'url' => url('/estate-sales/' . (string) $id),
+                'editable' => false,
+                'extendedProps' => [
+                    'customerName' => $location,
+                    'eventType' => 'Estate Sale',
+                ],
+            ];
         }
 
         return $events;

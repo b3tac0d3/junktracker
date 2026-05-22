@@ -5,7 +5,7 @@ $pageTitle = 'Events';
 <div class="jt-events-screen">
 <div class="page-header">
     <h1>Events</h1>
-    <p class="muted">Calendar for appointments, cancellations, tasks, jobs, deliveries, and quotes.</p>
+    <p class="muted">Calendar for appointments, cancellations, tasks, jobs, deliveries, quotes, and estate sales.</p>
 </div>
 
 <div class="card index-card">
@@ -18,6 +18,7 @@ $pageTitle = 'Events';
                     <span class="badge" style="background:#16a34a;">Tasks</span>
                     <span class="badge" style="background:#ea580c;">Jobs</span>
                     <span class="badge" style="background:#db2777;">Quotes</span>
+                    <span class="badge" style="background:#9333ea;">Estate Sales</span>
                 </div>
             </div>
     </div>
@@ -73,6 +74,10 @@ $pageTitle = 'Events';
                                     <input class="form-check-input" type="checkbox" id="jt-src-quotes" checked />
                                     <span class="small">Quotes</span>
                                 </label>
+                                <label class="form-check d-flex align-items-center gap-2 m-0">
+                                    <input class="form-check-input" type="checkbox" id="jt-src-estate-sales" checked />
+                                    <span class="small">Estate Sales</span>
+                                </label>
                             </div>
                         </div>
                     </div>
@@ -116,6 +121,7 @@ window.addEventListener('DOMContentLoaded', () => {
     if (document.getElementById('jt-src-jobs')?.checked) sources.push('jobs');
     if (document.getElementById('jt-src-deliveries')?.checked) sources.push('deliveries');
     if (document.getElementById('jt-src-quotes')?.checked) sources.push('quotes');
+    if (document.getElementById('jt-src-estate-sales')?.checked) sources.push('estate_sales');
     return sources.join(',');
   };
 
@@ -264,7 +270,13 @@ window.addEventListener('DOMContentLoaded', () => {
         else if (rawId.startsWith('job:')) eventType = 'Job';
         else if (rawId.startsWith('delivery:')) eventType = 'Delivery';
         else if (rawId.startsWith('quote:')) eventType = 'Quote';
+        else if (rawId.startsWith('estate_sale:')) eventType = 'Estate Sale';
         else eventType = 'Event';
+      }
+      const customerLabel = eventType === 'Estate Sale' ? 'Location' : 'Customer';
+      const customerLabelEl = document.querySelector('#jt-event-quickview-customer-wrap .small.text-uppercase');
+      if (customerLabelEl) {
+        customerLabelEl.textContent = customerLabel;
       }
       if (customerWrap && customerEl) {
         if (customerName !== '') {
@@ -353,6 +365,7 @@ window.addEventListener('DOMContentLoaded', () => {
   document.getElementById('jt-src-jobs')?.addEventListener('change', refetch);
   document.getElementById('jt-src-deliveries')?.addEventListener('change', refetch);
   document.getElementById('jt-src-quotes')?.addEventListener('change', refetch);
+  document.getElementById('jt-src-estate-sales')?.addEventListener('change', refetch);
   document.getElementById('jt-event-q')?.addEventListener('input', debounce(refetch, 250));
 
   const filterToggle = document.getElementById('jt-filter-toggle');

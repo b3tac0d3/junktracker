@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Models\Client;
+use App\Models\EstateSale;
 use App\Models\FormSelectValue;
 use App\Models\Job;
 use App\Models\Purchase;
@@ -88,6 +89,8 @@ final class SalesController extends Controller
             'form' => $form,
             'errors' => [],
             'typeOptions' => $this->saleTypeOptions($businessId),
+            'backUrl' => $this->saleFormBackUrl($form),
+            'backLabel' => $this->saleFormBackLabel($form),
         ]);
     }
 
@@ -205,13 +208,14 @@ final class SalesController extends Controller
                 'form' => $form,
                 'errors' => $errors,
                 'typeOptions' => $this->saleTypeOptions($businessId),
+                'backUrl' => $this->saleFormBackUrl($form),
+                'backLabel' => $this->saleFormBackLabel($form),
             ]);
             return;
         }
 
         $saleId = Sale::create($businessId, $this->payloadForSave($form), auth_user_id() ?? 0);
-        flash('success', 'Sale added.');
-        redirect('/sales/' . (string) $saleId);
+        $this->redirectAfterSaleSave($form, $saleId, 'Sale added.');
     }
 
     public function show(array $params): void
@@ -256,14 +260,23 @@ final class SalesController extends Controller
             return;
         }
 
+        $estateSaleId = (int) ($sale['estate_sale_id'] ?? 0);
+        if ($estateSaleId > 0) {
+            redirect('/estate-sales/' . (string) $estateSaleId . '/sales/' . (string) $saleId . '/edit');
+            return;
+        }
+
         $businessId = current_business_id();
+        $form = $this->formFromModel($sale);
         $this->render('sales/form', [
             'pageTitle' => 'Edit Sale',
             'mode' => 'edit',
             'actionUrl' => url('/sales/' . (string) $saleId . '/update'),
-            'form' => $this->formFromModel($sale),
+            'form' => $form,
             'errors' => [],
             'typeOptions' => $this->saleTypeOptions($businessId),
+            'backUrl' => $this->saleFormBackUrl($form),
+            'backLabel' => $this->saleFormBackLabel($form),
         ]);
     }
 
@@ -301,13 +314,14 @@ final class SalesController extends Controller
                 'form' => $form,
                 'errors' => $errors,
                 'typeOptions' => $this->saleTypeOptions($businessId),
+                'backUrl' => $this->saleFormBackUrl($form),
+                'backLabel' => $this->saleFormBackLabel($form),
             ]);
             return;
         }
 
         Sale::update($businessId, $saleId, $this->payloadForSave($form), auth_user_id() ?? 0);
-        flash('success', 'Sale updated.');
-        redirect('/sales/' . (string) $saleId);
+        $this->redirectAfterSaleSave($form, $saleId, 'Sale updated.');
     }
 
     public function delete(array $params): void
@@ -358,6 +372,10 @@ final class SalesController extends Controller
             'job_title' => '',
             'purchase_id' => '',
             'purchase_title' => '',
+            'estate_sale_id' => '',
+            'estate_sale_customer_id' => '',
+            'estate_sale_title' => '',
+            'estate_sale_customer_name' => '',
             'notes' => '',
         ];
     }
@@ -370,6 +388,10 @@ final class SalesController extends Controller
         $jobId = ((int) $jobIdRaw) > 0 ? (string) ((int) $jobIdRaw) : '';
         $purchaseIdRaw = trim((string) ($input['purchase_id'] ?? ''));
         $purchaseId = ((int) $purchaseIdRaw) > 0 ? (string) ((int) $purchaseIdRaw) : '';
+        $estateSaleIdRaw = trim((string) ($input['estate_sale_id'] ?? ''));
+        $estateSaleId = ((int) $estateSaleIdRaw) > 0 ? (string) ((int) $estateSaleIdRaw) : '';
+        $estateSaleCustomerIdRaw = trim((string) ($input['estate_sale_customer_id'] ?? ''));
+        $estateSaleCustomerId = ((int) $estateSaleCustomerIdRaw) > 0 ? (string) ((int) $estateSaleCustomerIdRaw) : '';
 
         return [
             'name' => trim((string) ($input['name'] ?? '')),
@@ -383,6 +405,10 @@ final class SalesController extends Controller
             'job_title' => trim((string) ($input['job_title'] ?? '')),
             'purchase_id' => $purchaseId,
             'purchase_title' => trim((string) ($input['purchase_title'] ?? '')),
+            'estate_sale_id' => $estateSaleId,
+            'estate_sale_customer_id' => $estateSaleCustomerId,
+            'estate_sale_title' => trim((string) ($input['estate_sale_title'] ?? '')),
+            'estate_sale_customer_name' => trim((string) ($input['estate_sale_customer_name'] ?? '')),
             'notes' => trim((string) ($input['notes'] ?? '')),
         ];
     }
@@ -407,6 +433,10 @@ final class SalesController extends Controller
             'job_title' => trim((string) ($sale['job_title'] ?? '')),
             'purchase_id' => ((int) ($sale['purchase_id'] ?? 0)) > 0 ? (string) ((int) ($sale['purchase_id'] ?? 0)) : '',
             'purchase_title' => trim((string) ($sale['purchase_title'] ?? '')),
+            'estate_sale_id' => ((int) ($sale['estate_sale_id'] ?? 0)) > 0 ? (string) ((int) ($sale['estate_sale_id'] ?? 0)) : '',
+            'estate_sale_customer_id' => ((int) ($sale['estate_sale_customer_id'] ?? 0)) > 0 ? (string) ((int) ($sale['estate_sale_customer_id'] ?? 0)) : '',
+            'estate_sale_title' => trim((string) ($sale['estate_sale_title'] ?? '')),
+            'estate_sale_customer_name' => trim((string) ($sale['estate_sale_customer_name'] ?? '')),
             'notes' => trim((string) ($sale['notes'] ?? '')),
         ];
     }
@@ -468,6 +498,28 @@ final class SalesController extends Controller
             $errors['purchase_id'] = 'Link this sale to either a purchase or a job, not both.';
         }
 
+        $estateSaleId = (int) $form['estate_sale_id'];
+        $estateSaleCustomerId = (int) $form['estate_sale_customer_id'];
+        if ($form['estate_sale_id'] !== '' && $estateSaleId <= 0) {
+            $errors['estate_sale_id'] = 'Invalid estate sale link.';
+        }
+        if ($form['estate_sale_customer_id'] !== '' && $estateSaleCustomerId <= 0) {
+            $errors['estate_sale_customer_id'] = 'Invalid estate sale customer link.';
+        }
+        if (($form['estate_sale_id'] === '') xor ($form['estate_sale_customer_id'] === '')) {
+            $errors['estate_sale_id'] = 'Estate sale and customer must be linked together.';
+            $errors['estate_sale_customer_id'] = 'Estate sale and customer must be linked together.';
+        } elseif ($estateSaleId > 0 && $estateSaleCustomerId > 0) {
+            $estateSale = EstateSale::findForBusiness($businessId, $estateSaleId);
+            $estateCustomer = EstateSale::findCustomerForSale($businessId, $estateSaleId, $estateSaleCustomerId);
+            if ($estateSale === null) {
+                $errors['estate_sale_id'] = 'Selected estate sale was not found.';
+            }
+            if ($estateCustomer === null) {
+                $errors['estate_sale_customer_id'] = 'Selected estate sale customer was not found.';
+            }
+        }
+
         return $errors;
     }
 
@@ -493,6 +545,8 @@ final class SalesController extends Controller
             'client_id' => ($form['client_id'] === '') ? null : (int) $form['client_id'],
             'job_id' => ($form['job_id'] === '') ? null : (int) $form['job_id'],
             'purchase_id' => ($form['purchase_id'] === '') ? null : (int) $form['purchase_id'],
+            'estate_sale_id' => ($form['estate_sale_id'] === '') ? null : (int) $form['estate_sale_id'],
+            'estate_sale_customer_id' => ($form['estate_sale_customer_id'] === '') ? null : (int) $form['estate_sale_customer_id'],
             'notes' => $form['notes'],
         ];
     }
@@ -546,6 +600,33 @@ final class SalesController extends Controller
         }
 
         return Sale::typeOptions($businessId);
+    }
+
+    private function saleFormBackUrl(array $form): string
+    {
+        $estateSaleId = (int) ($form['estate_sale_id'] ?? 0);
+        if ($estateSaleId > 0) {
+            return url('/estate-sales/' . (string) $estateSaleId . '?tab=customers');
+        }
+
+        return url('/sales');
+    }
+
+    private function saleFormBackLabel(array $form): string
+    {
+        return (int) ($form['estate_sale_id'] ?? 0) > 0 ? 'Back to Estate Sale' : 'Back to Sales';
+    }
+
+    private function redirectAfterSaleSave(array $form, int $saleId, string $message): void
+    {
+        flash('success', $message);
+
+        $estateSaleId = (int) ($form['estate_sale_id'] ?? 0);
+        if ($estateSaleId > 0) {
+            redirect('/estate-sales/' . (string) $estateSaleId . '?tab=customers');
+        }
+
+        redirect('/sales/' . (string) $saleId);
     }
 
     private function json(array $payload, int $status = 200): never

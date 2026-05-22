@@ -208,12 +208,14 @@ final class Quote
 
         $sql = 'INSERT INTO quotes (
                     business_id, client_id, title, status, service_type, quoted_amount, notes,
-                    next_follow_up_at, lost_reason, converted_job_id, source, priority,
+                    next_follow_up_at, lost_reason, converted_job_id, converted_estate_sale_id, converted_purchase_id,
+                    source, priority,
                     address_line1, address_line2, city, state, postal_code,
                     created_by, updated_by, created_at, updated_at
                 ) VALUES (
                     :business_id, :client_id, :title, :status, :service_type, :quoted_amount, :notes,
-                    :next_follow_up_at, :lost_reason, :converted_job_id, :source, :priority,
+                    :next_follow_up_at, :lost_reason, :converted_job_id, :converted_estate_sale_id, :converted_purchase_id,
+                    :source, :priority,
                     :address_line1, :address_line2, :city, :state, :postal_code,
                     :created_by, :updated_by, NOW(), NOW()
                 )';
@@ -239,6 +241,8 @@ final class Quote
                     next_follow_up_at = :next_follow_up_at,
                     lost_reason = :lost_reason,
                     converted_job_id = :converted_job_id,
+                    converted_estate_sale_id = :converted_estate_sale_id,
+                    converted_purchase_id = :converted_purchase_id,
                     source = :source,
                     priority = :priority,
                     address_line1 = :address_line1,
@@ -290,7 +294,7 @@ final class Quote
     public static function convertToJob(int $businessId, int $quoteId, int $actorUserId): int
     {
         $quote = self::findForBusiness($businessId, $quoteId);
-        if ($quote === null) {
+        if ($quote === null || self::hasConversion($quote)) {
             return 0;
         }
 
@@ -316,24 +320,9 @@ final class Quote
             return 0;
         }
 
-        self::update($businessId, $quoteId, [
-            'client_id' => (int) ($quote['client_id'] ?? 0),
-            'title' => trim((string) ($quote['title'] ?? '')),
-            'status' => 'won',
-            'service_type' => trim((string) ($quote['service_type'] ?? '')),
-            'quoted_amount' => (string) ($quote['quoted_amount'] ?? ''),
-            'notes' => trim((string) ($quote['notes'] ?? '')),
-            'next_follow_up_at' => '',
-            'lost_reason' => '',
+        self::update($businessId, $quoteId, self::conversionQuotePayload($quote, [
             'converted_job_id' => (string) $jobId,
-            'source' => trim((string) ($quote['source'] ?? '')),
-            'priority' => trim((string) ($quote['priority'] ?? '')),
-            'address_line1' => trim((string) ($quote['address_line1'] ?? '')),
-            'address_line2' => trim((string) ($quote['address_line2'] ?? '')),
-            'city' => trim((string) ($quote['city'] ?? '')),
-            'state' => trim((string) ($quote['state'] ?? '')),
-            'postal_code' => trim((string) ($quote['postal_code'] ?? '')),
-        ], $actorUserId);
+        ]), $actorUserId);
 
         if (SchemaInspector::hasTable('invoices') && SchemaInspector::hasColumn('invoices', 'quote_id') && SchemaInspector::hasColumn('invoices', 'job_id')) {
             $stmt = Database::connection()->prepare('UPDATE invoices
@@ -349,6 +338,126 @@ final class Quote
         }
 
         return $jobId;
+    }
+
+    public static function convertToEstateSale(int $businessId, int $quoteId, int $actorUserId): int
+    {
+        $quote = self::findForBusiness($businessId, $quoteId);
+        if ($quote === null || self::hasConversion($quote)) {
+            return 0;
+        }
+
+        $clientId = (int) ($quote['client_id'] ?? 0);
+        $estateSaleData = [
+            'title' => trim((string) ($quote['title'] ?? '')) ?: ('Estate Sale from Quote #' . (string) $quoteId),
+            'status' => 'scheduled',
+            'start_at' => null,
+            'end_at' => null,
+            'address_line1' => trim((string) ($quote['address_line1'] ?? '')),
+            'address_line2' => trim((string) ($quote['address_line2'] ?? '')),
+            'city' => trim((string) ($quote['city'] ?? '')),
+            'state' => trim((string) ($quote['state'] ?? '')),
+            'postal_code' => trim((string) ($quote['postal_code'] ?? '')),
+            'notes' => trim((string) ($quote['notes'] ?? '')),
+            'client_percentage' => null,
+        ];
+        if ($clientId > 0) {
+            $estateSaleData['client_id'] = $clientId;
+        }
+
+        $estateSaleId = EstateSale::create($businessId, $estateSaleData, $actorUserId);
+        if ($estateSaleId <= 0) {
+            return 0;
+        }
+
+        self::deactivateEstimatesForQuote($businessId, $quoteId, $actorUserId);
+        self::update($businessId, $quoteId, self::conversionQuotePayload($quote, [
+            'status' => 'won',
+            'converted_estate_sale_id' => (string) $estateSaleId,
+        ]), $actorUserId);
+
+        return $estateSaleId;
+    }
+
+    public static function convertToPurchase(int $businessId, int $quoteId, int $actorUserId): int
+    {
+        $quote = self::findForBusiness($businessId, $quoteId);
+        if ($quote === null || self::hasConversion($quote)) {
+            return 0;
+        }
+
+        $quotedAmount = trim((string) ($quote['quoted_amount'] ?? ''));
+        $purchasePrice = $quotedAmount !== '' && is_numeric($quotedAmount) ? (float) $quotedAmount : 0.0;
+
+        $purchaseId = Purchase::create($businessId, [
+            'client_id' => (int) ($quote['client_id'] ?? 0),
+            'title' => trim((string) ($quote['title'] ?? '')) ?: ('Purchase from Quote #' . (string) $quoteId),
+            'status' => 'prospect',
+            'contact_date' => date('Y-m-d'),
+            'purchase_date' => null,
+            'notes' => trim((string) ($quote['notes'] ?? '')),
+            'purchase_price' => $purchasePrice,
+        ], $actorUserId);
+        if ($purchaseId <= 0) {
+            return 0;
+        }
+
+        self::deactivateEstimatesForQuote($businessId, $quoteId, $actorUserId);
+        self::update($businessId, $quoteId, self::conversionQuotePayload($quote, [
+            'status' => 'won',
+            'converted_purchase_id' => (string) $purchaseId,
+        ]), $actorUserId);
+
+        return $purchaseId;
+    }
+
+    public static function hasConversion(array $quote): bool
+    {
+        return (int) ($quote['converted_job_id'] ?? 0) > 0
+            || (int) ($quote['converted_estate_sale_id'] ?? 0) > 0
+            || (int) ($quote['converted_purchase_id'] ?? 0) > 0;
+    }
+
+    private static function deactivateEstimatesForQuote(int $businessId, int $quoteId, int $actorUserId): void
+    {
+        foreach (self::estimatesByQuote($businessId, $quoteId) as $estimate) {
+            if (!is_array($estimate)) {
+                continue;
+            }
+            $estimateId = (int) ($estimate['id'] ?? 0);
+            if ($estimateId > 0) {
+                Invoice::softDelete($businessId, $estimateId, $actorUserId);
+            }
+        }
+    }
+
+    /**
+     * @param array<string, mixed> $quote
+     * @param array<string, mixed> $overrides
+     * @return array<string, mixed>
+     */
+    private static function conversionQuotePayload(array $quote, array $overrides): array
+    {
+        return array_merge([
+            'client_id' => (int) ($quote['client_id'] ?? 0),
+            'title' => trim((string) ($quote['title'] ?? '')),
+            'status' => 'won',
+            'service_type' => trim((string) ($quote['service_type'] ?? '')),
+            'quoted_amount' => (string) ($quote['quoted_amount'] ?? ''),
+            'notes' => trim((string) ($quote['notes'] ?? '')),
+            'next_follow_up_at' => '',
+            'lost_reason' => '',
+            'converted_job_id' => (string) ((int) ($quote['converted_job_id'] ?? 0)),
+            'converted_estate_sale_id' => (string) ((int) ($quote['converted_estate_sale_id'] ?? 0)),
+            'converted_purchase_id' => (string) ((int) ($quote['converted_purchase_id'] ?? 0)),
+            'source' => trim((string) ($quote['source'] ?? '')),
+            'priority' => trim((string) ($quote['priority'] ?? '')),
+            'address_line1' => trim((string) ($quote['address_line1'] ?? '')),
+            'address_line2' => trim((string) ($quote['address_line2'] ?? '')),
+            'city' => trim((string) ($quote['city'] ?? '')),
+            'state' => trim((string) ($quote['state'] ?? '')),
+            'postal_code' => trim((string) ($quote['postal_code'] ?? '')),
+        ], $overrides);
     }
 
     private static function resolveJobTypeForConversion(int $businessId, string $serviceType): string
@@ -438,6 +547,8 @@ final class Quote
             'next_follow_up_at' => $followUpDb,
             'lost_reason' => trim((string) ($data['lost_reason'] ?? '')),
             'converted_job_id' => (int) ($data['converted_job_id'] ?? 0) > 0 ? (int) $data['converted_job_id'] : null,
+            'converted_estate_sale_id' => (int) ($data['converted_estate_sale_id'] ?? 0) > 0 ? (int) $data['converted_estate_sale_id'] : null,
+            'converted_purchase_id' => (int) ($data['converted_purchase_id'] ?? 0) > 0 ? (int) $data['converted_purchase_id'] : null,
             'source' => trim((string) ($data['source'] ?? '')),
             'priority' => trim((string) ($data['priority'] ?? '')),
             'address_line1' => trim((string) ($data['address_line1'] ?? '')),

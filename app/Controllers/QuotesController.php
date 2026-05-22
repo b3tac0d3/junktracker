@@ -236,6 +236,48 @@ final class QuotesController extends Controller
         redirect('/jobs/' . (string) $jobId);
     }
 
+    public function convertToEstateSale(array $params): void
+    {
+        require_business_role(['general_user', 'admin']);
+        if (!verify_csrf($_POST['csrf_token'] ?? null)) {
+            flash('error', 'Session expired. Please try again.');
+            redirect('/quotes');
+        }
+
+        $quoteId = (int) ($params['id'] ?? 0);
+        $businessId = current_business_id();
+        $actorUserId = (int) (auth_user_id() ?? 0);
+        $estateSaleId = Quote::convertToEstateSale($businessId, $quoteId, $actorUserId);
+        if ($estateSaleId <= 0) {
+            flash('error', 'Unable to convert quote to estate sale.');
+            redirect('/quotes/' . (string) $quoteId);
+        }
+        AuditLog::write('quote_converted_to_estate_sale', 'quotes', $quoteId, $businessId, $actorUserId, ['estate_sale_id' => $estateSaleId]);
+        flash('success', 'Quote converted to estate sale.');
+        redirect('/estate-sales/' . (string) $estateSaleId);
+    }
+
+    public function convertToPurchase(array $params): void
+    {
+        require_business_role(['general_user', 'admin']);
+        if (!verify_csrf($_POST['csrf_token'] ?? null)) {
+            flash('error', 'Session expired. Please try again.');
+            redirect('/quotes');
+        }
+
+        $quoteId = (int) ($params['id'] ?? 0);
+        $businessId = current_business_id();
+        $actorUserId = (int) (auth_user_id() ?? 0);
+        $purchaseId = Quote::convertToPurchase($businessId, $quoteId, $actorUserId);
+        if ($purchaseId <= 0) {
+            flash('error', 'Unable to convert quote to purchase.');
+            redirect('/quotes/' . (string) $quoteId);
+        }
+        AuditLog::write('quote_converted_to_purchase', 'quotes', $quoteId, $businessId, $actorUserId, ['purchase_id' => $purchaseId]);
+        flash('success', 'Quote converted to purchase.');
+        redirect('/purchases/' . (string) $purchaseId);
+    }
+
     public function quickStatus(array $params): void
     {
         require_business_role(['general_user', 'admin']);
@@ -301,6 +343,8 @@ final class QuotesController extends Controller
             'state' => '',
             'postal_code' => '',
             'converted_job_id' => '',
+            'converted_estate_sale_id' => '',
+            'converted_purchase_id' => '',
         ];
     }
 
@@ -321,6 +365,8 @@ final class QuotesController extends Controller
             'state' => trim((string) ($input['state'] ?? '')),
             'postal_code' => trim((string) ($input['postal_code'] ?? '')),
             'converted_job_id' => trim((string) ($input['converted_job_id'] ?? '')),
+            'converted_estate_sale_id' => trim((string) ($input['converted_estate_sale_id'] ?? '')),
+            'converted_purchase_id' => trim((string) ($input['converted_purchase_id'] ?? '')),
         ];
     }
 
@@ -340,6 +386,8 @@ final class QuotesController extends Controller
             'state' => trim((string) ($quote['state'] ?? '')),
             'postal_code' => trim((string) ($quote['postal_code'] ?? '')),
             'converted_job_id' => (string) ((int) ($quote['converted_job_id'] ?? 0)),
+            'converted_estate_sale_id' => (string) ((int) ($quote['converted_estate_sale_id'] ?? 0)),
+            'converted_purchase_id' => (string) ((int) ($quote['converted_purchase_id'] ?? 0)),
         ];
     }
 

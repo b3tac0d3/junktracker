@@ -4,6 +4,8 @@ $errors = is_array($errors ?? null) ? $errors : [];
 $mode = (string) ($mode ?? 'create');
 $actionUrl = (string) ($actionUrl ?? url('/sales'));
 $typeOptions = is_array($typeOptions ?? null) ? $typeOptions : [];
+$backUrl = (string) ($backUrl ?? url('/sales'));
+$backLabel = (string) ($backLabel ?? 'Back to Sales');
 
 $fieldError = static function (string $field) use ($errors): string {
     return isset($errors[$field]) ? (string) $errors[$field] : '';
@@ -20,7 +22,7 @@ $hasError = static function (string $field) use ($errors): bool {
         <p class="muted">Sale amount, inventory, and proceeds</p>
     </div>
     <div>
-        <a class="btn btn-outline-secondary" href="<?= e(url('/sales')) ?>">Back to Sales</a>
+        <a class="btn btn-outline-secondary" href="<?= e($backUrl) ?>"><?= e($backLabel) ?></a>
     </div>
 </div>
 
@@ -165,7 +167,7 @@ $hasError = static function (string $field) use ($errors): bool {
 
             <div class="col-12 d-flex gap-2">
                 <button class="btn btn-primary" type="submit"><?= e($mode === 'edit' ? 'Save Changes' : 'Add Sale') ?></button>
-                <a class="btn btn-outline-secondary" href="<?= e(url('/sales')) ?>">Cancel</a>
+                <a class="btn btn-outline-secondary" href="<?= e($backUrl) ?>">Cancel</a>
             </div>
         </form>
     </div>

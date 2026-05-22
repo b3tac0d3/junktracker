@@ -1,6 +1,14 @@
 <?php
 $sale = is_array($sale ?? null) ? $sale : [];
 $saleId = (int) ($sale['id'] ?? 0);
+$estateSaleId = (int) ($sale['estate_sale_id'] ?? 0);
+$saleEditUrl = $estateSaleId > 0
+    ? url('/estate-sales/' . (string) $estateSaleId . '/sales/' . (string) $saleId . '/edit')
+    : url('/sales/' . (string) $saleId . '/edit');
+$backUrl = $estateSaleId > 0
+    ? url('/estate-sales/' . (string) $estateSaleId . '?tab=sales')
+    : url('/sales');
+$backLabel = $estateSaleId > 0 ? 'Back to Estate Sale' : 'Back to Sales';
 
 $displayName = trim((string) ($sale['name'] ?? ''));
 if ($displayName === '') {
@@ -36,7 +44,7 @@ $formatSaleDate = static function (?string $value): string {
                 <i class="fas fa-ellipsis-h me-2"></i>Actions
             </button>
             <ul class="dropdown-menu dropdown-menu-end">
-                <li><a class="dropdown-item" href="<?= e(url('/sales/' . (string) $saleId . '/edit')) ?>"><i class="fas fa-pen me-2"></i>Edit Sale</a></li>
+                <li><a class="dropdown-item" href="<?= e($saleEditUrl) ?>"><i class="fas fa-pen me-2"></i>Edit Sale</a></li>
                 <li>
                     <form method="post" action="<?= e(url('/sales/' . (string) $saleId . '/delete')) ?>" class="m-0" onsubmit="return confirm('Delete this sale?');">
                         <?= csrf_field() ?>
@@ -45,7 +53,7 @@ $formatSaleDate = static function (?string $value): string {
                 </li>
             </ul>
         </div>
-        <a class="btn btn-outline-secondary w-100 w-md-auto" href="<?= e(url('/sales')) ?>">Back to Sales</a>
+        <a class="btn btn-outline-secondary w-100 w-md-auto" href="<?= e($backUrl) ?>"><?= e($backLabel) ?></a>
     </div>
 </div>
 

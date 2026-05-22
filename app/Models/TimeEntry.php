@@ -390,20 +390,23 @@ final class TimeEntry
 
     public static function create(int $businessId, array $data, int $actorUserId): int
     {
+        $hasEstateSaleId = SchemaInspector::hasColumn('employee_time_entries', 'estate_sale_id');
+        $estateSaleIdSql = $hasEstateSaleId ? ', estate_sale_id' : '';
+        $estateSaleIdValueSql = $hasEstateSaleId ? ', :estate_sale_id' : '';
+
         $sql = 'INSERT INTO employee_time_entries (
-                    business_id, employee_id, job_id, is_non_job,
+                    business_id, employee_id, job_id' . $estateSaleIdSql . ', is_non_job,
                     clock_in_at, clock_out_at, duration_minutes,
                     clock_in_lat, clock_in_lng, clock_out_lat, clock_out_lng,
                     notes, created_by, updated_by, created_at, updated_at
                 ) VALUES (
-                    :business_id, :employee_id, :job_id, :is_non_job,
+                    :business_id, :employee_id, :job_id' . $estateSaleIdValueSql . ', :is_non_job,
                     :clock_in_at, :clock_out_at, :duration_minutes,
                     :clock_in_lat, :clock_in_lng, :clock_out_lat, :clock_out_lng,
                     :notes, :created_by, :updated_by, NOW(), NOW()
                 )';
 
-        $stmt = Database::connection()->prepare($sql);
-        $stmt->execute([
+        $params = [
             'business_id' => $businessId,
             'employee_id' => (int) ($data['employee_id'] ?? 0),
             'job_id' => (isset($data['job_id']) && (int) $data['job_id'] > 0) ? (int) $data['job_id'] : null,
@@ -420,7 +423,15 @@ final class TimeEntry
             'notes' => trim((string) ($data['notes'] ?? '')),
             'created_by' => $actorUserId,
             'updated_by' => $actorUserId,
-        ]);
+        ];
+        if ($hasEstateSaleId) {
+            $params['estate_sale_id'] = (isset($data['estate_sale_id']) && (int) $data['estate_sale_id'] > 0)
+                ? (int) $data['estate_sale_id']
+                : null;
+        }
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute($params);
 
         return (int) Database::connection()->lastInsertId();
     }
@@ -428,11 +439,13 @@ final class TimeEntry
     public static function update(int $businessId, int $entryId, array $data, int $actorUserId): bool
     {
         $deletedWhere = SchemaInspector::hasColumn('employee_time_entries', 'deleted_at') ? 'AND deleted_at IS NULL' : '';
+        $hasEstateSaleId = SchemaInspector::hasColumn('employee_time_entries', 'estate_sale_id');
+        $estateSaleIdSetSql = $hasEstateSaleId ? "estate_sale_id = :estate_sale_id,\n                    " : '';
 
         $sql = 'UPDATE employee_time_entries
                 SET employee_id = :employee_id,
                     job_id = :job_id,
-                    is_non_job = :is_non_job,
+                    ' . $estateSaleIdSetSql . 'is_non_job = :is_non_job,
                     clock_in_at = :clock_in_at,
                     clock_out_at = :clock_out_at,
                     duration_minutes = :duration_minutes,
@@ -447,8 +460,7 @@ final class TimeEntry
                   AND business_id = :business_id
                   ' . $deletedWhere;
 
-        $stmt = Database::connection()->prepare($sql);
-        return $stmt->execute([
+        $params = [
             'employee_id' => (int) ($data['employee_id'] ?? 0),
             'job_id' => (isset($data['job_id']) && (int) $data['job_id'] > 0) ? (int) $data['job_id'] : null,
             'is_non_job' => ((int) ($data['is_non_job'] ?? 0)) === 1 ? 1 : 0,
@@ -465,7 +477,16 @@ final class TimeEntry
             'updated_by' => $actorUserId,
             'entry_id' => $entryId,
             'business_id' => $businessId,
-        ]);
+        ];
+        if ($hasEstateSaleId) {
+            $params['estate_sale_id'] = (isset($data['estate_sale_id']) && (int) $data['estate_sale_id'] > 0)
+                ? (int) $data['estate_sale_id']
+                : null;
+        }
+
+        $stmt = Database::connection()->prepare($sql);
+
+        return $stmt->execute($params);
     }
 
     public static function softDelete(int $businessId, int $entryId, int $actorUserId, ?int $scopeEmployeeId = null): bool
@@ -738,13 +759,29 @@ final class TimeEntry
 
         $jobTitleSql = "'Non-Job Time'";
         $joinSql = '';
+        $estateSaleIdSql = SchemaInspector::hasColumn('employee_time_entries', 'estate_sale_id') ? 't.estate_sale_id' : 'NULL AS estate_sale_id';
         if (SchemaInspector::hasTable('jobs') && SchemaInspector::hasColumn('employee_time_entries', 'job_id')) {
             $jobTitleField = SchemaInspector::hasColumn('jobs', 'title')
                 ? 'j.title'
                 : (SchemaInspector::hasColumn('jobs', 'name') ? 'j.name' : "CONCAT('Job #', j.id)");
             $joinDeleted = SchemaInspector::hasColumn('jobs', 'deleted_at') ? 'AND j.deleted_at IS NULL' : '';
             $joinSql = "LEFT JOIN jobs j ON j.id = t.job_id {$joinDeleted}";
-            $jobTitleSql = "CASE WHEN COALESCE({$isNonJobSql}, 0) = 1 OR t.job_id IS NULL THEN 'Non-Job Time' ELSE COALESCE(NULLIF({$jobTitleField}, ''), CONCAT('Job #', j.id)) END";
+            $jobTitleSql = "CASE WHEN COALESCE({$isNonJobSql}, 0) = 1 THEN 'Non-Job Time' WHEN t.job_id IS NOT NULL THEN COALESCE(NULLIF({$jobTitleField}, ''), CONCAT('Job #', j.id)) ELSE 'Non-Job Time' END";
+        }
+        if (
+            SchemaInspector::hasColumn('employee_time_entries', 'estate_sale_id')
+            && SchemaInspector::hasTable('estate_sales')
+        ) {
+            $estateSaleTitleField = SchemaInspector::hasColumn('estate_sales', 'title') ? 'es.title' : "CONCAT('Estate Sale #', es.id)";
+            $estateJoinDeleted = SchemaInspector::hasColumn('estate_sales', 'deleted_at') ? 'AND es.deleted_at IS NULL' : '';
+            $joinSql .= ($joinSql !== '' ? "\n" : '') . "LEFT JOIN estate_sales es ON es.id = t.estate_sale_id {$estateJoinDeleted}";
+            $estateTitleSql = "COALESCE(NULLIF({$estateSaleTitleField}, ''), CONCAT('Estate Sale #', t.estate_sale_id))";
+            $jobTitleSql = "CASE
+                WHEN COALESCE({$isNonJobSql}, 0) = 1 THEN 'Non-Job Time'
+                WHEN t.estate_sale_id IS NOT NULL THEN {$estateTitleSql}
+                WHEN t.job_id IS NOT NULL THEN {$jobTitleSql}
+                ELSE 'Non-Job Time'
+            END";
         }
 
         $where = [];
@@ -759,6 +796,7 @@ final class TimeEntry
                     t.id,
                     t.employee_id,
                     t.job_id,
+                    {$estateSaleIdSql},
                     t.clock_in_at,
                     {$isNonJobSql} AS is_non_job,
                     {$notesSql} AS notes,
@@ -782,13 +820,19 @@ final class TimeEntry
         return is_array($row) ? $row : null;
     }
 
-    public static function punchInNow(int $businessId, int $employeeId, ?int $jobId, bool $isNonJob, int $actorUserId, string $notes = ''): int
+    public static function punchInNow(int $businessId, int $employeeId, ?int $jobId, bool $isNonJob, int $actorUserId, string $notes = '', ?int $estateSaleId = null): int
     {
         $clockInAt = date('Y-m-d H:i:s');
+        $resolvedEstateSaleId = $estateSaleId !== null && $estateSaleId > 0 ? $estateSaleId : null;
+        $resolvedJobId = $resolvedEstateSaleId !== null
+            ? null
+            : ($isNonJob ? null : ($jobId !== null && $jobId > 0 ? $jobId : null));
+
         return self::create($businessId, [
             'employee_id' => $employeeId,
-            'job_id' => $isNonJob ? null : ($jobId !== null && $jobId > 0 ? $jobId : null),
-            'is_non_job' => $isNonJob ? 1 : 0,
+            'job_id' => $resolvedJobId,
+            'estate_sale_id' => $resolvedEstateSaleId,
+            'is_non_job' => ($isNonJob && $resolvedEstateSaleId === null) ? 1 : 0,
             'clock_in_at' => $clockInAt,
             'clock_out_at' => null,
             'duration_minutes' => null,
@@ -819,6 +863,7 @@ final class TimeEntry
         self::update($businessId, (int) ($openEntry['id'] ?? 0), [
             'employee_id' => (int) ($openEntry['employee_id'] ?? $employeeId),
             'job_id' => isset($openEntry['job_id']) ? (int) ($openEntry['job_id'] ?? 0) : null,
+            'estate_sale_id' => isset($openEntry['estate_sale_id']) ? (int) ($openEntry['estate_sale_id'] ?? 0) : null,
             'is_non_job' => ((int) ($openEntry['is_non_job'] ?? 0)) === 1 ? 1 : 0,
             'clock_in_at' => $clockInAt,
             'clock_out_at' => $clockOutAt,

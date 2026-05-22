@@ -63,9 +63,22 @@ window.addEventListener('DOMContentLoaded', event => {
         });
 
         if (best) {
-            navLinks.forEach((l) => l.classList.remove('active'));
+            navLinks.forEach((l) => {
+                l.classList.remove('active');
+                l.removeAttribute('aria-current');
+            });
             best.classList.add('active');
             best.setAttribute('aria-current', 'page');
+
+            const collapse = best.closest('.collapse');
+            if (collapse && collapse.id) {
+                collapse.classList.add('show');
+                const toggle = document.querySelector(`#sidenavAccordion [data-bs-target="#${collapse.id}"]`);
+                if (toggle) {
+                    toggle.classList.remove('collapsed');
+                    toggle.setAttribute('aria-expanded', 'true');
+                }
+            }
         }
     }
 

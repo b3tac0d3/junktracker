@@ -6,6 +6,7 @@ namespace App\Controllers;
 
 use App\Models\Employee;
 use App\Models\AuditLog;
+use App\Models\EstateSale;
 use App\Models\Job;
 use App\Models\TimeEntry;
 use Core\Controller;
@@ -140,6 +141,18 @@ final class TimeTrackingController extends Controller
             }
         }
 
+        $requestedEstateSaleId = (int) ($_GET['estate_sale_id'] ?? 0);
+        if ($requestedEstateSaleId > 0) {
+            $estateSale = EstateSale::findForBusiness($businessId, $requestedEstateSaleId);
+            if ($estateSale !== null) {
+                $form['estate_sale_id'] = (string) $requestedEstateSaleId;
+                $form['estate_sale_title'] = trim((string) ($estateSale['title'] ?? '')) ?: ('Estate Sale #' . (string) $requestedEstateSaleId);
+                if ($returnTo === '') {
+                    $returnTo = '/estate-sales/' . (string) $requestedEstateSaleId . '?tab=labor';
+                }
+            }
+        }
+
         if (trim((string) ($form['clock_in_at'] ?? '')) === '') {
             $form['clock_in_at'] = date('Y-m-d\TH:i');
         }
@@ -205,6 +218,10 @@ final class TimeTrackingController extends Controller
         $jobId = (int) ($payload['job_id'] ?? 0);
         if ($jobId > 0) {
             Job::assignEmployee($businessId, (int) $jobId, (int) ($payload['employee_id'] ?? 0), auth_user_id() ?? 0);
+        }
+        $estateSaleId = (int) ($payload['estate_sale_id'] ?? 0);
+        if ($estateSaleId > 0) {
+            EstateSale::assignEmployee($businessId, $estateSaleId, (int) ($payload['employee_id'] ?? 0), auth_user_id() ?? 0);
         }
         flash('success', 'Time entry created.');
         if ($returnTo !== '') {
@@ -669,6 +686,8 @@ final class TimeTrackingController extends Controller
             'job_id' => '',
             'job_title' => '',
             'job_selection' => '',
+            'estate_sale_id' => '',
+            'estate_sale_title' => '',
             'clock_in_at' => '',
             'clock_out_at' => '',
             'open_punch' => '0',
@@ -713,8 +732,10 @@ final class TimeTrackingController extends Controller
             'employee_id' => trim((string) ($input['employee_id'] ?? '')),
             'employee_name' => trim((string) ($input['employee_name'] ?? '')),
             'job_selection' => trim((string) ($input['job_selection'] ?? '')),
-            'job_id' => '',
-            'job_title' => '',
+            'job_id' => trim((string) ($input['job_id'] ?? '')),
+            'job_title' => trim((string) ($input['job_title'] ?? '')),
+            'estate_sale_id' => trim((string) ($input['estate_sale_id'] ?? '')),
+            'estate_sale_title' => trim((string) ($input['estate_sale_title'] ?? '')),
             'clock_in_at' => trim((string) ($input['clock_in_at'] ?? '')),
             'clock_out_at' => $clockOut,
             'open_punch' => $openPunch ? '1' : '0',
@@ -768,15 +789,22 @@ final class TimeTrackingController extends Controller
             }
         }
 
-        $jobSelection = trim((string) ($form['job_selection'] ?? ''));
-        $specialSelections = ['shop_time', 'general_labor'];
-        $jobId = 0;
-        $isNonJob = true;
-        if ($jobSelection !== '' && !in_array($jobSelection, $specialSelections, true)) {
-            $jobId = (int) $jobSelection;
-            $isNonJob = $jobId <= 0;
-            if (!$isNonJob && !TimeEntry::jobExistsForBusiness($businessId, $jobId)) {
-                $errors['job_id'] = 'Choose a valid active job or one of the built-in non-job types.';
+        $estateSaleId = (int) ($form['estate_sale_id'] ?? 0);
+        if ($estateSaleId > 0 && EstateSale::findForBusiness($businessId, $estateSaleId) === null) {
+            $errors['estate_sale_id'] = 'Linked estate sale was not found.';
+        }
+
+        if ($estateSaleId <= 0) {
+            $jobSelection = trim((string) ($form['job_selection'] ?? ''));
+            $specialSelections = ['shop_time', 'general_labor'];
+            $jobId = 0;
+            $isNonJob = true;
+            if ($jobSelection !== '' && !in_array($jobSelection, $specialSelections, true)) {
+                $jobId = (int) $jobSelection;
+                $isNonJob = $jobId <= 0;
+                if (!$isNonJob && !TimeEntry::jobExistsForBusiness($businessId, $jobId)) {
+                    $errors['job_id'] = 'Choose a valid active job or one of the built-in non-job types.';
+                }
             }
         }
 
@@ -828,6 +856,25 @@ final class TimeTrackingController extends Controller
             $durationMinutes = (int) floor(($clockOutTs - $clockInTs) / 60);
         }
 
+        $notes = trim((string) ($form['notes'] ?? ''));
+        $estateSaleId = (int) ($form['estate_sale_id'] ?? 0);
+        if ($estateSaleId > 0) {
+            return [
+                'employee_id' => (int) $form['employee_id'],
+                'job_id' => null,
+                'estate_sale_id' => $estateSaleId,
+                'is_non_job' => 0,
+                'clock_in_at' => $this->toDatabaseDatetime($form['clock_in_at']),
+                'clock_out_at' => $this->toDatabaseDatetime($form['clock_out_at']),
+                'duration_minutes' => $durationMinutes,
+                'clock_in_lat' => $form['clock_in_lat'] !== '' ? (float) $form['clock_in_lat'] : null,
+                'clock_in_lng' => $form['clock_in_lng'] !== '' ? (float) $form['clock_in_lng'] : null,
+                'clock_out_lat' => $form['clock_out_lat'] !== '' ? (float) $form['clock_out_lat'] : null,
+                'clock_out_lng' => $form['clock_out_lng'] !== '' ? (float) $form['clock_out_lng'] : null,
+                'notes' => $notes,
+            ];
+        }
+
         $jobSelection = trim((string) ($form['job_selection'] ?? ''));
         $specialSelections = [
             'shop_time' => 'Shop Time',
@@ -835,7 +882,6 @@ final class TimeTrackingController extends Controller
         ];
         $jobId = 0;
         $isNonJob = true;
-        $notes = trim((string) ($form['notes'] ?? ''));
         if ($jobSelection !== '' && isset($specialSelections[$jobSelection])) {
             $label = $specialSelections[$jobSelection];
             $notes = $notes !== '' ? ($label . ' - ' . $notes) : $label;
@@ -847,6 +893,7 @@ final class TimeTrackingController extends Controller
         return [
             'employee_id' => (int) $form['employee_id'],
             'job_id' => $isNonJob ? null : ($jobId > 0 ? $jobId : null),
+            'estate_sale_id' => null,
             'is_non_job' => $isNonJob ? 1 : 0,
             'clock_in_at' => $this->toDatabaseDatetime($form['clock_in_at']),
             'clock_out_at' => $this->toDatabaseDatetime($form['clock_out_at']),
