@@ -87,7 +87,8 @@ final class AdminInvoiceItemTypesController extends Controller
             return;
         }
 
-        InvoiceItemType::create($businessId, $this->payloadForSave($form), (int) (auth_user_id() ?? 0));
+        $typeId = InvoiceItemType::create($businessId, $this->payloadForSave($form), (int) (auth_user_id() ?? 0));
+        audit('invoice_item_type_created', 'invoice_item_types', $typeId > 0 ? $typeId : null, ['name' => $form['name'] ?? '']);
         flash('success', 'Invoice item type added.');
         redirect('/admin/invoice-item-types');
     }
@@ -163,6 +164,7 @@ final class AdminInvoiceItemTypesController extends Controller
         }
 
         InvoiceItemType::update($businessId, $typeId, $this->payloadForSave($form), (int) (auth_user_id() ?? 0));
+        audit('invoice_item_type_updated', 'invoice_item_types', $typeId);
         flash('success', 'Invoice item type updated.');
         redirect('/admin/invoice-item-types');
     }
@@ -190,6 +192,7 @@ final class AdminInvoiceItemTypesController extends Controller
         }
 
         InvoiceItemType::softDelete($businessId, $typeId, (int) (auth_user_id() ?? 0));
+        audit('invoice_item_type_deleted', 'invoice_item_types', $typeId);
         flash('success', 'Invoice item type removed.');
         redirect('/admin/invoice-item-types');
     }

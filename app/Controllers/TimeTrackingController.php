@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Models\Employee;
-use App\Models\AuditLog;
 use App\Models\EstateSale;
 use App\Models\Job;
 use App\Models\TimeEntry;
@@ -223,6 +222,7 @@ final class TimeTrackingController extends Controller
         if ($estateSaleId > 0) {
             EstateSale::assignEmployee($businessId, $estateSaleId, (int) ($payload['employee_id'] ?? 0), auth_user_id() ?? 0);
         }
+        audit('time_entry_created', 'time_entries', $entryId, ['job_id' => $jobId]);
         flash('success', 'Time entry created.');
         if ($returnTo !== '') {
             redirect($returnTo);
@@ -352,7 +352,7 @@ final class TimeTrackingController extends Controller
         if ($jobId > 0) {
             Job::assignEmployee($businessId, (int) $jobId, (int) ($payload['employee_id'] ?? 0), auth_user_id() ?? 0);
         }
-        AuditLog::write('time_entry_updated', 'time_entries', $entryId, $businessId, (int) (auth_user_id() ?? 0), ['job_id' => $jobId]);
+        audit('time_entry_updated', 'time_entries', $entryId, ['job_id' => $jobId]);
         flash('success', 'Time entry updated.');
         redirect('/time-tracking/' . (string) $entryId);
     }
@@ -419,7 +419,7 @@ final class TimeTrackingController extends Controller
 
         $deleted = TimeEntry::softDelete($businessId, $entryId, auth_user_id() ?? 0, $scopeEmployeeId);
         if ($deleted) {
-            AuditLog::write('time_entry_deleted', 'time_entries', $entryId, $businessId, (int) (auth_user_id() ?? 0), []);
+            audit('time_entry_deleted', 'time_entries', $entryId);
             flash('success', 'Time entry deleted.');
             redirect('/time-tracking');
         }

@@ -138,6 +138,7 @@ final class AdminBusinessDetailsController extends Controller
 
         Business::updateDetails($businessId, $details, (int) (auth_user_id() ?? 0));
 
+        audit('business_details_updated', 'businesses', $businessId);
         flash('success', 'Business details updated.');
         redirect('/admin/business-details');
     }

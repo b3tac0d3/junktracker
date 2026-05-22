@@ -92,6 +92,7 @@ final class ExpensesController extends Controller
             redirect('/expenses/create');
         }
 
+        audit('expense_created', 'expenses', $expenseId, ['amount' => $form['amount'] ?? '']);
         flash('success', 'General expense added.');
         redirect('/expenses/' . (string) $expenseId);
     }
@@ -189,6 +190,7 @@ final class ExpensesController extends Controller
             redirect('/expenses/' . (string) ((int) ($expense['id'] ?? 0)) . '/edit');
         }
 
+        audit('expense_updated', 'expenses', $expenseId);
         flash('success', 'Expense updated.');
         redirect('/expenses/' . (string) ((int) ($expense['id'] ?? 0)));
     }
@@ -218,6 +220,7 @@ final class ExpensesController extends Controller
             redirect('/expenses/' . (string) ((int) ($expense['id'] ?? 0)));
         }
 
+        audit('expense_deleted', 'expenses', $expenseId);
         flash('success', 'Expense deleted.');
         redirect('/expenses');
     }

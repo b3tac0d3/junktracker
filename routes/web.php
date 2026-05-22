@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Controllers\AuthController;
 use App\Controllers\AdminController;
+use App\Controllers\AdminActivityLogController;
 use App\Controllers\AdminBusinessDetailsController;
 use App\Controllers\AdminEmployeesController;
 use App\Controllers\AdminFormSelectValuesController;
@@ -270,6 +271,7 @@ $router->get('/purchases/{id}', [PurchasesController::class, 'show']);
 $router->get('/admin/export.csv', [AdminExportController::class, 'csv']);
 
 $router->get('/admin', [AdminController::class, 'index']);
+$router->get('/admin/activity-log', [AdminActivityLogController::class, 'index']);
 $router->get('/admin/business-details', [AdminBusinessDetailsController::class, 'edit']);
 $router->post('/admin/business-details/update', [AdminBusinessDetailsController::class, 'update']);
 $router->get('/admin/users', [AdminUsersController::class, 'index']);

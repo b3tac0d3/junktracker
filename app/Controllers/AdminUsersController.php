@@ -125,6 +125,7 @@ final class AdminUsersController extends Controller
         }
 
         $inviteSent = $this->sendInviteEmail($form, $temporaryPassword, $isSiteAdminGlobal);
+        audit('user_created', 'users', $userId, ['email' => $form['email'] ?? '']);
         $this->flashInviteDeliveryResult($inviteSent, $isSiteAdminGlobal);
         redirect('/admin/users');
     }
@@ -216,6 +217,7 @@ final class AdminUsersController extends Controller
             }
         }
 
+        audit('user_updated', 'users', (int) ($targetUser['id'] ?? 0), ['email' => $form['email'] ?? '']);
         flash('success', 'User updated.');
         redirect('/admin/users');
     }
@@ -246,6 +248,7 @@ final class AdminUsersController extends Controller
         $setActive = (int) ($_POST['set_active'] ?? 0) === 1;
         if ($this->isGlobalSiteAdminContext()) {
             User::setActiveState($targetId, $setActive, $actorId);
+            audit($setActive ? 'user_reactivated' : 'user_deactivated', 'users', $targetId);
             flash('success', $setActive ? 'Site admin reactivated.' : 'Site admin deactivated.');
             redirect('/admin/users/' . (string) $targetId . '/edit');
         }
@@ -261,6 +264,7 @@ final class AdminUsersController extends Controller
             User::setActiveState($targetId, true, $actorId);
         }
 
+        audit($setActive ? 'user_reactivated' : 'user_deactivated', 'users', $targetId);
         flash('success', $setActive ? 'User reactivated.' : 'User deactivated.');
         redirect('/admin/users/' . (string) $targetId . '/edit');
     }
@@ -285,6 +289,7 @@ final class AdminUsersController extends Controller
         $actorId = (int) (auth_user_id() ?? 0);
         User::resendInvitation((int) ($targetUser['id'] ?? 0), password_hash($temporaryPassword, PASSWORD_DEFAULT), $actorId);
         $inviteSent = $this->sendInviteEmail($targetUser, $temporaryPassword, $this->isGlobalSiteAdminContext());
+        audit('user_invite_resent', 'users', (int) ($targetUser['id'] ?? 0));
         $this->flashInviteResendResult($inviteSent);
         redirect('/admin/users/' . (string) ((int) ($targetUser['id'] ?? 0)) . '/edit');
     }
@@ -309,6 +314,7 @@ final class AdminUsersController extends Controller
         $actorId = (int) (auth_user_id() ?? 0);
         User::autoAcceptInvitation((int) ($targetUser['id'] ?? 0), password_hash($temporaryPassword, PASSWORD_DEFAULT), $actorId);
 
+        audit('user_auto_accepted', 'users', (int) ($targetUser['id'] ?? 0));
         flash('success', 'Invite accepted on behalf of the user. Temporary password: ' . $temporaryPassword . '. The user must change it at first login.');
         redirect('/admin/users/' . (string) ((int) ($targetUser['id'] ?? 0)) . '/edit');
     }
@@ -338,6 +344,7 @@ final class AdminUsersController extends Controller
         }
 
         $sent = $this->sendPasswordResetEmail($targetUser, $token);
+        audit('user_password_reset_sent', 'users', (int) ($targetUser['id'] ?? 0));
         $this->flashPasswordResetDeliveryResult($sent);
         redirect('/admin/users/' . (string) ((int) ($targetUser['id'] ?? 0)) . '/edit');
     }

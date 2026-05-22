@@ -85,6 +85,7 @@ final class NetworkingController extends Controller
             flash('error', 'Unable to create networking contact. Run latest migrations if needed.');
             redirect('/networking/create');
         }
+        audit('networking_contact_created', 'networking_contacts', $id);
         flash('success', 'Networking contact created.');
         redirect('/networking/' . (string) $id);
     }
@@ -162,6 +163,7 @@ final class NetworkingController extends Controller
         }
 
         NetworkingContact::update($businessId, $contactId, $form, (int) (auth_user_id() ?? 0));
+        audit('networking_contact_updated', 'networking_contacts', $contactId);
         flash('success', 'Networking contact updated.');
         redirect('/networking/' . (string) $contactId);
     }
@@ -185,6 +187,7 @@ final class NetworkingController extends Controller
 
         $deleted = NetworkingContact::softDelete($businessId, $contactId, (int) (auth_user_id() ?? 0));
         if ($deleted) {
+            audit('networking_contact_deleted', 'networking_contacts', $contactId);
             flash('success', 'Networking contact deleted.');
             redirect('/networking');
         }

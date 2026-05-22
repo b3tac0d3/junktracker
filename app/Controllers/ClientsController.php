@@ -147,6 +147,7 @@ final class ClientsController extends Controller
         }
 
         $clientId = Client::create($businessId, $this->payloadForSave($form, true, null), auth_user_id() ?? 0);
+        audit('client_created', 'clients', $clientId, ['name' => trim(((string) ($form['first_name'] ?? '')) . ' ' . ((string) ($form['last_name'] ?? ''))) ?: ((string) ($form['company_name'] ?? ''))]);
         flash('success', 'Client created.');
         $nextAction = strtolower(trim((string) ($form['next_action'] ?? '')));
         if ($nextAction === 'job') {
@@ -243,6 +244,7 @@ final class ClientsController extends Controller
         }
 
         Client::update($businessId, $clientId, $this->payloadForSave($form, false, $client), auth_user_id() ?? 0);
+        audit('client_updated', 'clients', $clientId);
         flash('success', 'Client updated.');
         redirect('/clients/' . (string) $clientId);
     }
@@ -322,6 +324,7 @@ final class ClientsController extends Controller
         }
 
         Client::deactivate($businessId, $clientId, auth_user_id() ?? 0);
+        audit('client_deactivated', 'clients', $clientId);
         flash('success', 'Client deactivated.');
         redirect('/clients/' . (string) $clientId);
     }
@@ -414,6 +417,7 @@ final class ClientsController extends Controller
             auth_user_id() ?? 0
         );
 
+        audit('client_contact_created', 'clients', $clientId, ['contact_type' => $form['contact_type']]);
         flash('success', 'Contact added.');
         redirect('/clients/' . (string) $clientId);
     }
@@ -499,6 +503,7 @@ final class ClientsController extends Controller
             $lines
         );
 
+        audit('client_bolo_saved', 'clients', $clientId);
         flash('success', 'BOLO profile saved.');
         redirect('/clients/' . (string) $clientId);
     }
@@ -533,6 +538,7 @@ final class ClientsController extends Controller
         }
 
         ClientBoloProfile::setProfileActive($businessId, $clientId, false);
+        audit('client_bolo_deactivated', 'clients', $clientId);
         flash('success', 'BOLO profile deactivated. It will not appear in the BOLO list or search until reactivated.');
         redirect('/clients/' . (string) $clientId);
     }
@@ -567,6 +573,7 @@ final class ClientsController extends Controller
         }
 
         ClientBoloProfile::setProfileActive($businessId, $clientId, true);
+        audit('client_bolo_reactivated', 'clients', $clientId);
         flash('success', 'BOLO profile reactivated.');
         redirect('/clients/' . (string) $clientId);
     }

@@ -43,6 +43,15 @@
         </a>
     </div>
     <div class="col-12 col-sm-6 col-lg-3">
+        <a class="admin-nav-tile" href="<?= e(url('/admin/activity-log')) ?>">
+            <div class="admin-nav-tile-icon admin-nav-tile-icon--activity" aria-hidden="true">
+                <i class="fas fa-clipboard-list"></i>
+            </div>
+            <div class="admin-nav-tile-title">Activity Log</div>
+            <p class="admin-nav-tile-desc">Review user actions — adds, edits, deletes, and other changes.</p>
+        </a>
+    </div>
+    <div class="col-12 col-sm-6 col-lg-3">
         <a class="admin-nav-tile" href="<?= e(url('/admin/form-select-values')) ?>">
             <div class="admin-nav-tile-icon admin-nav-tile-icon--form-values" aria-hidden="true">
                 <i class="fas fa-list-ul"></i>

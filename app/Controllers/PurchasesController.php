@@ -252,6 +252,7 @@ final class PurchasesController extends Controller
         $purchaseId = Purchase::create($businessId, $this->payloadForSave($form), $actorUserId);
         $this->maybeCreateFollowUpTask($businessId, $purchaseId, $form, $actorUserId);
 
+        audit('purchase_created', 'purchases', $purchaseId, ['name' => trim((string) ($form['name'] ?? ''))]);
         flash('success', 'Purchase order created.');
         redirect('/purchases/' . (string) $purchaseId);
     }
@@ -365,6 +366,7 @@ final class PurchasesController extends Controller
         Purchase::update($businessId, $purchaseId, $this->payloadForSave($form), auth_user_id() ?? 0);
         $this->maybeCreateFollowUpTask($businessId, $purchaseId, $form, auth_user_id() ?? 0);
 
+        audit('purchase_updated', 'purchases', $purchaseId);
         flash('success', 'Purchase order updated.');
         redirect('/purchases/' . (string) $purchaseId);
     }
@@ -398,6 +400,7 @@ final class PurchasesController extends Controller
             redirect('/purchases/' . (string) $purchaseId);
         }
 
+        audit('purchase_deleted', 'purchases', $purchaseId);
         flash('success', 'Purchase order deleted.');
         redirect('/purchases');
     }

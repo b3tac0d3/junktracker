@@ -78,6 +78,7 @@ final class AdminEmployeesController extends Controller
         }
 
         $employeeId = Employee::create($businessId, $this->payloadForSave($form), auth_user_id() ?? 0);
+        audit('employee_created', 'employees', $employeeId);
         flash('success', 'Employee added.');
         redirect('/admin/employees/' . (string) $employeeId);
     }
@@ -178,6 +179,7 @@ final class AdminEmployeesController extends Controller
         }
 
         Employee::update($businessId, $employeeId, $this->payloadForSave($form), auth_user_id() ?? 0);
+        audit('employee_updated', 'employees', $employeeId);
         flash('success', 'Employee updated.');
         redirect('/admin/employees/' . (string) $employeeId);
     }

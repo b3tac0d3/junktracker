@@ -354,6 +354,7 @@ final class SalesController extends Controller
             redirect('/sales/' . (string) $saleId);
         }
 
+        audit('sale_deleted', 'sales', $saleId);
         flash('success', 'Sale deleted.');
         redirect('/sales');
     }
@@ -619,6 +620,11 @@ final class SalesController extends Controller
 
     private function redirectAfterSaleSave(array $form, int $saleId, string $message): void
     {
+        $action = str_contains(strtolower($message), 'updated') ? 'sale_updated' : 'sale_created';
+        audit($action, 'sales', $saleId, [
+            'name' => trim((string) ($form['name'] ?? '')),
+            'amount' => $form['gross_amount'] ?? '',
+        ]);
         flash('success', $message);
 
         $estateSaleId = (int) ($form['estate_sale_id'] ?? 0);

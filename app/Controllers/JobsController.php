@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Controllers;
 
-use App\Models\AuditLog;
 use App\Models\Client;
 use App\Models\Expense;
 use App\Models\FormSelectValue;
@@ -297,6 +296,7 @@ final class JobsController extends Controller
         $actorUserId = auth_user_id() ?? 0;
         $jobId = Job::create($businessId, $this->payloadForSave($form), $actorUserId);
         $this->maybeCreateFollowUpTask($businessId, $jobId, $form, $actorUserId);
+        audit('job_created', 'jobs', $jobId, ['name' => trim((string) ($form['name'] ?? ''))]);
         flash('success', 'Job created.');
         redirect('/jobs/' . (string) $jobId);
     }
@@ -382,6 +382,7 @@ final class JobsController extends Controller
         $nextStatus = strtolower(trim((string) ($form['status'] ?? 'pending')));
         Job::update($businessId, $jobId, $this->payloadForSave($form), $actorUserId);
         $this->syncEstimatesForJobStatusChange($businessId, $jobId, $previousStatus, $nextStatus, $actorUserId);
+        audit('job_updated', 'jobs', $jobId, ['status' => $nextStatus]);
         flash('success', 'Job updated.');
         redirect('/jobs/' . (string) $jobId);
     }
@@ -411,6 +412,7 @@ final class JobsController extends Controller
         }
 
         Job::deactivate($businessId, $jobId, auth_user_id() ?? 0);
+        audit('job_deactivated', 'jobs', $jobId);
         flash('success', 'Job deactivated.');
         redirect('/jobs');
     }
@@ -521,6 +523,7 @@ final class JobsController extends Controller
         $actor = (int) (auth_user_id() ?? 0);
         if (Job::updateStatus($businessId, $jobId, $status, $actor)) {
             $this->syncEstimatesForJobStatusChange($businessId, $jobId, $current, $status, $actor);
+            audit('job_status_updated', 'jobs', $jobId, ['status' => $status]);
             flash('success', 'Job status updated.');
         } else {
             flash('error', 'Could not update status.');
@@ -558,7 +561,7 @@ final class JobsController extends Controller
         ], $actor);
 
         if ($ok) {
-            AuditLog::write('job_closeout_saved', 'jobs', $jobId, $businessId, $actor, []);
+            audit('job_closeout_saved', 'jobs', $jobId);
             flash('success', 'Close-out saved.');
         } else {
             flash('error', 'Could not save close-out (run latest migrations?).');
@@ -1004,6 +1007,7 @@ final class JobsController extends Controller
             redirect('/jobs/' . (string) $jobId . '/expenses/create');
         }
 
+        audit('job_expense_created', 'jobs', $jobId, ['expense_id' => $expenseId, 'amount' => $form['amount'] ?? '']);
         flash('success', 'Expense added.');
         redirect('/jobs/' . (string) $jobId);
     }
@@ -1097,6 +1101,7 @@ final class JobsController extends Controller
 
         $updated = Job::updateExpense($businessId, $jobId, $expenseId, $this->expensePayloadForSave($form), auth_user_id() ?? 0);
         if ($updated) {
+            audit('job_expense_updated', 'jobs', $jobId, ['expense_id' => $expenseId]);
             flash('success', 'Expense updated.');
         } else {
             flash('error', 'Unable to update expense.');
@@ -1165,6 +1170,7 @@ final class JobsController extends Controller
 
         $deleted = Job::softDeleteExpense($businessId, $jobId, $expenseId, auth_user_id() ?? 0);
         if ($deleted) {
+            audit('job_expense_deleted', 'jobs', $jobId, ['expense_id' => $expenseId]);
             flash('success', 'Expense deleted.');
         } else {
             flash('error', 'Unable to delete expense.');
@@ -1243,6 +1249,7 @@ final class JobsController extends Controller
             redirect('/jobs/' . (string) $jobId . '/adjustments/create');
         }
 
+        audit('job_adjustment_created', 'jobs', $jobId, ['adjustment_id' => $adjustmentId]);
         flash('success', 'Adjustment added.');
         redirect('/jobs/' . (string) $jobId);
     }
@@ -1334,6 +1341,7 @@ final class JobsController extends Controller
 
         $updated = Job::updateAdjustment($businessId, $jobId, $adjustmentId, $this->adjustmentPayloadForSave($form), auth_user_id() ?? 0);
         if ($updated) {
+            audit('job_adjustment_updated', 'jobs', $jobId, ['adjustment_id' => $adjustmentId]);
             flash('success', 'Adjustment updated.');
         } else {
             flash('error', 'Unable to update adjustment.');
@@ -1402,6 +1410,7 @@ final class JobsController extends Controller
 
         $deleted = Job::softDeleteAdjustment($businessId, $jobId, $adjustmentId, auth_user_id() ?? 0);
         if ($deleted) {
+            audit('job_adjustment_deleted', 'jobs', $jobId, ['adjustment_id' => $adjustmentId]);
             flash('success', 'Adjustment deleted.');
         } else {
             flash('error', 'Unable to delete adjustment.');

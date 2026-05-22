@@ -1152,6 +1152,10 @@ a.admin-nav-tile:focus {
   background: linear-gradient(145deg, #ec4899, #db2777);
 }
 
+.admin-nav-tile-icon--activity {
+  background: linear-gradient(145deg, #14b8a6, #0f766e);
+}
+
 .index-card-header strong {
   font-weight: 800;
 }

@@ -109,6 +109,7 @@ final class EventsController extends Controller
             $this->sendJson(['ok' => false, 'error' => 'Event created but could not be loaded.'], 500);
         }
 
+        audit('event_created', 'events', $id, ['title' => trim((string) ($payload['title'] ?? ''))]);
         $this->sendJson(['ok' => true, 'id' => $id, 'url' => url('/events/' . (string) $id)], 201);
     }
 
@@ -138,6 +139,7 @@ final class EventsController extends Controller
         }
 
         Event::update($businessId, $id, $payload, $actorId);
+        audit('event_updated', 'events', $id);
         $this->sendJson(['ok' => true, 'id' => $id, 'url' => url('/events/' . (string) $id)]);
     }
 
@@ -162,6 +164,7 @@ final class EventsController extends Controller
         }
 
         Event::setCancelled($businessId, $id, $cancel, $actorId);
+        audit($cancel ? 'event_cancelled' : 'event_restored', 'events', $id);
         $this->sendJson(['ok' => true]);
     }
 
@@ -192,6 +195,7 @@ final class EventsController extends Controller
             $this->sendJson(['ok' => false, 'error' => 'Unable to move event.'], 422);
         }
 
+        audit('event_moved', 'events', $id);
         $this->sendJson(['ok' => true]);
     }
 
@@ -215,6 +219,7 @@ final class EventsController extends Controller
         }
 
         Event::softDelete($businessId, $id, $actorId);
+        audit('event_deleted', 'events', $id);
         $this->sendJson(['ok' => true]);
     }
 

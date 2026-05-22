@@ -190,6 +190,7 @@ final class EstateSalesController extends Controller
         }
 
         flash('success', 'Estate sale added.');
+        audit('estate_sale_created', 'estate_sales', $id, ['title' => trim((string) ($form['title'] ?? ''))]);
         redirect('/estate-sales/' . (string) $id);
     }
 
@@ -426,6 +427,7 @@ final class EstateSalesController extends Controller
         }
 
         if ($ok > 0 && $fail === 0) {
+            audit('estate_sale_employee_assigned', 'estate_sales', $estateSaleId, ['count' => $ok]);
             flash('success', $ok === 1 ? 'Employee added to estate sale.' : ((string) $ok . ' employees added to estate sale.'));
             redirect($this->laborReturnUrl($estateSaleId));
         }
@@ -673,6 +675,7 @@ final class EstateSalesController extends Controller
         }
 
         EstateSale::update($businessId, $id, EstateSale::payloadFromForm($form), auth_user_id() ?? 0);
+        audit('estate_sale_updated', 'estate_sales', $id);
         flash('success', 'Estate sale updated.');
         redirect('/estate-sales/' . (string) $id);
     }
@@ -690,6 +693,7 @@ final class EstateSalesController extends Controller
         $businessId = current_business_id();
         $actorId = (int) (auth_user_id() ?? 0);
         if (EstateSale::softDelete($businessId, $id, $actorId)) {
+            audit('estate_sale_deleted', 'estate_sales', $id);
             flash('success', 'Estate sale removed.');
         } else {
             flash('error', 'Could not remove estate sale.');
@@ -734,6 +738,11 @@ final class EstateSalesController extends Controller
             $this->json(['ok' => false, 'error' => 'Could not load saved customer.'], 422);
             return;
         }
+
+        audit('estate_sale_customer_created', 'estate_sale_customers', $customerId, [
+            'estate_sale_id' => $estateSaleId,
+            'name' => trim(((string) ($customer['first_name'] ?? '')) . ' ' . ((string) ($customer['last_name'] ?? ''))),
+        ]);
 
         $this->json([
             'ok' => true,
@@ -862,6 +871,7 @@ final class EstateSalesController extends Controller
         $actorId = (int) (auth_user_id() ?? 0);
 
         if (EstateSale::removeCustomer($businessId, $estateSaleId, $customerId, $actorId)) {
+            audit('estate_sale_customer_removed', 'estate_sale_customers', $customerId, ['estate_sale_id' => $estateSaleId]);
             flash('success', 'Customer removed from this estate sale.');
         } else {
             flash('error', 'Could not remove customer.');
@@ -918,6 +928,11 @@ final class EstateSalesController extends Controller
             $expenseDate = $ts === false ? $expenseDate : date('m/d/Y', $ts);
         }
 
+        audit('estate_sale_expense_created', 'estate_sales', $estateSaleId, [
+            'expense_id' => $expenseId,
+            'amount' => round((float) ($expense['amount'] ?? $payload['amount']), 2),
+        ]);
+
         $this->json([
             'ok' => true,
             'message' => 'Expense added.',
@@ -947,6 +962,7 @@ final class EstateSalesController extends Controller
         $actorId = (int) (auth_user_id() ?? 0);
 
         if (EstateSale::removeExpense($businessId, $estateSaleId, $expenseId, $actorId)) {
+            audit('estate_sale_expense_removed', 'estate_sales', $estateSaleId, ['expense_id' => $expenseId]);
             flash('success', 'Expense removed.');
         } else {
             flash('error', 'Could not remove expense.');
@@ -1051,7 +1067,7 @@ final class EstateSalesController extends Controller
 
         $gross = round((float) $form['gross_amount'], 2);
 
-        Sale::create($businessId, [
+        $saleId = Sale::create($businessId, [
             'name' => $form['name'],
             'gross_amount' => $gross,
             'net_amount' => $gross,
@@ -1065,6 +1081,11 @@ final class EstateSalesController extends Controller
             'purchase_id' => null,
         ], auth_user_id() ?? 0);
 
+        audit('estate_sale_sale_created', 'sales', $saleId > 0 ? $saleId : null, [
+            'estate_sale_id' => $estateSaleId,
+            'name' => $form['name'],
+            'amount' => $gross,
+        ]);
         flash('success', 'Sale added.');
         redirect('/estate-sales/' . (string) $estateSaleId . '?tab=sales');
     }
@@ -1136,6 +1157,7 @@ final class EstateSalesController extends Controller
             'purchase_id' => null,
         ], auth_user_id() ?? 0);
 
+        audit('estate_sale_sale_updated', 'sales', $saleId, ['estate_sale_id' => $estateSaleId, 'amount' => $gross]);
         flash('success', 'Sale updated.');
         redirect('/estate-sales/' . (string) $estateSaleId . '?tab=sales');
     }

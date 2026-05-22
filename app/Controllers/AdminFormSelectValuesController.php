@@ -77,6 +77,12 @@ final class AdminFormSelectValuesController extends Controller
             $this->json(['ok' => false, 'error' => 'Option was created but could not be loaded.'], 500);
         }
 
+        audit('form_select_value_created', 'form_select_values', $id, [
+            'form_key' => $formKey,
+            'section_key' => $sectionKey,
+            'option_value' => $optionValue,
+        ]);
+
         $this->json([
             'ok' => true,
             'option' => [
@@ -123,6 +129,8 @@ final class AdminFormSelectValuesController extends Controller
             $this->json(['ok' => false, 'error' => 'Updated option was not found.'], 404);
         }
 
+        audit('form_select_value_updated', 'form_select_values', $id, ['option_value' => $optionValue]);
+
         $this->json([
             'ok' => true,
             'option' => [
@@ -149,6 +157,8 @@ final class AdminFormSelectValuesController extends Controller
         if (!$deleted) {
             $this->json(['ok' => false, 'error' => 'Unable to delete option.'], 404);
         }
+
+        audit('form_select_value_deleted', 'form_select_values', $id);
 
         $this->json(['ok' => true]);
     }

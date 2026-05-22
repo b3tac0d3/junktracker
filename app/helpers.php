@@ -771,3 +771,227 @@ function refresh_session_cookie_lifetime(int $lifetimeSeconds): void
 
     setcookie(session_name(), session_id(), $options);
 }
+
+function audit(string $action, string $entity, ?int $entityId, array $meta = []): void
+{
+    $businessId = current_business_id();
+    \App\Models\AuditLog::write(
+        $action,
+        $entity,
+        $entityId,
+        $businessId > 0 ? $businessId : null,
+        auth_user_id(),
+        $meta
+    );
+}
+
+function audit_action_label(string $action): string
+{
+    static $labels = [
+        'user_login' => 'Logged in',
+        'user_logout' => 'Logged out',
+        'client_created' => 'Client created',
+        'client_updated' => 'Client updated',
+        'client_deactivated' => 'Client deactivated',
+        'client_contact_created' => 'Client contact added',
+        'client_bolo_saved' => 'BOLO profile saved',
+        'client_bolo_deactivated' => 'BOLO profile deactivated',
+        'client_bolo_reactivated' => 'BOLO profile reactivated',
+        'job_created' => 'Job created',
+        'job_updated' => 'Job updated',
+        'job_deactivated' => 'Job deactivated',
+        'job_status_updated' => 'Job status updated',
+        'job_closeout_saved' => 'Job close-out saved',
+        'job_expense_created' => 'Job expense added',
+        'job_expense_updated' => 'Job expense updated',
+        'job_expense_deleted' => 'Job expense deleted',
+        'job_adjustment_created' => 'Job adjustment added',
+        'job_adjustment_updated' => 'Job adjustment updated',
+        'job_adjustment_deleted' => 'Job adjustment deleted',
+        'estate_sale_created' => 'Estate sale created',
+        'estate_sale_updated' => 'Estate sale updated',
+        'estate_sale_deleted' => 'Estate sale deleted',
+        'estate_sale_customer_created' => 'Estate sale customer added',
+        'estate_sale_customer_removed' => 'Estate sale customer removed',
+        'estate_sale_sale_created' => 'Estate sale transaction added',
+        'estate_sale_sale_updated' => 'Estate sale transaction updated',
+        'estate_sale_expense_created' => 'Estate sale expense added',
+        'estate_sale_expense_removed' => 'Estate sale expense removed',
+        'estate_sale_employee_assigned' => 'Employee assigned to estate sale',
+        'sale_created' => 'Sale created',
+        'sale_updated' => 'Sale updated',
+        'sale_deleted' => 'Sale deleted',
+        'expense_created' => 'Expense created',
+        'expense_updated' => 'Expense updated',
+        'expense_deleted' => 'Expense deleted',
+        'purchase_created' => 'Purchase created',
+        'purchase_updated' => 'Purchase updated',
+        'purchase_deleted' => 'Purchase deleted',
+        'task_created' => 'Task created',
+        'task_updated' => 'Task updated',
+        'task_ownership_updated' => 'Task ownership updated',
+        'event_created' => 'Event created',
+        'event_updated' => 'Event updated',
+        'event_cancelled' => 'Event cancelled',
+        'event_restored' => 'Event restored',
+        'event_moved' => 'Event rescheduled',
+        'delivery_created' => 'Delivery created',
+        'delivery_updated' => 'Delivery updated',
+        'delivery_deleted' => 'Delivery deleted',
+        'networking_contact_created' => 'Networking contact created',
+        'networking_contact_updated' => 'Networking contact updated',
+        'networking_contact_deleted' => 'Networking contact deleted',
+        'user_created' => 'User invited',
+        'user_updated' => 'User updated',
+        'user_deactivated' => 'User deactivated',
+        'user_reactivated' => 'User reactivated',
+        'user_invite_resent' => 'User invite resent',
+        'user_password_reset_sent' => 'Password reset sent',
+        'user_auto_accepted' => 'User invite auto-accepted',
+        'employee_created' => 'Employee created',
+        'employee_updated' => 'Employee updated',
+        'business_details_updated' => 'Business details updated',
+        'invoice_item_type_created' => 'Invoice item type added',
+        'invoice_item_type_updated' => 'Invoice item type updated',
+        'invoice_item_type_deleted' => 'Invoice item type removed',
+        'form_select_value_created' => 'Form option added',
+        'form_select_value_updated' => 'Form option updated',
+        'form_select_value_deleted' => 'Form option removed',
+        'time_entry_created' => 'Time entry created',
+        'time_entry_updated' => 'Time entry updated',
+        'time_entry_deleted' => 'Time entry deleted',
+        'invoice_created' => 'Invoice/estimate created',
+        'invoice_updated' => 'Invoice/estimate updated',
+        'invoice_deleted' => 'Invoice/estimate deleted',
+        'invoice_status_changed' => 'Invoice/estimate status changed',
+        'payment_created' => 'Payment added',
+        'payment_updated' => 'Payment updated',
+        'payment_deleted' => 'Payment deleted',
+        'quote_created' => 'Quote created',
+        'quote_updated' => 'Quote updated',
+        'quote_status_updated' => 'Quote status updated',
+        'quote_converted_to_job' => 'Quote converted to job',
+        'quote_converted_to_estate_sale' => 'Quote converted to estate sale',
+        'quote_converted_to_purchase' => 'Quote converted to purchase',
+        'bank_deposit_created' => 'Bank deposit recorded',
+        'bank_deposit_payment_linked' => 'Payment linked to deposit',
+        'bank_deposit_payment_unlinked' => 'Payment unlinked from deposit',
+        'estimate_portal_approved' => 'Estimate approved (client portal)',
+    ];
+
+    if (isset($labels[$action])) {
+        return $labels[$action];
+    }
+
+    return ucwords(str_replace('_', ' ', $action));
+}
+
+function audit_entity_label(string $entity): string
+{
+    static $labels = [
+        'clients' => 'Client',
+        'jobs' => 'Job',
+        'estate_sales' => 'Estate sale',
+        'estate_sale_customers' => 'Estate sale customer',
+        'sales' => 'Sale',
+        'expenses' => 'Expense',
+        'purchases' => 'Purchase',
+        'tasks' => 'Task',
+        'events' => 'Event',
+        'deliveries' => 'Delivery',
+        'networking_contacts' => 'Networking contact',
+        'users' => 'User',
+        'employees' => 'Employee',
+        'businesses' => 'Business',
+        'invoice_item_types' => 'Invoice item type',
+        'form_select_values' => 'Form option',
+        'time_entries' => 'Time entry',
+        'invoices' => 'Invoice/estimate',
+        'payments' => 'Payment',
+        'quotes' => 'Quote',
+        'bank_deposits' => 'Bank deposit',
+    ];
+
+    if (isset($labels[$entity])) {
+        return $labels[$entity];
+    }
+
+    return ucwords(str_replace('_', ' ', $entity));
+}
+
+function audit_entity_url(string $entity, ?int $entityId, array $meta = []): ?string
+{
+    if ($entityId === null || $entityId <= 0) {
+        return null;
+    }
+
+    return match ($entity) {
+        'clients' => url('/clients/' . (string) $entityId),
+        'jobs' => url('/jobs/' . (string) $entityId),
+        'estate_sales' => url('/estate-sales/' . (string) $entityId),
+        'estate_sale_customers' => (static function () use ($entityId, $meta): ?string {
+            $estateSaleId = (int) ($meta['estate_sale_id'] ?? 0);
+            return $estateSaleId > 0
+                ? url('/estate-sales/' . (string) $estateSaleId . '/customers/' . (string) $entityId)
+                : null;
+        })(),
+        'sales' => url('/sales/' . (string) $entityId),
+        'expenses' => url('/expenses/' . (string) $entityId),
+        'purchases' => url('/purchases/' . (string) $entityId),
+        'tasks' => url('/tasks/' . (string) $entityId),
+        'events' => url('/events/' . (string) $entityId),
+        'deliveries' => url('/deliveries/' . (string) $entityId),
+        'networking_contacts' => url('/networking/' . (string) $entityId),
+        'users' => url('/admin/users/' . (string) $entityId . '/edit'),
+        'employees' => url('/admin/employees/' . (string) $entityId),
+        'quotes' => url('/quotes/' . (string) $entityId),
+        'invoices' => url('/billing/' . (string) $entityId),
+        'payments' => url('/billing/payments/' . (string) $entityId),
+        'bank_deposits' => url('/billing/deposits/' . (string) $entityId),
+        'time_entries' => (static function () use ($meta): ?string {
+            $jobId = (int) ($meta['job_id'] ?? 0);
+            return $jobId > 0 ? url('/jobs/' . (string) $jobId) : url('/time-tracking');
+        })(),
+        default => null,
+    };
+}
+
+function audit_user_display_name(?array $row): string
+{
+    if ($row === null) {
+        return 'System';
+    }
+
+    $first = trim((string) ($row['user_first_name'] ?? $row['first_name'] ?? ''));
+    $last = trim((string) ($row['user_last_name'] ?? $row['last_name'] ?? ''));
+    $full = trim($first . ' ' . $last);
+    if ($full !== '') {
+        return $full;
+    }
+
+    $email = trim((string) ($row['user_email'] ?? $row['email'] ?? ''));
+    if ($email !== '') {
+        return $email;
+    }
+
+    $userId = (int) ($row['user_id'] ?? $row['id'] ?? 0);
+    return $userId > 0 ? ('User #' . (string) $userId) : 'System';
+}
+
+function audit_metadata_summary(array $meta): string
+{
+    if ($meta === []) {
+        return '';
+    }
+
+    $parts = [];
+    foreach ($meta as $key => $value) {
+        if ($value === null || $value === '' || is_array($value)) {
+            continue;
+        }
+        $label = ucwords(str_replace('_', ' ', (string) $key));
+        $parts[] = $label . ': ' . (string) $value;
+    }
+
+    return implode(' · ', $parts);
+}

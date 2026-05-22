@@ -114,6 +114,7 @@ final class TasksController extends Controller
         }
 
         $taskId = Task::create($businessId, $this->payloadForSave($form), auth_user_id() ?? 0);
+        audit('task_created', 'tasks', $taskId, ['title' => trim((string) ($form['title'] ?? ''))]);
         flash('success', 'Task created.');
         redirect('/tasks/' . (string) $taskId);
     }
@@ -395,6 +396,7 @@ final class TasksController extends Controller
         }
 
         Task::update($businessId, $taskId, $this->payloadForSave($form), auth_user_id() ?? 0);
+        audit('task_updated', 'tasks', $taskId);
         flash('success', 'Task updated.');
         redirect('/tasks/' . (string) $taskId);
     }
@@ -576,6 +578,7 @@ final class TasksController extends Controller
         }
 
         Task::setOwner($businessId, $taskId, $actorId, $actorId);
+        audit('task_ownership_updated', 'tasks', $taskId);
         flash('success', 'Task ownership updated.');
         redirect('/tasks/' . (string) $taskId);
     }
