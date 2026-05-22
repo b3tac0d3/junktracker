@@ -1,0 +1,168 @@
+diff --git a/app/Views/home/index.php b/app/Views/home/index.php
+index 7f7c946..434d3ca 100644
+--- a/app/Views/home/index.php
++++ b/app/Views/home/index.php
+@@ -100,42 +100,42 @@ $employeeDisplayName = static function (array $row): string {
+ </div>
+ 
+ <div class="kpi-grid">
+-    <a class="kpi-card kpi-card-link" href="<?= e(url('/sales')) ?>">
++    <a class="kpi-card kpi-card-link kpi-card--sales" href="<?= e(url('/sales')) ?>">
+         <span>Sales MTD / YTD</span>
+         <strong>$<?= e(number_format((float) ($sales['mtd_gross'] ?? 0), 2)) ?> / $<?= e(number_format((float) ($sales['ytd_gross'] ?? 0), 2)) ?></strong>
+         <small>Net MTD $<?= e(number_format((float) ($sales['mtd_net'] ?? 0), 2)) ?> · Net YTD $<?= e(number_format((float) ($sales['ytd_net'] ?? 0), 2)) ?> · excludes estate on-site</small>
+     </a>
+-    <a class="kpi-card kpi-card-link" href="<?= e(url('/estate-sale-records')) ?>">
++    <a class="kpi-card kpi-card-link kpi-card--estate-sales" href="<?= e(url('/estate-sale-records')) ?>">
+         <span>Estate Sales MTD / YTD</span>
+         <strong>$<?= e(number_format((float) ($estateSales['mtd_gross'] ?? 0), 2)) ?> / $<?= e(number_format((float) ($estateSales['ytd_gross'] ?? 0), 2)) ?></strong>
+         <small>Net MTD $<?= e(number_format((float) ($estateSales['mtd_net'] ?? 0), 2)) ?> · Net YTD $<?= e(number_format((float) ($estateSales['ytd_net'] ?? 0), 2)) ?> · <?= e((string) ((int) ($estateSales['mtd_count'] ?? 0))) ?> MTD record(s)</small>
+     </a>
+-    <a class="kpi-card kpi-card-link" href="<?= e(url('/reports')) ?>">
++    <a class="kpi-card kpi-card-link kpi-card--service" href="<?= e(url('/reports')) ?>">
+         <span>Service Paid MTD / YTD</span>
+         <strong>$<?= e(number_format((float) ($service['mtd_gross'] ?? 0), 2)) ?> / $<?= e(number_format((float) ($service['ytd_gross'] ?? 0), 2)) ?></strong>
+         <small>Received payments (not invoiced totals)</small>
+     </a>
+-    <a class="kpi-card kpi-card-link" href="<?= e(url('/reports')) ?>">
++    <a class="kpi-card kpi-card-link kpi-card--income" href="<?= e(url('/reports')) ?>">
+         <span>Total Income MTD / YTD</span>
+         <strong>$<?= e(number_format($totalMtdGross, 2)) ?> / $<?= e(number_format($totalYtdGross, 2)) ?></strong>
+         <small>Net MTD $<?= e(number_format($totalMtdNet, 2)) ?> · Net YTD $<?= e(number_format($totalYtdNet, 2)) ?> · sales + estate + service, less general expenses</small>
+     </a>
+-    <a class="kpi-card kpi-card-link" href="<?= e(url('/purchases')) ?>">
++    <a class="kpi-card kpi-card-link kpi-card--purchases" href="<?= e(url('/purchases')) ?>">
+         <span>Purchases MTD / YTD</span>
+         <strong>$<?= e(number_format((float) ($purchasesSummary['mtd_total'] ?? 0), 2)) ?> / $<?= e(number_format((float) ($purchasesSummary['ytd_total'] ?? 0), 2)) ?></strong>
+         <small>MTD <?= e((string) ((int) ($purchasesSummary['mtd_count'] ?? 0))) ?> · YTD <?= e((string) ((int) ($purchasesSummary['ytd_count'] ?? 0))) ?></small>
+     </a>
+-    <a class="kpi-card kpi-card-link" href="<?= e(url('/expenses')) ?>">
++    <a class="kpi-card kpi-card-link kpi-card--expenses" href="<?= e(url('/expenses')) ?>">
+         <span>Expenses MTD / YTD</span>
+         <strong>$<?= e(number_format((float) ($expenses['mtd_total'] ?? 0), 2)) ?> / $<?= e(number_format((float) ($expenses['ytd_total'] ?? 0), 2)) ?></strong>
+         <small>All recorded expenses</small>
+     </a>
+-    <a class="kpi-card kpi-card-link" href="<?= e(url('/billing')) ?>">
++    <a class="kpi-card kpi-card-link kpi-card--receivables" href="<?= e(url('/billing')) ?>">
+         <span>Payments Due</span>
+         <strong>$<?= e(number_format((float) ($receivables['payments_due'] ?? 0), 2)) ?></strong>
+         <small><?= e((string) ((int) ($receivables['open_invoices'] ?? 0))) ?> open invoice(s)</small>
+     </a>
+-    <a class="kpi-card kpi-card-link kpi-card-full-width" href="<?= e(url('/reports')) ?>">
++    <a class="kpi-card kpi-card-link kpi-card--profit" href="<?= e(url('/reports')) ?>">
+         <span>Profit YTD</span>
+         <strong>$<?= e(number_format($profitYtd, 2)) ?><span class="kpi-card-subamount"> ($<?= e(number_format($ytdNetMinusPurchases, 2)) ?>)</span></strong>
+         <small>Net YTD less general expenses · After purchase costs (YTD) in parentheses</small>
+diff --git a/config/app.php b/config/app.php
+index 196c9af..2db5ea0 100644
+--- a/config/app.php
++++ b/config/app.php
+@@ -4,7 +4,7 @@ declare(strict_types=1);
+ 
+ return [
+     'name' => 'JunkTracker',
+-    'version' => '1.9.2.2-beta',
++    'version' => '1.9.2.3-beta',
+     'env' => 'local',
+     'url' => 'http://localhost/junktracker',
+     'timezone' => 'America/New_York',
+diff --git a/docs/deploy-checklist.md b/docs/deploy-checklist.md
+index 4423fda..c4fa497 100644
+--- a/docs/deploy-checklist.md
++++ b/docs/deploy-checklist.md
+@@ -2,8 +2,8 @@
+ 
+ Short list to keep releases predictable. Pair with delta bundles from `scripts/build-live-release.sh` and version tags.
+ 
+-**Latest release notes:** [releases/live-1.9.2.2-beta.md](./releases/live-1.9.2.2-beta.md) (Fix dashboard sales KPIs and profit YTD math).  
+-**Earlier:** [releases/live-1.9.2.1-beta.md](./releases/live-1.9.2.1-beta.md), [releases/live-1.9.2-beta.md](./releases/live-1.9.2-beta.md), [releases/live-1.9.1-beta.md](./releases/live-1.9.1-beta.md), [releases/live-1.9.0.1-beta.md](./releases/live-1.9.0.1-beta.md), [releases/live-1.9.0-beta.md](./releases/live-1.9.0-beta.md), [releases/live-1.8.3.3-beta.md](./releases/live-1.8.3.3-beta.md), [releases/live-1.8.3.2-beta.md](./releases/live-1.8.3.2-beta.md), [releases/live-1.8.3.1-beta.md](./releases/live-1.8.3.1-beta.md), [releases/live-1.8.3-beta.md](./releases/live-1.8.3-beta.md), [releases/live-1.8.2.3-beta.md](./releases/live-1.8.2.3-beta.md), [releases/live-1.8.2.2-beta.md](./releases/live-1.8.2.2-beta.md), [releases/live-1.8.2.1-beta.md](./releases/live-1.8.2.1-beta.md), [releases/live-1.8.2-beta.md](./releases/live-1.8.2-beta.md), [releases/live-1.8.1-beta.md](./releases/live-1.8.1-beta.md), [releases/live-1.8.0-beta.md](./releases/live-1.8.0-beta.md), [releases/live-1.7.2.md](./releases/live-1.7.2.md), [releases/live-1.7.0.md](./releases/live-1.7.0.md), [releases/live-1.6.4-beta.md](./releases/live-1.6.4-beta.md), [releases/live-1.6.3-beta.md](./releases/live-1.6.3-beta.md), [releases/live-1.6.2-beta.md](./releases/live-1.6.2-beta.md), [releases/live-1.6.1-beta.md](./releases/live-1.6.1-beta.md), [releases/live-1.6.0.md](./releases/live-1.6.0.md), [releases/live-1.5.3.md](./releases/live-1.5.3.md).
++**Latest release notes:** [releases/live-1.9.2.3-beta.md](./releases/live-1.9.2.3-beta.md) (Dashboard KPI card colors and profit card sizing).  
++**Earlier:** [releases/live-1.9.2.2-beta.md](./releases/live-1.9.2.2-beta.md), [releases/live-1.9.2.1-beta.md](./releases/live-1.9.2.1-beta.md), [releases/live-1.9.2-beta.md](./releases/live-1.9.2-beta.md), [releases/live-1.9.1-beta.md](./releases/live-1.9.1-beta.md), [releases/live-1.9.0.1-beta.md](./releases/live-1.9.0.1-beta.md), [releases/live-1.9.0-beta.md](./releases/live-1.9.0-beta.md), [releases/live-1.8.3.3-beta.md](./releases/live-1.8.3.3-beta.md), [releases/live-1.8.3.2-beta.md](./releases/live-1.8.3.2-beta.md), [releases/live-1.8.3.1-beta.md](./releases/live-1.8.3.1-beta.md), [releases/live-1.8.3-beta.md](./releases/live-1.8.3-beta.md), [releases/live-1.8.2.3-beta.md](./releases/live-1.8.2.3-beta.md), [releases/live-1.8.2.2-beta.md](./releases/live-1.8.2.2-beta.md), [releases/live-1.8.2.1-beta.md](./releases/live-1.8.2.1-beta.md), [releases/live-1.8.2-beta.md](./releases/live-1.8.2-beta.md), [releases/live-1.8.1-beta.md](./releases/live-1.8.1-beta.md), [releases/live-1.8.0-beta.md](./releases/live-1.8.0-beta.md), [releases/live-1.7.2.md](./releases/live-1.7.2.md), [releases/live-1.7.0.md](./releases/live-1.7.0.md), [releases/live-1.6.4-beta.md](./releases/live-1.6.4-beta.md), [releases/live-1.6.3-beta.md](./releases/live-1.6.3-beta.md), [releases/live-1.6.2-beta.md](./releases/live-1.6.2-beta.md), [releases/live-1.6.1-beta.md](./releases/live-1.6.1-beta.md), [releases/live-1.6.0.md](./releases/live-1.6.0.md), [releases/live-1.5.3.md](./releases/live-1.5.3.md).
+ 
+ ### Beta-live naming convention (standard)
+ 
+diff --git a/docs/releases/live-1.9.2.3-beta.md b/docs/releases/live-1.9.2.3-beta.md
+new file mode 100644
+index 0000000..ff6bc1a
+--- /dev/null
++++ b/docs/releases/live-1.9.2.3-beta.md
+@@ -0,0 +1,33 @@
++# Live Release 1.9.2.3-beta
++
++Date: 2026-05-21
++
++## Highlights
++
++- **Dashboard:** Payments Due and Profit YTD KPI cards get distinct colors (cyan and green) instead of dark navy.
++- **Dashboard:** Profit YTD card matches the same grid size as other KPI cards (no longer full-width).
++- **Dashboard:** Semantic color classes for all eight KPI cards so colors stay correct after Estate Sales was added.
++
++## Changed files
++
++- `app/Views/home/index.php`
++- `public/assets/css/jt-theme.css`
++- `config/app.php` (version `1.9.2.3-beta`)
++- `docs/deploy-checklist.md`, `docs/releases/live-1.9.2.3-beta.md`
++- `patches/live-1.9.2.3-kpi-colors.patch` (optional hotfix apply)
++
++## Database migrations in this release
++
++No new database migrations are required for 1.9.2.3-beta.
++
++## Patch-only deploy (FTP / manual upload)
++
++From the project root:
++
++`patch -p1 < patches/live-1.9.2.3-kpi-colors.patch`
++
++Or copy the files listed above from this bundle’s `upload/` tree.
++
++## Ops notes
++
++- Smoke test: Dashboard — confirm all KPI cards show correct colors; Profit YTD is same width as Payments Due in the grid.
+diff --git a/public/assets/css/jt-theme.css b/public/assets/css/jt-theme.css
+index db0ad92..e1ab68e 100644
+--- a/public/assets/css/jt-theme.css
++++ b/public/assets/css/jt-theme.css
+@@ -20,10 +20,12 @@
+    * Order: Sales → Service → Total income → Purchases → Expenses → Profit YTD
+    */
+   --jt-kpi-sales: #1d4ed8;
++  --jt-kpi-estate-sales: #7e22ce;
+   --jt-kpi-service: #15803d;
+   --jt-kpi-income: #0f766e;
+   --jt-kpi-purchases: #c2410c;
+   --jt-kpi-expenses: #9d174d;
++  --jt-kpi-receivables: #0e7490;
+   --jt-kpi-profit: #4d7c0f;
+ 
+   /* Grouped bar charts (lighter fill, KPI-hue stroke) */
+@@ -227,12 +229,22 @@ h1, h2, h3 {
+   box-shadow: 0 10px 22px rgba(15, 23, 42, 0.45);
+ }
+ 
+-.kpi-card:nth-child(1) { background-color: var(--jt-kpi-sales); }
+-.kpi-card:nth-child(2) { background-color: var(--jt-kpi-service); }
+-.kpi-card:nth-child(3) { background-color: var(--jt-kpi-income); }
+-.kpi-card:nth-child(4) { background-color: var(--jt-kpi-purchases); }
+-.kpi-card:nth-child(5) { background-color: var(--jt-kpi-expenses); }
+-.kpi-card:nth-child(6) { background-color: var(--jt-kpi-profit); }
++.kpi-card:nth-child(1),
++.kpi-card--sales { background-color: var(--jt-kpi-sales); }
++.kpi-card:nth-child(2),
++.kpi-card--estate-sales { background-color: var(--jt-kpi-estate-sales); }
++.kpi-card:nth-child(3),
++.kpi-card--service { background-color: var(--jt-kpi-service); }
++.kpi-card:nth-child(4),
++.kpi-card--income { background-color: var(--jt-kpi-income); }
++.kpi-card:nth-child(5),
++.kpi-card--purchases { background-color: var(--jt-kpi-purchases); }
++.kpi-card:nth-child(6),
++.kpi-card--expenses { background-color: var(--jt-kpi-expenses); }
++.kpi-card:nth-child(7),
++.kpi-card--receivables { background-color: var(--jt-kpi-receivables); }
++.kpi-card:nth-child(8),
++.kpi-card--profit { background-color: var(--jt-kpi-profit); }
+ 
+ .kpi-card span {
+   font-size: .8rem;

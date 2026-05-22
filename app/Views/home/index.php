@@ -100,42 +100,42 @@ $employeeDisplayName = static function (array $row): string {
 </div>
 
 <div class="kpi-grid">
-    <a class="kpi-card kpi-card-link" href="<?= e(url('/sales')) ?>">
+    <a class="kpi-card kpi-card-link kpi-card--sales" href="<?= e(url('/sales')) ?>">
         <span>Sales MTD / YTD</span>
         <strong>$<?= e(number_format((float) ($sales['mtd_gross'] ?? 0), 2)) ?> / $<?= e(number_format((float) ($sales['ytd_gross'] ?? 0), 2)) ?></strong>
         <small>Net MTD $<?= e(number_format((float) ($sales['mtd_net'] ?? 0), 2)) ?> · Net YTD $<?= e(number_format((float) ($sales['ytd_net'] ?? 0), 2)) ?> · excludes estate on-site</small>
     </a>
-    <a class="kpi-card kpi-card-link" href="<?= e(url('/estate-sale-records')) ?>">
+    <a class="kpi-card kpi-card-link kpi-card--estate-sales" href="<?= e(url('/estate-sale-records')) ?>">
         <span>Estate Sales MTD / YTD</span>
         <strong>$<?= e(number_format((float) ($estateSales['mtd_gross'] ?? 0), 2)) ?> / $<?= e(number_format((float) ($estateSales['ytd_gross'] ?? 0), 2)) ?></strong>
         <small>Net MTD $<?= e(number_format((float) ($estateSales['mtd_net'] ?? 0), 2)) ?> · Net YTD $<?= e(number_format((float) ($estateSales['ytd_net'] ?? 0), 2)) ?> · <?= e((string) ((int) ($estateSales['mtd_count'] ?? 0))) ?> MTD record(s)</small>
     </a>
-    <a class="kpi-card kpi-card-link" href="<?= e(url('/reports')) ?>">
+    <a class="kpi-card kpi-card-link kpi-card--service" href="<?= e(url('/reports')) ?>">
         <span>Service Paid MTD / YTD</span>
         <strong>$<?= e(number_format((float) ($service['mtd_gross'] ?? 0), 2)) ?> / $<?= e(number_format((float) ($service['ytd_gross'] ?? 0), 2)) ?></strong>
         <small>Received payments (not invoiced totals)</small>
     </a>
-    <a class="kpi-card kpi-card-link" href="<?= e(url('/reports')) ?>">
+    <a class="kpi-card kpi-card-link kpi-card--income" href="<?= e(url('/reports')) ?>">
         <span>Total Income MTD / YTD</span>
         <strong>$<?= e(number_format($totalMtdGross, 2)) ?> / $<?= e(number_format($totalYtdGross, 2)) ?></strong>
         <small>Net MTD $<?= e(number_format($totalMtdNet, 2)) ?> · Net YTD $<?= e(number_format($totalYtdNet, 2)) ?> · sales + estate + service, less general expenses</small>
     </a>
-    <a class="kpi-card kpi-card-link" href="<?= e(url('/purchases')) ?>">
+    <a class="kpi-card kpi-card-link kpi-card--purchases" href="<?= e(url('/purchases')) ?>">
         <span>Purchases MTD / YTD</span>
         <strong>$<?= e(number_format((float) ($purchasesSummary['mtd_total'] ?? 0), 2)) ?> / $<?= e(number_format((float) ($purchasesSummary['ytd_total'] ?? 0), 2)) ?></strong>
         <small>MTD <?= e((string) ((int) ($purchasesSummary['mtd_count'] ?? 0))) ?> · YTD <?= e((string) ((int) ($purchasesSummary['ytd_count'] ?? 0))) ?></small>
     </a>
-    <a class="kpi-card kpi-card-link" href="<?= e(url('/expenses')) ?>">
+    <a class="kpi-card kpi-card-link kpi-card--expenses" href="<?= e(url('/expenses')) ?>">
         <span>Expenses MTD / YTD</span>
         <strong>$<?= e(number_format((float) ($expenses['mtd_total'] ?? 0), 2)) ?> / $<?= e(number_format((float) ($expenses['ytd_total'] ?? 0), 2)) ?></strong>
         <small>All recorded expenses</small>
     </a>
-    <a class="kpi-card kpi-card-link" href="<?= e(url('/billing')) ?>">
+    <a class="kpi-card kpi-card-link kpi-card--receivables" href="<?= e(url('/billing')) ?>">
         <span>Payments Due</span>
         <strong>$<?= e(number_format((float) ($receivables['payments_due'] ?? 0), 2)) ?></strong>
         <small><?= e((string) ((int) ($receivables['open_invoices'] ?? 0))) ?> open invoice(s)</small>
     </a>
-    <a class="kpi-card kpi-card-link kpi-card-full-width" href="<?= e(url('/reports')) ?>">
+    <a class="kpi-card kpi-card-link kpi-card--profit" href="<?= e(url('/reports')) ?>">
         <span>Profit YTD</span>
         <strong>$<?= e(number_format($profitYtd, 2)) ?><span class="kpi-card-subamount"> ($<?= e(number_format($ytdNetMinusPurchases, 2)) ?>)</span></strong>
         <small>Net YTD less general expenses · After purchase costs (YTD) in parentheses</small>

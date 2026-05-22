@@ -20,10 +20,12 @@
    * Order: Sales → Service → Total income → Purchases → Expenses → Profit YTD
    */
   --jt-kpi-sales: #1d4ed8;
+  --jt-kpi-estate-sales: #7e22ce;
   --jt-kpi-service: #15803d;
   --jt-kpi-income: #0f766e;
   --jt-kpi-purchases: #c2410c;
   --jt-kpi-expenses: #9d174d;
+  --jt-kpi-receivables: #0e7490;
   --jt-kpi-profit: #4d7c0f;
 
   /* Grouped bar charts (lighter fill, KPI-hue stroke) */
@@ -227,12 +229,22 @@ h1, h2, h3 {
   box-shadow: 0 10px 22px rgba(15, 23, 42, 0.45);
 }
 
-.kpi-card:nth-child(1) { background-color: var(--jt-kpi-sales); }
-.kpi-card:nth-child(2) { background-color: var(--jt-kpi-service); }
-.kpi-card:nth-child(3) { background-color: var(--jt-kpi-income); }
-.kpi-card:nth-child(4) { background-color: var(--jt-kpi-purchases); }
-.kpi-card:nth-child(5) { background-color: var(--jt-kpi-expenses); }
-.kpi-card:nth-child(6) { background-color: var(--jt-kpi-profit); }
+.kpi-card:nth-child(1),
+.kpi-card--sales { background-color: var(--jt-kpi-sales); }
+.kpi-card:nth-child(2),
+.kpi-card--estate-sales { background-color: var(--jt-kpi-estate-sales); }
+.kpi-card:nth-child(3),
+.kpi-card--service { background-color: var(--jt-kpi-service); }
+.kpi-card:nth-child(4),
+.kpi-card--income { background-color: var(--jt-kpi-income); }
+.kpi-card:nth-child(5),
+.kpi-card--purchases { background-color: var(--jt-kpi-purchases); }
+.kpi-card:nth-child(6),
+.kpi-card--expenses { background-color: var(--jt-kpi-expenses); }
+.kpi-card:nth-child(7),
+.kpi-card--receivables { background-color: var(--jt-kpi-receivables); }
+.kpi-card:nth-child(8),
+.kpi-card--profit { background-color: var(--jt-kpi-profit); }
 
 .kpi-card span {
   font-size: .8rem;
