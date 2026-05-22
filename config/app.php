@@ -26,7 +26,7 @@ if (!$isLocalHost && $host !== '') {
 
 $config = [
     'name' => 'JunkTracker',
-    'version' => '1.9.4.1-beta',
+    'version' => '1.9.4.2-beta',
     // Beta-live deploys run on real hostnames: treat as production (mail, etc.). Localhost stays dev.
     'env' => $isLocalHost ? 'local' : 'production',
     'url' => $appUrl,

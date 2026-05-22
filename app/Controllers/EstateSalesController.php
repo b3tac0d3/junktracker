@@ -1058,7 +1058,7 @@ final class EstateSalesController extends Controller
             'sale_type' => EstateSale::ON_SITE_SALE_TYPE,
             'sale_date' => $this->saleDateToDatabase($form['sale_date']),
             'estate_sale_id' => $estateSaleId,
-            'estate_sale_customer_id' => (int) $form['estate_sale_customer_id'],
+            'estate_sale_customer_id' => ((int) $form['estate_sale_customer_id']) > 0 ? (int) $form['estate_sale_customer_id'] : null,
             'notes' => $form['notes'],
             'client_id' => null,
             'job_id' => null,
@@ -1129,7 +1129,7 @@ final class EstateSalesController extends Controller
             'sale_type' => EstateSale::ON_SITE_SALE_TYPE,
             'sale_date' => $this->saleDateToDatabase($form['sale_date']),
             'estate_sale_id' => $estateSaleId,
-            'estate_sale_customer_id' => (int) $form['estate_sale_customer_id'],
+            'estate_sale_customer_id' => ((int) $form['estate_sale_customer_id']) > 0 ? (int) $form['estate_sale_customer_id'] : null,
             'notes' => $form['notes'],
             'client_id' => null,
             'job_id' => null,
@@ -1295,9 +1295,7 @@ final class EstateSalesController extends Controller
         $errors = [];
 
         $customerId = (int) $form['estate_sale_customer_id'];
-        if ($customerId <= 0) {
-            $errors['estate_sale_customer_id'] = 'Select a customer from this estate sale.';
-        } elseif (EstateSale::findCustomerForSale($businessId, $estateSaleId, $customerId) === null) {
+        if ($customerId > 0 && EstateSale::findCustomerForSale($businessId, $estateSaleId, $customerId) === null) {
             $errors['estate_sale_customer_id'] = 'Selected customer was not found for this estate sale.';
         }
 

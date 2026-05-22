@@ -75,7 +75,7 @@ $hasError = static function (string $field) use ($errors): bool {
             </div>
 
             <div class="col-12 col-lg-8">
-                <label class="form-label fw-semibold" for="estate-sale-customer-search">Customer</label>
+                <label class="form-label fw-semibold" for="estate-sale-customer-search">Customer <span class="text-muted fw-normal">(recommended)</span></label>
                 <div class="position-relative client-autosuggest-wrap">
                     <input type="hidden" id="estate-sale-customer-id" name="estate_sale_customer_id" value="<?= e((string) ($form['estate_sale_customer_id'] ?? '')) ?>" />
                     <input type="hidden" id="estate-sale-customer-name" name="estate_sale_customer_name" value="<?= e((string) ($form['estate_sale_customer_name'] ?? '')) ?>" />
@@ -90,7 +90,7 @@ $hasError = static function (string $field) use ($errors): bool {
                     />
                     <div id="estate-sale-customer-suggestions" class="client-suggestions d-none" role="listbox" aria-label="Customer suggestions"></div>
                 </div>
-                <div class="form-text">Only customers registered at this estate sale are shown.</div>
+                <div class="form-text">Link a customer when you know who bought the item. Leave blank for walk-up or unknown buyers.</div>
                 <?php if ($hasError('estate_sale_customer_id')): ?><div class="invalid-feedback d-block"><?= e($fieldError('estate_sale_customer_id')) ?></div><?php endif; ?>
             </div>
 
