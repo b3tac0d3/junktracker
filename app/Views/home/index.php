@@ -13,9 +13,9 @@ $lists = is_array($summary['lists'] ?? null) ? $summary['lists'] : [];
 
 $totalMtdGross = (float) ($sales['mtd_gross'] ?? 0) + (float) ($estateSales['mtd_gross'] ?? 0) + (float) ($service['mtd_gross'] ?? 0);
 $totalYtdGross = (float) ($sales['ytd_gross'] ?? 0) + (float) ($estateSales['ytd_gross'] ?? 0) + (float) ($service['ytd_gross'] ?? 0);
-$totalMtdNet = (float) ($sales['mtd_net'] ?? 0) + (float) ($estateSales['mtd_net'] ?? 0) + (float) ($service['mtd_net'] ?? 0);
-$totalYtdNet = (float) ($sales['ytd_net'] ?? 0) + (float) ($estateSales['ytd_net'] ?? 0) + (float) ($service['ytd_net'] ?? 0);
-$profitYtd = $totalYtdNet - (float) ($expenses['ytd_total'] ?? 0);
+$totalMtdNet = (float) ($summary['mtd_overall_net'] ?? 0);
+$totalYtdNet = (float) ($summary['ytd_overall_net'] ?? 0);
+$profitYtd = $totalYtdNet;
 $ytdNetMinusPurchases = (float) ($summary['ytd_net_minus_purchases'] ?? 0);
 
 $dispatchJobs = is_array($lists['dispatch_jobs'] ?? null) ? $lists['dispatch_jobs'] : [];
@@ -118,7 +118,7 @@ $employeeDisplayName = static function (array $row): string {
     <a class="kpi-card kpi-card-link" href="<?= e(url('/reports')) ?>">
         <span>Total Income MTD / YTD</span>
         <strong>$<?= e(number_format($totalMtdGross, 2)) ?> / $<?= e(number_format($totalYtdGross, 2)) ?></strong>
-        <small>Net MTD $<?= e(number_format($totalMtdNet, 2)) ?> · Net YTD $<?= e(number_format($totalYtdNet, 2)) ?> · sales + estate + service</small>
+        <small>Net MTD $<?= e(number_format($totalMtdNet, 2)) ?> · Net YTD $<?= e(number_format($totalYtdNet, 2)) ?> · sales + estate + service, less general expenses</small>
     </a>
     <a class="kpi-card kpi-card-link" href="<?= e(url('/purchases')) ?>">
         <span>Purchases MTD / YTD</span>
@@ -138,7 +138,7 @@ $employeeDisplayName = static function (array $row): string {
     <a class="kpi-card kpi-card-link kpi-card-full-width" href="<?= e(url('/reports')) ?>">
         <span>Profit YTD</span>
         <strong>$<?= e(number_format($profitYtd, 2)) ?><span class="kpi-card-subamount"> ($<?= e(number_format($ytdNetMinusPurchases, 2)) ?>)</span></strong>
-        <small>Net YTD less expenses · After purchase costs (YTD) in parentheses</small>
+        <small>Net YTD less general expenses · After purchase costs (YTD) in parentheses</small>
     </a>
 </div>
 

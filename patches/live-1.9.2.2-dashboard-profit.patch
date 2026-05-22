@@ -1,0 +1,193 @@
+diff --git a/app/Models/DashboardSummary.php b/app/Models/DashboardSummary.php
+index 70730cf..f5cfe6c 100644
+--- a/app/Models/DashboardSummary.php
++++ b/app/Models/DashboardSummary.php
+@@ -21,7 +21,10 @@ final class DashboardSummary
+ 
+         $ytdFrom = date('Y-01-01');
+         $ytdTo = date('Y-m-d');
++        $mtdFrom = date('Y-m-01');
++        $mtdTo = date('Y-m-d');
+         $ytdIncome = ReportSummary::build($businessId, $ytdFrom, $ytdTo);
++        $mtdIncome = ReportSummary::build($businessId, $mtdFrom, $mtdTo);
+ 
+         $payload = [
+             'sales' => self::salesSummary($businessId),
+@@ -30,6 +33,8 @@ final class DashboardSummary
+             'receivables' => self::receivablesSummary($businessId),
+             'expenses' => self::expensesSummary($businessId),
+             'purchases' => self::purchasesSummary($businessId),
++            'mtd_overall_net' => round((float) ($mtdIncome['overall']['net'] ?? 0), 2),
++            'ytd_overall_net' => round((float) ($ytdIncome['overall']['net'] ?? 0), 2),
+             'ytd_net_minus_purchases' => round((float) ($ytdIncome['overall']['net_minus_purchases'] ?? 0), 2),
+             'jobs' => self::jobsSummary($businessId),
+             'tasks' => self::tasksSummary($businessId, $ownerUserId),
+@@ -62,12 +67,31 @@ final class DashboardSummary
+ 
+     private static function salesSummary(int $businessId): array
+     {
+-        return Sale::summary($businessId, Sale::ESTATE_SCOPE_GENERAL);
++        return self::normalizeSaleSummary(Sale::summary($businessId, Sale::ESTATE_SCOPE_GENERAL));
+     }
+ 
+     private static function estateSalesSummary(int $businessId): array
+     {
+-        return Sale::summary($businessId, Sale::ESTATE_SCOPE_ESTATE_ONLY);
++        return self::normalizeSaleSummary(Sale::summary($businessId, Sale::ESTATE_SCOPE_ESTATE_ONLY));
++    }
++
++    /**
++     * Dashboard KPI cards expect mtd_gross/ytd_gross keys; Sale::summary returns gross_mtd/gross_ytd.
++     *
++     * @param array<string, mixed> $summary
++     * @return array<string, float|int>
++     */
++    private static function normalizeSaleSummary(array $summary): array
++    {
++        return [
++            'count' => (int) ($summary['count'] ?? 0),
++            'mtd_count' => (int) ($summary['mtd_count'] ?? 0),
++            'ytd_count' => (int) ($summary['ytd_count'] ?? 0),
++            'mtd_gross' => (float) ($summary['gross_mtd'] ?? $summary['mtd_gross'] ?? 0),
++            'mtd_net' => (float) ($summary['net_mtd'] ?? $summary['mtd_net'] ?? 0),
++            'ytd_gross' => (float) ($summary['gross_ytd'] ?? $summary['ytd_gross'] ?? 0),
++            'ytd_net' => (float) ($summary['net_ytd'] ?? $summary['ytd_net'] ?? 0),
++        ];
+     }
+ 
+     private static function serviceSummary(int $businessId): array
+diff --git a/app/Models/Sale.php b/app/Models/Sale.php
+index a5bd464..af8e650 100644
+--- a/app/Models/Sale.php
++++ b/app/Models/Sale.php
+@@ -434,7 +434,7 @@ final class Sale
+         $netSql = SchemaInspector::hasColumn('sales', 'net_amount')
+             ? 'COALESCE(s.net_amount, 0)'
+             : $grossSql;
+-        $dateSql = SchemaInspector::hasColumn('sales', 'sale_date') ? 's.sale_date' : 'DATE(s.created_at)';
++        $filterDateSql = self::saleFilterDateExpr('s');
+ 
+         $where = [];
+         $where[] = SchemaInspector::hasColumn('sales', 'business_id') ? 's.business_id = :business_id' : '1=1';
+@@ -443,12 +443,12 @@ final class Sale
+ 
+         $sql = "SELECT
+                     COUNT(*) AS total_count,
+-                    SUM(CASE WHEN {$dateSql} >= DATE_FORMAT(CURDATE(), '%Y-%m-01') AND {$dateSql} <= CURDATE() THEN 1 ELSE 0 END) AS mtd_count,
+-                    SUM(CASE WHEN YEAR({$dateSql}) = YEAR(CURDATE()) AND {$dateSql} <= CURDATE() THEN 1 ELSE 0 END) AS ytd_count,
+-                    SUM(CASE WHEN {$dateSql} >= DATE_FORMAT(CURDATE(), '%Y-%m-01') AND {$dateSql} <= CURDATE() THEN {$grossSql} ELSE 0 END) AS gross_mtd,
+-                    SUM(CASE WHEN {$dateSql} >= DATE_FORMAT(CURDATE(), '%Y-%m-01') AND {$dateSql} <= CURDATE() THEN {$netSql} ELSE 0 END) AS net_mtd,
+-                    SUM(CASE WHEN YEAR({$dateSql}) = YEAR(CURDATE()) AND {$dateSql} <= CURDATE() THEN {$grossSql} ELSE 0 END) AS gross_ytd,
+-                    SUM(CASE WHEN YEAR({$dateSql}) = YEAR(CURDATE()) AND {$dateSql} <= CURDATE() THEN {$netSql} ELSE 0 END) AS net_ytd
++                    SUM(CASE WHEN {$filterDateSql} >= DATE_FORMAT(CURDATE(), '%Y-%m-01') AND {$filterDateSql} <= CURDATE() THEN 1 ELSE 0 END) AS mtd_count,
++                    SUM(CASE WHEN YEAR({$filterDateSql}) = YEAR(CURDATE()) AND {$filterDateSql} <= CURDATE() THEN 1 ELSE 0 END) AS ytd_count,
++                    SUM(CASE WHEN {$filterDateSql} >= DATE_FORMAT(CURDATE(), '%Y-%m-01') AND {$filterDateSql} <= CURDATE() THEN {$grossSql} ELSE 0 END) AS gross_mtd,
++                    SUM(CASE WHEN {$filterDateSql} >= DATE_FORMAT(CURDATE(), '%Y-%m-01') AND {$filterDateSql} <= CURDATE() THEN {$netSql} ELSE 0 END) AS net_mtd,
++                    SUM(CASE WHEN YEAR({$filterDateSql}) = YEAR(CURDATE()) AND {$filterDateSql} <= CURDATE() THEN {$grossSql} ELSE 0 END) AS gross_ytd,
++                    SUM(CASE WHEN YEAR({$filterDateSql}) = YEAR(CURDATE()) AND {$filterDateSql} <= CURDATE() THEN {$netSql} ELSE 0 END) AS net_ytd
+                 FROM sales s
+                 WHERE " . implode(' AND ', $where);
+ 
+diff --git a/app/Views/home/index.php b/app/Views/home/index.php
+index 5f2b6ec..7f7c946 100644
+--- a/app/Views/home/index.php
++++ b/app/Views/home/index.php
+@@ -13,9 +13,9 @@ $lists = is_array($summary['lists'] ?? null) ? $summary['lists'] : [];
+ 
+ $totalMtdGross = (float) ($sales['mtd_gross'] ?? 0) + (float) ($estateSales['mtd_gross'] ?? 0) + (float) ($service['mtd_gross'] ?? 0);
+ $totalYtdGross = (float) ($sales['ytd_gross'] ?? 0) + (float) ($estateSales['ytd_gross'] ?? 0) + (float) ($service['ytd_gross'] ?? 0);
+-$totalMtdNet = (float) ($sales['mtd_net'] ?? 0) + (float) ($estateSales['mtd_net'] ?? 0) + (float) ($service['mtd_net'] ?? 0);
+-$totalYtdNet = (float) ($sales['ytd_net'] ?? 0) + (float) ($estateSales['ytd_net'] ?? 0) + (float) ($service['ytd_net'] ?? 0);
+-$profitYtd = $totalYtdNet - (float) ($expenses['ytd_total'] ?? 0);
++$totalMtdNet = (float) ($summary['mtd_overall_net'] ?? 0);
++$totalYtdNet = (float) ($summary['ytd_overall_net'] ?? 0);
++$profitYtd = $totalYtdNet;
+ $ytdNetMinusPurchases = (float) ($summary['ytd_net_minus_purchases'] ?? 0);
+ 
+ $dispatchJobs = is_array($lists['dispatch_jobs'] ?? null) ? $lists['dispatch_jobs'] : [];
+@@ -118,7 +118,7 @@ $employeeDisplayName = static function (array $row): string {
+     <a class="kpi-card kpi-card-link" href="<?= e(url('/reports')) ?>">
+         <span>Total Income MTD / YTD</span>
+         <strong>$<?= e(number_format($totalMtdGross, 2)) ?> / $<?= e(number_format($totalYtdGross, 2)) ?></strong>
+-        <small>Net MTD $<?= e(number_format($totalMtdNet, 2)) ?> · Net YTD $<?= e(number_format($totalYtdNet, 2)) ?> · sales + estate + service</small>
++        <small>Net MTD $<?= e(number_format($totalMtdNet, 2)) ?> · Net YTD $<?= e(number_format($totalYtdNet, 2)) ?> · sales + estate + service, less general expenses</small>
+     </a>
+     <a class="kpi-card kpi-card-link" href="<?= e(url('/purchases')) ?>">
+         <span>Purchases MTD / YTD</span>
+@@ -138,7 +138,7 @@ $employeeDisplayName = static function (array $row): string {
+     <a class="kpi-card kpi-card-link kpi-card-full-width" href="<?= e(url('/reports')) ?>">
+         <span>Profit YTD</span>
+         <strong>$<?= e(number_format($profitYtd, 2)) ?><span class="kpi-card-subamount"> ($<?= e(number_format($ytdNetMinusPurchases, 2)) ?>)</span></strong>
+-        <small>Net YTD less expenses · After purchase costs (YTD) in parentheses</small>
++        <small>Net YTD less general expenses · After purchase costs (YTD) in parentheses</small>
+     </a>
+ </div>
+ 
+diff --git a/config/app.php b/config/app.php
+index d4f3038..196c9af 100644
+--- a/config/app.php
++++ b/config/app.php
+@@ -4,7 +4,7 @@ declare(strict_types=1);
+ 
+ return [
+     'name' => 'JunkTracker',
+-    'version' => '1.9.2.1-beta',
++    'version' => '1.9.2.2-beta',
+     'env' => 'local',
+     'url' => 'http://localhost/junktracker',
+     'timezone' => 'America/New_York',
+diff --git a/docs/deploy-checklist.md b/docs/deploy-checklist.md
+index be01979..4423fda 100644
+--- a/docs/deploy-checklist.md
++++ b/docs/deploy-checklist.md
+@@ -2,8 +2,8 @@
+ 
+ Short list to keep releases predictable. Pair with delta bundles from `scripts/build-live-release.sh` and version tags.
+ 
+-**Latest release notes:** [releases/live-1.9.2.1-beta.md](./releases/live-1.9.2.1-beta.md) (Estate sale tabs polish and tablet sidebar auto-hide).  
+-**Earlier:** [releases/live-1.9.2-beta.md](./releases/live-1.9.2-beta.md), [releases/live-1.9.1-beta.md](./releases/live-1.9.1-beta.md), [releases/live-1.9.0.1-beta.md](./releases/live-1.9.0.1-beta.md), [releases/live-1.9.0-beta.md](./releases/live-1.9.0-beta.md), [releases/live-1.8.3.3-beta.md](./releases/live-1.8.3.3-beta.md), [releases/live-1.8.3.2-beta.md](./releases/live-1.8.3.2-beta.md), [releases/live-1.8.3.1-beta.md](./releases/live-1.8.3.1-beta.md), [releases/live-1.8.3-beta.md](./releases/live-1.8.3-beta.md), [releases/live-1.8.2.3-beta.md](./releases/live-1.8.2.3-beta.md), [releases/live-1.8.2.2-beta.md](./releases/live-1.8.2.2-beta.md), [releases/live-1.8.2.1-beta.md](./releases/live-1.8.2.1-beta.md), [releases/live-1.8.2-beta.md](./releases/live-1.8.2-beta.md), [releases/live-1.8.1-beta.md](./releases/live-1.8.1-beta.md), [releases/live-1.8.0-beta.md](./releases/live-1.8.0-beta.md), [releases/live-1.7.2.md](./releases/live-1.7.2.md), [releases/live-1.7.0.md](./releases/live-1.7.0.md), [releases/live-1.6.4-beta.md](./releases/live-1.6.4-beta.md), [releases/live-1.6.3-beta.md](./releases/live-1.6.3-beta.md), [releases/live-1.6.2-beta.md](./releases/live-1.6.2-beta.md), [releases/live-1.6.1-beta.md](./releases/live-1.6.1-beta.md), [releases/live-1.6.0.md](./releases/live-1.6.0.md), [releases/live-1.5.3.md](./releases/live-1.5.3.md).
++**Latest release notes:** [releases/live-1.9.2.2-beta.md](./releases/live-1.9.2.2-beta.md) (Fix dashboard sales KPIs and profit YTD math).  
++**Earlier:** [releases/live-1.9.2.1-beta.md](./releases/live-1.9.2.1-beta.md), [releases/live-1.9.2-beta.md](./releases/live-1.9.2-beta.md), [releases/live-1.9.1-beta.md](./releases/live-1.9.1-beta.md), [releases/live-1.9.0.1-beta.md](./releases/live-1.9.0.1-beta.md), [releases/live-1.9.0-beta.md](./releases/live-1.9.0-beta.md), [releases/live-1.8.3.3-beta.md](./releases/live-1.8.3.3-beta.md), [releases/live-1.8.3.2-beta.md](./releases/live-1.8.3.2-beta.md), [releases/live-1.8.3.1-beta.md](./releases/live-1.8.3.1-beta.md), [releases/live-1.8.3-beta.md](./releases/live-1.8.3-beta.md), [releases/live-1.8.2.3-beta.md](./releases/live-1.8.2.3-beta.md), [releases/live-1.8.2.2-beta.md](./releases/live-1.8.2.2-beta.md), [releases/live-1.8.2.1-beta.md](./releases/live-1.8.2.1-beta.md), [releases/live-1.8.2-beta.md](./releases/live-1.8.2-beta.md), [releases/live-1.8.1-beta.md](./releases/live-1.8.1-beta.md), [releases/live-1.8.0-beta.md](./releases/live-1.8.0-beta.md), [releases/live-1.7.2.md](./releases/live-1.7.2.md), [releases/live-1.7.0.md](./releases/live-1.7.0.md), [releases/live-1.6.4-beta.md](./releases/live-1.6.4-beta.md), [releases/live-1.6.3-beta.md](./releases/live-1.6.3-beta.md), [releases/live-1.6.2-beta.md](./releases/live-1.6.2-beta.md), [releases/live-1.6.1-beta.md](./releases/live-1.6.1-beta.md), [releases/live-1.6.0.md](./releases/live-1.6.0.md), [releases/live-1.5.3.md](./releases/live-1.5.3.md).
+ 
+ ### Beta-live naming convention (standard)
+ 
+diff --git a/docs/releases/live-1.9.2.2-beta.md b/docs/releases/live-1.9.2.2-beta.md
+new file mode 100644
+index 0000000..2fca2fb
+--- /dev/null
++++ b/docs/releases/live-1.9.2.2-beta.md
+@@ -0,0 +1,34 @@
++# Live Release 1.9.2.2-beta
++
++Date: 2026-05-21
++
++## Highlights
++
++- **Dashboard:** Sales and Estate Sales KPI cards now show correct MTD/YTD totals (fixed key mapping from `Sale::summary()`).
++- **Dashboard:** Profit YTD and Total Income net now match Reports logic — general expenses only, no double-counting of job-linked expenses.
++- **Dashboard:** Profit YTD uses `ReportSummary` overall net; purchase-adjusted figure remains in parentheses.
++
++## Changed files
++
++- `app/Models/DashboardSummary.php`
++- `app/Models/Sale.php`
++- `app/Views/home/index.php`
++- `config/app.php` (version `1.9.2.2-beta`)
++- `docs/deploy-checklist.md`, `docs/releases/live-1.9.2.2-beta.md`
++- `patches/live-1.9.2.2-dashboard-profit.patch` (optional hotfix apply)
++
++## Database migrations in this release
++
++No new database migrations are required for 1.9.2.2-beta.
++
++## Patch-only deploy (FTP / manual upload)
++
++From the project root:
++
++`patch -p1 < patches/live-1.9.2.2-dashboard-profit.patch`
++
++Or copy the files listed above from this bundle’s `upload/` tree.
++
++## Ops notes
++
++- Smoke test: Dashboard — confirm **Sales MTD/YTD** shows non-zero totals when sales exist; **Profit YTD** is positive and consistent with **Reports → Income** overall net; parenthetical value is net after purchase costs.

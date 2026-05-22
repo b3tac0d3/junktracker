@@ -434,7 +434,7 @@ final class Sale
         $netSql = SchemaInspector::hasColumn('sales', 'net_amount')
             ? 'COALESCE(s.net_amount, 0)'
             : $grossSql;
-        $dateSql = SchemaInspector::hasColumn('sales', 'sale_date') ? 's.sale_date' : 'DATE(s.created_at)';
+        $filterDateSql = self::saleFilterDateExpr('s');
 
         $where = [];
         $where[] = SchemaInspector::hasColumn('sales', 'business_id') ? 's.business_id = :business_id' : '1=1';
@@ -443,12 +443,12 @@ final class Sale
 
         $sql = "SELECT
                     COUNT(*) AS total_count,
-                    SUM(CASE WHEN {$dateSql} >= DATE_FORMAT(CURDATE(), '%Y-%m-01') AND {$dateSql} <= CURDATE() THEN 1 ELSE 0 END) AS mtd_count,
-                    SUM(CASE WHEN YEAR({$dateSql}) = YEAR(CURDATE()) AND {$dateSql} <= CURDATE() THEN 1 ELSE 0 END) AS ytd_count,
-                    SUM(CASE WHEN {$dateSql} >= DATE_FORMAT(CURDATE(), '%Y-%m-01') AND {$dateSql} <= CURDATE() THEN {$grossSql} ELSE 0 END) AS gross_mtd,
-                    SUM(CASE WHEN {$dateSql} >= DATE_FORMAT(CURDATE(), '%Y-%m-01') AND {$dateSql} <= CURDATE() THEN {$netSql} ELSE 0 END) AS net_mtd,
-                    SUM(CASE WHEN YEAR({$dateSql}) = YEAR(CURDATE()) AND {$dateSql} <= CURDATE() THEN {$grossSql} ELSE 0 END) AS gross_ytd,
-                    SUM(CASE WHEN YEAR({$dateSql}) = YEAR(CURDATE()) AND {$dateSql} <= CURDATE() THEN {$netSql} ELSE 0 END) AS net_ytd
+                    SUM(CASE WHEN {$filterDateSql} >= DATE_FORMAT(CURDATE(), '%Y-%m-01') AND {$filterDateSql} <= CURDATE() THEN 1 ELSE 0 END) AS mtd_count,
+                    SUM(CASE WHEN YEAR({$filterDateSql}) = YEAR(CURDATE()) AND {$filterDateSql} <= CURDATE() THEN 1 ELSE 0 END) AS ytd_count,
+                    SUM(CASE WHEN {$filterDateSql} >= DATE_FORMAT(CURDATE(), '%Y-%m-01') AND {$filterDateSql} <= CURDATE() THEN {$grossSql} ELSE 0 END) AS gross_mtd,
+                    SUM(CASE WHEN {$filterDateSql} >= DATE_FORMAT(CURDATE(), '%Y-%m-01') AND {$filterDateSql} <= CURDATE() THEN {$netSql} ELSE 0 END) AS net_mtd,
+                    SUM(CASE WHEN YEAR({$filterDateSql}) = YEAR(CURDATE()) AND {$filterDateSql} <= CURDATE() THEN {$grossSql} ELSE 0 END) AS gross_ytd,
+                    SUM(CASE WHEN YEAR({$filterDateSql}) = YEAR(CURDATE()) AND {$filterDateSql} <= CURDATE() THEN {$netSql} ELSE 0 END) AS net_ytd
                 FROM sales s
                 WHERE " . implode(' AND ', $where);
 

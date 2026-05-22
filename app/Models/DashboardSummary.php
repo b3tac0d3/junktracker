@@ -21,7 +21,10 @@ final class DashboardSummary
 
         $ytdFrom = date('Y-01-01');
         $ytdTo = date('Y-m-d');
+        $mtdFrom = date('Y-m-01');
+        $mtdTo = date('Y-m-d');
         $ytdIncome = ReportSummary::build($businessId, $ytdFrom, $ytdTo);
+        $mtdIncome = ReportSummary::build($businessId, $mtdFrom, $mtdTo);
 
         $payload = [
             'sales' => self::salesSummary($businessId),
@@ -30,6 +33,8 @@ final class DashboardSummary
             'receivables' => self::receivablesSummary($businessId),
             'expenses' => self::expensesSummary($businessId),
             'purchases' => self::purchasesSummary($businessId),
+            'mtd_overall_net' => round((float) ($mtdIncome['overall']['net'] ?? 0), 2),
+            'ytd_overall_net' => round((float) ($ytdIncome['overall']['net'] ?? 0), 2),
             'ytd_net_minus_purchases' => round((float) ($ytdIncome['overall']['net_minus_purchases'] ?? 0), 2),
             'jobs' => self::jobsSummary($businessId),
             'tasks' => self::tasksSummary($businessId, $ownerUserId),
@@ -62,12 +67,31 @@ final class DashboardSummary
 
     private static function salesSummary(int $businessId): array
     {
-        return Sale::summary($businessId, Sale::ESTATE_SCOPE_GENERAL);
+        return self::normalizeSaleSummary(Sale::summary($businessId, Sale::ESTATE_SCOPE_GENERAL));
     }
 
     private static function estateSalesSummary(int $businessId): array
     {
-        return Sale::summary($businessId, Sale::ESTATE_SCOPE_ESTATE_ONLY);
+        return self::normalizeSaleSummary(Sale::summary($businessId, Sale::ESTATE_SCOPE_ESTATE_ONLY));
+    }
+
+    /**
+     * Dashboard KPI cards expect mtd_gross/ytd_gross keys; Sale::summary returns gross_mtd/gross_ytd.
+     *
+     * @param array<string, mixed> $summary
+     * @return array<string, float|int>
+     */
+    private static function normalizeSaleSummary(array $summary): array
+    {
+        return [
+            'count' => (int) ($summary['count'] ?? 0),
+            'mtd_count' => (int) ($summary['mtd_count'] ?? 0),
+            'ytd_count' => (int) ($summary['ytd_count'] ?? 0),
+            'mtd_gross' => (float) ($summary['gross_mtd'] ?? $summary['mtd_gross'] ?? 0),
+            'mtd_net' => (float) ($summary['net_mtd'] ?? $summary['mtd_net'] ?? 0),
+            'ytd_gross' => (float) ($summary['gross_ytd'] ?? $summary['ytd_gross'] ?? 0),
+            'ytd_net' => (float) ($summary['net_ytd'] ?? $summary['ytd_net'] ?? 0),
+        ];
     }
 
     private static function serviceSummary(int $businessId): array
