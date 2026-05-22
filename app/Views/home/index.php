@@ -105,11 +105,6 @@ $employeeDisplayName = static function (array $row): string {
         <strong>$<?= e(number_format((float) ($sales['mtd_gross'] ?? 0), 2)) ?> / $<?= e(number_format((float) ($sales['ytd_gross'] ?? 0), 2)) ?></strong>
         <small>Net MTD $<?= e(number_format((float) ($sales['mtd_net'] ?? 0), 2)) ?> · Net YTD $<?= e(number_format((float) ($sales['ytd_net'] ?? 0), 2)) ?> · excludes estate on-site</small>
     </a>
-    <a class="kpi-card kpi-card-link kpi-card--estate-sales" href="<?= e(url('/estate-sale-records')) ?>">
-        <span>Estate Sales MTD / YTD</span>
-        <strong>$<?= e(number_format((float) ($estateSales['mtd_gross'] ?? 0), 2)) ?> / $<?= e(number_format((float) ($estateSales['ytd_gross'] ?? 0), 2)) ?></strong>
-        <small>Net MTD $<?= e(number_format((float) ($estateSales['mtd_net'] ?? 0), 2)) ?> · Net YTD $<?= e(number_format((float) ($estateSales['ytd_net'] ?? 0), 2)) ?> · <?= e((string) ((int) ($estateSales['mtd_count'] ?? 0))) ?> MTD record(s)</small>
-    </a>
     <a class="kpi-card kpi-card-link kpi-card--service" href="<?= e(url('/reports')) ?>">
         <span>Service Paid MTD / YTD</span>
         <strong>$<?= e(number_format((float) ($service['mtd_gross'] ?? 0), 2)) ?> / $<?= e(number_format((float) ($service['ytd_gross'] ?? 0), 2)) ?></strong>
@@ -129,6 +124,11 @@ $employeeDisplayName = static function (array $row): string {
         <span>Expenses MTD / YTD</span>
         <strong>$<?= e(number_format((float) ($expenses['mtd_total'] ?? 0), 2)) ?> / $<?= e(number_format((float) ($expenses['ytd_total'] ?? 0), 2)) ?></strong>
         <small>All recorded expenses</small>
+    </a>
+    <a class="kpi-card kpi-card-link kpi-card--estate-sales" href="<?= e(url('/estate-sale-records')) ?>">
+        <span>Estate Sales MTD / YTD</span>
+        <strong>$<?= e(number_format((float) ($estateSales['mtd_gross'] ?? 0), 2)) ?> / $<?= e(number_format((float) ($estateSales['ytd_gross'] ?? 0), 2)) ?></strong>
+        <small>Net MTD $<?= e(number_format((float) ($estateSales['mtd_net'] ?? 0), 2)) ?> · Net YTD $<?= e(number_format((float) ($estateSales['ytd_net'] ?? 0), 2)) ?> · our share after split</small>
     </a>
     <a class="kpi-card kpi-card-link kpi-card--receivables" href="<?= e(url('/billing')) ?>">
         <span>Payments Due</span>

@@ -1362,6 +1362,7 @@ final class EstateSale
 
         return [
             'total_sales' => round($totalSales, 2),
+            'gross' => round($totalSales, 2),
             'total_expenses' => round($totalExpenses, 2),
             'total_labor' => $totalLabor,
             'client_percentage' => $clientPct,
@@ -1371,7 +1372,234 @@ final class EstateSale
             'split_base' => $splitBase,
             'client_share' => $clientShare,
             'our_share' => $ourShare,
+            'net' => $ourShare,
         ];
+    }
+
+    /**
+     * Dashboard MTD/YTD totals: gross = on-site sales; net = our share after the agreed split.
+     *
+     * @return array{count:int, mtd_count:int, ytd_count:int, mtd_gross:float, mtd_net:float, ytd_gross:float, ytd_net:float}
+     */
+    public static function dashboardSummary(int $businessId): array
+    {
+        $mtd = self::periodFinancialTotals($businessId, date('Y-m-01'), date('Y-m-d'));
+        $ytd = self::periodFinancialTotals($businessId, date('Y-01-01'), date('Y-m-d'));
+
+        return [
+            'count' => (int) ($ytd['estate_sale_count'] ?? 0),
+            'mtd_count' => (int) ($mtd['transaction_count'] ?? 0),
+            'ytd_count' => (int) ($ytd['transaction_count'] ?? 0),
+            'mtd_gross' => (float) ($mtd['gross'] ?? 0),
+            'mtd_net' => (float) ($mtd['net'] ?? 0),
+            'ytd_gross' => (float) ($ytd['gross'] ?? 0),
+            'ytd_net' => (float) ($ytd['net'] ?? 0),
+        ];
+    }
+
+    /**
+     * Period totals for estate on-site sales using split-based net (our share).
+     *
+     * @return array{gross:float, net:float, transaction_count:int, estate_sale_count:int}
+     */
+    public static function periodFinancialTotals(int $businessId, string $fromDate, string $toDate): array
+    {
+        $fromDate = trim($fromDate);
+        $toDate = trim($toDate);
+        $empty = [
+            'gross' => 0.0,
+            'net' => 0.0,
+            'transaction_count' => 0,
+            'estate_sale_count' => 0,
+        ];
+
+        if (
+            $businessId <= 0
+            || $fromDate === ''
+            || $toDate === ''
+            || !SchemaInspector::hasTable('sales')
+            || !SchemaInspector::hasColumn('sales', 'estate_sale_id')
+        ) {
+            return $empty;
+        }
+
+        $periodByEstateSale = self::salesTotalsByEstateSaleInPeriod($businessId, $fromDate, $toDate);
+        if ($periodByEstateSale === []) {
+            return $empty;
+        }
+
+        $gross = 0.0;
+        $net = 0.0;
+        $transactionCount = 0;
+
+        foreach ($periodByEstateSale as $estateSaleId => $periodTotals) {
+            if (!is_array($periodTotals)) {
+                continue;
+            }
+
+            $periodGross = (float) ($periodTotals['gross'] ?? 0);
+            $periodCount = (int) ($periodTotals['count'] ?? 0);
+            if ($periodGross <= 0.0001 && $periodCount <= 0) {
+                continue;
+            }
+
+            $gross += $periodGross;
+            $transactionCount += $periodCount;
+
+            $estateSale = self::findForBusiness($businessId, (int) $estateSaleId) ?? [];
+            $financial = self::financialSummary($businessId, (int) $estateSaleId, $estateSale);
+            $transactionNet = self::transactionNetShare($periodGross, $financial);
+            if ($transactionNet !== null) {
+                $net += $transactionNet;
+            }
+        }
+
+        return [
+            'gross' => round($gross, 2),
+            'net' => round($net, 2),
+            'transaction_count' => $transactionCount,
+            'estate_sale_count' => count($periodByEstateSale),
+        ];
+    }
+
+    /**
+     * Allocate our split share to a single on-site transaction.
+     */
+    public static function transactionNetShare(float $transactionGross, array $financial): ?float
+    {
+        if ($transactionGross <= 0.0001) {
+            return 0.0;
+        }
+
+        $totalSales = (float) ($financial['total_sales'] ?? $financial['gross'] ?? 0);
+        $ourShare = $financial['our_share'] ?? $financial['net'] ?? null;
+        if ($totalSales <= 0.0001 || $ourShare === null) {
+            return null;
+        }
+
+        return round($transactionGross * ((float) $ourShare / $totalSales), 2);
+    }
+
+    /**
+     * @param list<array<string, mixed>> $records
+     * @return list<array<string, mixed>>
+     */
+    public static function applySplitNetToSalesRecords(int $businessId, array $records): array
+    {
+        if ($records === []) {
+            return [];
+        }
+
+        $financialCache = [];
+        foreach ($records as $index => $record) {
+            if (!is_array($record)) {
+                continue;
+            }
+
+            $estateSaleId = (int) ($record['estate_sale_id'] ?? 0);
+            if ($estateSaleId <= 0) {
+                continue;
+            }
+
+            if (!isset($financialCache[$estateSaleId])) {
+                $estateSale = self::findForBusiness($businessId, $estateSaleId) ?? [];
+                $financialCache[$estateSaleId] = self::financialSummary($businessId, $estateSaleId, $estateSale);
+            }
+
+            $gross = (float) ($record['gross_amount'] ?? 0);
+            $shareNet = self::transactionNetShare($gross, $financialCache[$estateSaleId]);
+            $records[$index]['net_amount'] = $shareNet;
+        }
+
+        return $records;
+    }
+
+    /**
+     * @param list<array<string, mixed>> $rows
+     * @return list<array<string, mixed>>
+     */
+    public static function enrichIndexRowsWithFinancials(int $businessId, array $rows): array
+    {
+        foreach ($rows as $index => $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+
+            $estateSaleId = (int) ($row['id'] ?? 0);
+            if ($estateSaleId <= 0) {
+                continue;
+            }
+
+            $financial = self::financialSummary($businessId, $estateSaleId, $row);
+            $rows[$index]['gross_total'] = (float) ($financial['gross'] ?? 0);
+            $rows[$index]['net_total'] = $financial['net'];
+        }
+
+        return $rows;
+    }
+
+    /**
+     * @return array<int, array{gross: float, count: int}>
+     */
+    private static function salesTotalsByEstateSaleInPeriod(int $businessId, string $fromDate, string $toDate): array
+    {
+        $grossSql = SchemaInspector::hasColumn('sales', 'gross_amount')
+            ? 'COALESCE(s.gross_amount, 0)'
+            : (SchemaInspector::hasColumn('sales', 'amount') ? 'COALESCE(s.amount, 0)' : '0');
+        $filterDateSql = SchemaInspector::hasColumn('sales', 'sale_date')
+            ? (SchemaInspector::hasColumn('sales', 'created_at')
+                ? 'DATE(COALESCE(s.sale_date, s.created_at))'
+                : 'DATE(s.sale_date)')
+            : (SchemaInspector::hasColumn('sales', 'created_at') ? 'DATE(s.created_at)' : "'0000-00-00'");
+
+        $where = [
+            's.estate_sale_id IS NOT NULL',
+            's.estate_sale_id > 0',
+            "{$filterDateSql} BETWEEN :from_date AND :to_date",
+        ];
+        if (SchemaInspector::hasColumn('sales', 'business_id')) {
+            $where[] = 's.business_id = :business_id';
+        }
+        if (SchemaInspector::hasColumn('sales', 'deleted_at')) {
+            $where[] = 's.deleted_at IS NULL';
+        }
+
+        $sql = "SELECT
+                    s.estate_sale_id,
+                    COUNT(*) AS item_count,
+                    COALESCE(SUM({$grossSql}), 0) AS gross_total
+                FROM sales s
+                WHERE " . implode(' AND ', $where) . '
+                GROUP BY s.estate_sale_id';
+
+        $stmt = Database::connection()->prepare($sql);
+        if (SchemaInspector::hasColumn('sales', 'business_id')) {
+            $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
+        }
+        $stmt->bindValue(':from_date', $fromDate, \PDO::PARAM_STR);
+        $stmt->bindValue(':to_date', $toDate, \PDO::PARAM_STR);
+        $stmt->execute();
+        $rows = $stmt->fetchAll();
+        if (!is_array($rows)) {
+            return [];
+        }
+
+        $out = [];
+        foreach ($rows as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $estateSaleId = (int) ($row['estate_sale_id'] ?? 0);
+            if ($estateSaleId <= 0) {
+                continue;
+            }
+            $out[$estateSaleId] = [
+                'gross' => (float) ($row['gross_total'] ?? 0),
+                'count' => (int) ($row['item_count'] ?? 0),
+            ];
+        }
+
+        return $out;
     }
 
     /**

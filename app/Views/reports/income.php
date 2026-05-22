@@ -231,7 +231,7 @@ $resetHref = url('/reports/income');
         <section class="card index-card h-100 reports-card-estate-sales">
             <div class="card-header index-card-header"><strong><i class="fas fa-store me-2 jt-report-icon--service" aria-hidden="true"></i>Estate Sales</strong></div>
             <div class="card-body">
-                <p class="small text-muted mb-3">On-site transactions recorded during estate sales.</p>
+                <p class="small text-muted mb-3">On-site transactions recorded during estate sales. Net is our share after the agreed client split.</p>
                 <div class="record-row-fields record-row-fields-3">
                     <div class="record-field"><span class="record-label">Count</span><span class="record-value"><span class="jt-report-count"><?= e((string) ((int) ($estateSales['count'] ?? 0))) ?></span></span></div>
                     <div class="record-field"><span class="record-label">Gross</span><span class="record-value"><span class="jt-report-in"><?= e($formatMoney($estateSales['gross'] ?? 0)) ?></span></span></div>

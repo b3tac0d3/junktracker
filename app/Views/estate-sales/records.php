@@ -142,7 +142,7 @@ $formatSaleDate = static function (?string $value): string {
                                 </div>
                                 <div class="record-field">
                                     <span class="record-label">Net</span>
-                                    <span class="record-value">$<?= e(number_format((float) ($record['net_amount'] ?? 0), 2)) ?></span>
+                                    <span class="record-value"><?= ($record['net_amount'] ?? null) !== null ? '$' . e(number_format((float) $record['net_amount'], 2)) : '—' ?></span>
                                 </div>
                                 <div class="record-field">
                                     <span class="record-label">Estate Sale</span>

@@ -99,8 +99,17 @@ $clientPctDisplay = $clientPctRaw !== '' && is_numeric($clientPctRaw)
     ? rtrim(rtrim(number_format((float) $clientPctRaw, 2, '.', ''), '0'), '.') . '%'
     : '—';
 $clientSplitType = \App\Models\EstateSale::normalizeClientSplitType($estateSale['client_split_type'] ?? ($financialSummary['client_split_type'] ?? null));
-$clientSplitTypeLabel = \App\Models\EstateSale::clientSplitTypeLabel($clientSplitType);
-$clientSplitHelpText = \App\Models\EstateSale::clientSplitTypeHelpText($clientSplitType);
+$clientSplitTypeLabel = trim((string) ($financialSummary['client_split_type_label'] ?? ''));
+if ($clientSplitTypeLabel === '') {
+    $clientSplitTypeLabel = \App\Models\EstateSale::clientSplitTypeLabel($clientSplitType);
+}
+$clientSplitHelpText = trim((string) ($financialSummary['split_help_text'] ?? ''));
+if ($clientSplitHelpText === '') {
+    $clientSplitHelpText = \App\Models\EstateSale::clientSplitTypeHelpText($clientSplitType);
+}
+$estateGross = (float) ($financialSummary['gross'] ?? $financialSummary['total_sales'] ?? 0);
+$estateNet = $financialSummary['net'] ?? $financialSummary['our_share'] ?? null;
+$estateNetDisplay = $estateNet !== null ? $formatMoney((float) $estateNet) : '—';
 $formatExpenseDate = static function (?string $value): string {
     $raw = trim((string) ($value ?? ''));
     if ($raw === '') {
@@ -183,7 +192,7 @@ $customerActionsMenu = static function (
 <div class="page-header d-flex flex-wrap align-items-end justify-content-between gap-2">
     <div>
         <h1><?= e($title) ?></h1>
-        <p class="muted"><?= e($statusLabel($status)) ?> · <?= e((string) $customerCount) ?> customer(s)</p>
+        <p class="muted"><?= e($statusLabel($status)) ?> · <?= e((string) $customerCount) ?> customer(s) · Gross <?= e($formatMoney($estateGross)) ?> · Net <?= e($estateNetDisplay) ?></p>
     </div>
     <div class="jt-page-header-actions d-grid gap-2 d-md-flex d-md-flex-wrap justify-content-md-end align-items-md-center">
         <div class="dropdown w-100 w-md-auto">
@@ -366,6 +375,18 @@ $customerActionsMenu = static function (
 
             <div id="estate-sale-financial-summary">
                 <h2 class="h6 mb-3"><i class="fas fa-calculator me-2"></i>Financial summary</h2>
+                <div class="record-row-fields record-row-fields-2 mb-3">
+                    <div class="record-field">
+                        <span class="record-label">Gross</span>
+                        <span class="record-value fw-semibold fs-5" id="estate-sale-gross-total"><?= e($formatMoney($estateGross)) ?></span>
+                        <div class="form-text">Total on-site sales for this estate sale</div>
+                    </div>
+                    <div class="record-field">
+                        <span class="record-label">Net</span>
+                        <span class="record-value fw-semibold fs-5 text-success" id="estate-sale-net-total"><?= e($estateNetDisplay) ?></span>
+                        <div class="form-text">Our share after the agreed client split</div>
+                    </div>
+                </div>
                 <div class="row g-3">
                     <div class="col-12 col-md-6 col-lg-4">
                         <div class="record-label">Client percentage</div>
@@ -379,8 +400,8 @@ $customerActionsMenu = static function (
                         <div id="estate-sale-client-split-type-display"><?= e($clientSplitTypeLabel) ?></div>
                     </div>
                     <div class="col-12 col-md-6 col-lg-4">
-                        <div class="record-label">Total sales</div>
-                        <div id="estate-sale-total-sales"><?= e($formatMoney((float) ($financialSummary['total_sales'] ?? 0))) ?></div>
+                        <div class="record-label">On-site sales (gross)</div>
+                        <div id="estate-sale-total-sales"><?= e($formatMoney($estateGross)) ?></div>
                     </div>
                     <div class="col-12 col-md-6 col-lg-4">
                         <div class="record-label">Total expenses</div>
@@ -397,9 +418,9 @@ $customerActionsMenu = static function (
                         </div>
                     </div>
                     <div class="col-12 col-md-6 col-lg-4">
-                        <div class="record-label">Our share</div>
+                        <div class="record-label">Our share (net)</div>
                         <div id="estate-sale-our-share" class="fw-semibold">
-                            <?= ($financialSummary['our_share'] ?? null) !== null ? e($formatMoney((float) $financialSummary['our_share'])) : '—' ?>
+                            <?= e($estateNetDisplay) ?>
                         </div>
                     </div>
                 </div>
@@ -607,10 +628,14 @@ $customerActionsMenu = static function (
             tabindex="0"
         >
             <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
-                <div class="record-row-fields record-row-fields-2 mb-0">
+                <div class="record-row-fields record-row-fields-3 mb-0">
                     <div class="record-field">
-                        <span class="record-label">Total sales</span>
-                        <span class="record-value fw-semibold"><?= e($formatMoney($salesTotal)) ?></span>
+                        <span class="record-label">Gross</span>
+                        <span class="record-value fw-semibold"><?= e($formatMoney($estateGross)) ?></span>
+                    </div>
+                    <div class="record-field">
+                        <span class="record-label">Net</span>
+                        <span class="record-value fw-semibold"><?= e($estateNetDisplay) ?></span>
                     </div>
                     <div class="record-field">
                         <span class="record-label">Transactions</span>
@@ -662,7 +687,7 @@ $customerActionsMenu = static function (
                                         <span class="record-value"><?= e($saleDate) ?></span>
                                     </div>
                                     <div class="record-field">
-                                        <span class="record-label">Amount</span>
+                                        <span class="record-label">Gross</span>
                                         <span class="record-value"><?= e($formatMoney($saleAmount)) ?></span>
                                     </div>
                                     <div class="record-field">
@@ -1673,12 +1698,24 @@ window.addEventListener('DOMContentLoaded', () => {
             return;
         }
         const totalSalesEl = document.getElementById('estate-sale-total-sales');
+        const grossTotalEl = document.getElementById('estate-sale-gross-total');
+        const netTotalEl = document.getElementById('estate-sale-net-total');
         const totalExpensesEl = document.getElementById('estate-sale-total-expenses');
         const totalLaborEl = document.getElementById('estate-sale-total-labor');
         const clientShareEl = document.getElementById('estate-sale-client-share');
         const ourShareEl = document.getElementById('estate-sale-our-share');
+        const grossValue = formatMoney(summary.gross ?? summary.total_sales);
+        const netValue = summary.net ?? summary.our_share;
         if (totalSalesEl) {
-            totalSalesEl.textContent = formatMoney(summary.total_sales);
+            totalSalesEl.textContent = grossValue;
+        }
+        if (grossTotalEl) {
+            grossTotalEl.textContent = grossValue;
+        }
+        if (netTotalEl) {
+            netTotalEl.textContent = netValue === null || netValue === undefined
+                ? '—'
+                : formatMoney(netValue);
         }
         if (totalExpensesEl) {
             totalExpensesEl.textContent = formatMoney(summary.total_expenses);

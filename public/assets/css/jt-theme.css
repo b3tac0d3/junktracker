@@ -1167,10 +1167,95 @@ a.admin-nav-tile:focus {
 }
 
 .index-card-header a.btn,
-.index-card-header a.btn:hover,
-.index-card-header a.btn:focus {
-  color: #fff;
+.index-card-header button.btn {
   text-decoration: none;
+}
+
+.index-card-header .btn-primary,
+.index-card-header .btn-secondary:not(.btn-outline-secondary),
+.index-card-header .btn-success:not(.btn-outline-success),
+.index-card-header .btn-danger:not(.btn-outline-danger),
+.index-card-header .btn-warning:not(.btn-outline-warning),
+.index-card-header .btn-info:not(.btn-outline-info) {
+  color: #fff;
+}
+
+.index-card-header .btn-outline-primary {
+  color: #1d4ed8;
+  border-color: rgba(37, 99, 235, 0.55);
+  background-color: rgba(255, 255, 255, 0.78);
+}
+
+.index-card-header .btn-outline-secondary {
+  color: #334155;
+  border-color: rgba(100, 116, 139, 0.55);
+  background-color: rgba(255, 255, 255, 0.78);
+}
+
+.index-card-header .btn-outline-success {
+  color: #15803d;
+  border-color: rgba(21, 128, 61, 0.45);
+  background-color: rgba(255, 255, 255, 0.78);
+}
+
+.index-card-header .btn-outline-danger {
+  color: #b91c1c;
+  border-color: rgba(185, 28, 28, 0.45);
+  background-color: rgba(255, 255, 255, 0.78);
+}
+
+.index-card-header .btn-outline-warning {
+  color: #a16207;
+  border-color: rgba(161, 98, 7, 0.45);
+  background-color: rgba(255, 255, 255, 0.78);
+}
+
+.index-card-header .btn-outline-info {
+  color: #0e7490;
+  border-color: rgba(14, 116, 144, 0.45);
+  background-color: rgba(255, 255, 255, 0.78);
+}
+
+.index-card-header .btn-outline-primary:hover,
+.index-card-header .btn-outline-primary:focus {
+  color: #fff;
+  background-color: var(--jt-primary);
+  border-color: var(--jt-primary);
+}
+
+.index-card-header .btn-outline-secondary:hover,
+.index-card-header .btn-outline-secondary:focus {
+  color: #0f172a;
+  background-color: rgba(255, 255, 255, 0.96);
+  border-color: rgba(71, 85, 105, 0.75);
+}
+
+.index-card-header .btn-outline-success:hover,
+.index-card-header .btn-outline-success:focus {
+  color: #fff;
+  background-color: #15803d;
+  border-color: #15803d;
+}
+
+.index-card-header .btn-outline-danger:hover,
+.index-card-header .btn-outline-danger:focus {
+  color: #fff;
+  background-color: #b91c1c;
+  border-color: #b91c1c;
+}
+
+.index-card-header .btn-outline-warning:hover,
+.index-card-header .btn-outline-warning:focus {
+  color: #0f172a;
+  background-color: #facc15;
+  border-color: #facc15;
+}
+
+.index-card-header .btn-outline-info:hover,
+.index-card-header .btn-outline-info:focus {
+  color: #fff;
+  background-color: #0e7490;
+  border-color: #0e7490;
 }
 
 #estate-sale-customer-status-filters .btn-primary .badge.bg-light {

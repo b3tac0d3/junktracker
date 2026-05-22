@@ -60,6 +60,7 @@ final class EstateSalesController extends Controller
             $sortBy,
             $sortDir
         );
+        $estateSales = EstateSale::enrichIndexRowsWithFinancials($businessId, $estateSales);
         $pagination = pagination_meta($page, $perPage, $totalRows, count($estateSales));
 
         $this->render('estate-sales/index', [
@@ -118,7 +119,8 @@ final class EstateSalesController extends Controller
             $sortDir,
             Sale::ESTATE_SCOPE_ESTATE_ONLY
         );
-        $summary = Sale::summary($businessId, Sale::ESTATE_SCOPE_ESTATE_ONLY);
+        $records = EstateSale::applySplitNetToSalesRecords($businessId, $records);
+        $summary = EstateSale::dashboardSummary($businessId);
         $pagination = pagination_meta($page, $perPage, $totalRows, count($records));
 
         $this->render('estate-sales/records', [

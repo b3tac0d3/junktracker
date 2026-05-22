@@ -347,7 +347,13 @@ final class ReportSummary
      */
     private static function estateSalesSummary(int $businessId, string $fromDate, string $toDate): array
     {
-        return Sale::periodTotals($businessId, $fromDate, $toDate, Sale::ESTATE_SCOPE_ESTATE_ONLY);
+        $totals = EstateSale::periodFinancialTotals($businessId, $fromDate, $toDate);
+
+        return [
+            'count' => (int) ($totals['transaction_count'] ?? 0),
+            'gross' => (float) ($totals['gross'] ?? 0),
+            'net' => (float) ($totals['net'] ?? 0),
+        ];
     }
 
     /**

@@ -72,7 +72,7 @@ final class DashboardSummary
 
     private static function estateSalesSummary(int $businessId): array
     {
-        return self::normalizeSaleSummary(Sale::summary($businessId, Sale::ESTATE_SCOPE_ESTATE_ONLY));
+        return EstateSale::dashboardSummary($businessId);
     }
 
     /**
@@ -926,7 +926,8 @@ final class DashboardSummary
             $salesGross = self::monthlySalesGross($businessId, $from, $to, Sale::ESTATE_SCOPE_GENERAL);
             $estateSalesGross = self::monthlySalesGross($businessId, $from, $to, Sale::ESTATE_SCOPE_ESTATE_ONLY);
             $salesNet = self::monthlySalesNet($businessId, $from, $to, Sale::ESTATE_SCOPE_GENERAL);
-            $estateSalesNet = self::monthlySalesNet($businessId, $from, $to, Sale::ESTATE_SCOPE_ESTATE_ONLY);
+            $estatePeriod = EstateSale::periodFinancialTotals($businessId, $from, $to);
+            $estateSalesNet = (float) ($estatePeriod['net'] ?? 0);
             $serviceGross = self::monthlyServiceInvoiceGross($businessId, $from, $to);
             $jobExp = self::expensesTotalBetween($businessId, $from, $to, true);
             $generalExp = self::expensesTotalBetween($businessId, $from, $to, false);
