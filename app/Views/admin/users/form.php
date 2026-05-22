@@ -47,7 +47,7 @@ $mailLogOnly = $mailTransport === 'log';
 
 <?php if ($mailLogOnly): ?>
 <div class="alert alert-warning mb-3" role="alert">
-    <strong>Email is in log-only mode.</strong> Invites are not emailed until mail transport is configured on the server.
+    <strong>Email is in log-only mode.</strong> Invites are not emailed on localhost. Beta-live servers on a real hostname send mail automatically.
 </div>
 <?php endif; ?>
 

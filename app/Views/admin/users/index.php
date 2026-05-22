@@ -23,7 +23,7 @@ $mailLogOnly = $mailTransport === 'log';
 
 <?php if ($mailLogOnly): ?>
 <div class="alert alert-warning mb-3" role="alert">
-    <strong>Email is in log-only mode.</strong> User invites and password resets are written to <code>storage/logs/mail-*.log</code> but are not emailed until the server uses mail transport (<code>app.env = production</code> or <code>config/mail.local.php</code>).
+    <strong>Email is in log-only mode.</strong> User invites and password resets are written to <code>storage/logs/mail-*.log</code> but are not emailed. This is normal on localhost; beta-live servers on a real hostname send mail automatically.
 </div>
 <?php endif; ?>
 

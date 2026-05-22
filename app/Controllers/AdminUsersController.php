@@ -547,7 +547,7 @@ final class AdminUsersController extends Controller
     {
         $label = $isSiteAdminGlobal ? 'Site admin' : 'User';
         if (!Mailer::sendsExternally()) {
-            flash('error', $label . ' added, but no invite email was sent — mail is in log-only mode. Set app.env to production on the server, or add config/mail.local.php with transport mail.');
+            flash('error', $label . ' added, but no invite email was sent — mail is in log-only mode (localhost/dev). On the live server this should send automatically; check storage/logs/mail-*.log or mail.local.php.');
             return;
         }
 

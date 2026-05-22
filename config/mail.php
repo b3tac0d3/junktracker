@@ -5,11 +5,16 @@ declare(strict_types=1);
 $app = require __DIR__ . '/app.php';
 $env = (string) ($app['env'] ?? 'local');
 
+$host = trim((string) ($_SERVER['HTTP_HOST'] ?? ''));
+$isLocalHost = $host !== '' && (
+    str_contains($host, 'localhost') || str_contains($host, '127.0.0.1')
+);
+
 $envTransport = getenv('JUNKTRACKER_MAIL_TRANSPORT');
 $transport = 'log';
 if (is_string($envTransport) && trim($envTransport) !== '') {
     $transport = strtolower(trim($envTransport));
-} elseif ($env === 'production') {
+} elseif ($env === 'production' || !$isLocalHost) {
     $transport = 'mail';
 }
 
