@@ -11,16 +11,18 @@ final class ReportSummary
     public static function build(int $businessId, string $fromDate, string $toDate): array
     {
         $sales = self::salesSummary($businessId, $fromDate, $toDate);
+        $estateSales = self::estateSalesSummary($businessId, $fromDate, $toDate);
         $service = self::serviceSummary($businessId, $fromDate, $toDate);
         $expenses = self::expenseSummary($businessId, $fromDate, $toDate);
         $purchases = self::purchaseSummary($businessId, $fromDate, $toDate);
 
-        $overallGross = $sales['gross'] + $service['gross'];
-        $overallNet = $sales['net'] + $service['net'] - $expenses['general_total'];
+        $overallGross = $sales['gross'] + $estateSales['gross'] + $service['gross'];
+        $overallNet = $sales['net'] + $estateSales['net'] + $service['net'] - $expenses['general_total'];
         $overallNetMinusPurchases = $overallNet - $purchases['total'];
 
         return [
             'sales' => $sales,
+            'estate_sales' => $estateSales,
             'service' => $service,
             'expenses' => $expenses,
             'purchases' => $purchases,
@@ -78,6 +80,16 @@ final class ReportSummary
     public static function salesTotalsForRange(int $businessId, string $fromDate, string $toDate): array
     {
         return self::salesSummary($businessId, $fromDate, $toDate);
+    }
+
+    /**
+     * Estate sale transaction aggregates for the period.
+     *
+     * @return array{count:int, gross:float, net:float}
+     */
+    public static function estateSalesTotalsForRange(int $businessId, string $fromDate, string $toDate): array
+    {
+        return self::estateSalesSummary($businessId, $fromDate, $toDate);
     }
 
     /**
@@ -311,70 +323,31 @@ final class ReportSummary
             $defaultTypes[$type] = ['count' => 0, 'gross' => 0.0, 'net' => 0.0];
         }
 
-        if (!SchemaInspector::hasTable('sales')) {
-            return ['count' => 0, 'gross' => 0.0, 'net' => 0.0, 'by_type' => $defaultTypes];
-        }
+        $totals = Sale::periodTotals($businessId, $fromDate, $toDate, Sale::ESTATE_SCOPE_GENERAL, true);
+        $byType = is_array($totals['by_type'] ?? null) ? $totals['by_type'] : [];
+        unset($totals['by_type']);
 
-        $grossSql = SchemaInspector::hasColumn('sales', 'gross_amount')
-            ? 'COALESCE(s.gross_amount, 0)'
-            : (SchemaInspector::hasColumn('sales', 'amount') ? 'COALESCE(s.amount, 0)' : '0');
-        $netSql = SchemaInspector::hasColumn('sales', 'net_amount') ? 'COALESCE(s.net_amount, 0)' : $grossSql;
-        $typeSql = SchemaInspector::hasColumn('sales', 'sale_type') ? "LOWER(COALESCE(NULLIF(TRIM(s.sale_type), ''), 'other'))" : "'other'";
-        $dateSql = self::dateSql('sales', 's', ['sale_date', 'created_at']);
-
-        $where = self::baseWhere('sales', 's', $businessId);
-        if ($dateSql !== null) {
-            $where[] = "DATE({$dateSql}) BETWEEN :from_date AND :to_date";
-        }
-
-        $sql = "SELECT
-                    COUNT(*) AS item_count,
-                    COALESCE(SUM({$grossSql}), 0) AS gross_total,
-                    COALESCE(SUM({$netSql}), 0) AS net_total
-                FROM sales s
-                WHERE " . implode(' AND ', $where);
-
-        $stmt = Database::connection()->prepare($sql);
-        $params = self::baseParams('sales', $businessId);
-        if ($dateSql !== null) {
-            $params['from_date'] = $fromDate;
-            $params['to_date'] = $toDate;
-        }
-        $stmt->execute($params);
-        $row = $stmt->fetch();
-
-        $byType = $defaultTypes;
-        $typeStmt = Database::connection()->prepare("SELECT
-                    {$typeSql} AS sale_type,
-                    COUNT(*) AS item_count,
-                    COALESCE(SUM({$grossSql}), 0) AS gross_total,
-                    COALESCE(SUM({$netSql}), 0) AS net_total
-                FROM sales s
-                WHERE " . implode(' AND ', $where) . "
-                GROUP BY {$typeSql}");
-        $typeStmt->execute($params);
-        foreach ($typeStmt->fetchAll() as $typeRow) {
-            $typeKey = strtolower(trim((string) ($typeRow['sale_type'] ?? '')));
-            if ($typeKey === '') {
-                $typeKey = 'other';
+        foreach ($byType as $typeKey => $typeSummary) {
+            if (!isset($defaultTypes[$typeKey])) {
+                $defaultTypes[$typeKey] = ['count' => 0, 'gross' => 0.0, 'net' => 0.0];
             }
-            if (!isset($byType[$typeKey])) {
-                $byType[$typeKey] = ['count' => 0, 'gross' => 0.0, 'net' => 0.0];
-            }
-
-            $byType[$typeKey] = [
-                'count' => (int) ($typeRow['item_count'] ?? 0),
-                'gross' => (float) ($typeRow['gross_total'] ?? 0),
-                'net' => (float) ($typeRow['net_total'] ?? 0),
-            ];
+            $defaultTypes[$typeKey] = $typeSummary;
         }
 
         return [
-            'count' => (int) ($row['item_count'] ?? 0),
-            'gross' => (float) ($row['gross_total'] ?? 0),
-            'net' => (float) ($row['net_total'] ?? 0),
-            'by_type' => $byType,
+            'count' => (int) ($totals['count'] ?? 0),
+            'gross' => (float) ($totals['gross'] ?? 0),
+            'net' => (float) ($totals['net'] ?? 0),
+            'by_type' => $defaultTypes,
         ];
+    }
+
+    /**
+     * @return array{count:int, gross:float, net:float}
+     */
+    private static function estateSalesSummary(int $businessId, string $fromDate, string $toDate): array
+    {
+        return Sale::periodTotals($businessId, $fromDate, $toDate, Sale::ESTATE_SCOPE_ESTATE_ONLY);
     }
 
     /**
@@ -387,7 +360,7 @@ final class ReportSummary
             FormSelectValue::optionsForSection($businessId, 'sale_type')
         );
 
-        foreach (Sale::typeOptions($businessId) as $value) {
+        foreach (Sale::typeOptions($businessId, Sale::ESTATE_SCOPE_GENERAL) as $value) {
             $normalized = strtolower(trim((string) $value));
             if ($normalized !== '') {
                 $options[] = $normalized;
@@ -585,6 +558,7 @@ final class ReportSummary
         if ($dateSql !== null) {
             $where[] = "DATE({$dateSql}) BETWEEN :from_date AND :to_date";
         }
+        Sale::appendScopeToWhere($where, Sale::ESTATE_SCOPE_GENERAL);
 
         $sql = "SELECT
                     s.id,

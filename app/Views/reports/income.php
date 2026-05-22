@@ -4,6 +4,7 @@ $toDate = trim((string) ($toDate ?? date('Y-m-d')));
 $report = is_array($report ?? null) ? $report : [];
 
 $sales = is_array($report['sales'] ?? null) ? $report['sales'] : [];
+$estateSales = is_array($report['estate_sales'] ?? null) ? $report['estate_sales'] : [];
 $service = is_array($report['service'] ?? null) ? $report['service'] : [];
 $expenses = is_array($report['expenses'] ?? null) ? $report['expenses'] : [];
 $purchases = is_array($report['purchases'] ?? null) ? $report['purchases'] : [];
@@ -45,7 +46,7 @@ $resetHref = url('/reports/income');
     <div class="page-header d-flex flex-wrap align-items-end justify-content-between gap-2">
         <div>
             <h1>Income report</h1>
-            <p class="muted">Period summary for service, sales, expenses, and purchases</p>
+            <p class="muted">Period summary for service, sales, estate sales, expenses, and purchases</p>
         </div>
         <a class="btn btn-sm btn-outline-secondary" href="<?= e(url('/reports/export/income') . '?' . http_build_query(['from' => $fromDate, 'to' => $toDate])) ?>">
             <i class="fas fa-download me-1" aria-hidden="true"></i>Download CSV
@@ -119,7 +120,7 @@ $resetHref = url('/reports/income');
                 </div>
             </div>
             <div class="card-body d-flex flex-column">
-                <p class="small text-muted mb-3 mb-md-2">Gross (sales + invoiced service), total expenses, and profit (net after general expenses) for <?= e($formatDate($fromDate)) ?>–<?= e($formatDate($toDate)) ?>.</p>
+                <p class="small text-muted mb-3 mb-md-2">Gross (sales + estate sales + invoiced service), total expenses, and profit (net after general expenses) for <?= e($formatDate($fromDate)) ?>–<?= e($formatDate($toDate)) ?>.</p>
                 <div class="jt-report-chart-holder flex-grow-1">
                     <canvas id="jtReportsChart" aria-label="Chart of gross, expenses, and profit" role="img"></canvas>
                 </div>
@@ -181,6 +182,7 @@ $resetHref = url('/reports/income');
         <section class="card index-card h-100 reports-card-sales">
             <div class="card-header index-card-header"><strong><i class="fas fa-sack-dollar me-2 jt-report-icon--sales" aria-hidden="true"></i>Sales</strong></div>
             <div class="card-body">
+                <p class="small text-muted mb-3">Shop, job, and other sales — excludes estate on-site records.</p>
                 <div class="record-row-fields record-row-fields-3 mb-3">
                     <div class="record-field"><span class="record-label">Count</span><span class="record-value"><span class="jt-report-count"><?= e((string) ((int) ($sales['count'] ?? 0))) ?></span></span></div>
                     <div class="record-field"><span class="record-label">Gross</span><span class="record-value"><span class="jt-report-in"><?= e($formatMoney($sales['gross'] ?? 0)) ?></span></span></div>
@@ -222,6 +224,22 @@ $resetHref = url('/reports/income');
                         <?php endforeach; ?>
                     </div>
                 <?php endif; ?>
+            </div>
+        </section>
+    </div>
+    <div class="col-12 col-xl-6">
+        <section class="card index-card h-100 reports-card-estate-sales">
+            <div class="card-header index-card-header"><strong><i class="fas fa-store me-2 jt-report-icon--service" aria-hidden="true"></i>Estate Sales</strong></div>
+            <div class="card-body">
+                <p class="small text-muted mb-3">On-site transactions recorded during estate sales.</p>
+                <div class="record-row-fields record-row-fields-3">
+                    <div class="record-field"><span class="record-label">Count</span><span class="record-value"><span class="jt-report-count"><?= e((string) ((int) ($estateSales['count'] ?? 0))) ?></span></span></div>
+                    <div class="record-field"><span class="record-label">Gross</span><span class="record-value"><span class="jt-report-in"><?= e($formatMoney($estateSales['gross'] ?? 0)) ?></span></span></div>
+                    <div class="record-field"><span class="record-label">Net</span><span class="record-value"><span class="jt-report-in"><?= e($formatMoney($estateSales['net'] ?? 0)) ?></span></span></div>
+                </div>
+                <div class="mt-3">
+                    <a class="small fw-semibold text-decoration-none" href="<?= e(url('/estate-sale-records')) ?>">View estate sale records</a>
+                </div>
             </div>
         </section>
     </div>

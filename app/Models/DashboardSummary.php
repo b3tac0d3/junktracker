@@ -14,7 +14,7 @@ final class DashboardSummary
         $cacheKey = 'dash:' . $businessId . ':' . $ownerUserId . ':' . AppCache::versionSuffix();
         if (AppCache::enabled()) {
             $cached = AppCache::get($cacheKey);
-            if (is_array($cached) && isset($cached['sales'], $cached['service'], $cached['lists'])) {
+            if (is_array($cached) && isset($cached['sales'], $cached['estate_sales'], $cached['service'], $cached['lists'])) {
                 return $cached;
             }
         }
@@ -25,6 +25,7 @@ final class DashboardSummary
 
         $payload = [
             'sales' => self::salesSummary($businessId),
+            'estate_sales' => self::estateSalesSummary($businessId),
             'service' => self::serviceSummary($businessId),
             'receivables' => self::receivablesSummary($businessId),
             'expenses' => self::expensesSummary($businessId),
@@ -40,6 +41,7 @@ final class DashboardSummary
                 'outstanding_quotes' => self::outstandingQuotes($businessId),
                 'my_tasks_due' => self::myTasksDue($businessId, $ownerUserId),
                 'recent_sales' => self::recentSales($businessId),
+                'recent_estate_sale_records' => self::recentEstateSaleRecords($businessId),
                 'upcoming_deliveries' => self::upcomingDeliveries($businessId),
             ],
         ];
@@ -60,59 +62,12 @@ final class DashboardSummary
 
     private static function salesSummary(int $businessId): array
     {
-        $summary = [
-            'mtd_gross' => 0.0,
-            'mtd_net' => 0.0,
-            'mtd_count' => 0,
-            'ytd_gross' => 0.0,
-            'ytd_net' => 0.0,
-            'ytd_count' => 0,
-        ];
+        return Sale::summary($businessId, Sale::ESTATE_SCOPE_GENERAL);
+    }
 
-        if (!SchemaInspector::hasTable('sales')) {
-            return $summary;
-        }
-
-        $grossSql = SchemaInspector::hasColumn('sales', 'gross_amount')
-            ? 'COALESCE(s.gross_amount, 0)'
-            : (SchemaInspector::hasColumn('sales', 'amount') ? 'COALESCE(s.amount, 0)' : '0');
-        $netSql = SchemaInspector::hasColumn('sales', 'net_amount') ? 'COALESCE(s.net_amount, 0)' : $grossSql;
-        $dateSql = SchemaInspector::hasColumn('sales', 'sale_date') ? 'DATE(s.sale_date)' : 'DATE(s.created_at)';
-
-        $where = [
-            SchemaInspector::hasColumn('sales', 'business_id') ? 's.business_id = :business_id' : '1=1',
-            SchemaInspector::hasColumn('sales', 'deleted_at') ? 's.deleted_at IS NULL' : '1=1',
-        ];
-
-        $sql = "SELECT
-                    COALESCE(SUM(CASE WHEN {$dateSql} >= DATE_FORMAT(CURDATE(), '%Y-%m-01') AND {$dateSql} <= CURDATE() THEN {$grossSql} ELSE 0 END), 0) AS mtd_gross,
-                    COALESCE(SUM(CASE WHEN {$dateSql} >= DATE_FORMAT(CURDATE(), '%Y-%m-01') AND {$dateSql} <= CURDATE() THEN {$netSql} ELSE 0 END), 0) AS mtd_net,
-                    COALESCE(SUM(CASE WHEN {$dateSql} >= DATE_FORMAT(CURDATE(), '%Y-%m-01') AND {$dateSql} <= CURDATE() THEN 1 ELSE 0 END), 0) AS mtd_count,
-                    COALESCE(SUM(CASE WHEN {$dateSql} >= DATE_FORMAT(CURDATE(), '%Y-01-01') AND {$dateSql} <= CURDATE() THEN {$grossSql} ELSE 0 END), 0) AS ytd_gross,
-                    COALESCE(SUM(CASE WHEN {$dateSql} >= DATE_FORMAT(CURDATE(), '%Y-01-01') AND {$dateSql} <= CURDATE() THEN {$netSql} ELSE 0 END), 0) AS ytd_net,
-                    COALESCE(SUM(CASE WHEN {$dateSql} >= DATE_FORMAT(CURDATE(), '%Y-01-01') AND {$dateSql} <= CURDATE() THEN 1 ELSE 0 END), 0) AS ytd_count
-                FROM sales s
-                WHERE " . implode(' AND ', $where);
-
-        $stmt = Database::connection()->prepare($sql);
-        if (SchemaInspector::hasColumn('sales', 'business_id')) {
-            $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
-        }
-        $stmt->execute();
-
-        $row = $stmt->fetch();
-        if (!is_array($row)) {
-            return $summary;
-        }
-
-        return [
-            'mtd_gross' => (float) ($row['mtd_gross'] ?? 0),
-            'mtd_net' => (float) ($row['mtd_net'] ?? 0),
-            'mtd_count' => (int) ($row['mtd_count'] ?? 0),
-            'ytd_gross' => (float) ($row['ytd_gross'] ?? 0),
-            'ytd_net' => (float) ($row['ytd_net'] ?? 0),
-            'ytd_count' => (int) ($row['ytd_count'] ?? 0),
-        ];
+    private static function estateSalesSummary(int $businessId): array
+    {
+        return Sale::summary($businessId, Sale::ESTATE_SCOPE_ESTATE_ONLY);
     }
 
     private static function serviceSummary(int $businessId): array
@@ -832,6 +787,7 @@ final class DashboardSummary
             'DATE(' . $dateSql . ") >= DATE_FORMAT(CURDATE(), '%Y-%m-01')",
             'DATE(' . $dateSql . ') <= CURDATE()',
         ];
+        Sale::appendScopeToWhere($where, Sale::ESTATE_SCOPE_GENERAL);
 
         $sql = "SELECT
                     s.id,
@@ -856,8 +812,80 @@ final class DashboardSummary
         return is_array($rows) ? $rows : [];
     }
 
+    private static function recentEstateSaleRecords(int $businessId, int $limit = 5): array
+    {
+        if (!SchemaInspector::hasTable('sales') || !SchemaInspector::hasColumn('sales', 'estate_sale_id')) {
+            return [];
+        }
+
+        $nameSql = SchemaInspector::hasColumn('sales', 'name') ? 's.name' : "CONCAT('Sale #', s.id)";
+        $dateSql = SchemaInspector::hasColumn('sales', 'sale_date') ? 's.sale_date' : 's.created_at';
+        $grossSql = SchemaInspector::hasColumn('sales', 'gross_amount')
+            ? 'COALESCE(s.gross_amount, 0)'
+            : (SchemaInspector::hasColumn('sales', 'amount') ? 'COALESCE(s.amount, 0)' : '0');
+        $netSql = SchemaInspector::hasColumn('sales', 'net_amount') ? 'COALESCE(s.net_amount, 0)' : $grossSql;
+        $estateTitleSql = SchemaInspector::hasTable('estate_sales') && SchemaInspector::hasColumn('estate_sales', 'title')
+            ? "COALESCE(NULLIF(TRIM(es.title), ''), CONCAT('Estate Sale #', es.id))"
+            : "CONCAT('Estate Sale #', s.estate_sale_id)";
+        $customerNameSql = 'NULL';
+        $joins = [];
+        if (SchemaInspector::hasTable('estate_sales')) {
+            $join = 'LEFT JOIN estate_sales es ON es.id = s.estate_sale_id';
+            if (SchemaInspector::hasColumn('estate_sales', 'deleted_at')) {
+                $join .= ' AND es.deleted_at IS NULL';
+            }
+            if (SchemaInspector::hasColumn('estate_sales', 'business_id') && SchemaInspector::hasColumn('sales', 'business_id')) {
+                $join .= ' AND es.business_id = s.business_id';
+            }
+            $joins[] = $join;
+        }
+        if (SchemaInspector::hasColumn('sales', 'estate_sale_customer_id') && SchemaInspector::hasTable('estate_sale_customers')) {
+            $join = 'LEFT JOIN estate_sale_customers esc ON esc.id = s.estate_sale_customer_id';
+            if (SchemaInspector::hasColumn('estate_sale_customers', 'deleted_at')) {
+                $join .= ' AND esc.deleted_at IS NULL';
+            }
+            $joins[] = $join;
+            $customerNameSql = "COALESCE(NULLIF(TRIM(CONCAT_WS(' ', esc.first_name, esc.last_name)), ''), CONCAT('Customer #', esc.id))";
+        }
+
+        $where = [
+            SchemaInspector::hasColumn('sales', 'business_id') ? 's.business_id = :business_id' : '1=1',
+            SchemaInspector::hasColumn('sales', 'deleted_at') ? 's.deleted_at IS NULL' : '1=1',
+            'DATE(' . $dateSql . ") >= DATE_FORMAT(CURDATE(), '%Y-%m-01')",
+            'DATE(' . $dateSql . ') <= CURDATE()',
+        ];
+        Sale::appendScopeToWhere($where, Sale::ESTATE_SCOPE_ESTATE_ONLY);
+
+        $sql = "SELECT
+                    s.id,
+                    s.estate_sale_id,
+                    {$nameSql} AS name,
+                    {$dateSql} AS sale_date,
+                    {$grossSql} AS gross_amount,
+                    {$netSql} AS net_amount,
+                    {$estateTitleSql} AS estate_sale_title,
+                    {$customerNameSql} AS customer_name
+                FROM sales s";
+        if ($joins !== []) {
+            $sql .= "\n" . implode("\n", $joins);
+        }
+        $sql .= "\nWHERE " . implode(' AND ', $where) . "
+                ORDER BY {$dateSql} DESC, s.id DESC
+                LIMIT :row_limit";
+
+        $stmt = Database::connection()->prepare($sql);
+        if (SchemaInspector::hasColumn('sales', 'business_id')) {
+            $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
+        }
+        $stmt->bindValue(':row_limit', max(1, min($limit, 20)), \PDO::PARAM_INT);
+        $stmt->execute();
+
+        $rows = $stmt->fetchAll();
+        return is_array($rows) ? $rows : [];
+    }
+
     /**
-     * Last three calendar months (oldest → newest): total gross (sales + service), sales gross, service gross, expenses total, net profit.
+     * Last three calendar months (oldest → newest): total gross (sales + estate + service), sales gross, estate sales gross, service gross, expenses total, net profit.
      * Net matches reports: sales net + service net − general expenses; service net = invoice gross − job expenses in month.
      *
      * @return array{months: list<array{label: string, total_gross: float, sales_gross: float, service_gross: float, expenses_total: float, net_profit: float}>}
@@ -871,19 +899,22 @@ final class DashboardSummary
             $from = $dt->format('Y-m-01');
             $to = $dt->format('Y-m-t');
             $label = $dt->format('M Y');
-            $salesGross = self::monthlySalesGross($businessId, $from, $to);
-            $salesNet = self::monthlySalesNet($businessId, $from, $to);
+            $salesGross = self::monthlySalesGross($businessId, $from, $to, Sale::ESTATE_SCOPE_GENERAL);
+            $estateSalesGross = self::monthlySalesGross($businessId, $from, $to, Sale::ESTATE_SCOPE_ESTATE_ONLY);
+            $salesNet = self::monthlySalesNet($businessId, $from, $to, Sale::ESTATE_SCOPE_GENERAL);
+            $estateSalesNet = self::monthlySalesNet($businessId, $from, $to, Sale::ESTATE_SCOPE_ESTATE_ONLY);
             $serviceGross = self::monthlyServiceInvoiceGross($businessId, $from, $to);
             $jobExp = self::expensesTotalBetween($businessId, $from, $to, true);
             $generalExp = self::expensesTotalBetween($businessId, $from, $to, false);
             $serviceNet = round($serviceGross - $jobExp, 2);
             $expensesTotal = round($jobExp + $generalExp, 2);
-            $netProfit = round($salesNet + $serviceNet - $generalExp, 2);
-            $totalGross = round($salesGross + $serviceGross, 2);
+            $netProfit = round($salesNet + $estateSalesNet + $serviceNet - $generalExp, 2);
+            $totalGross = round($salesGross + $estateSalesGross + $serviceGross, 2);
             $months[] = [
                 'label' => $label,
                 'total_gross' => $totalGross,
                 'sales_gross' => round($salesGross, 2),
+                'estate_sales_gross' => round($estateSalesGross, 2),
                 'service_gross' => round($serviceGross, 2),
                 'expenses_total' => $expensesTotal,
                 'net_profit' => $netProfit,
@@ -893,7 +924,7 @@ final class DashboardSummary
         return ['months' => $months];
     }
 
-    private static function monthlySalesGross(int $businessId, string $from, string $to): float
+    private static function monthlySalesGross(int $businessId, string $from, string $to, string $estateSaleScope = Sale::ESTATE_SCOPE_ALL): float
     {
         if (!SchemaInspector::hasTable('sales')) {
             return 0.0;
@@ -907,6 +938,7 @@ final class DashboardSummary
             SchemaInspector::hasColumn('sales', 'deleted_at') ? 's.deleted_at IS NULL' : '1=1',
             "{$dateSql} BETWEEN :from_date AND :to_date",
         ];
+        Sale::appendScopeToWhere($where, $estateSaleScope);
         $sql = "SELECT COALESCE(SUM({$grossSql}), 0) AS gross_total FROM sales s WHERE " . implode(' AND ', $where);
         $stmt = Database::connection()->prepare($sql);
         if (SchemaInspector::hasColumn('sales', 'business_id')) {
@@ -920,7 +952,7 @@ final class DashboardSummary
         return (float) ($row['gross_total'] ?? 0);
     }
 
-    private static function monthlySalesNet(int $businessId, string $from, string $to): float
+    private static function monthlySalesNet(int $businessId, string $from, string $to, string $estateSaleScope = Sale::ESTATE_SCOPE_ALL): float
     {
         if (!SchemaInspector::hasTable('sales')) {
             return 0.0;
@@ -935,6 +967,7 @@ final class DashboardSummary
             SchemaInspector::hasColumn('sales', 'deleted_at') ? 's.deleted_at IS NULL' : '1=1',
             "{$dateSql} BETWEEN :from_date AND :to_date",
         ];
+        Sale::appendScopeToWhere($where, $estateSaleScope);
         $sql = "SELECT COALESCE(SUM({$netSql}), 0) AS net_total FROM sales s WHERE " . implode(' AND ', $where);
         $stmt = Database::connection()->prepare($sql);
         if (SchemaInspector::hasColumn('sales', 'business_id')) {

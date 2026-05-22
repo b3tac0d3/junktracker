@@ -2,6 +2,7 @@
 $businessName = (string) (($business['name'] ?? '') !== '' ? $business['name'] : ('Business #' . (string) current_business_id()));
 $summary = is_array($summary ?? null) ? $summary : [];
 $sales = is_array($summary['sales'] ?? null) ? $summary['sales'] : [];
+$estateSales = is_array($summary['estate_sales'] ?? null) ? $summary['estate_sales'] : [];
 $service = is_array($summary['service'] ?? null) ? $summary['service'] : [];
 $expenses = is_array($summary['expenses'] ?? null) ? $summary['expenses'] : [];
 $purchasesSummary = is_array($summary['purchases'] ?? null) ? $summary['purchases'] : [];
@@ -10,10 +11,10 @@ $jobs = is_array($summary['jobs'] ?? null) ? $summary['jobs'] : [];
 $tasks = is_array($summary['tasks'] ?? null) ? $summary['tasks'] : [];
 $lists = is_array($summary['lists'] ?? null) ? $summary['lists'] : [];
 
-$totalMtdGross = (float) ($sales['mtd_gross'] ?? 0) + (float) ($service['mtd_gross'] ?? 0);
-$totalYtdGross = (float) ($sales['ytd_gross'] ?? 0) + (float) ($service['ytd_gross'] ?? 0);
-$totalMtdNet = (float) ($sales['mtd_net'] ?? 0) + (float) ($service['mtd_net'] ?? 0);
-$totalYtdNet = (float) ($sales['ytd_net'] ?? 0) + (float) ($service['ytd_net'] ?? 0);
+$totalMtdGross = (float) ($sales['mtd_gross'] ?? 0) + (float) ($estateSales['mtd_gross'] ?? 0) + (float) ($service['mtd_gross'] ?? 0);
+$totalYtdGross = (float) ($sales['ytd_gross'] ?? 0) + (float) ($estateSales['ytd_gross'] ?? 0) + (float) ($service['ytd_gross'] ?? 0);
+$totalMtdNet = (float) ($sales['mtd_net'] ?? 0) + (float) ($estateSales['mtd_net'] ?? 0) + (float) ($service['mtd_net'] ?? 0);
+$totalYtdNet = (float) ($sales['ytd_net'] ?? 0) + (float) ($estateSales['ytd_net'] ?? 0) + (float) ($service['ytd_net'] ?? 0);
 $profitYtd = $totalYtdNet - (float) ($expenses['ytd_total'] ?? 0);
 $ytdNetMinusPurchases = (float) ($summary['ytd_net_minus_purchases'] ?? 0);
 
@@ -23,6 +24,7 @@ $purchaseProspects = is_array($lists['purchase_prospects'] ?? null) ? $lists['pu
 $outstandingQuotes = is_array($lists['outstanding_quotes'] ?? null) ? $lists['outstanding_quotes'] : [];
 $myTasksDue = is_array($lists['my_tasks_due'] ?? null) ? $lists['my_tasks_due'] : [];
 $recentSales = is_array($lists['recent_sales'] ?? null) ? $lists['recent_sales'] : [];
+$recentEstateSaleRecords = is_array($lists['recent_estate_sale_records'] ?? null) ? $lists['recent_estate_sale_records'] : [];
 $upcomingDeliveries = is_array($lists['upcoming_deliveries'] ?? null) ? $lists['upcoming_deliveries'] : [];
 $threeMonthChart = is_array($summary['three_month_chart'] ?? null) ? $summary['three_month_chart'] : ['months' => []];
 $chartMonths = is_array($threeMonthChart['months'] ?? null) ? $threeMonthChart['months'] : [];
@@ -30,6 +32,7 @@ $dashboardChartPayload = [
     'labels' => [],
     'total_gross' => [],
     'sales_gross' => [],
+    'estate_sales_gross' => [],
     'service_gross' => [],
     'expenses_total' => [],
     'net_profit' => [],
@@ -40,9 +43,11 @@ foreach ($chartMonths as $m) {
     }
     $dashboardChartPayload['labels'][] = (string) ($m['label'] ?? '');
     $salesG = round((float) ($m['sales_gross'] ?? 0), 2);
+    $estateSalesG = round((float) ($m['estate_sales_gross'] ?? 0), 2);
     $serviceG = round((float) ($m['service_gross'] ?? 0), 2);
-    $dashboardChartPayload['total_gross'][] = isset($m['total_gross']) ? round((float) $m['total_gross'], 2) : round($salesG + $serviceG, 2);
+    $dashboardChartPayload['total_gross'][] = isset($m['total_gross']) ? round((float) $m['total_gross'], 2) : round($salesG + $estateSalesG + $serviceG, 2);
     $dashboardChartPayload['sales_gross'][] = $salesG;
+    $dashboardChartPayload['estate_sales_gross'][] = $estateSalesG;
     $dashboardChartPayload['service_gross'][] = $serviceG;
     $dashboardChartPayload['expenses_total'][] = round((float) ($m['expenses_total'] ?? 0), 2);
     $dashboardChartPayload['net_profit'][] = round((float) ($m['net_profit'] ?? 0), 2);
@@ -98,7 +103,12 @@ $employeeDisplayName = static function (array $row): string {
     <a class="kpi-card kpi-card-link" href="<?= e(url('/sales')) ?>">
         <span>Sales MTD / YTD</span>
         <strong>$<?= e(number_format((float) ($sales['mtd_gross'] ?? 0), 2)) ?> / $<?= e(number_format((float) ($sales['ytd_gross'] ?? 0), 2)) ?></strong>
-        <small>Net MTD $<?= e(number_format((float) ($sales['mtd_net'] ?? 0), 2)) ?> · Net YTD $<?= e(number_format((float) ($sales['ytd_net'] ?? 0), 2)) ?></small>
+        <small>Net MTD $<?= e(number_format((float) ($sales['mtd_net'] ?? 0), 2)) ?> · Net YTD $<?= e(number_format((float) ($sales['ytd_net'] ?? 0), 2)) ?> · excludes estate on-site</small>
+    </a>
+    <a class="kpi-card kpi-card-link" href="<?= e(url('/estate-sale-records')) ?>">
+        <span>Estate Sales MTD / YTD</span>
+        <strong>$<?= e(number_format((float) ($estateSales['mtd_gross'] ?? 0), 2)) ?> / $<?= e(number_format((float) ($estateSales['ytd_gross'] ?? 0), 2)) ?></strong>
+        <small>Net MTD $<?= e(number_format((float) ($estateSales['mtd_net'] ?? 0), 2)) ?> · Net YTD $<?= e(number_format((float) ($estateSales['ytd_net'] ?? 0), 2)) ?> · <?= e((string) ((int) ($estateSales['mtd_count'] ?? 0))) ?> MTD record(s)</small>
     </a>
     <a class="kpi-card kpi-card-link" href="<?= e(url('/reports')) ?>">
         <span>Service Paid MTD / YTD</span>
@@ -108,7 +118,7 @@ $employeeDisplayName = static function (array $row): string {
     <a class="kpi-card kpi-card-link" href="<?= e(url('/reports')) ?>">
         <span>Total Income MTD / YTD</span>
         <strong>$<?= e(number_format($totalMtdGross, 2)) ?> / $<?= e(number_format($totalYtdGross, 2)) ?></strong>
-        <small>Net MTD $<?= e(number_format($totalMtdNet, 2)) ?> · Net YTD $<?= e(number_format($totalYtdNet, 2)) ?></small>
+        <small>Net MTD $<?= e(number_format($totalMtdNet, 2)) ?> · Net YTD $<?= e(number_format($totalYtdNet, 2)) ?> · sales + estate + service</small>
     </a>
     <a class="kpi-card kpi-card-link" href="<?= e(url('/purchases')) ?>">
         <span>Purchases MTD / YTD</span>
@@ -136,7 +146,7 @@ $employeeDisplayName = static function (array $row): string {
     <div class="card-header index-card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
         <div>
             <strong class="fs-5"><i class="fas fa-chart-column me-2 jt-dashboard-icon--sales" aria-hidden="true"></i>Last 3 months</strong>
-            <div class="small text-muted">Total gross, sales gross, service gross, expenses, and net profit by calendar month (same logic as Reports).</div>
+            <div class="small text-muted">Total gross, sales gross, estate sales gross, service gross, expenses, and net profit by calendar month (same logic as Reports).</div>
         </div>
         <a class="btn btn-sm btn-outline-secondary" href="<?= e(url('/reports')) ?>">Full reports</a>
     </div>
@@ -456,6 +466,36 @@ $employeeDisplayName = static function (array $row): string {
             <?php endif; ?>
         </div>
     </section>
+
+    <section class="card index-card">
+        <div class="card-header index-card-header d-flex align-items-center justify-content-between">
+            <strong><i class="fas fa-store me-2 jt-dashboard-icon--service" aria-hidden="true"></i>Recent Estate Sale Records (MTD)</strong>
+            <a class="small text-decoration-none fw-semibold" href="<?= e(url('/estate-sale-records')) ?>">Open Estate Sale Records</a>
+        </div>
+        <div class="card-body">
+            <?php if ($recentEstateSaleRecords === []): ?>
+                <div class="record-empty">No estate sale records this month.</div>
+            <?php else: ?>
+                <div class="simple-list-table">
+                    <?php foreach ($recentEstateSaleRecords as $record): ?>
+                        <?php
+                        $recordId = (int) ($record['id'] ?? 0);
+                        $name = trim((string) ($record['name'] ?? '')) ?: ('Sale #' . (string) $recordId);
+                        $gross = (float) ($record['gross_amount'] ?? 0);
+                        $net = (float) ($record['net_amount'] ?? 0);
+                        $saleDate = $formatDate((string) ($record['sale_date'] ?? ''));
+                        $estateTitle = trim((string) ($record['estate_sale_title'] ?? '')) ?: 'Estate sale';
+                        $customerName = trim((string) ($record['customer_name'] ?? ''));
+                        ?>
+                        <a class="simple-list-row simple-list-row-link" href="<?= e(url('/sales/' . (string) $recordId)) ?>">
+                            <span class="simple-list-title"><?= e($name) ?></span>
+                            <span class="simple-list-meta"><?= e($saleDate) ?> · <?= e($estateTitle) ?><?= $customerName !== '' ? ' · ' . e($customerName) : '' ?> · Gross $<?= e(number_format($gross, 2)) ?> · Net $<?= e(number_format($net, 2)) ?></span>
+                        </a>
+                    <?php endforeach; ?>
+                </div>
+            <?php endif; ?>
+        </div>
+    </section>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" crossorigin="anonymous"></script>
@@ -492,6 +532,10 @@ $employeeDisplayName = static function (array $row): string {
                 Object.assign(
                     { label: 'Sales gross', data: ds('sales_gross') },
                     barColors('--jt-chart-sales-fill', '--jt-chart-sales-stroke')
+                ),
+                Object.assign(
+                    { label: 'Estate sales gross', data: ds('estate_sales_gross') },
+                    barColors('--jt-chart-estate-sales-fill', '--jt-chart-estate-sales-stroke')
                 ),
                 Object.assign(
                     { label: 'Service gross', data: ds('service_gross') },

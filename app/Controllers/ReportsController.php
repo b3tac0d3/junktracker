@@ -133,6 +133,7 @@ final class ReportsController extends Controller
         $report = ReportSummary::build($businessId, $fromDate, $toDate);
 
         $sales = is_array($report['sales'] ?? null) ? $report['sales'] : [];
+        $estateSales = is_array($report['estate_sales'] ?? null) ? $report['estate_sales'] : [];
         $service = is_array($report['service'] ?? null) ? $report['service'] : [];
         $expenses = is_array($report['expenses'] ?? null) ? $report['expenses'] : [];
         $purchases = is_array($report['purchases'] ?? null) ? $report['purchases'] : [];
@@ -173,6 +174,13 @@ final class ReportsController extends Controller
         fputcsv($out, ['Count', (string) ((int) ($sales['count'] ?? 0))]);
         fputcsv($out, ['Gross', $this->csvMoney($sales['gross'] ?? 0)]);
         fputcsv($out, ['Net', $this->csvMoney($sales['net'] ?? 0)]);
+        fputcsv($out, []);
+
+        fputcsv($out, ['Estate sales (summary)']);
+        fputcsv($out, ['Field', 'Value']);
+        fputcsv($out, ['Count', (string) ((int) ($estateSales['count'] ?? 0))]);
+        fputcsv($out, ['Gross', $this->csvMoney($estateSales['gross'] ?? 0)]);
+        fputcsv($out, ['Net', $this->csvMoney($estateSales['net'] ?? 0)]);
         fputcsv($out, []);
 
         fputcsv($out, ['Expenses']);

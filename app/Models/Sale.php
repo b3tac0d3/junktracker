@@ -418,6 +418,8 @@ final class Sale
         if (!SchemaInspector::hasTable('sales')) {
             return [
                 'count' => 0,
+                'mtd_count' => 0,
+                'ytd_count' => 0,
                 'gross_mtd' => 0.0,
                 'net_mtd' => 0.0,
                 'gross_ytd' => 0.0,
@@ -441,6 +443,8 @@ final class Sale
 
         $sql = "SELECT
                     COUNT(*) AS total_count,
+                    SUM(CASE WHEN {$dateSql} >= DATE_FORMAT(CURDATE(), '%Y-%m-01') AND {$dateSql} <= CURDATE() THEN 1 ELSE 0 END) AS mtd_count,
+                    SUM(CASE WHEN YEAR({$dateSql}) = YEAR(CURDATE()) AND {$dateSql} <= CURDATE() THEN 1 ELSE 0 END) AS ytd_count,
                     SUM(CASE WHEN {$dateSql} >= DATE_FORMAT(CURDATE(), '%Y-%m-01') AND {$dateSql} <= CURDATE() THEN {$grossSql} ELSE 0 END) AS gross_mtd,
                     SUM(CASE WHEN {$dateSql} >= DATE_FORMAT(CURDATE(), '%Y-%m-01') AND {$dateSql} <= CURDATE() THEN {$netSql} ELSE 0 END) AS net_mtd,
                     SUM(CASE WHEN YEAR({$dateSql}) = YEAR(CURDATE()) AND {$dateSql} <= CURDATE() THEN {$grossSql} ELSE 0 END) AS gross_ytd,
@@ -457,11 +461,117 @@ final class Sale
         $row = $stmt->fetch();
         return [
             'count' => (int) ($row['total_count'] ?? 0),
+            'mtd_count' => (int) ($row['mtd_count'] ?? 0),
+            'ytd_count' => (int) ($row['ytd_count'] ?? 0),
             'gross_mtd' => (float) ($row['gross_mtd'] ?? 0),
             'net_mtd' => (float) ($row['net_mtd'] ?? 0),
             'gross_ytd' => (float) ($row['gross_ytd'] ?? 0),
             'net_ytd' => (float) ($row['net_ytd'] ?? 0),
         ];
+    }
+
+    /**
+     * @return array{count:int, gross:float, net:float, by_type?: array<string, array{count:int, gross:float, net:float}>}
+     */
+    public static function periodTotals(
+        int $businessId,
+        string $fromDate,
+        string $toDate,
+        string $estateSaleScope = self::ESTATE_SCOPE_ALL,
+        bool $withTypeBreakdown = false
+    ): array {
+        $empty = ['count' => 0, 'gross' => 0.0, 'net' => 0.0];
+        if (!SchemaInspector::hasTable('sales')) {
+            return $withTypeBreakdown ? $empty + ['by_type' => []] : $empty;
+        }
+
+        $estateSaleScope = self::normalizeEstateSaleScope($estateSaleScope);
+        $fromDate = trim($fromDate);
+        $toDate = trim($toDate);
+        $grossSql = self::saleGrossExpr('s');
+        $netSql = self::saleNetExpr('s');
+        $filterDateSql = self::saleFilterDateExpr('s');
+
+        $where = [];
+        $where[] = SchemaInspector::hasColumn('sales', 'business_id') ? 's.business_id = :business_id' : '1=1';
+        $where[] = SchemaInspector::hasColumn('sales', 'deleted_at') ? 's.deleted_at IS NULL' : '1=1';
+        self::appendEstateSaleScopeCondition($where, $estateSaleScope);
+        if ($fromDate !== '') {
+            $where[] = "{$filterDateSql} >= :from_date";
+        }
+        if ($toDate !== '') {
+            $where[] = "{$filterDateSql} <= :to_date";
+        }
+
+        $sql = "SELECT
+                    COUNT(*) AS item_count,
+                    COALESCE(SUM({$grossSql}), 0) AS gross_total,
+                    COALESCE(SUM({$netSql}), 0) AS net_total
+                FROM sales s
+                WHERE " . implode(' AND ', $where);
+
+        $stmt = Database::connection()->prepare($sql);
+        if (SchemaInspector::hasColumn('sales', 'business_id')) {
+            $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
+        }
+        if ($fromDate !== '') {
+            $stmt->bindValue(':from_date', $fromDate);
+        }
+        if ($toDate !== '') {
+            $stmt->bindValue(':to_date', $toDate);
+        }
+        $stmt->execute();
+        $row = $stmt->fetch();
+
+        $result = [
+            'count' => (int) ($row['item_count'] ?? 0),
+            'gross' => (float) ($row['gross_total'] ?? 0),
+            'net' => (float) ($row['net_total'] ?? 0),
+        ];
+
+        if (!$withTypeBreakdown || !SchemaInspector::hasColumn('sales', 'sale_type')) {
+            return $result;
+        }
+
+        $typeSql = "LOWER(COALESCE(NULLIF(TRIM(s.sale_type), ''), 'other'))";
+        $typeStmt = Database::connection()->prepare("SELECT
+                    {$typeSql} AS sale_type,
+                    COUNT(*) AS item_count,
+                    COALESCE(SUM({$grossSql}), 0) AS gross_total,
+                    COALESCE(SUM({$netSql}), 0) AS net_total
+                FROM sales s
+                WHERE " . implode(' AND ', $where) . "
+                GROUP BY {$typeSql}");
+        if (SchemaInspector::hasColumn('sales', 'business_id')) {
+            $typeStmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
+        }
+        if ($fromDate !== '') {
+            $typeStmt->bindValue(':from_date', $fromDate);
+        }
+        if ($toDate !== '') {
+            $typeStmt->bindValue(':to_date', $toDate);
+        }
+        $typeStmt->execute();
+
+        $byType = [];
+        foreach ($typeStmt->fetchAll() as $typeRow) {
+            if (!is_array($typeRow)) {
+                continue;
+            }
+            $typeKey = strtolower(trim((string) ($typeRow['sale_type'] ?? '')));
+            if ($typeKey === '') {
+                $typeKey = 'other';
+            }
+            $byType[$typeKey] = [
+                'count' => (int) ($typeRow['item_count'] ?? 0),
+                'gross' => (float) ($typeRow['gross_total'] ?? 0),
+                'net' => (float) ($typeRow['net_total'] ?? 0),
+            ];
+        }
+
+        $result['by_type'] = $byType;
+
+        return $result;
     }
 
     public static function findForBusiness(int $businessId, int $saleId): ?array
@@ -1090,6 +1200,14 @@ final class Sale
     /**
      * @param array<int, string> $where
      */
+    /**
+     * @param array<int, string> $where
+     */
+    public static function appendScopeToWhere(array &$where, string $scope, string $alias = 's'): void
+    {
+        self::appendEstateSaleScopeCondition($where, $scope, $alias);
+    }
+
     private static function appendEstateSaleScopeCondition(array &$where, string $scope, string $alias = 's'): void
     {
         if (!SchemaInspector::hasColumn('sales', 'estate_sale_id')) {

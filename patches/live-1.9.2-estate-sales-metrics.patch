@@ -1,0 +1,863 @@
+diff --git a/app/Controllers/ReportsController.php b/app/Controllers/ReportsController.php
+index 5d2dabf..f87c9f6 100644
+--- a/app/Controllers/ReportsController.php
++++ b/app/Controllers/ReportsController.php
+@@ -133,6 +133,7 @@ final class ReportsController extends Controller
+         $report = ReportSummary::build($businessId, $fromDate, $toDate);
+ 
+         $sales = is_array($report['sales'] ?? null) ? $report['sales'] : [];
++        $estateSales = is_array($report['estate_sales'] ?? null) ? $report['estate_sales'] : [];
+         $service = is_array($report['service'] ?? null) ? $report['service'] : [];
+         $expenses = is_array($report['expenses'] ?? null) ? $report['expenses'] : [];
+         $purchases = is_array($report['purchases'] ?? null) ? $report['purchases'] : [];
+@@ -175,6 +176,13 @@ final class ReportsController extends Controller
+         fputcsv($out, ['Net', $this->csvMoney($sales['net'] ?? 0)]);
+         fputcsv($out, []);
+ 
++        fputcsv($out, ['Estate sales (summary)']);
++        fputcsv($out, ['Field', 'Value']);
++        fputcsv($out, ['Count', (string) ((int) ($estateSales['count'] ?? 0))]);
++        fputcsv($out, ['Gross', $this->csvMoney($estateSales['gross'] ?? 0)]);
++        fputcsv($out, ['Net', $this->csvMoney($estateSales['net'] ?? 0)]);
++        fputcsv($out, []);
++
+         fputcsv($out, ['Expenses']);
+         fputcsv($out, ['Field', 'Value']);
+         fputcsv($out, ['Count', (string) ((int) ($expenses['count'] ?? 0))]);
+diff --git a/app/Models/DashboardSummary.php b/app/Models/DashboardSummary.php
+index 3150d3d..70730cf 100644
+--- a/app/Models/DashboardSummary.php
++++ b/app/Models/DashboardSummary.php
+@@ -14,7 +14,7 @@ final class DashboardSummary
+         $cacheKey = 'dash:' . $businessId . ':' . $ownerUserId . ':' . AppCache::versionSuffix();
+         if (AppCache::enabled()) {
+             $cached = AppCache::get($cacheKey);
+-            if (is_array($cached) && isset($cached['sales'], $cached['service'], $cached['lists'])) {
++            if (is_array($cached) && isset($cached['sales'], $cached['estate_sales'], $cached['service'], $cached['lists'])) {
+                 return $cached;
+             }
+         }
+@@ -25,6 +25,7 @@ final class DashboardSummary
+ 
+         $payload = [
+             'sales' => self::salesSummary($businessId),
++            'estate_sales' => self::estateSalesSummary($businessId),
+             'service' => self::serviceSummary($businessId),
+             'receivables' => self::receivablesSummary($businessId),
+             'expenses' => self::expensesSummary($businessId),
+@@ -40,6 +41,7 @@ final class DashboardSummary
+                 'outstanding_quotes' => self::outstandingQuotes($businessId),
+                 'my_tasks_due' => self::myTasksDue($businessId, $ownerUserId),
+                 'recent_sales' => self::recentSales($businessId),
++                'recent_estate_sale_records' => self::recentEstateSaleRecords($businessId),
+                 'upcoming_deliveries' => self::upcomingDeliveries($businessId),
+             ],
+         ];
+@@ -60,59 +62,12 @@ final class DashboardSummary
+ 
+     private static function salesSummary(int $businessId): array
+     {
+-        $summary = [
+-            'mtd_gross' => 0.0,
+-            'mtd_net' => 0.0,
+-            'mtd_count' => 0,
+-            'ytd_gross' => 0.0,
+-            'ytd_net' => 0.0,
+-            'ytd_count' => 0,
+-        ];
+-
+-        if (!SchemaInspector::hasTable('sales')) {
+-            return $summary;
+-        }
+-
+-        $grossSql = SchemaInspector::hasColumn('sales', 'gross_amount')
+-            ? 'COALESCE(s.gross_amount, 0)'
+-            : (SchemaInspector::hasColumn('sales', 'amount') ? 'COALESCE(s.amount, 0)' : '0');
+-        $netSql = SchemaInspector::hasColumn('sales', 'net_amount') ? 'COALESCE(s.net_amount, 0)' : $grossSql;
+-        $dateSql = SchemaInspector::hasColumn('sales', 'sale_date') ? 'DATE(s.sale_date)' : 'DATE(s.created_at)';
+-
+-        $where = [
+-            SchemaInspector::hasColumn('sales', 'business_id') ? 's.business_id = :business_id' : '1=1',
+-            SchemaInspector::hasColumn('sales', 'deleted_at') ? 's.deleted_at IS NULL' : '1=1',
+-        ];
+-
+-        $sql = "SELECT
+-                    COALESCE(SUM(CASE WHEN {$dateSql} >= DATE_FORMAT(CURDATE(), '%Y-%m-01') AND {$dateSql} <= CURDATE() THEN {$grossSql} ELSE 0 END), 0) AS mtd_gross,
+-                    COALESCE(SUM(CASE WHEN {$dateSql} >= DATE_FORMAT(CURDATE(), '%Y-%m-01') AND {$dateSql} <= CURDATE() THEN {$netSql} ELSE 0 END), 0) AS mtd_net,
+-                    COALESCE(SUM(CASE WHEN {$dateSql} >= DATE_FORMAT(CURDATE(), '%Y-%m-01') AND {$dateSql} <= CURDATE() THEN 1 ELSE 0 END), 0) AS mtd_count,
+-                    COALESCE(SUM(CASE WHEN {$dateSql} >= DATE_FORMAT(CURDATE(), '%Y-01-01') AND {$dateSql} <= CURDATE() THEN {$grossSql} ELSE 0 END), 0) AS ytd_gross,
+-                    COALESCE(SUM(CASE WHEN {$dateSql} >= DATE_FORMAT(CURDATE(), '%Y-01-01') AND {$dateSql} <= CURDATE() THEN {$netSql} ELSE 0 END), 0) AS ytd_net,
+-                    COALESCE(SUM(CASE WHEN {$dateSql} >= DATE_FORMAT(CURDATE(), '%Y-01-01') AND {$dateSql} <= CURDATE() THEN 1 ELSE 0 END), 0) AS ytd_count
+-                FROM sales s
+-                WHERE " . implode(' AND ', $where);
+-
+-        $stmt = Database::connection()->prepare($sql);
+-        if (SchemaInspector::hasColumn('sales', 'business_id')) {
+-            $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
+-        }
+-        $stmt->execute();
+-
+-        $row = $stmt->fetch();
+-        if (!is_array($row)) {
+-            return $summary;
+-        }
++        return Sale::summary($businessId, Sale::ESTATE_SCOPE_GENERAL);
++    }
+ 
+-        return [
+-            'mtd_gross' => (float) ($row['mtd_gross'] ?? 0),
+-            'mtd_net' => (float) ($row['mtd_net'] ?? 0),
+-            'mtd_count' => (int) ($row['mtd_count'] ?? 0),
+-            'ytd_gross' => (float) ($row['ytd_gross'] ?? 0),
+-            'ytd_net' => (float) ($row['ytd_net'] ?? 0),
+-            'ytd_count' => (int) ($row['ytd_count'] ?? 0),
+-        ];
++    private static function estateSalesSummary(int $businessId): array
++    {
++        return Sale::summary($businessId, Sale::ESTATE_SCOPE_ESTATE_ONLY);
+     }
+ 
+     private static function serviceSummary(int $businessId): array
+@@ -832,6 +787,7 @@ final class DashboardSummary
+             'DATE(' . $dateSql . ") >= DATE_FORMAT(CURDATE(), '%Y-%m-01')",
+             'DATE(' . $dateSql . ') <= CURDATE()',
+         ];
++        Sale::appendScopeToWhere($where, Sale::ESTATE_SCOPE_GENERAL);
+ 
+         $sql = "SELECT
+                     s.id,
+@@ -856,8 +812,80 @@ final class DashboardSummary
+         return is_array($rows) ? $rows : [];
+     }
+ 
++    private static function recentEstateSaleRecords(int $businessId, int $limit = 5): array
++    {
++        if (!SchemaInspector::hasTable('sales') || !SchemaInspector::hasColumn('sales', 'estate_sale_id')) {
++            return [];
++        }
++
++        $nameSql = SchemaInspector::hasColumn('sales', 'name') ? 's.name' : "CONCAT('Sale #', s.id)";
++        $dateSql = SchemaInspector::hasColumn('sales', 'sale_date') ? 's.sale_date' : 's.created_at';
++        $grossSql = SchemaInspector::hasColumn('sales', 'gross_amount')
++            ? 'COALESCE(s.gross_amount, 0)'
++            : (SchemaInspector::hasColumn('sales', 'amount') ? 'COALESCE(s.amount, 0)' : '0');
++        $netSql = SchemaInspector::hasColumn('sales', 'net_amount') ? 'COALESCE(s.net_amount, 0)' : $grossSql;
++        $estateTitleSql = SchemaInspector::hasTable('estate_sales') && SchemaInspector::hasColumn('estate_sales', 'title')
++            ? "COALESCE(NULLIF(TRIM(es.title), ''), CONCAT('Estate Sale #', es.id))"
++            : "CONCAT('Estate Sale #', s.estate_sale_id)";
++        $customerNameSql = 'NULL';
++        $joins = [];
++        if (SchemaInspector::hasTable('estate_sales')) {
++            $join = 'LEFT JOIN estate_sales es ON es.id = s.estate_sale_id';
++            if (SchemaInspector::hasColumn('estate_sales', 'deleted_at')) {
++                $join .= ' AND es.deleted_at IS NULL';
++            }
++            if (SchemaInspector::hasColumn('estate_sales', 'business_id') && SchemaInspector::hasColumn('sales', 'business_id')) {
++                $join .= ' AND es.business_id = s.business_id';
++            }
++            $joins[] = $join;
++        }
++        if (SchemaInspector::hasColumn('sales', 'estate_sale_customer_id') && SchemaInspector::hasTable('estate_sale_customers')) {
++            $join = 'LEFT JOIN estate_sale_customers esc ON esc.id = s.estate_sale_customer_id';
++            if (SchemaInspector::hasColumn('estate_sale_customers', 'deleted_at')) {
++                $join .= ' AND esc.deleted_at IS NULL';
++            }
++            $joins[] = $join;
++            $customerNameSql = "COALESCE(NULLIF(TRIM(CONCAT_WS(' ', esc.first_name, esc.last_name)), ''), CONCAT('Customer #', esc.id))";
++        }
++
++        $where = [
++            SchemaInspector::hasColumn('sales', 'business_id') ? 's.business_id = :business_id' : '1=1',
++            SchemaInspector::hasColumn('sales', 'deleted_at') ? 's.deleted_at IS NULL' : '1=1',
++            'DATE(' . $dateSql . ") >= DATE_FORMAT(CURDATE(), '%Y-%m-01')",
++            'DATE(' . $dateSql . ') <= CURDATE()',
++        ];
++        Sale::appendScopeToWhere($where, Sale::ESTATE_SCOPE_ESTATE_ONLY);
++
++        $sql = "SELECT
++                    s.id,
++                    s.estate_sale_id,
++                    {$nameSql} AS name,
++                    {$dateSql} AS sale_date,
++                    {$grossSql} AS gross_amount,
++                    {$netSql} AS net_amount,
++                    {$estateTitleSql} AS estate_sale_title,
++                    {$customerNameSql} AS customer_name
++                FROM sales s";
++        if ($joins !== []) {
++            $sql .= "\n" . implode("\n", $joins);
++        }
++        $sql .= "\nWHERE " . implode(' AND ', $where) . "
++                ORDER BY {$dateSql} DESC, s.id DESC
++                LIMIT :row_limit";
++
++        $stmt = Database::connection()->prepare($sql);
++        if (SchemaInspector::hasColumn('sales', 'business_id')) {
++            $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
++        }
++        $stmt->bindValue(':row_limit', max(1, min($limit, 20)), \PDO::PARAM_INT);
++        $stmt->execute();
++
++        $rows = $stmt->fetchAll();
++        return is_array($rows) ? $rows : [];
++    }
++
+     /**
+-     * Last three calendar months (oldest → newest): total gross (sales + service), sales gross, service gross, expenses total, net profit.
++     * Last three calendar months (oldest → newest): total gross (sales + estate + service), sales gross, estate sales gross, service gross, expenses total, net profit.
+      * Net matches reports: sales net + service net − general expenses; service net = invoice gross − job expenses in month.
+      *
+      * @return array{months: list<array{label: string, total_gross: float, sales_gross: float, service_gross: float, expenses_total: float, net_profit: float}>}
+@@ -871,19 +899,22 @@ final class DashboardSummary
+             $from = $dt->format('Y-m-01');
+             $to = $dt->format('Y-m-t');
+             $label = $dt->format('M Y');
+-            $salesGross = self::monthlySalesGross($businessId, $from, $to);
+-            $salesNet = self::monthlySalesNet($businessId, $from, $to);
++            $salesGross = self::monthlySalesGross($businessId, $from, $to, Sale::ESTATE_SCOPE_GENERAL);
++            $estateSalesGross = self::monthlySalesGross($businessId, $from, $to, Sale::ESTATE_SCOPE_ESTATE_ONLY);
++            $salesNet = self::monthlySalesNet($businessId, $from, $to, Sale::ESTATE_SCOPE_GENERAL);
++            $estateSalesNet = self::monthlySalesNet($businessId, $from, $to, Sale::ESTATE_SCOPE_ESTATE_ONLY);
+             $serviceGross = self::monthlyServiceInvoiceGross($businessId, $from, $to);
+             $jobExp = self::expensesTotalBetween($businessId, $from, $to, true);
+             $generalExp = self::expensesTotalBetween($businessId, $from, $to, false);
+             $serviceNet = round($serviceGross - $jobExp, 2);
+             $expensesTotal = round($jobExp + $generalExp, 2);
+-            $netProfit = round($salesNet + $serviceNet - $generalExp, 2);
+-            $totalGross = round($salesGross + $serviceGross, 2);
++            $netProfit = round($salesNet + $estateSalesNet + $serviceNet - $generalExp, 2);
++            $totalGross = round($salesGross + $estateSalesGross + $serviceGross, 2);
+             $months[] = [
+                 'label' => $label,
+                 'total_gross' => $totalGross,
+                 'sales_gross' => round($salesGross, 2),
++                'estate_sales_gross' => round($estateSalesGross, 2),
+                 'service_gross' => round($serviceGross, 2),
+                 'expenses_total' => $expensesTotal,
+                 'net_profit' => $netProfit,
+@@ -893,7 +924,7 @@ final class DashboardSummary
+         return ['months' => $months];
+     }
+ 
+-    private static function monthlySalesGross(int $businessId, string $from, string $to): float
++    private static function monthlySalesGross(int $businessId, string $from, string $to, string $estateSaleScope = Sale::ESTATE_SCOPE_ALL): float
+     {
+         if (!SchemaInspector::hasTable('sales')) {
+             return 0.0;
+@@ -907,6 +938,7 @@ final class DashboardSummary
+             SchemaInspector::hasColumn('sales', 'deleted_at') ? 's.deleted_at IS NULL' : '1=1',
+             "{$dateSql} BETWEEN :from_date AND :to_date",
+         ];
++        Sale::appendScopeToWhere($where, $estateSaleScope);
+         $sql = "SELECT COALESCE(SUM({$grossSql}), 0) AS gross_total FROM sales s WHERE " . implode(' AND ', $where);
+         $stmt = Database::connection()->prepare($sql);
+         if (SchemaInspector::hasColumn('sales', 'business_id')) {
+@@ -920,7 +952,7 @@ final class DashboardSummary
+         return (float) ($row['gross_total'] ?? 0);
+     }
+ 
+-    private static function monthlySalesNet(int $businessId, string $from, string $to): float
++    private static function monthlySalesNet(int $businessId, string $from, string $to, string $estateSaleScope = Sale::ESTATE_SCOPE_ALL): float
+     {
+         if (!SchemaInspector::hasTable('sales')) {
+             return 0.0;
+@@ -935,6 +967,7 @@ final class DashboardSummary
+             SchemaInspector::hasColumn('sales', 'deleted_at') ? 's.deleted_at IS NULL' : '1=1',
+             "{$dateSql} BETWEEN :from_date AND :to_date",
+         ];
++        Sale::appendScopeToWhere($where, $estateSaleScope);
+         $sql = "SELECT COALESCE(SUM({$netSql}), 0) AS net_total FROM sales s WHERE " . implode(' AND ', $where);
+         $stmt = Database::connection()->prepare($sql);
+         if (SchemaInspector::hasColumn('sales', 'business_id')) {
+diff --git a/app/Models/ReportSummary.php b/app/Models/ReportSummary.php
+index 3bba574..52ba342 100644
+--- a/app/Models/ReportSummary.php
++++ b/app/Models/ReportSummary.php
+@@ -11,16 +11,18 @@ final class ReportSummary
+     public static function build(int $businessId, string $fromDate, string $toDate): array
+     {
+         $sales = self::salesSummary($businessId, $fromDate, $toDate);
++        $estateSales = self::estateSalesSummary($businessId, $fromDate, $toDate);
+         $service = self::serviceSummary($businessId, $fromDate, $toDate);
+         $expenses = self::expenseSummary($businessId, $fromDate, $toDate);
+         $purchases = self::purchaseSummary($businessId, $fromDate, $toDate);
+ 
+-        $overallGross = $sales['gross'] + $service['gross'];
+-        $overallNet = $sales['net'] + $service['net'] - $expenses['general_total'];
++        $overallGross = $sales['gross'] + $estateSales['gross'] + $service['gross'];
++        $overallNet = $sales['net'] + $estateSales['net'] + $service['net'] - $expenses['general_total'];
+         $overallNetMinusPurchases = $overallNet - $purchases['total'];
+ 
+         return [
+             'sales' => $sales,
++            'estate_sales' => $estateSales,
+             'service' => $service,
+             'expenses' => $expenses,
+             'purchases' => $purchases,
+@@ -80,6 +82,16 @@ final class ReportSummary
+         return self::salesSummary($businessId, $fromDate, $toDate);
+     }
+ 
++    /**
++     * Estate sale transaction aggregates for the period.
++     *
++     * @return array{count:int, gross:float, net:float}
++     */
++    public static function estateSalesTotalsForRange(int $businessId, string $fromDate, string $toDate): array
++    {
++        return self::estateSalesSummary($businessId, $fromDate, $toDate);
++    }
++
+     /**
+      * Purchase aggregates for the period (full totals, not limited to list rows).
+      *
+@@ -311,72 +323,33 @@ final class ReportSummary
+             $defaultTypes[$type] = ['count' => 0, 'gross' => 0.0, 'net' => 0.0];
+         }
+ 
+-        if (!SchemaInspector::hasTable('sales')) {
+-            return ['count' => 0, 'gross' => 0.0, 'net' => 0.0, 'by_type' => $defaultTypes];
+-        }
+-
+-        $grossSql = SchemaInspector::hasColumn('sales', 'gross_amount')
+-            ? 'COALESCE(s.gross_amount, 0)'
+-            : (SchemaInspector::hasColumn('sales', 'amount') ? 'COALESCE(s.amount, 0)' : '0');
+-        $netSql = SchemaInspector::hasColumn('sales', 'net_amount') ? 'COALESCE(s.net_amount, 0)' : $grossSql;
+-        $typeSql = SchemaInspector::hasColumn('sales', 'sale_type') ? "LOWER(COALESCE(NULLIF(TRIM(s.sale_type), ''), 'other'))" : "'other'";
+-        $dateSql = self::dateSql('sales', 's', ['sale_date', 'created_at']);
+-
+-        $where = self::baseWhere('sales', 's', $businessId);
+-        if ($dateSql !== null) {
+-            $where[] = "DATE({$dateSql}) BETWEEN :from_date AND :to_date";
+-        }
+-
+-        $sql = "SELECT
+-                    COUNT(*) AS item_count,
+-                    COALESCE(SUM({$grossSql}), 0) AS gross_total,
+-                    COALESCE(SUM({$netSql}), 0) AS net_total
+-                FROM sales s
+-                WHERE " . implode(' AND ', $where);
+-
+-        $stmt = Database::connection()->prepare($sql);
+-        $params = self::baseParams('sales', $businessId);
+-        if ($dateSql !== null) {
+-            $params['from_date'] = $fromDate;
+-            $params['to_date'] = $toDate;
+-        }
+-        $stmt->execute($params);
+-        $row = $stmt->fetch();
++        $totals = Sale::periodTotals($businessId, $fromDate, $toDate, Sale::ESTATE_SCOPE_GENERAL, true);
++        $byType = is_array($totals['by_type'] ?? null) ? $totals['by_type'] : [];
++        unset($totals['by_type']);
+ 
+-        $byType = $defaultTypes;
+-        $typeStmt = Database::connection()->prepare("SELECT
+-                    {$typeSql} AS sale_type,
+-                    COUNT(*) AS item_count,
+-                    COALESCE(SUM({$grossSql}), 0) AS gross_total,
+-                    COALESCE(SUM({$netSql}), 0) AS net_total
+-                FROM sales s
+-                WHERE " . implode(' AND ', $where) . "
+-                GROUP BY {$typeSql}");
+-        $typeStmt->execute($params);
+-        foreach ($typeStmt->fetchAll() as $typeRow) {
+-            $typeKey = strtolower(trim((string) ($typeRow['sale_type'] ?? '')));
+-            if ($typeKey === '') {
+-                $typeKey = 'other';
+-            }
+-            if (!isset($byType[$typeKey])) {
+-                $byType[$typeKey] = ['count' => 0, 'gross' => 0.0, 'net' => 0.0];
++        foreach ($byType as $typeKey => $typeSummary) {
++            if (!isset($defaultTypes[$typeKey])) {
++                $defaultTypes[$typeKey] = ['count' => 0, 'gross' => 0.0, 'net' => 0.0];
+             }
+-
+-            $byType[$typeKey] = [
+-                'count' => (int) ($typeRow['item_count'] ?? 0),
+-                'gross' => (float) ($typeRow['gross_total'] ?? 0),
+-                'net' => (float) ($typeRow['net_total'] ?? 0),
+-            ];
++            $defaultTypes[$typeKey] = $typeSummary;
+         }
+ 
+         return [
+-            'count' => (int) ($row['item_count'] ?? 0),
+-            'gross' => (float) ($row['gross_total'] ?? 0),
+-            'net' => (float) ($row['net_total'] ?? 0),
+-            'by_type' => $byType,
++            'count' => (int) ($totals['count'] ?? 0),
++            'gross' => (float) ($totals['gross'] ?? 0),
++            'net' => (float) ($totals['net'] ?? 0),
++            'by_type' => $defaultTypes,
+         ];
+     }
+ 
++    /**
++     * @return array{count:int, gross:float, net:float}
++     */
++    private static function estateSalesSummary(int $businessId, string $fromDate, string $toDate): array
++    {
++        return Sale::periodTotals($businessId, $fromDate, $toDate, Sale::ESTATE_SCOPE_ESTATE_ONLY);
++    }
++
+     /**
+      * @return list<string>
+      */
+@@ -387,7 +360,7 @@ final class ReportSummary
+             FormSelectValue::optionsForSection($businessId, 'sale_type')
+         );
+ 
+-        foreach (Sale::typeOptions($businessId) as $value) {
++        foreach (Sale::typeOptions($businessId, Sale::ESTATE_SCOPE_GENERAL) as $value) {
+             $normalized = strtolower(trim((string) $value));
+             if ($normalized !== '') {
+                 $options[] = $normalized;
+@@ -585,6 +558,7 @@ final class ReportSummary
+         if ($dateSql !== null) {
+             $where[] = "DATE({$dateSql}) BETWEEN :from_date AND :to_date";
+         }
++        Sale::appendScopeToWhere($where, Sale::ESTATE_SCOPE_GENERAL);
+ 
+         $sql = "SELECT
+                     s.id,
+diff --git a/app/Models/Sale.php b/app/Models/Sale.php
+index 326015c..a5bd464 100644
+--- a/app/Models/Sale.php
++++ b/app/Models/Sale.php
+@@ -418,6 +418,8 @@ final class Sale
+         if (!SchemaInspector::hasTable('sales')) {
+             return [
+                 'count' => 0,
++                'mtd_count' => 0,
++                'ytd_count' => 0,
+                 'gross_mtd' => 0.0,
+                 'net_mtd' => 0.0,
+                 'gross_ytd' => 0.0,
+@@ -441,6 +443,8 @@ final class Sale
+ 
+         $sql = "SELECT
+                     COUNT(*) AS total_count,
++                    SUM(CASE WHEN {$dateSql} >= DATE_FORMAT(CURDATE(), '%Y-%m-01') AND {$dateSql} <= CURDATE() THEN 1 ELSE 0 END) AS mtd_count,
++                    SUM(CASE WHEN YEAR({$dateSql}) = YEAR(CURDATE()) AND {$dateSql} <= CURDATE() THEN 1 ELSE 0 END) AS ytd_count,
+                     SUM(CASE WHEN {$dateSql} >= DATE_FORMAT(CURDATE(), '%Y-%m-01') AND {$dateSql} <= CURDATE() THEN {$grossSql} ELSE 0 END) AS gross_mtd,
+                     SUM(CASE WHEN {$dateSql} >= DATE_FORMAT(CURDATE(), '%Y-%m-01') AND {$dateSql} <= CURDATE() THEN {$netSql} ELSE 0 END) AS net_mtd,
+                     SUM(CASE WHEN YEAR({$dateSql}) = YEAR(CURDATE()) AND {$dateSql} <= CURDATE() THEN {$grossSql} ELSE 0 END) AS gross_ytd,
+@@ -457,6 +461,8 @@ final class Sale
+         $row = $stmt->fetch();
+         return [
+             'count' => (int) ($row['total_count'] ?? 0),
++            'mtd_count' => (int) ($row['mtd_count'] ?? 0),
++            'ytd_count' => (int) ($row['ytd_count'] ?? 0),
+             'gross_mtd' => (float) ($row['gross_mtd'] ?? 0),
+             'net_mtd' => (float) ($row['net_mtd'] ?? 0),
+             'gross_ytd' => (float) ($row['gross_ytd'] ?? 0),
+@@ -464,6 +470,110 @@ final class Sale
+         ];
+     }
+ 
++    /**
++     * @return array{count:int, gross:float, net:float, by_type?: array<string, array{count:int, gross:float, net:float}>}
++     */
++    public static function periodTotals(
++        int $businessId,
++        string $fromDate,
++        string $toDate,
++        string $estateSaleScope = self::ESTATE_SCOPE_ALL,
++        bool $withTypeBreakdown = false
++    ): array {
++        $empty = ['count' => 0, 'gross' => 0.0, 'net' => 0.0];
++        if (!SchemaInspector::hasTable('sales')) {
++            return $withTypeBreakdown ? $empty + ['by_type' => []] : $empty;
++        }
++
++        $estateSaleScope = self::normalizeEstateSaleScope($estateSaleScope);
++        $fromDate = trim($fromDate);
++        $toDate = trim($toDate);
++        $grossSql = self::saleGrossExpr('s');
++        $netSql = self::saleNetExpr('s');
++        $filterDateSql = self::saleFilterDateExpr('s');
++
++        $where = [];
++        $where[] = SchemaInspector::hasColumn('sales', 'business_id') ? 's.business_id = :business_id' : '1=1';
++        $where[] = SchemaInspector::hasColumn('sales', 'deleted_at') ? 's.deleted_at IS NULL' : '1=1';
++        self::appendEstateSaleScopeCondition($where, $estateSaleScope);
++        if ($fromDate !== '') {
++            $where[] = "{$filterDateSql} >= :from_date";
++        }
++        if ($toDate !== '') {
++            $where[] = "{$filterDateSql} <= :to_date";
++        }
++
++        $sql = "SELECT
++                    COUNT(*) AS item_count,
++                    COALESCE(SUM({$grossSql}), 0) AS gross_total,
++                    COALESCE(SUM({$netSql}), 0) AS net_total
++                FROM sales s
++                WHERE " . implode(' AND ', $where);
++
++        $stmt = Database::connection()->prepare($sql);
++        if (SchemaInspector::hasColumn('sales', 'business_id')) {
++            $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
++        }
++        if ($fromDate !== '') {
++            $stmt->bindValue(':from_date', $fromDate);
++        }
++        if ($toDate !== '') {
++            $stmt->bindValue(':to_date', $toDate);
++        }
++        $stmt->execute();
++        $row = $stmt->fetch();
++
++        $result = [
++            'count' => (int) ($row['item_count'] ?? 0),
++            'gross' => (float) ($row['gross_total'] ?? 0),
++            'net' => (float) ($row['net_total'] ?? 0),
++        ];
++
++        if (!$withTypeBreakdown || !SchemaInspector::hasColumn('sales', 'sale_type')) {
++            return $result;
++        }
++
++        $typeSql = "LOWER(COALESCE(NULLIF(TRIM(s.sale_type), ''), 'other'))";
++        $typeStmt = Database::connection()->prepare("SELECT
++                    {$typeSql} AS sale_type,
++                    COUNT(*) AS item_count,
++                    COALESCE(SUM({$grossSql}), 0) AS gross_total,
++                    COALESCE(SUM({$netSql}), 0) AS net_total
++                FROM sales s
++                WHERE " . implode(' AND ', $where) . "
++                GROUP BY {$typeSql}");
++        if (SchemaInspector::hasColumn('sales', 'business_id')) {
++            $typeStmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
++        }
++        if ($fromDate !== '') {
++            $typeStmt->bindValue(':from_date', $fromDate);
++        }
++        if ($toDate !== '') {
++            $typeStmt->bindValue(':to_date', $toDate);
++        }
++        $typeStmt->execute();
++
++        $byType = [];
++        foreach ($typeStmt->fetchAll() as $typeRow) {
++            if (!is_array($typeRow)) {
++                continue;
++            }
++            $typeKey = strtolower(trim((string) ($typeRow['sale_type'] ?? '')));
++            if ($typeKey === '') {
++                $typeKey = 'other';
++            }
++            $byType[$typeKey] = [
++                'count' => (int) ($typeRow['item_count'] ?? 0),
++                'gross' => (float) ($typeRow['gross_total'] ?? 0),
++                'net' => (float) ($typeRow['net_total'] ?? 0),
++            ];
++        }
++
++        $result['by_type'] = $byType;
++
++        return $result;
++    }
++
+     public static function findForBusiness(int $businessId, int $saleId): ?array
+     {
+         if (!SchemaInspector::hasTable('sales') || $saleId <= 0) {
+@@ -1090,6 +1200,14 @@ final class Sale
+     /**
+      * @param array<int, string> $where
+      */
++    /**
++     * @param array<int, string> $where
++     */
++    public static function appendScopeToWhere(array &$where, string $scope, string $alias = 's'): void
++    {
++        self::appendEstateSaleScopeCondition($where, $scope, $alias);
++    }
++
+     private static function appendEstateSaleScopeCondition(array &$where, string $scope, string $alias = 's'): void
+     {
+         if (!SchemaInspector::hasColumn('sales', 'estate_sale_id')) {
+diff --git a/app/Views/home/index.php b/app/Views/home/index.php
+index 44d759b..5f2b6ec 100644
+--- a/app/Views/home/index.php
++++ b/app/Views/home/index.php
+@@ -2,6 +2,7 @@
+ $businessName = (string) (($business['name'] ?? '') !== '' ? $business['name'] : ('Business #' . (string) current_business_id()));
+ $summary = is_array($summary ?? null) ? $summary : [];
+ $sales = is_array($summary['sales'] ?? null) ? $summary['sales'] : [];
++$estateSales = is_array($summary['estate_sales'] ?? null) ? $summary['estate_sales'] : [];
+ $service = is_array($summary['service'] ?? null) ? $summary['service'] : [];
+ $expenses = is_array($summary['expenses'] ?? null) ? $summary['expenses'] : [];
+ $purchasesSummary = is_array($summary['purchases'] ?? null) ? $summary['purchases'] : [];
+@@ -10,10 +11,10 @@ $jobs = is_array($summary['jobs'] ?? null) ? $summary['jobs'] : [];
+ $tasks = is_array($summary['tasks'] ?? null) ? $summary['tasks'] : [];
+ $lists = is_array($summary['lists'] ?? null) ? $summary['lists'] : [];
+ 
+-$totalMtdGross = (float) ($sales['mtd_gross'] ?? 0) + (float) ($service['mtd_gross'] ?? 0);
+-$totalYtdGross = (float) ($sales['ytd_gross'] ?? 0) + (float) ($service['ytd_gross'] ?? 0);
+-$totalMtdNet = (float) ($sales['mtd_net'] ?? 0) + (float) ($service['mtd_net'] ?? 0);
+-$totalYtdNet = (float) ($sales['ytd_net'] ?? 0) + (float) ($service['ytd_net'] ?? 0);
++$totalMtdGross = (float) ($sales['mtd_gross'] ?? 0) + (float) ($estateSales['mtd_gross'] ?? 0) + (float) ($service['mtd_gross'] ?? 0);
++$totalYtdGross = (float) ($sales['ytd_gross'] ?? 0) + (float) ($estateSales['ytd_gross'] ?? 0) + (float) ($service['ytd_gross'] ?? 0);
++$totalMtdNet = (float) ($sales['mtd_net'] ?? 0) + (float) ($estateSales['mtd_net'] ?? 0) + (float) ($service['mtd_net'] ?? 0);
++$totalYtdNet = (float) ($sales['ytd_net'] ?? 0) + (float) ($estateSales['ytd_net'] ?? 0) + (float) ($service['ytd_net'] ?? 0);
+ $profitYtd = $totalYtdNet - (float) ($expenses['ytd_total'] ?? 0);
+ $ytdNetMinusPurchases = (float) ($summary['ytd_net_minus_purchases'] ?? 0);
+ 
+@@ -23,6 +24,7 @@ $purchaseProspects = is_array($lists['purchase_prospects'] ?? null) ? $lists['pu
+ $outstandingQuotes = is_array($lists['outstanding_quotes'] ?? null) ? $lists['outstanding_quotes'] : [];
+ $myTasksDue = is_array($lists['my_tasks_due'] ?? null) ? $lists['my_tasks_due'] : [];
+ $recentSales = is_array($lists['recent_sales'] ?? null) ? $lists['recent_sales'] : [];
++$recentEstateSaleRecords = is_array($lists['recent_estate_sale_records'] ?? null) ? $lists['recent_estate_sale_records'] : [];
+ $upcomingDeliveries = is_array($lists['upcoming_deliveries'] ?? null) ? $lists['upcoming_deliveries'] : [];
+ $threeMonthChart = is_array($summary['three_month_chart'] ?? null) ? $summary['three_month_chart'] : ['months' => []];
+ $chartMonths = is_array($threeMonthChart['months'] ?? null) ? $threeMonthChart['months'] : [];
+@@ -30,6 +32,7 @@ $dashboardChartPayload = [
+     'labels' => [],
+     'total_gross' => [],
+     'sales_gross' => [],
++    'estate_sales_gross' => [],
+     'service_gross' => [],
+     'expenses_total' => [],
+     'net_profit' => [],
+@@ -40,9 +43,11 @@ foreach ($chartMonths as $m) {
+     }
+     $dashboardChartPayload['labels'][] = (string) ($m['label'] ?? '');
+     $salesG = round((float) ($m['sales_gross'] ?? 0), 2);
++    $estateSalesG = round((float) ($m['estate_sales_gross'] ?? 0), 2);
+     $serviceG = round((float) ($m['service_gross'] ?? 0), 2);
+-    $dashboardChartPayload['total_gross'][] = isset($m['total_gross']) ? round((float) $m['total_gross'], 2) : round($salesG + $serviceG, 2);
++    $dashboardChartPayload['total_gross'][] = isset($m['total_gross']) ? round((float) $m['total_gross'], 2) : round($salesG + $estateSalesG + $serviceG, 2);
+     $dashboardChartPayload['sales_gross'][] = $salesG;
++    $dashboardChartPayload['estate_sales_gross'][] = $estateSalesG;
+     $dashboardChartPayload['service_gross'][] = $serviceG;
+     $dashboardChartPayload['expenses_total'][] = round((float) ($m['expenses_total'] ?? 0), 2);
+     $dashboardChartPayload['net_profit'][] = round((float) ($m['net_profit'] ?? 0), 2);
+@@ -98,7 +103,12 @@ $employeeDisplayName = static function (array $row): string {
+     <a class="kpi-card kpi-card-link" href="<?= e(url('/sales')) ?>">
+         <span>Sales MTD / YTD</span>
+         <strong>$<?= e(number_format((float) ($sales['mtd_gross'] ?? 0), 2)) ?> / $<?= e(number_format((float) ($sales['ytd_gross'] ?? 0), 2)) ?></strong>
+-        <small>Net MTD $<?= e(number_format((float) ($sales['mtd_net'] ?? 0), 2)) ?> · Net YTD $<?= e(number_format((float) ($sales['ytd_net'] ?? 0), 2)) ?></small>
++        <small>Net MTD $<?= e(number_format((float) ($sales['mtd_net'] ?? 0), 2)) ?> · Net YTD $<?= e(number_format((float) ($sales['ytd_net'] ?? 0), 2)) ?> · excludes estate on-site</small>
++    </a>
++    <a class="kpi-card kpi-card-link" href="<?= e(url('/estate-sale-records')) ?>">
++        <span>Estate Sales MTD / YTD</span>
++        <strong>$<?= e(number_format((float) ($estateSales['mtd_gross'] ?? 0), 2)) ?> / $<?= e(number_format((float) ($estateSales['ytd_gross'] ?? 0), 2)) ?></strong>
++        <small>Net MTD $<?= e(number_format((float) ($estateSales['mtd_net'] ?? 0), 2)) ?> · Net YTD $<?= e(number_format((float) ($estateSales['ytd_net'] ?? 0), 2)) ?> · <?= e((string) ((int) ($estateSales['mtd_count'] ?? 0))) ?> MTD record(s)</small>
+     </a>
+     <a class="kpi-card kpi-card-link" href="<?= e(url('/reports')) ?>">
+         <span>Service Paid MTD / YTD</span>
+@@ -108,7 +118,7 @@ $employeeDisplayName = static function (array $row): string {
+     <a class="kpi-card kpi-card-link" href="<?= e(url('/reports')) ?>">
+         <span>Total Income MTD / YTD</span>
+         <strong>$<?= e(number_format($totalMtdGross, 2)) ?> / $<?= e(number_format($totalYtdGross, 2)) ?></strong>
+-        <small>Net MTD $<?= e(number_format($totalMtdNet, 2)) ?> · Net YTD $<?= e(number_format($totalYtdNet, 2)) ?></small>
++        <small>Net MTD $<?= e(number_format($totalMtdNet, 2)) ?> · Net YTD $<?= e(number_format($totalYtdNet, 2)) ?> · sales + estate + service</small>
+     </a>
+     <a class="kpi-card kpi-card-link" href="<?= e(url('/purchases')) ?>">
+         <span>Purchases MTD / YTD</span>
+@@ -136,7 +146,7 @@ $employeeDisplayName = static function (array $row): string {
+     <div class="card-header index-card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+         <div>
+             <strong class="fs-5"><i class="fas fa-chart-column me-2 jt-dashboard-icon--sales" aria-hidden="true"></i>Last 3 months</strong>
+-            <div class="small text-muted">Total gross, sales gross, service gross, expenses, and net profit by calendar month (same logic as Reports).</div>
++            <div class="small text-muted">Total gross, sales gross, estate sales gross, service gross, expenses, and net profit by calendar month (same logic as Reports).</div>
+         </div>
+         <a class="btn btn-sm btn-outline-secondary" href="<?= e(url('/reports')) ?>">Full reports</a>
+     </div>
+@@ -456,6 +466,36 @@ $employeeDisplayName = static function (array $row): string {
+             <?php endif; ?>
+         </div>
+     </section>
++
++    <section class="card index-card">
++        <div class="card-header index-card-header d-flex align-items-center justify-content-between">
++            <strong><i class="fas fa-store me-2 jt-dashboard-icon--service" aria-hidden="true"></i>Recent Estate Sale Records (MTD)</strong>
++            <a class="small text-decoration-none fw-semibold" href="<?= e(url('/estate-sale-records')) ?>">Open Estate Sale Records</a>
++        </div>
++        <div class="card-body">
++            <?php if ($recentEstateSaleRecords === []): ?>
++                <div class="record-empty">No estate sale records this month.</div>
++            <?php else: ?>
++                <div class="simple-list-table">
++                    <?php foreach ($recentEstateSaleRecords as $record): ?>
++                        <?php
++                        $recordId = (int) ($record['id'] ?? 0);
++                        $name = trim((string) ($record['name'] ?? '')) ?: ('Sale #' . (string) $recordId);
++                        $gross = (float) ($record['gross_amount'] ?? 0);
++                        $net = (float) ($record['net_amount'] ?? 0);
++                        $saleDate = $formatDate((string) ($record['sale_date'] ?? ''));
++                        $estateTitle = trim((string) ($record['estate_sale_title'] ?? '')) ?: 'Estate sale';
++                        $customerName = trim((string) ($record['customer_name'] ?? ''));
++                        ?>
++                        <a class="simple-list-row simple-list-row-link" href="<?= e(url('/sales/' . (string) $recordId)) ?>">
++                            <span class="simple-list-title"><?= e($name) ?></span>
++                            <span class="simple-list-meta"><?= e($saleDate) ?> · <?= e($estateTitle) ?><?= $customerName !== '' ? ' · ' . e($customerName) : '' ?> · Gross $<?= e(number_format($gross, 2)) ?> · Net $<?= e(number_format($net, 2)) ?></span>
++                        </a>
++                    <?php endforeach; ?>
++                </div>
++            <?php endif; ?>
++        </div>
++    </section>
+ </div>
+ 
+ <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" crossorigin="anonymous"></script>
+@@ -493,6 +533,10 @@ $employeeDisplayName = static function (array $row): string {
+                     { label: 'Sales gross', data: ds('sales_gross') },
+                     barColors('--jt-chart-sales-fill', '--jt-chart-sales-stroke')
+                 ),
++                Object.assign(
++                    { label: 'Estate sales gross', data: ds('estate_sales_gross') },
++                    barColors('--jt-chart-estate-sales-fill', '--jt-chart-estate-sales-stroke')
++                ),
+                 Object.assign(
+                     { label: 'Service gross', data: ds('service_gross') },
+                     barColors('--jt-chart-service-fill', '--jt-chart-service-stroke')
+diff --git a/app/Views/reports/income.php b/app/Views/reports/income.php
+index 9a15829..8d9be2c 100644
+--- a/app/Views/reports/income.php
++++ b/app/Views/reports/income.php
+@@ -4,6 +4,7 @@ $toDate = trim((string) ($toDate ?? date('Y-m-d')));
+ $report = is_array($report ?? null) ? $report : [];
+ 
+ $sales = is_array($report['sales'] ?? null) ? $report['sales'] : [];
++$estateSales = is_array($report['estate_sales'] ?? null) ? $report['estate_sales'] : [];
+ $service = is_array($report['service'] ?? null) ? $report['service'] : [];
+ $expenses = is_array($report['expenses'] ?? null) ? $report['expenses'] : [];
+ $purchases = is_array($report['purchases'] ?? null) ? $report['purchases'] : [];
+@@ -45,7 +46,7 @@ $resetHref = url('/reports/income');
+     <div class="page-header d-flex flex-wrap align-items-end justify-content-between gap-2">
+         <div>
+             <h1>Income report</h1>
+-            <p class="muted">Period summary for service, sales, expenses, and purchases</p>
++            <p class="muted">Period summary for service, sales, estate sales, expenses, and purchases</p>
+         </div>
+         <a class="btn btn-sm btn-outline-secondary" href="<?= e(url('/reports/export/income') . '?' . http_build_query(['from' => $fromDate, 'to' => $toDate])) ?>">
+             <i class="fas fa-download me-1" aria-hidden="true"></i>Download CSV
+@@ -119,7 +120,7 @@ $resetHref = url('/reports/income');
+                 </div>
+             </div>
+             <div class="card-body d-flex flex-column">
+-                <p class="small text-muted mb-3 mb-md-2">Gross (sales + invoiced service), total expenses, and profit (net after general expenses) for <?= e($formatDate($fromDate)) ?>–<?= e($formatDate($toDate)) ?>.</p>
++                <p class="small text-muted mb-3 mb-md-2">Gross (sales + estate sales + invoiced service), total expenses, and profit (net after general expenses) for <?= e($formatDate($fromDate)) ?>–<?= e($formatDate($toDate)) ?>.</p>
+                 <div class="jt-report-chart-holder flex-grow-1">
+                     <canvas id="jtReportsChart" aria-label="Chart of gross, expenses, and profit" role="img"></canvas>
+                 </div>
+@@ -181,6 +182,7 @@ $resetHref = url('/reports/income');
+         <section class="card index-card h-100 reports-card-sales">
+             <div class="card-header index-card-header"><strong><i class="fas fa-sack-dollar me-2 jt-report-icon--sales" aria-hidden="true"></i>Sales</strong></div>
+             <div class="card-body">
++                <p class="small text-muted mb-3">Shop, job, and other sales — excludes estate on-site records.</p>
+                 <div class="record-row-fields record-row-fields-3 mb-3">
+                     <div class="record-field"><span class="record-label">Count</span><span class="record-value"><span class="jt-report-count"><?= e((string) ((int) ($sales['count'] ?? 0))) ?></span></span></div>
+                     <div class="record-field"><span class="record-label">Gross</span><span class="record-value"><span class="jt-report-in"><?= e($formatMoney($sales['gross'] ?? 0)) ?></span></span></div>
+@@ -225,6 +227,22 @@ $resetHref = url('/reports/income');
+             </div>
+         </section>
+     </div>
++    <div class="col-12 col-xl-6">
++        <section class="card index-card h-100 reports-card-estate-sales">
++            <div class="card-header index-card-header"><strong><i class="fas fa-store me-2 jt-report-icon--service" aria-hidden="true"></i>Estate Sales</strong></div>
++            <div class="card-body">
++                <p class="small text-muted mb-3">On-site transactions recorded during estate sales.</p>
++                <div class="record-row-fields record-row-fields-3">
++                    <div class="record-field"><span class="record-label">Count</span><span class="record-value"><span class="jt-report-count"><?= e((string) ((int) ($estateSales['count'] ?? 0))) ?></span></span></div>
++                    <div class="record-field"><span class="record-label">Gross</span><span class="record-value"><span class="jt-report-in"><?= e($formatMoney($estateSales['gross'] ?? 0)) ?></span></span></div>
++                    <div class="record-field"><span class="record-label">Net</span><span class="record-value"><span class="jt-report-in"><?= e($formatMoney($estateSales['net'] ?? 0)) ?></span></span></div>
++                </div>
++                <div class="mt-3">
++                    <a class="small fw-semibold text-decoration-none" href="<?= e(url('/estate-sale-records')) ?>">View estate sale records</a>
++                </div>
++            </div>
++        </section>
++    </div>
+     <div class="col-12 col-xl-6">
+         <section class="card index-card h-100 reports-card-expenses">
+             <div class="card-header index-card-header"><strong><i class="fas fa-receipt me-2 jt-report-icon--expenses" aria-hidden="true"></i>Expenses</strong></div>
+diff --git a/config/app.php b/config/app.php
+index f66273c..0afad79 100644
+--- a/config/app.php
++++ b/config/app.php
+@@ -4,7 +4,7 @@ declare(strict_types=1);
+ 
+ return [
+     'name' => 'JunkTracker',
+-    'version' => '1.9.1-beta',
++    'version' => '1.9.2-beta',
+     'env' => 'local',
+     'url' => 'http://localhost/junktracker',
+     'timezone' => 'America/New_York',
+diff --git a/docs/deploy-checklist.md b/docs/deploy-checklist.md
+index 4ba4d06..d323983 100644
+--- a/docs/deploy-checklist.md
++++ b/docs/deploy-checklist.md
+@@ -2,8 +2,8 @@
+ 
+ Short list to keep releases predictable. Pair with delta bundles from `scripts/build-live-release.sh` and version tags.
+ 
+-**Latest release notes:** [releases/live-1.9.1-beta.md](./releases/live-1.9.1-beta.md) (Separate estate sale records from general sales list).  
+-**Earlier:** [releases/live-1.9.0.1-beta.md](./releases/live-1.9.0.1-beta.md), [releases/live-1.9.0-beta.md](./releases/live-1.9.0-beta.md), [releases/live-1.8.3.3-beta.md](./releases/live-1.8.3.3-beta.md), [releases/live-1.8.3.2-beta.md](./releases/live-1.8.3.2-beta.md), [releases/live-1.8.3.1-beta.md](./releases/live-1.8.3.1-beta.md), [releases/live-1.8.3-beta.md](./releases/live-1.8.3-beta.md), [releases/live-1.8.2.3-beta.md](./releases/live-1.8.2.3-beta.md), [releases/live-1.8.2.2-beta.md](./releases/live-1.8.2.2-beta.md), [releases/live-1.8.2.1-beta.md](./releases/live-1.8.2.1-beta.md), [releases/live-1.8.2-beta.md](./releases/live-1.8.2-beta.md), [releases/live-1.8.1-beta.md](./releases/live-1.8.1-beta.md), [releases/live-1.8.0-beta.md](./releases/live-1.8.0-beta.md), [releases/live-1.7.2.md](./releases/live-1.7.2.md), [releases/live-1.7.0.md](./releases/live-1.7.0.md), [releases/live-1.6.4-beta.md](./releases/live-1.6.4-beta.md), [releases/live-1.6.3-beta.md](./releases/live-1.6.3-beta.md), [releases/live-1.6.2-beta.md](./releases/live-1.6.2-beta.md), [releases/live-1.6.1-beta.md](./releases/live-1.6.1-beta.md), [releases/live-1.6.0.md](./releases/live-1.6.0.md), [releases/live-1.5.3.md](./releases/live-1.5.3.md).
++**Latest release notes:** [releases/live-1.9.2-beta.md](./releases/live-1.9.2-beta.md) (Estate sales dashboard and income report metrics).  
++**Earlier:** [releases/live-1.9.1-beta.md](./releases/live-1.9.1-beta.md), [releases/live-1.9.0.1-beta.md](./releases/live-1.9.0.1-beta.md), [releases/live-1.9.0-beta.md](./releases/live-1.9.0-beta.md), [releases/live-1.8.3.3-beta.md](./releases/live-1.8.3.3-beta.md), [releases/live-1.8.3.2-beta.md](./releases/live-1.8.3.2-beta.md), [releases/live-1.8.3.1-beta.md](./releases/live-1.8.3.1-beta.md), [releases/live-1.8.3-beta.md](./releases/live-1.8.3-beta.md), [releases/live-1.8.2.3-beta.md](./releases/live-1.8.2.3-beta.md), [releases/live-1.8.2.2-beta.md](./releases/live-1.8.2.2-beta.md), [releases/live-1.8.2.1-beta.md](./releases/live-1.8.2.1-beta.md), [releases/live-1.8.2-beta.md](./releases/live-1.8.2-beta.md), [releases/live-1.8.1-beta.md](./releases/live-1.8.1-beta.md), [releases/live-1.8.0-beta.md](./releases/live-1.8.0-beta.md), [releases/live-1.7.2.md](./releases/live-1.7.2.md), [releases/live-1.7.0.md](./releases/live-1.7.0.md), [releases/live-1.6.4-beta.md](./releases/live-1.6.4-beta.md), [releases/live-1.6.3-beta.md](./releases/live-1.6.3-beta.md), [releases/live-1.6.2-beta.md](./releases/live-1.6.2-beta.md), [releases/live-1.6.1-beta.md](./releases/live-1.6.1-beta.md), [releases/live-1.6.0.md](./releases/live-1.6.0.md), [releases/live-1.5.3.md](./releases/live-1.5.3.md).
+ 
+ ### Beta-live naming convention (standard)
+ 
+diff --git a/docs/releases/live-1.9.2-beta.md b/docs/releases/live-1.9.2-beta.md
+new file mode 100644
+index 0000000..15003b7
+--- /dev/null
++++ b/docs/releases/live-1.9.2-beta.md
+@@ -0,0 +1,40 @@
++# Live Release 1.9.2-beta
++
++Date: 2026-05-21
++
++## Highlights
++
++- **Dashboard:** New **Estate Sales MTD / YTD** KPI card with gross/net, separate from general Sales.
++- **Dashboard:** **Total Income** and 3-month chart now include estate sales (new purple **Estate sales gross** bar).
++- **Dashboard:** New **Recent Estate Sale Records (MTD)** panel.
++- **Income report:** New **Estate Sales** section (count, gross, net); general **Sales** section excludes on-site estate records.
++- **CSV export:** Income report CSV includes estate sales summary.
++
++## Changed files
++
++- `app/Models/Sale.php`
++- `app/Models/DashboardSummary.php`
++- `app/Models/ReportSummary.php`
++- `app/Controllers/ReportsController.php`
++- `app/Views/home/index.php`
++- `app/Views/reports/income.php`
++- `public/assets/css/jt-theme.css`
++- `config/app.php` (version `1.9.2-beta`)
++- `docs/deploy-checklist.md`, `docs/releases/live-1.9.2-beta.md`
++- `patches/live-1.9.2-estate-sales-metrics.patch` (optional hotfix apply)
++
++## Database migrations in this release
++
++No new database migrations are required for 1.9.2-beta.
++
++## Patch-only deploy (FTP / manual upload)
++
++From the project root:
++
++`patch -p1 < patches/live-1.9.2-estate-sales-metrics.patch`
++
++Or copy the files listed above from this bundle’s `upload/` tree.
++
++## Ops notes
++
++- Smoke test: Dashboard — confirm **Estate Sales** KPI and recent-records panel; **Reports → Income** — confirm **Estate Sales** section and that overall gross includes estate + sales + service.
+diff --git a/public/assets/css/jt-theme.css b/public/assets/css/jt-theme.css
+index 0634bd6..1ca9ddb 100644
+--- a/public/assets/css/jt-theme.css
++++ b/public/assets/css/jt-theme.css
+@@ -31,6 +31,8 @@
+   --jt-chart-total-gross-stroke: #0f766e;
+   --jt-chart-sales-fill: #60a5fa;
+   --jt-chart-sales-stroke: #1d4ed8;
++  --jt-chart-estate-sales-fill: #c084fc;
++  --jt-chart-estate-sales-stroke: #7e22ce;
+   --jt-chart-service-fill: #4ade80;
+   --jt-chart-service-stroke: #15803d;
+   --jt-chart-expenses-fill: #f472b6;
