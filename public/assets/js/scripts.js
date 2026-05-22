@@ -9,19 +9,56 @@
 
 window.addEventListener('DOMContentLoaded', event => {
 
+    const SIDEBAR_DESKTOP_MIN = 1200;
+    let sidebarDesktopViewport = window.innerWidth >= SIDEBAR_DESKTOP_MIN;
+
+    const isSidebarDesktopViewport = () => window.innerWidth >= SIDEBAR_DESKTOP_MIN;
+
+    const resetSidebarToDefault = () => {
+        document.body.classList.remove('sb-sidenav-toggled');
+    };
+
+    const syncSidebarForViewport = () => {
+        const isDesktop = isSidebarDesktopViewport();
+        if (isDesktop === sidebarDesktopViewport) {
+            return;
+        }
+        sidebarDesktopViewport = isDesktop;
+        resetSidebarToDefault();
+    };
+
     // Toggle the side navigation
     const sidebarToggle = document.body.querySelector('#sidebarToggle');
     if (sidebarToggle) {
-        // Uncomment Below to persist sidebar toggle between refreshes
-        // if (localStorage.getItem('sb|sidebar-toggle') === 'true') {
-        //     document.body.classList.toggle('sb-sidenav-toggled');
-        // }
         sidebarToggle.addEventListener('click', event => {
             event.preventDefault();
             document.body.classList.toggle('sb-sidenav-toggled');
             localStorage.setItem('sb|sidebar-toggle', document.body.classList.contains('sb-sidenav-toggled'));
         });
     }
+
+    if (!isSidebarDesktopViewport()) {
+        resetSidebarToDefault();
+    }
+
+    window.addEventListener('resize', syncSidebarForViewport);
+
+    document.addEventListener('click', (event) => {
+        if (isSidebarDesktopViewport()) {
+            return;
+        }
+        if (!document.body.classList.contains('sb-sidenav-toggled')) {
+            return;
+        }
+
+        const nav = document.querySelector('#layoutSidenav_nav');
+        const toggle = document.querySelector('#sidebarToggle');
+        if (nav?.contains(event.target) || toggle?.contains(event.target)) {
+            return;
+        }
+
+        resetSidebarToDefault();
+    });
 
     // Mark current sidenav link active (keeps UI consistent)
     const normalizePath = (value) => {

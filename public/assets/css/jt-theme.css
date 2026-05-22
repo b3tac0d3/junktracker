@@ -134,6 +134,71 @@ h1, h2, h3 {
   border-radius: 0 999px 999px 0;
 }
 
+/* Sidebar: collapsed by default on tablets / medium screens (SB Admin uses 992px) */
+@media (max-width: 1199.98px) {
+  #layoutSidenav #layoutSidenav_nav {
+    transform: translateX(-225px);
+  }
+
+  #layoutSidenav #layoutSidenav_content {
+    margin-left: 0;
+    transition: margin 0.15s ease-in-out;
+  }
+
+  .sb-nav-fixed #layoutSidenav #layoutSidenav_content {
+    padding-left: 0;
+  }
+
+  .sb-topnav .navbar-brand {
+    width: auto;
+  }
+
+  .sb-sidenav-toggled #layoutSidenav #layoutSidenav_nav {
+    transform: translateX(0);
+  }
+
+  .sb-sidenav-toggled #layoutSidenav #layoutSidenav_content:before {
+    background: #000;
+    content: "";
+    display: block;
+    height: 100%;
+    left: 0;
+    opacity: 0.5;
+    position: absolute;
+    top: 0;
+    transition: opacity 0.3s ease-in-out;
+    width: 100%;
+    z-index: 1037;
+  }
+}
+
+@media (min-width: 1200px) {
+  #layoutSidenav #layoutSidenav_nav {
+    transform: translateX(0);
+  }
+
+  #layoutSidenav #layoutSidenav_content {
+    margin-left: 0;
+    transition: margin 0.15s ease-in-out;
+  }
+
+  .sb-nav-fixed #layoutSidenav #layoutSidenav_content {
+    padding-left: 225px;
+  }
+
+  .sb-sidenav-toggled #layoutSidenav #layoutSidenav_nav {
+    transform: translateX(-225px);
+  }
+
+  .sb-sidenav-toggled #layoutSidenav #layoutSidenav_content {
+    margin-left: -225px;
+  }
+
+  .sb-sidenav-toggled #layoutSidenav #layoutSidenav_content:before {
+    display: none;
+  }
+}
+
 /* Dashboard KPIs */
 .kpi-card {
   background: #ffffff;
@@ -602,6 +667,190 @@ main .card.index-card-overflow-visible .card-body {
   background: #fff;
   border-color: rgba(214, 224, 255, 0.9);
   color: #1e40af;
+}
+
+/* Estate sale detail tabs */
+.index-card-header:has(.estate-sale-tabs) {
+  background: linear-gradient(135deg, #eef2ff 0%, #e8f0ff 45%, #f0f9ff 100%);
+  border-bottom: 0;
+  padding: .85rem .85rem 0;
+}
+
+.estate-sale-tabs {
+  flex-wrap: wrap;
+  gap: .4rem;
+  margin: 0;
+  padding: 0;
+}
+
+.estate-sale-tabs .nav-item {
+  flex: 0 0 auto;
+}
+
+.estate-sale-tab-link {
+  display: inline-flex;
+  align-items: center;
+  gap: .55rem;
+  padding: .55rem .95rem .7rem;
+  border-radius: var(--jt-radius-sm) var(--jt-radius-sm) 0 0;
+  border: 1px solid transparent;
+  border-bottom: 0;
+  background: rgba(255, 255, 255, 0.42);
+  color: #475569;
+  font-size: .9rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  transition: background-color .15s ease, border-color .15s ease, box-shadow .15s ease, transform .15s ease, color .15s ease;
+}
+
+.estate-sale-tab-link:hover,
+.estate-sale-tab-link:focus {
+  background: rgba(255, 255, 255, 0.78);
+  border-color: rgba(214, 224, 255, 0.85);
+  color: #1e293b;
+  transform: translateY(-1px);
+  box-shadow: var(--jt-shadow-sm);
+}
+
+.estate-sale-tab-link.active {
+  background: #fff;
+  border-color: rgba(214, 224, 255, 0.95);
+  border-bottom-color: #fff;
+  box-shadow: 0 -3px 14px rgba(15, 23, 42, 0.06);
+  color: var(--estate-tab-accent, #1e40af);
+  margin-bottom: -1px;
+  position: relative;
+  z-index: 1;
+}
+
+.estate-sale-tab-link.active::after {
+  background: var(--estate-tab-accent, #2563eb);
+  border-radius: 3px 3px 0 0;
+  bottom: 0;
+  content: "";
+  height: 3px;
+  left: .95rem;
+  position: absolute;
+  right: .95rem;
+}
+
+.estate-sale-tab-icon {
+  align-items: center;
+  background: var(--estate-tab-icon-bg, #f1f5f9);
+  border-radius: 8px;
+  color: var(--estate-tab-accent, #64748b);
+  display: inline-flex;
+  flex-shrink: 0;
+  font-size: .72rem;
+  height: 1.7rem;
+  justify-content: center;
+  transition: background-color .15s ease, color .15s ease, box-shadow .15s ease;
+  width: 1.7rem;
+}
+
+.estate-sale-tab-link:hover .estate-sale-tab-icon,
+.estate-sale-tab-link:focus .estate-sale-tab-icon {
+  background: var(--estate-tab-icon-bg-hover, #e2e8f0);
+}
+
+.estate-sale-tab-link.active .estate-sale-tab-icon {
+  background: var(--estate-tab-icon-bg-active, #dbeafe);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.65);
+  color: var(--estate-tab-accent, #2563eb);
+}
+
+.estate-sale-tab-label {
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.estate-sale-tab-badge {
+  background: rgba(100, 116, 139, 0.14);
+  border-radius: 999px;
+  color: #475569;
+  font-size: .68rem;
+  font-weight: 700;
+  line-height: 1;
+  min-width: 1.35rem;
+  padding: .28rem .48rem;
+  text-align: center;
+  transition: background-color .15s ease, color .15s ease;
+}
+
+.estate-sale-tab-link.active .estate-sale-tab-badge {
+  background: var(--estate-tab-accent, #2563eb);
+  color: #fff;
+}
+
+.estate-sale-tab-badge:empty,
+.estate-sale-tab-badge[data-count="0"] {
+  opacity: .55;
+}
+
+.estate-sale-tabs .nav-item:nth-child(1) .estate-sale-tab-link {
+  --estate-tab-accent: #6366f1;
+  --estate-tab-icon-bg: #eef2ff;
+  --estate-tab-icon-bg-hover: #e0e7ff;
+  --estate-tab-icon-bg-active: #e0e7ff;
+}
+
+.estate-sale-tabs .nav-item:nth-child(2) .estate-sale-tab-link {
+  --estate-tab-accent: #2563eb;
+  --estate-tab-icon-bg: #eff6ff;
+  --estate-tab-icon-bg-hover: #dbeafe;
+  --estate-tab-icon-bg-active: #dbeafe;
+}
+
+.estate-sale-tabs .nav-item:nth-child(3) .estate-sale-tab-link {
+  --estate-tab-accent: #7c3aed;
+  --estate-tab-icon-bg: #f5f3ff;
+  --estate-tab-icon-bg-hover: #ede9fe;
+  --estate-tab-icon-bg-active: #ede9fe;
+}
+
+.estate-sale-tabs .nav-item:nth-child(4) .estate-sale-tab-link {
+  --estate-tab-accent: #db2777;
+  --estate-tab-icon-bg: #fdf2f8;
+  --estate-tab-icon-bg-hover: #fce7f3;
+  --estate-tab-icon-bg-active: #fce7f3;
+}
+
+.estate-sale-tabs .nav-item:nth-child(5) .estate-sale-tab-link {
+  --estate-tab-accent: #d97706;
+  --estate-tab-icon-bg: #fffbeb;
+  --estate-tab-icon-bg-hover: #fef3c7;
+  --estate-tab-icon-bg-active: #fef3c7;
+}
+
+.index-card:has(.estate-sale-tabs) > .card-body.tab-content {
+  border-top: 1px solid rgba(214, 224, 255, 0.95);
+  margin-top: 0;
+}
+
+@media (max-width: 767.98px) {
+  .index-card-header:has(.estate-sale-tabs) {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .index-card-header:has(.estate-sale-tabs)::-webkit-scrollbar {
+    display: none;
+  }
+
+  .estate-sale-tabs {
+    flex-wrap: nowrap;
+    min-width: max-content;
+    padding-bottom: .15rem;
+  }
+
+  .estate-sale-tab-link {
+    padding-inline: .75rem;
+  }
+
+  .estate-sale-tab-label {
+    font-size: .85rem;
+  }
 }
 
 /* Reports-specific accents */

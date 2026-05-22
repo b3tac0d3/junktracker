@@ -226,10 +226,10 @@ $customerActionsMenu = static function (
 
 <section class="card index-card index-card-overflow-visible">
     <div class="card-header index-card-header p-0 border-bottom-0">
-        <ul class="nav nav-tabs index-card-tabs px-2 pt-2" id="estate-sale-tabs" role="tablist">
+        <ul class="nav nav-tabs index-card-tabs estate-sale-tabs" id="estate-sale-tabs" role="tablist">
             <li class="nav-item" role="presentation">
                 <button
-                    class="nav-link<?= $detailsTabActive ? ' active' : '' ?>"
+                    class="nav-link estate-sale-tab-link<?= $detailsTabActive ? ' active' : '' ?>"
                     id="estate-sale-details-tab"
                     type="button"
                     role="tab"
@@ -239,12 +239,13 @@ $customerActionsMenu = static function (
                     aria-controls="estate-sale-tab-details"
                     aria-selected="<?= $detailsTabActive ? 'true' : 'false' ?>"
                 >
-                    <i class="fas fa-store me-2"></i>Details
+                    <span class="estate-sale-tab-icon" aria-hidden="true"><i class="fas fa-store"></i></span>
+                    <span class="estate-sale-tab-label">Details</span>
                 </button>
             </li>
             <li class="nav-item" role="presentation">
                 <button
-                    class="nav-link<?= $customersTabActive ? ' active' : '' ?>"
+                    class="nav-link estate-sale-tab-link<?= $customersTabActive ? ' active' : '' ?>"
                     id="estate-sale-customers-tab"
                     type="button"
                     role="tab"
@@ -254,13 +255,14 @@ $customerActionsMenu = static function (
                     aria-controls="estate-sale-tab-customers"
                     aria-selected="<?= $customersTabActive ? 'true' : 'false' ?>"
                 >
-                    <i class="fas fa-users me-2"></i>Customers
-                    <span class="badge text-bg-secondary ms-1"><?= e((string) $customerCount) ?></span>
+                    <span class="estate-sale-tab-icon" aria-hidden="true"><i class="fas fa-users"></i></span>
+                    <span class="estate-sale-tab-label">Customers</span>
+                    <span class="estate-sale-tab-badge" data-count="<?= e((string) $customerCount) ?>"><?= e((string) $customerCount) ?></span>
                 </button>
             </li>
             <li class="nav-item" role="presentation">
                 <button
-                    class="nav-link<?= $salesTabActive ? ' active' : '' ?>"
+                    class="nav-link estate-sale-tab-link<?= $salesTabActive ? ' active' : '' ?>"
                     id="estate-sale-sales-tab"
                     type="button"
                     role="tab"
@@ -270,13 +272,14 @@ $customerActionsMenu = static function (
                     aria-controls="estate-sale-tab-sales"
                     aria-selected="<?= $salesTabActive ? 'true' : 'false' ?>"
                 >
-                    <i class="fas fa-cash-register me-2"></i>Sales
-                    <span class="badge text-bg-secondary ms-1"><?= e((string) $salesCount) ?></span>
+                    <span class="estate-sale-tab-icon" aria-hidden="true"><i class="fas fa-cash-register"></i></span>
+                    <span class="estate-sale-tab-label">Sales</span>
+                    <span class="estate-sale-tab-badge" data-count="<?= e((string) $salesCount) ?>"><?= e((string) $salesCount) ?></span>
                 </button>
             </li>
             <li class="nav-item" role="presentation">
                 <button
-                    class="nav-link<?= $expensesTabActive ? ' active' : '' ?>"
+                    class="nav-link estate-sale-tab-link<?= $expensesTabActive ? ' active' : '' ?>"
                     id="estate-sale-expenses-tab"
                     type="button"
                     role="tab"
@@ -286,13 +289,14 @@ $customerActionsMenu = static function (
                     aria-controls="estate-sale-tab-expenses"
                     aria-selected="<?= $expensesTabActive ? 'true' : 'false' ?>"
                 >
-                    <i class="fas fa-receipt me-2"></i>Expenses
-                    <span class="badge text-bg-secondary ms-1" id="estate-sale-expense-count"><?= e((string) $expenseCount) ?></span>
+                    <span class="estate-sale-tab-icon" aria-hidden="true"><i class="fas fa-receipt"></i></span>
+                    <span class="estate-sale-tab-label">Expenses</span>
+                    <span class="estate-sale-tab-badge" id="estate-sale-expense-count" data-count="<?= e((string) $expenseCount) ?>"><?= e((string) $expenseCount) ?></span>
                 </button>
             </li>
             <li class="nav-item" role="presentation">
                 <button
-                    class="nav-link<?= $laborTabActive ? ' active' : '' ?>"
+                    class="nav-link estate-sale-tab-link<?= $laborTabActive ? ' active' : '' ?>"
                     id="estate-sale-labor-tab"
                     type="button"
                     role="tab"
@@ -302,8 +306,9 @@ $customerActionsMenu = static function (
                     aria-controls="estate-sale-tab-labor"
                     aria-selected="<?= $laborTabActive ? 'true' : 'false' ?>"
                 >
-                    <i class="fas fa-clock me-2"></i>Labor
-                    <span class="badge text-bg-secondary ms-1"><?= e((string) $assignedEmployeeCount) ?></span>
+                    <span class="estate-sale-tab-icon" aria-hidden="true"><i class="fas fa-clock"></i></span>
+                    <span class="estate-sale-tab-label">Labor</span>
+                    <span class="estate-sale-tab-badge" data-count="<?= e((string) $assignedEmployeeCount) ?>"><?= e((string) $assignedEmployeeCount) ?></span>
                 </button>
             </li>
         </ul>
@@ -1719,7 +1724,9 @@ window.addEventListener('DOMContentLoaded', () => {
             return;
         }
         const current = Number(expenseCountBadge.textContent || '0');
-        expenseCountBadge.textContent = String(Math.max(0, current + delta));
+        const next = Math.max(0, current + delta);
+        expenseCountBadge.textContent = String(next);
+        expenseCountBadge.setAttribute('data-count', String(next));
     };
 
     const appendExpenseRow = (expense) => {
