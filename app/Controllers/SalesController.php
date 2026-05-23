@@ -236,9 +236,24 @@ final class SalesController extends Controller
             return;
         }
 
+        $clientPercentageMeta = null;
+        $estateSaleId = (int) ($sale['estate_sale_id'] ?? 0);
+        if ($estateSaleId > 0) {
+            $estateSale = EstateSale::findForBusiness(current_business_id(), $estateSaleId);
+            if ($estateSale !== null) {
+                $clientPercentageMeta = EstateSale::saleClientPercentageMeta($sale, $estateSale);
+            }
+        }
+
+        $back = sale_detail_back_meta($sale, (string) ($_GET['return_to'] ?? ''));
+
         $this->render('sales/show', [
             'pageTitle' => 'Sale Details',
             'sale' => $sale,
+            'clientPercentageMeta' => $clientPercentageMeta,
+            'backUrl' => $back['url'],
+            'backLabel' => $back['label'],
+            'returnTo' => $back['path'],
         ]);
     }
 
@@ -356,6 +371,20 @@ final class SalesController extends Controller
 
         audit('sale_deleted', 'sales', $saleId);
         flash('success', 'Sale deleted.');
+        $returnTo = safe_return_path((string) ($_POST['return_to'] ?? ''));
+        if ($returnTo !== '') {
+            redirect($returnTo);
+        }
+        $this->redirectAfterSaleDelete($sale);
+    }
+
+    private function redirectAfterSaleDelete(array $sale): void
+    {
+        $estateSaleId = (int) ($sale['estate_sale_id'] ?? 0);
+        if ($estateSaleId > 0) {
+            redirect('/estate-sales/' . (string) $estateSaleId . '?tab=sales');
+        }
+
         redirect('/sales');
     }
 

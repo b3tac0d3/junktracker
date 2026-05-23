@@ -306,3 +306,147 @@ window.addEventListener('DOMContentLoaded', () => {
         }
     });
 });
+
+window.jtSubmitLock = (function () {
+    const defaultSavingHtml = (label) => (
+        '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>'
+        + '<span>' + label + '</span>'
+    );
+
+    const lockButton = (button, options = {}) => {
+        if (!button || button.disabled || button.dataset.jtSubmitLocked === '1') {
+            return false;
+        }
+
+        const label = String(options.label || 'Saving…');
+        button.dataset.jtSubmitLocked = '1';
+        button.dataset.jtSubmitLockOriginalHtml = button.innerHTML;
+        button.disabled = true;
+        button.setAttribute('aria-busy', 'true');
+        button.innerHTML = options.savingHtml || defaultSavingHtml(label);
+        return true;
+    };
+
+    const unlockButton = (button) => {
+        if (!button) {
+            return;
+        }
+        if (button.dataset.jtSubmitLockOriginalHtml) {
+            button.innerHTML = button.dataset.jtSubmitLockOriginalHtml;
+            delete button.dataset.jtSubmitLockOriginalHtml;
+        }
+        button.disabled = false;
+        delete button.dataset.jtSubmitLocked;
+        button.removeAttribute('aria-busy');
+    };
+
+    const showProgress = (container) => {
+        if (!container) {
+            return;
+        }
+        container.classList.remove('d-none');
+        container.setAttribute('aria-hidden', 'false');
+    };
+
+    const hideProgress = (container) => {
+        if (!container) {
+            return;
+        }
+        container.classList.add('d-none');
+        container.setAttribute('aria-hidden', 'true');
+    };
+
+    const ensureFormProgress = (form) => {
+        let progress = form.querySelector(':scope > .jt-submit-progress');
+        if (!progress) {
+            progress = document.createElement('div');
+            progress.className = 'jt-submit-progress d-none';
+            progress.setAttribute('role', 'progressbar');
+            progress.setAttribute('aria-label', 'Saving');
+            progress.setAttribute('aria-hidden', 'true');
+            progress.innerHTML = '<div class="jt-submit-progress-bar"></div>';
+            form.insertBefore(progress, form.firstChild);
+        }
+        return progress;
+    };
+
+    const lockForm = (form, options = {}) => {
+        if (!form || form.dataset.jtSubmitLocked === '1') {
+            return false;
+        }
+
+        form.dataset.jtSubmitLocked = '1';
+        const label = String(options.label || form.getAttribute('data-jt-submit-label') || 'Saving…');
+        form.querySelectorAll('button[type="submit"], input[type="submit"]').forEach((button) => {
+            lockButton(button, { label, savingHtml: options.savingHtml });
+        });
+        showProgress(ensureFormProgress(form));
+        return true;
+    };
+
+    const unlockForm = (form) => {
+        if (!form) {
+            return;
+        }
+        delete form.dataset.jtSubmitLocked;
+        form.querySelectorAll('button[type="submit"], input[type="submit"]').forEach(unlockButton);
+        hideProgress(form.querySelector(':scope > .jt-submit-progress'));
+    };
+
+    const lockModalSave = (saveButton, options = {}) => {
+        if (!lockButton(saveButton, options)) {
+            return false;
+        }
+        const modal = saveButton.closest('.modal');
+        if (modal) {
+            modal.querySelectorAll('[data-bs-dismiss="modal"], .btn-close').forEach((el) => {
+                el.dataset.jtSubmitLockWasDisabled = el.disabled ? '1' : '0';
+                el.disabled = true;
+                el.classList.add('disabled');
+                el.setAttribute('aria-disabled', 'true');
+            });
+            showProgress(modal.querySelector('.jt-submit-progress'));
+        }
+        return true;
+    };
+
+    const unlockModalSave = (saveButton) => {
+        if (!saveButton) {
+            return;
+        }
+        unlockButton(saveButton);
+        const modal = saveButton.closest('.modal');
+        if (modal) {
+            modal.querySelectorAll('[data-bs-dismiss="modal"], .btn-close').forEach((el) => {
+                el.disabled = el.dataset.jtSubmitLockWasDisabled === '1';
+                delete el.dataset.jtSubmitLockWasDisabled;
+                el.classList.remove('disabled');
+                el.removeAttribute('aria-disabled');
+            });
+            hideProgress(modal.querySelector('.jt-submit-progress'));
+        }
+    };
+
+    return {
+        lockButton,
+        unlockButton,
+        showProgress,
+        hideProgress,
+        lockForm,
+        unlockForm,
+        lockModalSave,
+        unlockModalSave,
+    };
+})();
+
+window.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('form[data-jt-submit-lock]').forEach((form) => {
+        form.addEventListener('submit', (event) => {
+            if (form.dataset.jtSubmitLocked === '1') {
+                event.preventDefault();
+                return;
+            }
+            window.jtSubmitLock.lockForm(form);
+        });
+    });
+});

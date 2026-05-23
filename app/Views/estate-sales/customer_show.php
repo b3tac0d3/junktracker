@@ -28,12 +28,7 @@ $formatDt = static function (?string $value): string {
 };
 
 $formatSaleDate = static function (?string $value): string {
-    $raw = trim((string) ($value ?? ''));
-    if ($raw === '') {
-        return '—';
-    }
-    $ts = strtotime($raw);
-    return $ts === false ? '—' : date('m/d/Y', $ts);
+    return format_datetime($value);
 };
 
 $formatMoney = static fn (float $amount): string => '$' . number_format($amount, 2);
@@ -55,6 +50,7 @@ $state = trim((string) ($customer['state'] ?? ''));
 $cityState = trim(implode(', ', array_filter([$city, $state], static fn (string $v): bool => $v !== '')));
 $csrfToken = csrf_token();
 $backUrl = url('/estate-sales/' . (string) $estateSaleId . '?tab=customers');
+$editUrl = url('/estate-sales/' . (string) $estateSaleId . '/customers/' . (string) $customerId . '/edit');
 $saleCreateUrl = url('/estate-sales/' . (string) $estateSaleId . '/sales/create?customer_id=' . (string) $customerId);
 $checkInUrl = url('/estate-sales/' . (string) $estateSaleId . '/customers/' . (string) $customerId . '/check-in');
 $checkOutUrl = url('/estate-sales/' . (string) $estateSaleId . '/customers/' . (string) $customerId . '/check-out');
@@ -75,19 +71,48 @@ $canCheckOut = $checkInStatus === 'inside';
         <p class="muted mb-0"><?= e($estateSaleTitle) ?></p>
     </div>
     <div class="jt-page-header-actions d-grid gap-2 d-md-flex d-md-flex-wrap justify-content-md-end align-items-md-center">
-        <?php if ($canCheckIn): ?>
-            <button type="button" class="btn btn-success w-100 w-md-auto estate-sale-customer-check-in" data-url="<?= e($checkInUrl) ?>">
-                <i class="fas fa-door-open me-1"></i>Check in
+        <div class="dropdown w-100 w-md-auto">
+            <button class="btn btn-primary dropdown-toggle w-100" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                <i class="fas fa-ellipsis-h me-2"></i>Actions
             </button>
-        <?php endif; ?>
-        <?php if ($canCheckOut): ?>
-            <button type="button" class="btn btn-outline-warning w-100 w-md-auto estate-sale-customer-check-out" data-url="<?= e($checkOutUrl) ?>">
-                <i class="fas fa-door-closed me-1"></i>Check out
-            </button>
-        <?php endif; ?>
-        <a class="btn btn-primary w-100 w-md-auto" href="<?= e($saleCreateUrl) ?>">
-            <i class="fas fa-cash-register me-1"></i>Add sale
-        </a>
+            <ul class="dropdown-menu dropdown-menu-end">
+                <?php if ($canCheckIn): ?>
+                    <li>
+                        <button type="button" class="dropdown-item estate-sale-customer-check-in" data-url="<?= e($checkInUrl) ?>">
+                            <i class="fas fa-door-open me-2"></i>Check in
+                        </button>
+                    </li>
+                <?php endif; ?>
+                <?php if ($canCheckOut): ?>
+                    <li>
+                        <button type="button" class="dropdown-item estate-sale-customer-check-out" data-url="<?= e($checkOutUrl) ?>">
+                            <i class="fas fa-door-closed me-2"></i>Check out
+                        </button>
+                    </li>
+                <?php endif; ?>
+                <li>
+                    <a class="dropdown-item" href="<?= e($saleCreateUrl) ?>">
+                        <i class="fas fa-cash-register me-2"></i>Add sale
+                    </a>
+                </li>
+                <li>
+                    <a class="dropdown-item" href="<?= e($editUrl) ?>">
+                        <i class="fas fa-pen me-2"></i>Edit customer
+                    </a>
+                </li>
+                <?php if ($canRemoveCustomers): ?>
+                    <li><hr class="dropdown-divider"></li>
+                    <li>
+                        <form method="post" action="<?= e($removeUrl) ?>" class="m-0" onsubmit="return confirm('Remove this customer from the estate sale list?');">
+                            <?= csrf_field() ?>
+                            <button type="submit" class="dropdown-item text-danger">
+                                <i class="fas fa-user-minus me-2"></i>Remove from sale
+                            </button>
+                        </form>
+                    </li>
+                <?php endif; ?>
+            </ul>
+        </div>
         <a class="btn btn-outline-secondary w-100 w-md-auto" href="<?= e($backUrl) ?>">Back to customers</a>
     </div>
 </div>
@@ -135,16 +160,6 @@ $canCheckOut = $checkInStatus === 'inside';
                 <span class="record-value" id="estate-sale-customer-status-label"><?= e($statusLabel) ?></span>
             </div>
         </div>
-        <?php if ($canRemoveCustomers): ?>
-            <div class="mt-3 pt-3 border-top">
-                <form method="post" action="<?= e($removeUrl) ?>" class="m-0" onsubmit="return confirm('Remove this customer from the estate sale list?');">
-                    <?= csrf_field() ?>
-                    <button type="submit" class="btn btn-outline-danger btn-sm">
-                        <i class="fas fa-user-minus me-1"></i>Remove from sale
-                    </button>
-                </form>
-            </div>
-        <?php endif; ?>
     </div>
 </section>
 
@@ -214,8 +229,11 @@ $canCheckOut = $checkInStatus === 'inside';
                     $saleId = (int) ($sale['id'] ?? 0);
                     $saleName = trim((string) ($sale['name'] ?? '')) ?: ('Sale #' . (string) $saleId);
                     $canViewFinancials = can_view_financials();
+                    $effectiveClientPct = $sale['effective_client_percentage'] ?? null;
+                    $clientPctIsOverride = !empty($sale['client_percentage_is_override']);
+                    $paymentMethodLabel = \App\Models\Sale::paymentMethodLabel($sale['payment_method'] ?? null);
                     $saleRowUrl = $canViewFinancials
-                        ? url('/sales/' . (string) $saleId)
+                        ? sale_detail_url($saleId, '/estate-sales/' . (string) $estateSaleId . '/customers/' . (string) $customerId)
                         : url('/estate-sales/' . (string) $estateSaleId . '/sales/' . (string) $saleId . '/edit');
                     ?>
                     <article class="record-row-simple">
@@ -223,15 +241,23 @@ $canCheckOut = $checkInStatus === 'inside';
                             <div class="record-row-main">
                                 <h3 class="record-title-simple mb-1"><?= e($saleName) ?></h3>
                             </div>
-                            <div class="record-row-fields record-row-fields-<?= $canViewFinancials ? '3' : '2' ?> mt-2">
+                            <div class="record-row-fields record-row-fields-<?= $canViewFinancials ? '5' : '3' ?> mt-2">
                                 <div class="record-field">
-                                    <span class="record-label">Date</span>
+                                    <span class="record-label">Date & time</span>
                                     <span class="record-value"><?= e($formatSaleDate((string) ($sale['sale_date'] ?? ''))) ?></span>
+                                </div>
+                                <div class="record-field">
+                                    <span class="record-label">Payment</span>
+                                    <span class="record-value"><?= e($paymentMethodLabel) ?></span>
                                 </div>
                                 <?php if ($canViewFinancials): ?>
                                 <div class="record-field">
                                     <span class="record-label">Amount</span>
                                     <span class="record-value"><?= e($formatMoney((float) ($sale['gross_amount'] ?? 0))) ?></span>
+                                </div>
+                                <div class="record-field">
+                                    <span class="record-label">Client split</span>
+                                    <span class="record-value<?= $clientPctIsOverride ? ' fw-bold' : '' ?>"><?= e(format_client_percentage(is_numeric($effectiveClientPct) ? (float) $effectiveClientPct : null)) ?></span>
                                 </div>
                                 <?php endif; ?>
                                 <div class="record-field">

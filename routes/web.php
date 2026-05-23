@@ -127,6 +127,7 @@ $router->post('/jobs/{id}/employees', [JobsController::class, 'storeEmployee']);
 $router->post('/jobs/{id}/employees/bulk-punch', [JobsController::class, 'bulkPunchEmployees']);
 $router->post('/jobs/{id}/employees/{employeeId}/punch-in', [JobsController::class, 'punchInEmployee']);
 $router->post('/jobs/{id}/employees/{employeeId}/punch-out', [JobsController::class, 'punchOutEmployee']);
+$router->post('/jobs/{id}/employees/{employeeId}/remove', [JobsController::class, 'removeEmployee']);
 $router->post('/jobs/{id}/closeout', [JobsController::class, 'saveCloseout']);
 $router->post('/jobs/{id}/quick-status', [JobsController::class, 'quickStatus']);
 $router->get('/jobs/{id}', [JobsController::class, 'show']);
@@ -218,6 +219,8 @@ $router->post('/estate-sales/{id}/quick-create-expense', [EstateSalesController:
 $router->post('/estate-sales/{id}/customers/{customerId}/remove', [EstateSalesController::class, 'removeCustomer']);
 $router->post('/estate-sales/{id}/customers/{customerId}/check-in', [EstateSalesController::class, 'checkInCustomer']);
 $router->post('/estate-sales/{id}/customers/{customerId}/check-out', [EstateSalesController::class, 'checkOutCustomer']);
+$router->get('/estate-sales/{id}/customers/{customerId}/edit', [EstateSalesController::class, 'editCustomer']);
+$router->post('/estate-sales/{id}/customers/{customerId}/update', [EstateSalesController::class, 'updateCustomer']);
 $router->get('/estate-sales/{id}/customers/{customerId}', [EstateSalesController::class, 'showCustomer']);
 $router->post('/estate-sales/{id}/expenses/{expenseId}/remove', [EstateSalesController::class, 'removeExpense']);
 $router->get('/estate-sales/{id}/employees/add', [EstateSalesController::class, 'addEmployee']);
@@ -226,6 +229,7 @@ $router->post('/estate-sales/{id}/employees', [EstateSalesController::class, 'st
 $router->post('/estate-sales/{id}/employees/bulk-punch', [EstateSalesController::class, 'bulkPunchEmployees']);
 $router->post('/estate-sales/{id}/employees/{employeeId}/punch-in', [EstateSalesController::class, 'punchInEmployee']);
 $router->post('/estate-sales/{id}/employees/{employeeId}/punch-out', [EstateSalesController::class, 'punchOutEmployee']);
+$router->post('/estate-sales/{id}/employees/{employeeId}/remove', [EstateSalesController::class, 'removeEmployee']);
 $router->get('/estate-sales/{id}/customer-search', [EstateSalesController::class, 'customerSearch']);
 $router->get('/estate-sales/{id}/sales/create', [EstateSalesController::class, 'createSale']);
 $router->get('/estate-sales/{id}/sales/{saleId}/edit', [EstateSalesController::class, 'editSale']);

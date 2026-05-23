@@ -675,6 +675,7 @@ $formatDuration = static function (int $minutes): string {
                     $linkedUserEmail = trim((string) ($employee['linked_user_email'] ?? ''));
                     $canManageEmployeeTime = is_site_admin() || workspace_role() === 'admin';
                     $addTimeEntryUrl = url('/time-tracking/create?job_id=' . rawurlencode((string) $jobId) . '&employee_id=' . rawurlencode((string) $employeeId) . '&return_to=' . rawurlencode('/jobs/' . (string) $jobId));
+                    $canRemoveEmployee = (bool) ($employee['can_remove'] ?? false);
                     ?>
                     <article class="record-row-simple">
                         <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
@@ -700,7 +701,7 @@ $formatDuration = static function (int $minutes): string {
                                 </div>
                                 </div>
                             </div>
-                            <div class="d-flex gap-2">
+                            <div class="d-flex gap-2 flex-wrap justify-content-end">
                                 <?php if ($canManageEmployeeTime): ?>
                                     <a class="btn btn-outline-primary btn-sm" href="<?= e($addTimeEntryUrl) ?>"><i class="fas fa-plus me-1"></i>Add Time Entry</a>
                                 <?php endif; ?>
@@ -713,6 +714,12 @@ $formatDuration = static function (int $minutes): string {
                                     <form method="post" action="<?= e(url('/jobs/' . (string) $jobId . '/employees/' . (string) $employeeId . '/punch-in')) ?>">
                                         <?= csrf_field() ?>
                                         <button class="btn btn-success btn-sm" type="submit"><i class="fas fa-play me-1"></i>Punch In</button>
+                                    </form>
+                                <?php endif; ?>
+                                <?php if ($canRemoveEmployee): ?>
+                                    <form method="post" action="<?= e(url('/jobs/' . (string) $jobId . '/employees/' . (string) $employeeId . '/remove')) ?>" onsubmit="return confirm('Remove this employee from the job?');">
+                                        <?= csrf_field() ?>
+                                        <button class="btn btn-outline-secondary btn-sm" type="submit"><i class="fas fa-user-minus me-1"></i>Remove</button>
                                     </form>
                                 <?php endif; ?>
                             </div>

@@ -14,6 +14,11 @@ $actionUrl = $isEdit
     ? url('/estate-sales/' . (string) $estateSaleId . '/sales/' . (string) $saleId . '/update')
     : url('/estate-sales/' . (string) $estateSaleId . '/sales');
 $customerSearchUrl = url('/estate-sales/' . (string) $estateSaleId . '/customer-search');
+$canEditClientPercentage = !empty($canEditClientPercentage);
+$defaultClientPercentage = trim((string) ($form['default_client_percentage'] ?? ''));
+$clientPercentagePlaceholder = $defaultClientPercentage !== '' ? $defaultClientPercentage : 'Estate sale default';
+$paymentMethodOptions = is_array($paymentMethodOptions ?? null) ? $paymentMethodOptions : \App\Models\Sale::paymentMethodOptions();
+$selectedPaymentMethod = \App\Models\Sale::normalizePaymentMethod($form['payment_method'] ?? null);
 
 $fieldError = static function (string $field) use ($errors): string {
     return isset($errors[$field]) ? (string) $errors[$field] : '';
@@ -39,7 +44,13 @@ $hasError = static function (string $field) use ($errors): bool {
         <strong><i class="fas fa-cash-register me-2"></i>Estate Sale Transaction</strong>
     </div>
     <div class="card-body">
-        <form method="post" action="<?= e($actionUrl) ?>" class="row g-3">
+        <form
+            method="post"
+            action="<?= e($actionUrl) ?>"
+            class="row g-3"
+            data-jt-submit-lock
+            data-jt-submit-label="<?= e($isEdit ? 'Saving changes…' : 'Adding sale…') ?>"
+        >
             <?= csrf_field() ?>
 
             <div class="col-12">
@@ -49,7 +60,7 @@ $hasError = static function (string $field) use ($errors): bool {
                 </div>
             </div>
 
-            <div class="col-12 col-lg-8">
+            <div class="col-12 col-lg-6">
                 <label class="form-label fw-semibold" for="estate-sale-sale-name">Name</label>
                 <input
                     id="estate-sale-sale-name"
@@ -62,7 +73,7 @@ $hasError = static function (string $field) use ($errors): bool {
                 <?php if ($hasError('name')): ?><div class="invalid-feedback d-block"><?= e($fieldError('name')) ?></div><?php endif; ?>
             </div>
 
-            <div class="col-12 col-lg-4">
+            <div class="col-12 col-lg-3">
                 <label class="form-label fw-semibold" for="estate-sale-sale-date">Date</label>
                 <input
                     id="estate-sale-sale-date"
@@ -74,7 +85,19 @@ $hasError = static function (string $field) use ($errors): bool {
                 <?php if ($hasError('sale_date')): ?><div class="invalid-feedback d-block"><?= e($fieldError('sale_date')) ?></div><?php endif; ?>
             </div>
 
-            <div class="col-12 col-lg-8">
+            <div class="col-12 col-lg-3">
+                <label class="form-label fw-semibold" for="estate-sale-sale-time">Time</label>
+                <input
+                    id="estate-sale-sale-time"
+                    type="time"
+                    name="sale_time"
+                    class="form-control <?= $hasError('sale_time') ? 'is-invalid' : '' ?>"
+                    value="<?= e((string) ($form['sale_time'] ?? date('H:i'))) ?>"
+                />
+                <?php if ($hasError('sale_time')): ?><div class="invalid-feedback d-block"><?= e($fieldError('sale_time')) ?></div><?php endif; ?>
+            </div>
+
+            <div class="col-12 col-lg-6">
                 <label class="form-label fw-semibold" for="estate-sale-customer-search">Customer <span class="text-muted fw-normal">(recommended)</span></label>
                 <div class="position-relative client-autosuggest-wrap">
                     <input type="hidden" id="estate-sale-customer-id" name="estate_sale_customer_id" value="<?= e((string) ($form['estate_sale_customer_id'] ?? '')) ?>" />
@@ -107,6 +130,44 @@ $hasError = static function (string $field) use ($errors): bool {
                 />
                 <?php if ($hasError('gross_amount')): ?><div class="invalid-feedback d-block"><?= e($fieldError('gross_amount')) ?></div><?php endif; ?>
             </div>
+
+            <div class="col-12 col-lg-4">
+                <label class="form-label fw-semibold" for="estate-sale-sale-payment-method">Payment type</label>
+                <select
+                    id="estate-sale-sale-payment-method"
+                    name="payment_method"
+                    class="form-select <?= $hasError('payment_method') ? 'is-invalid' : '' ?>"
+                >
+                    <?php foreach ($paymentMethodOptions as $value => $label): ?>
+                        <option value="<?= e((string) $value) ?>" <?= $selectedPaymentMethod === (string) $value ? 'selected' : '' ?>><?= e((string) $label) ?></option>
+                    <?php endforeach; ?>
+                </select>
+                <?php if ($hasError('payment_method')): ?><div class="invalid-feedback d-block"><?= e($fieldError('payment_method')) ?></div><?php endif; ?>
+            </div>
+
+            <?php if ($canEditClientPercentage): ?>
+            <div class="col-12 col-lg-4">
+                <label class="form-label fw-semibold" for="estate-sale-sale-client-percentage">Client split %</label>
+                <div class="input-group">
+                    <input
+                        id="estate-sale-sale-client-percentage"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        max="100"
+                        name="client_percentage"
+                        class="form-control <?= $hasError('client_percentage') ? 'is-invalid' : '' ?>"
+                        value="<?= e((string) ($form['client_percentage'] ?? '')) ?>"
+                        placeholder="<?= e($clientPercentagePlaceholder) ?>"
+                    />
+                    <span class="input-group-text">%</span>
+                </div>
+                <div class="form-text">
+                    Leave blank to use the estate sale default<?= $defaultClientPercentage !== '' ? ' (' . e($defaultClientPercentage) . ')' : '' ?>.
+                </div>
+                <?php if ($hasError('client_percentage')): ?><div class="invalid-feedback d-block"><?= e($fieldError('client_percentage')) ?></div><?php endif; ?>
+            </div>
+            <?php endif; ?>
 
             <div class="col-12">
                 <label class="form-label fw-semibold" for="estate-sale-sale-notes">Note</label>

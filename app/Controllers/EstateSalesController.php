@@ -40,7 +40,7 @@ final class EstateSalesController extends Controller
             $status = 'dispatch';
         }
 
-        $perPage = pagination_per_page($_GET['per_page'] ?? null);
+        $perPage = pagination_remembered_per_page('estate_sales.index');
         $page = pagination_current_page($_GET['page'] ?? null);
         $totalRows = EstateSale::indexCount($businessId, $search, $status, $fromDate, $toDate);
         $totalPages = pagination_total_pages($totalRows, $perPage);
@@ -98,7 +98,7 @@ final class EstateSalesController extends Controller
         }
 
         $businessId = current_business_id();
-        $perPage = pagination_per_page($_GET['per_page'] ?? null);
+        $perPage = pagination_remembered_per_page('estate_sale_records.index');
         $page = pagination_current_page($_GET['page'] ?? null);
         $totalRows = Sale::indexCount($businessId, $search, '', $fromDate, $toDate, Sale::ESTATE_SCOPE_ESTATE_ONLY);
         $totalPages = pagination_total_pages($totalRows, $perPage);
@@ -120,8 +120,15 @@ final class EstateSalesController extends Controller
             Sale::ESTATE_SCOPE_ESTATE_ONLY
         );
         $records = EstateSale::applySplitNetToSalesRecords($businessId, $records);
+        $records = EstateSale::enrichSaleRecordsWithClientPercentage($records);
         $summary = EstateSale::dashboardSummary($businessId);
         $pagination = pagination_meta($page, $perPage, $totalRows, count($records));
+
+        $recordsReturnTo = '/estate-sale-records';
+        $query = trim((string) ($_SERVER['QUERY_STRING'] ?? ''));
+        if ($query !== '') {
+            $recordsReturnTo .= '?' . $query;
+        }
 
         $this->render('estate-sales/records', [
             'pageTitle' => 'Estate Sale Records',
@@ -133,6 +140,7 @@ final class EstateSalesController extends Controller
             'records' => $records,
             'summary' => $summary,
             'pagination' => $pagination,
+            'recordsReturnTo' => $recordsReturnTo,
         ]);
     }
 
@@ -207,14 +215,14 @@ final class EstateSalesController extends Controller
         $estateSaleId = (int) ($estateSale['id'] ?? 0);
 
         $activeTab = strtolower(trim((string) ($_GET['tab'] ?? 'details')));
-        if (!in_array($activeTab, ['details', 'customers', 'sales', 'expenses', 'labor'], true)) {
+        if (!in_array($activeTab, ['details', 'customers', 'sales', 'expenses', 'labor', 'metrics'], true)) {
             $activeTab = 'details';
         }
-        if ($activeTab === 'expenses' && !can_view_financials()) {
+        if (in_array($activeTab, ['expenses', 'metrics'], true) && !can_view_financials()) {
             $activeTab = 'details';
         }
 
-        $customersPerPage = pagination_per_page($_GET['customers_per_page'] ?? null);
+        $customersPerPage = pagination_remembered_per_page('estate_sales.customers', 'customers_per_page');
         $customersPage = pagination_current_page($_GET['customers_page'] ?? null);
         $customersStatusFilter = EstateSale::normalizeCustomersStatusFilter($_GET['customers_status'] ?? null);
         $customersTotal = EstateSale::customersCount(
@@ -236,7 +244,7 @@ final class EstateSalesController extends Controller
         );
         $customersPagination = pagination_meta($customersPage, $customersPerPage, $customersTotal, count($customers));
 
-        $salesPerPage = pagination_per_page($_GET['sales_per_page'] ?? null);
+        $salesPerPage = pagination_remembered_per_page('estate_sales.sales', 'sales_per_page');
         $salesPage = pagination_current_page($_GET['sales_page'] ?? null);
         $salesTotalCount = EstateSale::salesCount($businessId, $estateSaleId);
         $salesTotalPages = pagination_total_pages($salesTotalCount, $salesPerPage);
@@ -245,7 +253,8 @@ final class EstateSalesController extends Controller
         }
         $salesOffset = pagination_offset($salesPage, $salesPerPage);
         $salesData = EstateSale::salesSummary($businessId, $estateSaleId, $salesPerPage, $salesOffset);
-        $salesPagination = pagination_meta($salesPage, $salesPerPage, $salesTotalCount, count($salesData['sales']));
+        $sales = EstateSale::enrichSalesWithClientPercentage($salesData['sales'], $estateSale);
+        $salesPagination = pagination_meta($salesPage, $salesPerPage, $salesTotalCount, count($sales));
 
         $timeSummary = EstateSale::timeSummary($businessId, $estateSaleId);
         $timeLogs = EstateSale::timeLogsByEstateSale($businessId, $estateSaleId);
@@ -264,7 +273,12 @@ final class EstateSalesController extends Controller
             $assignedEmployees[$index]['open_job_title'] = (string) ($openEntry['job_title'] ?? '');
             $assignedEmployees[$index]['is_open_for_this_estate_sale'] = ((int) ($openEntry['estate_sale_id'] ?? 0)) === $estateSaleId
                 && ((int) ($openEntry['is_non_job'] ?? 0)) !== 1;
+            $assignedEmployees[$index]['can_remove'] = !TimeEntry::hasActiveEntryForEstateSale($businessId, $estateSaleId, $employeeId);
         }
+
+        $metricsReport = can_view_financials()
+            ? EstateSale::metricsReport($businessId, $estateSaleId, $estateSale)
+            : [];
 
         $this->render('estate-sales/show', [
             'pageTitle' => trim((string) ($estateSale['title'] ?? '')) ?: ('Estate Sale #' . (string) $estateSaleId),
@@ -273,7 +287,7 @@ final class EstateSalesController extends Controller
             'customersPagination' => $customersPagination,
             'customerPresence' => EstateSale::customerPresenceSummary($businessId, $estateSaleId),
             'customersStatusFilter' => $customersStatusFilter,
-            'sales' => $salesData['sales'],
+            'sales' => $sales,
             'salesCount' => (int) ($salesData['count'] ?? 0),
             'salesTotal' => (float) ($salesData['total_amount'] ?? 0),
             'salesPagination' => $salesPagination,
@@ -287,6 +301,7 @@ final class EstateSalesController extends Controller
             'timeLogs' => $timeLogs,
             'laborCost' => $laborCost,
             'assignedEmployees' => $assignedEmployees,
+            'metricsReport' => $metricsReport,
         ]);
     }
 
@@ -519,6 +534,51 @@ final class EstateSalesController extends Controller
         }
 
         flash('success', 'Employee punched out.');
+        redirect($this->laborReturnUrl($estateSaleId));
+    }
+
+    public function removeEmployee(array $params): void
+    {
+        require_business_role(['general_user', 'admin']);
+
+        $estateSaleId = (int) ($params['id'] ?? 0);
+        $employeeId = (int) ($params['employeeId'] ?? 0);
+        if ($estateSaleId <= 0 || $employeeId <= 0) {
+            http_response_code(404);
+            $this->render('errors/404', ['pageTitle' => 'Not Found']);
+            return;
+        }
+
+        if (!verify_csrf($_POST['csrf_token'] ?? null)) {
+            flash('error', 'Session expired. Please try again.');
+            redirect($this->laborReturnUrl($estateSaleId));
+        }
+
+        $businessId = current_business_id();
+        if (EstateSale::findForBusiness($businessId, $estateSaleId) === null) {
+            http_response_code(404);
+            $this->render('errors/404', ['pageTitle' => 'Not Found']);
+            return;
+        }
+
+        if (EstateSale::findAssignedEmployee($businessId, $estateSaleId, $employeeId) === null) {
+            flash('error', 'Employee is not assigned to this estate sale.');
+            redirect($this->laborReturnUrl($estateSaleId));
+        }
+
+        if (TimeEntry::hasActiveEntryForEstateSale($businessId, $estateSaleId, $employeeId)) {
+            flash('error', 'Cannot remove this employee while they have an open punch on this estate sale.');
+            redirect($this->laborReturnUrl($estateSaleId));
+        }
+
+        $actorUserId = (int) (auth_user_id() ?? 0);
+        if (!EstateSale::unassignEmployee($businessId, $estateSaleId, $employeeId, $actorUserId)) {
+            flash('error', 'Could not remove employee from this estate sale.');
+            redirect($this->laborReturnUrl($estateSaleId));
+        }
+
+        audit('estate_sale_employee_unassigned', 'estate_sales', $estateSaleId, ['employee_id' => $employeeId]);
+        flash('success', 'Employee removed from this estate sale.');
         redirect($this->laborReturnUrl($estateSaleId));
     }
 
@@ -777,9 +837,95 @@ final class EstateSalesController extends Controller
             'estateSale' => $estateSale,
             'customer' => $customer,
             'visits' => EstateSale::customerVisits($businessId, $estateSaleId, $customerId),
-            'sales' => EstateSale::customerSales($businessId, $estateSaleId, $customerId),
+            'sales' => EstateSale::enrichSalesWithClientPercentage(
+                EstateSale::customerSales($businessId, $estateSaleId, $customerId),
+                $estateSale
+            ),
             'canRemoveCustomers' => is_site_admin() || workspace_role() === 'admin',
         ]);
+    }
+
+    public function editCustomer(array $params): void
+    {
+        require_business_role(['general_user', 'admin']);
+
+        $estateSale = $this->estateSaleOr404((int) ($params['id'] ?? 0));
+        if ($estateSale === null) {
+            return;
+        }
+
+        $businessId = current_business_id();
+        $estateSaleId = (int) ($estateSale['id'] ?? 0);
+        $customerId = (int) ($params['customerId'] ?? 0);
+        $customer = EstateSale::findCustomerForSale($businessId, $estateSaleId, $customerId);
+        if ($customer === null) {
+            http_response_code(404);
+            $this->render('errors/404', ['pageTitle' => 'Customer not found']);
+
+            return;
+        }
+
+        $this->render('estate-sales/customer_form', [
+            'pageTitle' => 'Edit Customer',
+            'estateSale' => $estateSale,
+            'customer' => $customer,
+            'form' => $this->customerFormFromRow($customer),
+            'errors' => [],
+        ]);
+    }
+
+    public function updateCustomer(array $params): void
+    {
+        require_business_role(['general_user', 'admin']);
+
+        $estateSale = $this->estateSaleOr404((int) ($params['id'] ?? 0));
+        if ($estateSale === null) {
+            return;
+        }
+
+        $businessId = current_business_id();
+        $estateSaleId = (int) ($estateSale['id'] ?? 0);
+        $customerId = (int) ($params['customerId'] ?? 0);
+
+        if (!verify_csrf($_POST['csrf_token'] ?? null)) {
+            flash('error', 'Session expired. Please try again.');
+            redirect('/estate-sales/' . (string) $estateSaleId . '/customers/' . (string) $customerId . '/edit');
+        }
+
+        $customer = EstateSale::findCustomerForSale($businessId, $estateSaleId, $customerId);
+        if ($customer === null) {
+            http_response_code(404);
+            $this->render('errors/404', ['pageTitle' => 'Customer not found']);
+
+            return;
+        }
+
+        $form = EstateSale::customerPayloadFromInput($_POST);
+        $errors = EstateSale::validateCustomer($form);
+        if ($errors !== []) {
+            $this->render('estate-sales/customer_form', [
+                'pageTitle' => 'Edit Customer',
+                'estateSale' => $estateSale,
+                'customer' => $customer,
+                'form' => $form,
+                'errors' => $errors,
+            ]);
+
+            return;
+        }
+
+        $actorId = (int) (auth_user_id() ?? 0);
+        if (!EstateSale::updateCustomer($businessId, $estateSaleId, $customerId, $form, $actorId)) {
+            flash('error', 'Could not update customer.');
+            redirect('/estate-sales/' . (string) $estateSaleId . '/customers/' . (string) $customerId . '/edit');
+        }
+
+        audit('estate_sale_customer_updated', 'estate_sale_customers', $customerId, [
+            'estate_sale_id' => $estateSaleId,
+            'name' => trim($form['first_name'] . ' ' . $form['last_name']),
+        ]);
+        flash('success', 'Customer updated.');
+        redirect('/estate-sales/' . (string) $estateSaleId . '/customers/' . (string) $customerId);
     }
 
     public function checkInCustomer(array $params): void
@@ -1024,7 +1170,7 @@ final class EstateSalesController extends Controller
         $businessId = current_business_id();
         $estateSaleId = (int) ($estateSale['id'] ?? 0);
         $estateTitle = trim((string) ($estateSale['title'] ?? '')) ?: ('Estate Sale #' . (string) $estateSaleId);
-        $form = $this->defaultEstateSaleForm();
+        $form = $this->defaultEstateSaleForm($estateSale);
 
         $customerIdPrefill = (int) ($_GET['customer_id'] ?? $_GET['estate_sale_customer_id'] ?? 0);
         if ($customerIdPrefill > 0) {
@@ -1058,7 +1204,7 @@ final class EstateSalesController extends Controller
         $estateSaleId = (int) ($estateSale['id'] ?? 0);
         $estateTitle = trim((string) ($estateSale['title'] ?? '')) ?: ('Estate Sale #' . (string) $estateSaleId);
         $form = $this->estateSaleFormFromPost($_POST);
-        $errors = $this->validateEstateSaleForm($form, $businessId, $estateSaleId);
+        $errors = $this->validateEstateSaleForm($form, $businessId, $estateSaleId, $estateSale);
 
         if ($errors !== []) {
             $this->renderSaleForm($estateSale, $form, $errors, 'create');
@@ -1066,20 +1212,26 @@ final class EstateSalesController extends Controller
         }
 
         $gross = round((float) $form['gross_amount'], 2);
-
-        $saleId = Sale::create($businessId, [
+        $salePayload = [
             'name' => $form['name'],
             'gross_amount' => $gross,
             'net_amount' => $gross,
             'sale_type' => EstateSale::ON_SITE_SALE_TYPE,
-            'sale_date' => $this->saleDateToDatabase($form['sale_date']),
+            'sale_date' => $this->saleDateTimeToDatabase($form['sale_date'], $form['sale_time']),
             'estate_sale_id' => $estateSaleId,
             'estate_sale_customer_id' => ((int) $form['estate_sale_customer_id']) > 0 ? (int) $form['estate_sale_customer_id'] : null,
             'notes' => $form['notes'],
+            'payment_method' => Sale::normalizePaymentMethod($form['payment_method'] ?? null),
             'client_id' => null,
             'job_id' => null,
             'purchase_id' => null,
-        ], auth_user_id() ?? 0);
+        ];
+        $clientPercentage = $this->resolveSaleClientPercentage($form, $estateSale);
+        if ($clientPercentage !== false) {
+            $salePayload['client_percentage'] = $clientPercentage;
+        }
+
+        $saleId = Sale::create($businessId, $salePayload, auth_user_id() ?? 0);
 
         audit('estate_sale_sale_created', 'sales', $saleId > 0 ? $saleId : null, [
             'estate_sale_id' => $estateSaleId,
@@ -1107,7 +1259,7 @@ final class EstateSalesController extends Controller
             return;
         }
 
-        $this->renderSaleForm($estateSale, $this->estateSaleFormFromSale($sale, $businessId, $estateSaleId), [], 'edit', $saleId);
+        $this->renderSaleForm($estateSale, $this->estateSaleFormFromSale($sale, $estateSale), [], 'edit', $saleId);
     }
 
     public function updateSale(array $params): void
@@ -1134,7 +1286,7 @@ final class EstateSalesController extends Controller
         }
 
         $form = $this->estateSaleFormFromPost($_POST);
-        $errors = $this->validateEstateSaleForm($form, $businessId, $estateSaleId);
+        $errors = $this->validateEstateSaleForm($form, $businessId, $estateSaleId, $estateSale);
 
         if ($errors !== []) {
             $this->renderSaleForm($estateSale, $form, $errors, 'edit', $saleId);
@@ -1142,20 +1294,26 @@ final class EstateSalesController extends Controller
         }
 
         $gross = round((float) $form['gross_amount'], 2);
-
-        Sale::update($businessId, $saleId, [
+        $salePayload = [
             'name' => $form['name'],
             'gross_amount' => $gross,
             'net_amount' => $gross,
             'sale_type' => EstateSale::ON_SITE_SALE_TYPE,
-            'sale_date' => $this->saleDateToDatabase($form['sale_date']),
+            'sale_date' => $this->saleDateTimeToDatabase($form['sale_date'], $form['sale_time']),
             'estate_sale_id' => $estateSaleId,
             'estate_sale_customer_id' => ((int) $form['estate_sale_customer_id']) > 0 ? (int) $form['estate_sale_customer_id'] : null,
             'notes' => $form['notes'],
+            'payment_method' => Sale::normalizePaymentMethod($form['payment_method'] ?? null),
             'client_id' => null,
             'job_id' => null,
             'purchase_id' => null,
-        ], auth_user_id() ?? 0);
+        ];
+        $clientPercentage = $this->resolveSaleClientPercentage($form, $estateSale);
+        if ($clientPercentage !== false) {
+            $salePayload['client_percentage'] = $clientPercentage;
+        }
+
+        Sale::update($businessId, $saleId, $salePayload, auth_user_id() ?? 0);
 
         audit('estate_sale_sale_updated', 'sales', $saleId, ['estate_sale_id' => $estateSaleId, 'amount' => $gross]);
         flash('success', 'Sale updated.');
@@ -1275,17 +1433,22 @@ final class EstateSalesController extends Controller
     }
 
     /**
+     * @param array<string, mixed> $estateSale
      * @return array<string, string>
      */
-    private function defaultEstateSaleForm(): array
+    private function defaultEstateSaleForm(array $estateSale = []): array
     {
         return [
             'name' => '',
             'gross_amount' => '',
             'sale_date' => date('Y-m-d'),
+            'sale_time' => date('H:i'),
             'estate_sale_customer_id' => '',
             'estate_sale_customer_name' => '',
             'notes' => '',
+            'client_percentage' => '',
+            'payment_method' => Sale::PAYMENT_METHOD_DEFAULT,
+            'default_client_percentage' => $this->formatDefaultClientPercentage($estateSale),
         ];
     }
 
@@ -1302,17 +1465,23 @@ final class EstateSalesController extends Controller
             'name' => trim((string) ($post['name'] ?? '')),
             'gross_amount' => trim((string) ($post['gross_amount'] ?? '')),
             'sale_date' => trim((string) ($post['sale_date'] ?? '')),
+            'sale_time' => trim((string) ($post['sale_time'] ?? '')),
             'estate_sale_customer_id' => $customerId,
             'estate_sale_customer_name' => trim((string) ($post['estate_sale_customer_name'] ?? '')),
             'notes' => trim((string) ($post['notes'] ?? '')),
+            'client_percentage' => can_view_financials()
+                ? trim((string) ($post['client_percentage'] ?? ''))
+                : '',
+            'payment_method' => Sale::normalizePaymentMethod($post['payment_method'] ?? null),
         ];
     }
 
     /**
      * @param array<string, string> $form
+     * @param array<string, mixed> $estateSale
      * @return array<string, string>
      */
-    private function validateEstateSaleForm(array $form, int $businessId, int $estateSaleId): array
+    private function validateEstateSaleForm(array $form, int $businessId, int $estateSaleId, array $estateSale = []): array
     {
         $errors = [];
 
@@ -1335,7 +1504,68 @@ final class EstateSalesController extends Controller
             $errors['sale_date'] = 'Date is invalid.';
         }
 
+        if (!$this->isValidSaleTime($form['sale_time'])) {
+            $errors['sale_time'] = 'Time is invalid.';
+        }
+
+        if (can_view_financials()) {
+            $clientPctRaw = trim((string) ($form['client_percentage'] ?? ''));
+            if ($clientPctRaw !== '') {
+                if (!is_numeric($clientPctRaw)) {
+                    $errors['client_percentage'] = 'Client percentage must be a number.';
+                } else {
+                    $clientPct = EstateSale::normalizeClientPercentage($clientPctRaw);
+                    if ($clientPct === null) {
+                        $errors['client_percentage'] = 'Client percentage must be between 0 and 100.';
+                    }
+                }
+            }
+        }
+
+        if (!array_key_exists((string) ($form['payment_method'] ?? ''), Sale::paymentMethodOptions())) {
+            $errors['payment_method'] = 'Choose a valid payment type.';
+        }
+
         return $errors;
+    }
+
+    /**
+     * @param array<string, string> $form
+     * @param array<string, mixed> $estateSale
+     * @return float|null|false null clears override; float stores override; false = do not change column
+     */
+    private function resolveSaleClientPercentage(array $form, array $estateSale): float|null|false
+    {
+        if (!can_view_financials()) {
+            return false;
+        }
+
+        $raw = trim((string) ($form['client_percentage'] ?? ''));
+        if ($raw === '') {
+            return null;
+        }
+
+        $pct = EstateSale::normalizeClientPercentage($raw);
+        if ($pct === null) {
+            return null;
+        }
+
+        $standard = EstateSale::normalizeClientPercentage($estateSale['client_percentage'] ?? null);
+        if ($standard !== null && abs($pct - $standard) < 0.001) {
+            return null;
+        }
+
+        return $pct;
+    }
+
+    /**
+     * @param array<string, mixed> $estateSale
+     */
+    private function formatDefaultClientPercentage(array $estateSale): string
+    {
+        $pct = EstateSale::normalizeClientPercentage($estateSale['client_percentage'] ?? null);
+
+        return $pct === null ? '' : format_client_percentage($pct);
     }
 
     private function isValidSaleMoney(string $value): bool
@@ -1347,14 +1577,46 @@ final class EstateSalesController extends Controller
         return (float) $value >= 0;
     }
 
-    private function saleDateToDatabase(string $value): ?string
+    private function isValidSaleTime(string $value): bool
     {
         $value = trim($value);
         if ($value === '') {
+            return false;
+        }
+
+        $parsed = \DateTimeImmutable::createFromFormat('H:i', $value);
+        if ($parsed instanceof \DateTimeImmutable && $parsed->format('H:i') === $value) {
+            return true;
+        }
+
+        $parsed = \DateTimeImmutable::createFromFormat('H:i:s', $value);
+
+        return $parsed instanceof \DateTimeImmutable && $parsed->format('H:i:s') === $value;
+    }
+
+    private function saleDateTimeToDatabase(string $date, string $time): ?string
+    {
+        $date = trim($date);
+        $time = trim($time);
+        if ($date === '') {
             return null;
         }
 
-        $timestamp = strtotime($value);
+        if ($time === '') {
+            $time = date('H:i');
+        }
+
+        if (preg_match('/^\d{1,2}:\d{2}:\d{2}$/', $time) === 1) {
+            $time = substr($time, 0, 5);
+        }
+
+        $combined = $date . ' ' . $time . ':00';
+        $parsed = \DateTimeImmutable::createFromFormat('Y-m-d H:i:s', $combined);
+        if ($parsed instanceof \DateTimeImmutable && $parsed->format('Y-m-d H:i:s') === $combined) {
+            return $parsed->format('Y-m-d H:i:s');
+        }
+
+        $timestamp = strtotime($date . ' ' . $time);
 
         return $timestamp === false ? null : date('Y-m-d H:i:s', $timestamp);
     }
@@ -1378,6 +1640,8 @@ final class EstateSalesController extends Controller
             'estateSaleTitle' => $estateTitle,
             'form' => $form,
             'errors' => $errors,
+            'canEditClientPercentage' => can_view_financials(),
+            'paymentMethodOptions' => Sale::paymentMethodOptions(),
             'backUrl' => url('/estate-sales/' . (string) $estateSaleId . '?tab=sales'),
         ]);
     }
@@ -1407,10 +1671,13 @@ final class EstateSalesController extends Controller
 
     /**
      * @param array<string, mixed> $sale
+     * @param array<string, mixed> $estateSale
      * @return array<string, string>
      */
-    private function estateSaleFormFromSale(array $sale, int $businessId, int $estateSaleId): array
+    private function estateSaleFormFromSale(array $sale, array $estateSale): array
     {
+        $businessId = current_business_id();
+        $estateSaleId = (int) ($estateSale['id'] ?? 0);
         $customerId = (int) ($sale['estate_sale_customer_id'] ?? 0);
         $customerName = '';
         if ($customerId > 0) {
@@ -1421,18 +1688,29 @@ final class EstateSalesController extends Controller
         }
 
         $saleDate = trim((string) ($sale['sale_date'] ?? ''));
+        $saleDateValue = '';
+        $saleTimeValue = date('H:i');
         if ($saleDate !== '') {
             $timestamp = strtotime($saleDate);
-            $saleDate = $timestamp === false ? '' : date('Y-m-d', $timestamp);
+            if ($timestamp !== false) {
+                $saleDateValue = date('Y-m-d', $timestamp);
+                $saleTimeValue = date('H:i', $timestamp);
+            }
         }
+
+        $overridePct = EstateSale::normalizeClientPercentage($sale['client_percentage'] ?? null);
 
         return [
             'name' => trim((string) ($sale['name'] ?? '')),
             'gross_amount' => number_format((float) ($sale['gross_amount'] ?? 0), 2, '.', ''),
-            'sale_date' => $saleDate,
+            'sale_date' => $saleDateValue,
+            'sale_time' => $saleTimeValue,
             'estate_sale_customer_id' => $customerId > 0 ? (string) $customerId : '',
             'estate_sale_customer_name' => $customerName,
             'notes' => trim((string) ($sale['notes'] ?? '')),
+            'client_percentage' => $overridePct !== null ? (string) $overridePct : '',
+            'payment_method' => Sale::normalizePaymentMethod($sale['payment_method'] ?? null),
+            'default_client_percentage' => $this->formatDefaultClientPercentage($estateSale),
         ];
     }
 
@@ -1445,6 +1723,21 @@ final class EstateSalesController extends Controller
         }
 
         return $name;
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function customerFormFromRow(array $customer): array
+    {
+        return [
+            'first_name' => trim((string) ($customer['first_name'] ?? '')),
+            'last_name' => trim((string) ($customer['last_name'] ?? '')),
+            'email' => trim((string) ($customer['email'] ?? '')),
+            'phone' => trim((string) ($customer['phone'] ?? '')),
+            'city' => trim((string) ($customer['city'] ?? '')),
+            'state' => trim((string) ($customer['state'] ?? '')),
+        ];
     }
 
     private function json(array $payload, int $status = 200): never

@@ -5,10 +5,10 @@ $estateSaleId = (int) ($sale['estate_sale_id'] ?? 0);
 $saleEditUrl = $estateSaleId > 0
     ? url('/estate-sales/' . (string) $estateSaleId . '/sales/' . (string) $saleId . '/edit')
     : url('/sales/' . (string) $saleId . '/edit');
-$backUrl = $estateSaleId > 0
-    ? url('/estate-sale-records')
-    : url('/sales');
-$backLabel = $estateSaleId > 0 ? 'Back to Estate Sale Records' : 'Back to Sales';
+$backMeta = sale_detail_back_meta($sale, (string) ($returnTo ?? ''));
+$backUrl = (string) ($backUrl ?? $backMeta['url']);
+$backLabel = (string) ($backLabel ?? $backMeta['label']);
+$returnTo = safe_return_path((string) ($returnTo ?? $backMeta['path']));
 
 $displayName = trim((string) ($sale['name'] ?? ''));
 if ($displayName === '') {
@@ -17,6 +17,9 @@ if ($displayName === '') {
 
 $grossAmt = (float) ($sale['gross_amount'] ?? 0);
 $netAmt = (float) ($sale['net_amount'] ?? 0);
+$clientPercentageMeta = is_array($clientPercentageMeta ?? null) ? $clientPercentageMeta : null;
+$recordedBy = trim((string) ($sale['created_by_name'] ?? ''));
+$recordedAt = format_datetime((string) ($sale['created_at'] ?? ''));
 
 $formatSaleDate = static function (?string $value): string {
     $raw = trim((string) ($value ?? ''));
@@ -48,6 +51,9 @@ $formatSaleDate = static function (?string $value): string {
                 <li>
                     <form method="post" action="<?= e(url('/sales/' . (string) $saleId . '/delete')) ?>" class="m-0" onsubmit="return confirm('Delete this sale?');">
                         <?= csrf_field() ?>
+                        <?php if ($returnTo !== ''): ?>
+                        <input type="hidden" name="return_to" value="<?= e($returnTo) ?>">
+                        <?php endif; ?>
                         <button class="dropdown-item text-danger" type="submit"><i class="fas fa-trash me-2"></i>Delete Sale</button>
                     </form>
                 </li>
@@ -71,9 +77,15 @@ $formatSaleDate = static function (?string $value): string {
                 <span class="record-label">Type</span>
                 <span class="record-value"><?= e(trim((string) ($sale['sale_type'] ?? '')) ?: '—') ?></span>
             </div>
+            <?php if ($estateSaleId > 0): ?>
             <div class="record-field">
-                <span class="record-label">Date</span>
-                <span class="record-value"><?= e($formatSaleDate((string) ($sale['sale_date'] ?? ''))) ?></span>
+                <span class="record-label">Payment</span>
+                <span class="record-value"><?= e(\App\Models\Sale::paymentMethodLabel($sale['payment_method'] ?? null)) ?></span>
+            </div>
+            <?php endif; ?>
+            <div class="record-field">
+                <span class="record-label"><?= $estateSaleId > 0 ? 'Date & time' : 'Date' ?></span>
+                <span class="record-value"><?= e($estateSaleId > 0 ? format_datetime((string) ($sale['sale_date'] ?? '')) : $formatSaleDate((string) ($sale['sale_date'] ?? ''))) ?></span>
             </div>
             <div class="record-field">
                 <span class="record-label">Gross</span>
@@ -83,6 +95,14 @@ $formatSaleDate = static function (?string $value): string {
                 <span class="record-label">Net</span>
                 <span class="record-value">$<?= e(number_format($netAmt, 2)) ?></span>
             </div>
+            <?php if ($estateSaleId > 0 && $clientPercentageMeta !== null): ?>
+            <div class="record-field">
+                <span class="record-label">Client split</span>
+                <span class="record-value<?= !empty($clientPercentageMeta['client_percentage_is_override']) ? ' fw-bold' : '' ?>">
+                    <?= e(format_client_percentage($clientPercentageMeta['effective_client_percentage'] ?? null)) ?>
+                </span>
+            </div>
+            <?php endif; ?>
         </div>
         <div class="record-row-fields record-row-fields-3 mt-3">
             <div class="record-field record-field-full">
@@ -108,6 +128,24 @@ $formatSaleDate = static function (?string $value): string {
                 <?php else: ?>
                     <span class="record-value">—</span>
                 <?php endif; ?>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="card index-card mb-3">
+    <div class="card-header index-card-header">
+        <strong><i class="fas fa-user-check me-2"></i>Recording</strong>
+    </div>
+    <div class="card-body">
+        <div class="record-row-fields record-row-fields-2">
+            <div class="record-field">
+                <span class="record-label">Recorded by</span>
+                <span class="record-value"><?= e($recordedBy !== '' ? $recordedBy : '—') ?></span>
+            </div>
+            <div class="record-field">
+                <span class="record-label">Recorded at</span>
+                <span class="record-value"><?= e($recordedAt) ?></span>
             </div>
         </div>
     </div>

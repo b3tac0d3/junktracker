@@ -824,6 +824,52 @@ final class EstateSale
         return (int) Database::connection()->lastInsertId();
     }
 
+    public static function updateCustomer(int $businessId, int $estateSaleId, int $customerId, array $data, int $actorUserId): bool
+    {
+        if ($estateSaleId <= 0 || $customerId <= 0 || !SchemaInspector::hasTable('estate_sale_customers')) {
+            return false;
+        }
+
+        if (self::findCustomerForSale($businessId, $estateSaleId, $customerId) === null) {
+            return false;
+        }
+
+        if (!SchemaInspector::hasColumn('estate_sale_customers', 'first_name')) {
+            return false;
+        }
+
+        $payload = self::customerPayloadFromInput($data);
+
+        $sql = 'UPDATE estate_sale_customers
+                SET first_name = :first_name,
+                    last_name = :last_name,
+                    email = :email,
+                    phone = :phone,
+                    city = :city,
+                    state = :state,
+                    updated_by = :updated_by,
+                    updated_at = NOW()
+                WHERE business_id = :business_id
+                  AND estate_sale_id = :estate_sale_id
+                  AND id = :id
+                  AND deleted_at IS NULL';
+
+        $stmt = Database::connection()->prepare($sql);
+
+        return $stmt->execute([
+            'first_name' => $payload['first_name'],
+            'last_name' => $payload['last_name'],
+            'email' => $payload['email'],
+            'phone' => $payload['phone'],
+            'city' => $payload['city'],
+            'state' => $payload['state'],
+            'updated_by' => $actorUserId > 0 ? $actorUserId : null,
+            'business_id' => $businessId,
+            'estate_sale_id' => $estateSaleId,
+            'id' => $customerId,
+        ]);
+    }
+
     public static function findCustomerForSale(int $businessId, int $estateSaleId, int $customerId): ?array
     {
         if ($estateSaleId <= 0 || $customerId <= 0 || !SchemaInspector::hasTable('estate_sale_customers')) {
@@ -1195,6 +1241,9 @@ final class EstateSale
         $grossSql = SchemaInspector::hasColumn('sales', 'gross_amount')
             ? 'COALESCE(s.gross_amount, 0)'
             : (SchemaInspector::hasColumn('sales', 'amount') ? 'COALESCE(s.amount, 0)' : '0');
+        $paymentMethodSql = SchemaInspector::hasColumn('sales', 'payment_method')
+            ? 's.payment_method'
+            : "'" . Sale::PAYMENT_METHOD_DEFAULT . "' AS payment_method";
 
         $where = [
             's.estate_sale_id = :estate_sale_id',
@@ -1213,7 +1262,8 @@ final class EstateSale
                     {$nameSql} AS name,
                     {$typeSql} AS sale_type,
                     {$dateSql} AS sale_date,
-                    {$grossSql} AS gross_amount
+                    {$grossSql} AS gross_amount,
+                    {$paymentMethodSql}
                 FROM sales s
                 WHERE " . implode(' AND ', $where) . "
                 ORDER BY COALESCE({$dateSql}, s.id) DESC, s.id DESC
@@ -1331,30 +1381,35 @@ final class EstateSale
         $splitType = self::normalizeClientSplitType($estateSale['client_split_type'] ?? null);
         $totalLabor = round(self::laborCostByEstateSale($businessId, $estateSaleId), 2);
 
-        $clientShare = null;
+        $clientShare = self::clientShareFromSales(
+            $businessId,
+            $estateSaleId,
+            $clientPct,
+            $splitType,
+            $totalSales,
+            $totalExpenses,
+            $totalLabor
+        );
+
         $ourShare = null;
         $splitBase = null;
-        if ($clientPct !== null) {
+        if ($clientShare !== null) {
             switch ($splitType) {
                 case self::SPLIT_NET:
                     $splitBase = round($totalSales - $totalExpenses, 2);
-                    $clientShare = round($splitBase * ($clientPct / 100), 2);
                     $ourShare = round($splitBase - $clientShare, 2);
                     break;
                 case self::SPLIT_LESS_LABOR:
                     $splitBase = round($totalSales - $totalLabor, 2);
-                    $clientShare = round($splitBase * ($clientPct / 100), 2);
                     $ourShare = round($totalSales - $clientShare - $totalExpenses - $totalLabor, 2);
                     break;
                 case self::SPLIT_NET_TOTAL:
                     $splitBase = round($totalSales - $totalExpenses - $totalLabor, 2);
-                    $clientShare = round($splitBase * ($clientPct / 100), 2);
                     $ourShare = round($splitBase - $clientShare, 2);
                     break;
                 case self::SPLIT_GROSS_TOTAL:
                 default:
                     $splitBase = round($totalSales, 2);
-                    $clientShare = round($totalSales * ($clientPct / 100), 2);
                     $ourShare = round($totalSales - $clientShare - $totalExpenses, 2);
                     break;
             }
@@ -1374,6 +1429,142 @@ final class EstateSale
             'our_share' => $ourShare,
             'net' => $ourShare,
         ];
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $sales
+     * @param array<string, mixed> $estateSale
+     * @return array<int, array<string, mixed>>
+     */
+    public static function enrichSalesWithClientPercentage(array $sales, array $estateSale): array
+    {
+        $standard = self::normalizeClientPercentage($estateSale['client_percentage'] ?? null);
+
+        foreach ($sales as $index => $sale) {
+            if (!is_array($sale)) {
+                continue;
+            }
+
+            $override = self::normalizeClientPercentage($sale['client_percentage'] ?? null);
+            $sales[$index]['estate_client_percentage'] = $standard;
+            $sales[$index]['effective_client_percentage'] = $override ?? $standard;
+            $sales[$index]['client_percentage_is_override'] = $override !== null;
+        }
+
+        return $sales;
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $records
+     * @return array<int, array<string, mixed>>
+     */
+    public static function enrichSaleRecordsWithClientPercentage(array $records): array
+    {
+        foreach ($records as $index => $record) {
+            if (!is_array($record)) {
+                continue;
+            }
+
+            $override = self::normalizeClientPercentage($record['client_percentage'] ?? null);
+            $standard = self::normalizeClientPercentage($record['estate_client_percentage'] ?? null);
+            $records[$index]['estate_client_percentage'] = $standard;
+            $records[$index]['effective_client_percentage'] = $override ?? $standard;
+            $records[$index]['client_percentage_is_override'] = $override !== null;
+        }
+
+        return $records;
+    }
+
+    /**
+     * @return array<string, float|null>
+     */
+    public static function saleClientPercentageMeta(array $sale, array $estateSale): array
+    {
+        $override = self::normalizeClientPercentage($sale['client_percentage'] ?? null);
+        $standard = self::normalizeClientPercentage($estateSale['client_percentage'] ?? null);
+
+        return [
+            'estate_client_percentage' => $standard,
+            'effective_client_percentage' => $override ?? $standard,
+            'client_percentage_is_override' => $override !== null,
+        ];
+    }
+
+    private static function clientShareFromSales(
+        int $businessId,
+        int $estateSaleId,
+        ?float $defaultPct,
+        string $splitType,
+        float $totalSales,
+        float $totalExpenses,
+        float $totalLabor
+    ): ?float {
+        if ($estateSaleId <= 0 || !SchemaInspector::hasTable('sales') || !SchemaInspector::hasColumn('sales', 'estate_sale_id')) {
+            return null;
+        }
+
+        $grossSql = SchemaInspector::hasColumn('sales', 'gross_amount')
+            ? 'COALESCE(s.gross_amount, 0)'
+            : (SchemaInspector::hasColumn('sales', 'amount') ? 'COALESCE(s.amount, 0)' : '0');
+        $clientPctSql = SchemaInspector::hasColumn('sales', 'client_percentage')
+            ? 's.client_percentage'
+            : 'NULL';
+
+        $where = ['s.estate_sale_id = :estate_sale_id'];
+        if (SchemaInspector::hasColumn('sales', 'business_id')) {
+            $where[] = 's.business_id = :business_id';
+        }
+        if (SchemaInspector::hasColumn('sales', 'deleted_at')) {
+            $where[] = 's.deleted_at IS NULL';
+        }
+
+        $sql = "SELECT {$grossSql} AS gross_amount, {$clientPctSql}
+                FROM sales s
+                WHERE " . implode(' AND ', $where);
+
+        $stmt = Database::connection()->prepare($sql);
+        if (SchemaInspector::hasColumn('sales', 'business_id')) {
+            $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
+        }
+        $stmt->bindValue(':estate_sale_id', $estateSaleId, \PDO::PARAM_INT);
+        $stmt->execute();
+        $rows = $stmt->fetchAll();
+        if (!is_array($rows) || $rows === []) {
+            return null;
+        }
+
+        $clientShare = 0.0;
+        $hasApplicablePct = false;
+
+        foreach ($rows as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+
+            $gross = round((float) ($row['gross_amount'] ?? 0), 2);
+            $pct = self::normalizeClientPercentage($row['client_percentage'] ?? null) ?? $defaultPct;
+            if ($pct === null) {
+                continue;
+            }
+
+            $hasApplicablePct = true;
+            $saleBase = match ($splitType) {
+                self::SPLIT_NET => $totalSales > 0
+                    ? round(($gross / $totalSales) * ($totalSales - $totalExpenses), 2)
+                    : 0.0,
+                self::SPLIT_LESS_LABOR => $totalSales > 0
+                    ? round(($gross / $totalSales) * ($totalSales - $totalLabor), 2)
+                    : 0.0,
+                self::SPLIT_NET_TOTAL => $totalSales > 0
+                    ? round(($gross / $totalSales) * ($totalSales - $totalExpenses - $totalLabor), 2)
+                    : 0.0,
+                default => $gross,
+            };
+
+            $clientShare += round($saleBase * ($pct / 100), 2);
+        }
+
+        return $hasApplicablePct ? round($clientShare, 2) : null;
     }
 
     /**
@@ -1662,6 +1853,10 @@ final class EstateSale
             ? 'COALESCE(s.gross_amount, 0)'
             : (SchemaInspector::hasColumn('sales', 'amount') ? 'COALESCE(s.amount, 0)' : '0');
         $netSql = SchemaInspector::hasColumn('sales', 'net_amount') ? 'COALESCE(s.net_amount, 0)' : $grossSql;
+        $clientPctSql = SchemaInspector::hasColumn('sales', 'client_percentage') ? 's.client_percentage' : 'NULL AS client_percentage';
+        $paymentMethodSql = SchemaInspector::hasColumn('sales', 'payment_method')
+            ? 's.payment_method'
+            : "'" . Sale::PAYMENT_METHOD_DEFAULT . "' AS payment_method";
         $customerNameSql = 'NULL';
         $joins = [];
 
@@ -1688,6 +1883,8 @@ final class EstateSale
                     {$dateSql} AS sale_date,
                     {$grossSql} AS gross_amount,
                     {$netSql} AS net_amount,
+                    {$clientPctSql},
+                    {$paymentMethodSql},
                     {$customerNameSql} AS customer_name
                 FROM sales s";
 
@@ -2096,6 +2293,51 @@ final class EstateSale
         return true;
     }
 
+    public static function unassignEmployee(int $businessId, int $estateSaleId, int $employeeId, int $actorUserId): bool
+    {
+        if ($estateSaleId <= 0 || $employeeId <= 0 || !SchemaInspector::hasTable('estate_sale_employee_assignments')) {
+            return false;
+        }
+
+        if (self::findAssignedEmployee($businessId, $estateSaleId, $employeeId) === null) {
+            return false;
+        }
+
+        if (TimeEntry::hasActiveEntryForEstateSale($businessId, $estateSaleId, $employeeId)) {
+            return false;
+        }
+
+        $sets = [
+            'deleted_at = NOW()',
+            'updated_by = :updated_by',
+            'updated_at = NOW()',
+        ];
+        if (SchemaInspector::hasColumn('estate_sale_employee_assignments', 'deleted_by')) {
+            $sets[] = 'deleted_by = :deleted_by';
+        }
+
+        $sql = 'UPDATE estate_sale_employee_assignments
+                SET ' . implode(', ', $sets) . '
+                WHERE business_id = :business_id
+                  AND estate_sale_id = :estate_sale_id
+                  AND employee_id = :employee_id
+                  AND deleted_at IS NULL';
+
+        $params = [
+            'updated_by' => $actorUserId > 0 ? $actorUserId : null,
+            'business_id' => $businessId,
+            'estate_sale_id' => $estateSaleId,
+            'employee_id' => $employeeId,
+        ];
+        if (SchemaInspector::hasColumn('estate_sale_employee_assignments', 'deleted_by')) {
+            $params['deleted_by'] = $actorUserId > 0 ? $actorUserId : null;
+        }
+
+        $stmt = Database::connection()->prepare($sql);
+
+        return $stmt->execute($params);
+    }
+
     /**
      * @return array<int, array<string, mixed>>
      */
@@ -2353,6 +2595,644 @@ final class EstateSale
         return (float) $stmt->fetchColumn();
     }
 
+    /**
+     * @return array<string, mixed>
+     */
+    public static function metricsReport(int $businessId, int $estateSaleId, array $estateSale): array
+    {
+        $saleDays = self::metricsSaleDays($businessId, $estateSaleId, $estateSale);
+        $allSales = self::enrichSalesWithClientPercentage(self::sales($businessId, $estateSaleId, 5000, 0), $estateSale);
+        $allExpenses = self::expenses($businessId, $estateSaleId, 2000);
+        $allTimeLogs = self::timeLogsByEstateSale($businessId, $estateSaleId, 2000);
+        $visitStats = self::metricsVisitStats($businessId, $estateSaleId);
+        $customerCountsByDay = self::metricsCustomerCountsByDay($businessId, $estateSaleId, $allSales);
+
+        $overallFinancial = self::financialSummary($businessId, $estateSaleId, $estateSale);
+        $overall = self::metricsSnapshot(
+            null,
+            $allSales,
+            $allExpenses,
+            $allTimeLogs,
+            $visitStats,
+            $customerCountsByDay,
+            $estateSale,
+            $overallFinancial,
+            (int) self::customersCount($businessId, $estateSaleId)
+        );
+
+        $days = [];
+        $dayNumber = 0;
+        foreach ($saleDays as $day) {
+            $dayNumber++;
+            $days[] = array_merge(
+                self::metricsSnapshot(
+                    $day,
+                    $allSales,
+                    $allExpenses,
+                    $allTimeLogs,
+                    $visitStats,
+                    $customerCountsByDay,
+                    $estateSale,
+                    null,
+                    0
+                ),
+                [
+                    'date' => $day,
+                    'label' => date('D, M j, Y', strtotime($day . ' 12:00:00')),
+                    'day_number' => $dayNumber,
+                ]
+            );
+        }
+
+        $splitLabels = [];
+        $splitCounts = [];
+        $splitGross = [];
+        foreach ($overall['split_breakdown'] as $row) {
+            $splitLabels[] = (string) ($row['label'] ?? '');
+            $splitCounts[] = (int) ($row['sale_count'] ?? 0);
+            $splitGross[] = round((float) ($row['gross_total'] ?? 0), 2);
+        }
+
+        $dailyLabels = [];
+        $dailyGross = [];
+        $dailyCustomers = [];
+        foreach ($days as $dayRow) {
+            $dailyLabels[] = date('M j', strtotime((string) ($dayRow['date'] ?? '')));
+            $dailyGross[] = round((float) ($dayRow['financial']['gross'] ?? 0), 2);
+            $dailyCustomers[] = (int) ($dayRow['customer_count'] ?? 0);
+        }
+
+        return [
+            'sale_days' => $saleDays,
+            'overall' => $overall,
+            'days' => $days,
+            'charts' => [
+                'split_labels' => $splitLabels,
+                'split_counts' => $splitCounts,
+                'split_gross' => $splitGross,
+                'daily_labels' => $dailyLabels,
+                'daily_gross' => $dailyGross,
+                'daily_customers' => $dailyCustomers,
+            ],
+        ];
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public static function metricsSaleDays(int $businessId, int $estateSaleId, array $estateSale): array
+    {
+        $start = self::metricsDateOnly($estateSale['start_at'] ?? null);
+        $end = self::metricsDateOnly($estateSale['end_at'] ?? null);
+
+        if ($start !== '' && $end !== '') {
+            return self::metricsDatesBetweenInclusive($start, $end);
+        }
+        if ($start !== '') {
+            return [$start];
+        }
+        if ($end !== '') {
+            return [$end];
+        }
+
+        $dates = [];
+        foreach (self::sales($businessId, $estateSaleId, 5000, 0) as $sale) {
+            if (!is_array($sale)) {
+                continue;
+            }
+            $day = self::metricsDateOnly($sale['sale_date'] ?? null);
+            if ($day !== '') {
+                $dates[$day] = true;
+            }
+        }
+
+        if ($dates === [] && SchemaInspector::hasTable('estate_sale_customer_visits')) {
+            $sql = 'SELECT DISTINCT DATE(checked_in_at) AS visit_day
+                    FROM estate_sale_customer_visits
+                    WHERE business_id = :business_id AND estate_sale_id = :estate_sale_id
+                    ORDER BY visit_day ASC';
+            $stmt = Database::connection()->prepare($sql);
+            $stmt->execute(['business_id' => $businessId, 'estate_sale_id' => $estateSaleId]);
+            foreach ($stmt->fetchAll() as $row) {
+                if (!is_array($row)) {
+                    continue;
+                }
+                $day = trim((string) ($row['visit_day'] ?? ''));
+                if ($day !== '') {
+                    $dates[$day] = true;
+                }
+            }
+        }
+
+        if ($dates === []) {
+            return [date('Y-m-d')];
+        }
+
+        $sorted = array_keys($dates);
+        sort($sorted);
+
+        return self::metricsDatesBetweenInclusive($sorted[0], $sorted[array_key_last($sorted)]);
+    }
+    /**
+     * @param array<int, array<string, mixed>> $sales
+     * @param array<int, array<string, mixed>> $expenses
+     * @param array<int, array<string, mixed>> $timeLogs
+     * @param array<string, mixed> $visitStats
+     * @param array<string, int> $customerCountsByDay
+     * @param array<string, mixed> $estateSale
+     * @param array<string, mixed>|null $financialPrefetched
+     * @return array<string, mixed>
+     */
+    private static function metricsSnapshot(
+        ?string $day,
+        array $sales,
+        array $expenses,
+        array $timeLogs,
+        array $visitStats,
+        array $customerCountsByDay,
+        array $estateSale,
+        ?array $financialPrefetched,
+        int $overallCustomerCount
+    ): array {
+        $filteredSales = self::metricsFilterSalesByDay($sales, $day);
+        $saleCount = count($filteredSales);
+        $grossTotal = 0.0;
+        foreach ($filteredSales as $sale) {
+            if (!is_array($sale)) {
+                continue;
+            }
+            $grossTotal += (float) ($sale['gross_amount'] ?? 0);
+        }
+        $grossTotal = round($grossTotal, 2);
+        $avgSalePrice = $saleCount > 0 ? round($grossTotal / $saleCount, 2) : null;
+
+        $splitBreakdown = self::metricsSplitBreakdown($filteredSales, $estateSale);
+        $totalExpenses = round(self::metricsSumExpensesForDay($expenses, $day), 2);
+        $totalLabor = round(self::metricsSumLaborForDay($timeLogs, $day), 2);
+
+        $clientPct = self::normalizeClientPercentage($estateSale['client_percentage'] ?? null);
+        $splitType = self::normalizeClientSplitType($estateSale['client_split_type'] ?? null);
+        $clientShare = self::metricsClientShareFromRows($filteredSales, $clientPct, $splitType, $grossTotal, $totalExpenses, $totalLabor);
+        $ourShare = self::metricsOurShareFromParts($splitType, $grossTotal, $totalExpenses, $totalLabor, $clientShare);
+
+        $financial = $financialPrefetched ?? [
+            'gross' => $grossTotal,
+            'total_sales' => $grossTotal,
+            'total_expenses' => $totalExpenses,
+            'total_labor' => $totalLabor,
+            'client_share' => $clientShare,
+            'our_share' => $ourShare,
+            'net' => $ourShare,
+            'client_split_type' => $splitType,
+            'client_split_type_label' => self::clientSplitTypeLabel($splitType),
+            'client_percentage' => $clientPct,
+        ];
+
+        $waitKey = $day ?? '__overall__';
+        $shoppingKey = $day ?? '__overall__';
+        $avgWait = $visitStats['wait'][$waitKey] ?? null;
+        $avgShopping = $visitStats['shopping'][$shoppingKey] ?? null;
+
+        return [
+            'customer_count' => $day === null ? $overallCustomerCount : (int) ($customerCountsByDay[$day] ?? 0),
+            'sale_count' => $saleCount,
+            'avg_sale_price' => $avgSalePrice,
+            'avg_wait_minutes' => $avgWait,
+            'avg_shopping_minutes' => $avgShopping,
+            'avg_wait_display' => self::formatVisitDuration($avgWait !== null ? (int) round($avgWait) : null),
+            'avg_shopping_display' => self::formatVisitDuration($avgShopping !== null ? (int) round($avgShopping) : null),
+            'split_breakdown' => $splitBreakdown,
+            'financial' => $financial,
+            'profit_steps' => self::metricsProfitSteps($financial, $estateSale),
+        ];
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $sales
+     * @return array<int, array<string, mixed>>
+     */
+    private static function metricsFilterSalesByDay(array $sales, ?string $day): array
+    {
+        if ($day === null) {
+            return $sales;
+        }
+
+        $filtered = [];
+        foreach ($sales as $sale) {
+            if (!is_array($sale)) {
+                continue;
+            }
+            if (self::metricsDateOnly($sale['sale_date'] ?? null) === $day) {
+                $filtered[] = $sale;
+            }
+        }
+
+        return $filtered;
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $sales
+     * @return array<int, array<string, mixed>>
+     */
+    private static function metricsSplitBreakdown(array $sales, array $estateSale): array
+    {
+        $standard = self::normalizeClientPercentage($estateSale['client_percentage'] ?? null);
+        $groups = [];
+
+        foreach ($sales as $sale) {
+            if (!is_array($sale)) {
+                continue;
+            }
+            $override = self::normalizeClientPercentage($sale['client_percentage'] ?? null);
+            $effective = $override ?? $standard;
+            $key = $effective !== null ? number_format($effective, 2, '.', '') : 'unset';
+            if (!isset($groups[$key])) {
+                $groups[$key] = [
+                    'percentage' => $effective,
+                    'label' => $effective !== null ? format_client_percentage($effective) : 'Not set',
+                    'sale_count' => 0,
+                    'gross_total' => 0.0,
+                ];
+            }
+            $groups[$key]['sale_count']++;
+            $groups[$key]['gross_total'] += (float) ($sale['gross_amount'] ?? 0);
+        }
+
+        $rows = array_values($groups);
+        usort($rows, static function (array $a, array $b): int {
+            return ((float) ($b['percentage'] ?? -1)) <=> ((float) ($a['percentage'] ?? -1));
+        });
+        foreach ($rows as $index => $row) {
+            $rows[$index]['gross_total'] = round((float) ($row['gross_total'] ?? 0), 2);
+        }
+
+        return $rows;
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $sales
+     */
+    private static function metricsClientShareFromRows(
+        array $sales,
+        ?float $defaultPct,
+        string $splitType,
+        float $totalSales,
+        float $totalExpenses,
+        float $totalLabor
+    ): ?float {
+        if ($sales === []) {
+            return null;
+        }
+
+        $clientShare = 0.0;
+        $hasApplicablePct = false;
+
+        foreach ($sales as $sale) {
+            if (!is_array($sale)) {
+                continue;
+            }
+            $gross = round((float) ($sale['gross_amount'] ?? 0), 2);
+            $pct = self::normalizeClientPercentage($sale['client_percentage'] ?? null) ?? $defaultPct;
+            if ($pct === null) {
+                continue;
+            }
+
+            $hasApplicablePct = true;
+            $saleBase = match ($splitType) {
+                self::SPLIT_NET => $totalSales > 0
+                    ? round(($gross / $totalSales) * ($totalSales - $totalExpenses), 2)
+                    : 0.0,
+                self::SPLIT_LESS_LABOR => $totalSales > 0
+                    ? round(($gross / $totalSales) * ($totalSales - $totalLabor), 2)
+                    : 0.0,
+                self::SPLIT_NET_TOTAL => $totalSales > 0
+                    ? round(($gross / $totalSales) * ($totalSales - $totalExpenses - $totalLabor), 2)
+                    : 0.0,
+                default => $gross,
+            };
+            $clientShare += round($saleBase * ($pct / 100), 2);
+        }
+
+        return $hasApplicablePct ? round($clientShare, 2) : null;
+    }
+
+    private static function metricsOurShareFromParts(
+        string $splitType,
+        float $totalSales,
+        float $totalExpenses,
+        float $totalLabor,
+        ?float $clientShare
+    ): ?float {
+        if ($clientShare === null) {
+            return null;
+        }
+
+        return match ($splitType) {
+            self::SPLIT_NET => round(($totalSales - $totalExpenses) - $clientShare, 2),
+            self::SPLIT_LESS_LABOR => round($totalSales - $clientShare - $totalExpenses - $totalLabor, 2),
+            self::SPLIT_NET_TOTAL => round(($totalSales - $totalExpenses - $totalLabor) - $clientShare, 2),
+            default => round($totalSales - $clientShare - $totalExpenses, 2),
+        };
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $expenses
+     */
+    private static function metricsSumExpensesForDay(array $expenses, ?string $day): float
+    {
+        $total = 0.0;
+        foreach ($expenses as $expense) {
+            if (!is_array($expense)) {
+                continue;
+            }
+            $expenseDay = self::metricsDateOnly($expense['expense_date'] ?? ($expense['created_at'] ?? null));
+            if ($day !== null && $expenseDay !== $day) {
+                continue;
+            }
+            $total += (float) ($expense['amount'] ?? 0);
+        }
+
+        return $total;
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $timeLogs
+     */
+    private static function metricsSumLaborForDay(array $timeLogs, ?string $day): float
+    {
+        $total = 0.0;
+        foreach ($timeLogs as $log) {
+            if (!is_array($log)) {
+                continue;
+            }
+            $logDay = self::metricsDateOnly($log['clock_in_at'] ?? null);
+            if ($day !== null && $logDay !== $day) {
+                continue;
+            }
+            $total += (float) ($log['labor_cost'] ?? 0);
+        }
+
+        return $total;
+    }
+    /**
+     * @return array{wait: array<string, float>, shopping: array<string, float>}
+     */
+    private static function metricsVisitStats(int $businessId, int $estateSaleId): array
+    {
+        $wait = ['__overall__' => 0.0];
+        $shopping = ['__overall__' => 0.0];
+        $waitCounts = ['__overall__' => 0];
+        $shoppingCounts = ['__overall__' => 0];
+
+        if ($estateSaleId <= 0 || !SchemaInspector::hasTable('estate_sale_customers')) {
+            return ['wait' => [], 'shopping' => []];
+        }
+
+        $sql = 'SELECT esc.created_at, esc.checked_in_at, esc.checked_out_at
+                FROM estate_sale_customers esc
+                WHERE esc.estate_sale_id = :estate_sale_id';
+        if (SchemaInspector::hasColumn('estate_sale_customers', 'business_id')) {
+            $sql .= ' AND esc.business_id = :business_id';
+        }
+        if (SchemaInspector::hasColumn('estate_sale_customers', 'deleted_at')) {
+            $sql .= ' AND esc.deleted_at IS NULL';
+        }
+
+        $stmt = Database::connection()->prepare($sql);
+        $params = ['estate_sale_id' => $estateSaleId];
+        if (SchemaInspector::hasColumn('estate_sale_customers', 'business_id')) {
+            $params['business_id'] = $businessId;
+        }
+        $stmt->execute($params);
+
+        $hasVisitsTable = SchemaInspector::hasTable('estate_sale_customer_visits');
+
+        foreach ($stmt->fetchAll() as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $checkedIn = trim((string) ($row['checked_in_at'] ?? ''));
+            $created = trim((string) ($row['created_at'] ?? ''));
+            if ($checkedIn !== '' && $created !== '') {
+                $waitMinutes = self::customerVisitDurationMinutes($created, $checkedIn);
+                if ($waitMinutes !== null && $waitMinutes >= 0) {
+                    $day = self::metricsDateOnly($checkedIn);
+                    $wait['__overall__'] = ($wait['__overall__'] ?? 0) + $waitMinutes;
+                    $waitCounts['__overall__'] = ($waitCounts['__overall__'] ?? 0) + 1;
+                    if ($day !== '') {
+                        $wait[$day] = ($wait[$day] ?? 0) + $waitMinutes;
+                        $waitCounts[$day] = ($waitCounts[$day] ?? 0) + 1;
+                    }
+                }
+            }
+
+            if (!$hasVisitsTable) {
+                $checkedOut = trim((string) ($row['checked_out_at'] ?? ''));
+                if ($checkedIn !== '' && $checkedOut !== '') {
+                    $shopMinutes = self::customerVisitDurationMinutes($checkedIn, $checkedOut);
+                    if ($shopMinutes !== null && $shopMinutes >= 0) {
+                        $day = self::metricsDateOnly($checkedIn);
+                        $shopping['__overall__'] = ($shopping['__overall__'] ?? 0) + $shopMinutes;
+                        $shoppingCounts['__overall__'] = ($shoppingCounts['__overall__'] ?? 0) + 1;
+                        if ($day !== '') {
+                            $shopping[$day] = ($shopping[$day] ?? 0) + $shopMinutes;
+                            $shoppingCounts[$day] = ($shoppingCounts[$day] ?? 0) + 1;
+                        }
+                    }
+                }
+            }
+        }
+
+        if ($hasVisitsTable) {
+            $visitSql = 'SELECT v.checked_in_at, v.checked_out_at
+                         FROM estate_sale_customer_visits v
+                         WHERE v.estate_sale_id = :estate_sale_id';
+            if (SchemaInspector::hasColumn('estate_sale_customer_visits', 'business_id')) {
+                $visitSql .= ' AND v.business_id = :business_id';
+            }
+            $visitStmt = Database::connection()->prepare($visitSql);
+            $visitStmt->execute($params);
+            foreach ($visitStmt->fetchAll() as $row) {
+                if (!is_array($row)) {
+                    continue;
+                }
+                $checkedIn = trim((string) ($row['checked_in_at'] ?? ''));
+                $checkedOut = trim((string) ($row['checked_out_at'] ?? ''));
+                if ($checkedIn === '' || $checkedOut === '') {
+                    continue;
+                }
+                $shopMinutes = self::customerVisitDurationMinutes($checkedIn, $checkedOut);
+                if ($shopMinutes === null || $shopMinutes < 0) {
+                    continue;
+                }
+                $day = self::metricsDateOnly($checkedIn);
+                $shopping['__overall__'] = ($shopping['__overall__'] ?? 0) + $shopMinutes;
+                $shoppingCounts['__overall__'] = ($shoppingCounts['__overall__'] ?? 0) + 1;
+                if ($day !== '') {
+                    $shopping[$day] = ($shopping[$day] ?? 0) + $shopMinutes;
+                    $shoppingCounts[$day] = ($shoppingCounts[$day] ?? 0) + 1;
+                }
+            }
+        }
+
+        $waitAvg = [];
+        foreach ($wait as $key => $sum) {
+            $count = (int) ($waitCounts[$key] ?? 0);
+            if ($count > 0) {
+                $waitAvg[$key] = round($sum / $count, 1);
+            }
+        }
+
+        $shoppingAvg = [];
+        foreach ($shopping as $key => $sum) {
+            $count = (int) ($shoppingCounts[$key] ?? 0);
+            if ($count > 0) {
+                $shoppingAvg[$key] = round($sum / $count, 1);
+            }
+        }
+
+        return ['wait' => $waitAvg, 'shopping' => $shoppingAvg];
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $sales
+     * @return array<string, int>
+     */
+    private static function metricsCustomerCountsByDay(int $businessId, int $estateSaleId, array $sales): array
+    {
+        $counts = [];
+        $add = static function (string $day, int $customerId) use (&$counts): void {
+            if ($day === '' || $customerId <= 0) {
+                return;
+            }
+            if (!isset($counts[$day])) {
+                $counts[$day] = [];
+            }
+            $counts[$day][$customerId] = true;
+        };
+
+        if (SchemaInspector::hasTable('estate_sale_customers')) {
+            $sql = 'SELECT id, created_at, checked_in_at FROM estate_sale_customers
+                    WHERE estate_sale_id = :estate_sale_id';
+            if (SchemaInspector::hasColumn('estate_sale_customers', 'business_id')) {
+                $sql .= ' AND business_id = :business_id';
+            }
+            if (SchemaInspector::hasColumn('estate_sale_customers', 'deleted_at')) {
+                $sql .= ' AND deleted_at IS NULL';
+            }
+            $stmt = Database::connection()->prepare($sql);
+            $params = ['estate_sale_id' => $estateSaleId];
+            if (SchemaInspector::hasColumn('estate_sale_customers', 'business_id')) {
+                $params['business_id'] = $businessId;
+            }
+            $stmt->execute($params);
+            foreach ($stmt->fetchAll() as $row) {
+                if (!is_array($row)) {
+                    continue;
+                }
+                $customerId = (int) ($row['id'] ?? 0);
+                $add(self::metricsDateOnly($row['created_at'] ?? null), $customerId);
+                $add(self::metricsDateOnly($row['checked_in_at'] ?? null), $customerId);
+            }
+        }
+
+        foreach ($sales as $sale) {
+            if (!is_array($sale)) {
+                continue;
+            }
+            $customerId = (int) ($sale['estate_sale_customer_id'] ?? 0);
+            $add(self::metricsDateOnly($sale['sale_date'] ?? null), $customerId);
+        }
+
+        $result = [];
+        foreach ($counts as $day => $customerMap) {
+            $result[$day] = count($customerMap);
+        }
+
+        return $result;
+    }
+
+    /**
+     * @param array<string, mixed> $financial
+     * @param array<string, mixed> $estateSale
+     * @return array<int, array<string, mixed>>
+     */
+    private static function metricsProfitSteps(array $financial, array $estateSale): array
+    {
+        $splitType = self::normalizeClientSplitType($financial['client_split_type'] ?? ($estateSale['client_split_type'] ?? null));
+        $splitLabel = self::clientSplitTypeLabel($splitType);
+        $gross = round((float) ($financial['gross'] ?? $financial['total_sales'] ?? 0), 2);
+        $expenses = round((float) ($financial['total_expenses'] ?? 0), 2);
+        $labor = round((float) ($financial['total_labor'] ?? 0), 2);
+        $clientShare = ($financial['client_share'] ?? null) !== null ? round((float) $financial['client_share'], 2) : null;
+        $ourShare = ($financial['our_share'] ?? $financial['net'] ?? null) !== null ? round((float) ($financial['our_share'] ?? $financial['net']), 2) : null;
+
+        $steps = [
+            ['label' => 'Gross on-site sales', 'amount' => $gross, 'kind' => 'line'],
+        ];
+
+        if ($splitType === self::SPLIT_NET) {
+            $steps[] = ['label' => 'Less total expenses', 'amount' => -$expenses, 'kind' => 'subtract'];
+            if ($clientShare !== null) {
+                $steps[] = ['label' => 'Client share (' . $splitLabel . ', per-sale %)', 'amount' => -$clientShare, 'kind' => 'subtract'];
+            }
+        } elseif ($splitType === self::SPLIT_LESS_LABOR) {
+            $steps[] = ['label' => 'Less total labor', 'amount' => -$labor, 'kind' => 'subtract'];
+            if ($clientShare !== null) {
+                $steps[] = ['label' => 'Client share (' . $splitLabel . ', per-sale %)', 'amount' => -$clientShare, 'kind' => 'subtract'];
+            }
+            $steps[] = ['label' => 'Less total expenses', 'amount' => -$expenses, 'kind' => 'subtract'];
+        } elseif ($splitType === self::SPLIT_NET_TOTAL) {
+            $steps[] = ['label' => 'Less total expenses', 'amount' => -$expenses, 'kind' => 'subtract'];
+            $steps[] = ['label' => 'Less total labor', 'amount' => -$labor, 'kind' => 'subtract'];
+            if ($clientShare !== null) {
+                $steps[] = ['label' => 'Client share (' . $splitLabel . ', per-sale %)', 'amount' => -$clientShare, 'kind' => 'subtract'];
+            }
+        } else {
+            if ($clientShare !== null) {
+                $steps[] = ['label' => 'Client share (' . $splitLabel . ', per-sale %)', 'amount' => -$clientShare, 'kind' => 'subtract'];
+            }
+            $steps[] = ['label' => 'Less total expenses', 'amount' => -$expenses, 'kind' => 'subtract'];
+        }
+
+        if ($ourShare !== null) {
+            $steps[] = ['label' => 'Our profit (after split, labor & expenses)', 'amount' => $ourShare, 'kind' => 'total'];
+        }
+
+        return $steps;
+    }
+
+    private static function metricsDateOnly(mixed $value): string
+    {
+        $raw = trim((string) ($value ?? ''));
+        if ($raw === '') {
+            return '';
+        }
+
+        $ts = strtotime($raw);
+
+        return $ts === false ? '' : date('Y-m-d', $ts);
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private static function metricsDatesBetweenInclusive(string $start, string $end): array
+    {
+        if ($start > $end) {
+            [$start, $end] = [$end, $start];
+        }
+
+        $days = [];
+        $current = new \DateTimeImmutable($start);
+        $last = new \DateTimeImmutable($end);
+        while ($current <= $last) {
+            $days[] = $current->format('Y-m-d');
+            $current = $current->modify('+1 day');
+        }
+
+        return $days;
+    }
     public static function normalizeClientSplitType(mixed $value): string
     {
         $normalized = strtolower(trim((string) ($value ?? '')));
@@ -2368,7 +3248,7 @@ final class EstateSale
         return $clientId > 0 ? $clientId : null;
     }
 
-    private static function normalizeClientPercentage(mixed $value): ?float
+    public static function normalizeClientPercentage(mixed $value): ?float
     {
         $raw = trim((string) ($value ?? ''));
         if ($raw === '' || !is_numeric($raw)) {

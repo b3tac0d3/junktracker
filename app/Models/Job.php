@@ -1937,6 +1937,51 @@ final class Job
         return true;
     }
 
+    public static function unassignEmployee(int $businessId, int $jobId, int $employeeId, int $actorUserId): bool
+    {
+        if ($jobId <= 0 || $employeeId <= 0 || !SchemaInspector::hasTable('job_employee_assignments')) {
+            return false;
+        }
+
+        if (self::findAssignedEmployee($businessId, $jobId, $employeeId) === null) {
+            return false;
+        }
+
+        if (TimeEntry::hasActiveEntryForJob($businessId, $jobId, $employeeId)) {
+            return false;
+        }
+
+        $sets = [
+            'deleted_at = NOW()',
+            'updated_by = :updated_by',
+            'updated_at = NOW()',
+        ];
+        if (SchemaInspector::hasColumn('job_employee_assignments', 'deleted_by')) {
+            $sets[] = 'deleted_by = :deleted_by';
+        }
+
+        $sql = 'UPDATE job_employee_assignments
+                SET ' . implode(', ', $sets) . '
+                WHERE business_id = :business_id
+                  AND job_id = :job_id
+                  AND employee_id = :employee_id
+                  AND deleted_at IS NULL';
+
+        $params = [
+            'updated_by' => $actorUserId > 0 ? $actorUserId : null,
+            'business_id' => $businessId,
+            'job_id' => $jobId,
+            'employee_id' => $employeeId,
+        ];
+        if (SchemaInspector::hasColumn('job_employee_assignments', 'deleted_by')) {
+            $params['deleted_by'] = $actorUserId > 0 ? $actorUserId : null;
+        }
+
+        $stmt = Database::connection()->prepare($sql);
+
+        return $stmt->execute($params);
+    }
+
     public static function employeeSearchOptions(int $businessId, int $jobId, string $query = '', int $limit = 10): array
     {
         if (!SchemaInspector::hasTable('employees')) {

@@ -20,6 +20,43 @@ final class Sale
     public const ESTATE_SCOPE_GENERAL = 'general';
     public const ESTATE_SCOPE_ESTATE_ONLY = 'estate_only';
 
+    public const PAYMENT_METHOD_DEFAULT = 'cash';
+
+    /**
+     * @return array<string, string>
+     */
+    public static function paymentMethodOptions(): array
+    {
+        return [
+            'cash' => 'Cash',
+            'venmo' => 'Venmo',
+            'cashapp' => 'Cash App',
+            'paypal' => 'PayPal',
+            'credit_card' => 'Credit Card',
+            'check' => 'Check',
+            'other' => 'Other',
+        ];
+    }
+
+    public static function paymentMethodLabel(mixed $value): string
+    {
+        $normalized = self::normalizePaymentMethod($value);
+
+        return self::paymentMethodOptions()[$normalized];
+    }
+
+    public static function normalizePaymentMethod(mixed $value): string
+    {
+        $key = strtolower(trim((string) ($value ?? '')));
+        if ($key === 'cc') {
+            $key = 'credit_card';
+        }
+
+        $options = self::paymentMethodOptions();
+
+        return array_key_exists($key, $options) ? $key : self::PAYMENT_METHOD_DEFAULT;
+    }
+
     public static function indexList(
         int $businessId,
         string $search = '',
@@ -73,12 +110,20 @@ final class Sale
 
         $estateSaleScope = self::normalizeEstateSaleScope($estateSaleScope);
         $estateSaleIdSql = SchemaInspector::hasColumn('sales', 'estate_sale_id') ? 's.estate_sale_id' : 'NULL';
+        $clientPctSql = SchemaInspector::hasColumn('sales', 'client_percentage') ? 's.client_percentage' : 'NULL AS client_percentage';
+        $paymentMethodSql = SchemaInspector::hasColumn('sales', 'payment_method')
+            ? 's.payment_method'
+            : "'" . self::PAYMENT_METHOD_DEFAULT . "' AS payment_method";
+        $estateClientPctSql = 'NULL AS estate_client_percentage';
         $estateSaleTitleSql = 'NULL';
         $estateCustomerNameSql = 'NULL';
         if ($estateSaleScope === self::ESTATE_SCOPE_ESTATE_ONLY && SchemaInspector::hasColumn('sales', 'estate_sale_id')) {
             if (SchemaInspector::hasTable('estate_sales')) {
                 $joins[] = self::estateSaleJoinSql();
                 $estateSaleTitleSql = self::estateSaleTitleExpr();
+                if (SchemaInspector::hasColumn('estate_sales', 'client_percentage')) {
+                    $estateClientPctSql = 'es.client_percentage AS estate_client_percentage';
+                }
             }
             if (SchemaInspector::hasColumn('sales', 'estate_sale_customer_id') && SchemaInspector::hasTable('estate_sale_customers')) {
                 $joins[] = self::estateSaleCustomerJoinSql();
@@ -151,7 +196,10 @@ final class Sale
                     {$purchaseTitleSql} AS purchase_title,
                     {$estateSaleIdSql} AS estate_sale_id,
                     {$estateSaleTitleSql} AS estate_sale_title,
-                    {$estateCustomerNameSql} AS estate_customer_name
+                    {$estateCustomerNameSql} AS estate_customer_name,
+                    {$clientPctSql},
+                    {$paymentMethodSql},
+                    {$estateClientPctSql}
                 FROM sales s\n";
 
         if ($joins !== []) {
@@ -397,6 +445,12 @@ final class Sale
         if (SchemaInspector::hasColumn('sales', 'estate_sale_customer_id')) {
             $append('estate_sale_customer_id', ':estate_sale_customer_id', $payload['estate_sale_customer_id'] ?? null);
         }
+        if (SchemaInspector::hasColumn('sales', 'client_percentage') && array_key_exists('client_percentage', $payload)) {
+            $append('client_percentage', ':client_percentage', $payload['client_percentage']);
+        }
+        if (SchemaInspector::hasColumn('sales', 'payment_method')) {
+            $append('payment_method', ':payment_method', self::normalizePaymentMethod($payload['payment_method'] ?? null));
+        }
         if (SchemaInspector::hasColumn('sales', 'created_by')) {
             $append('created_by', ':created_by', $actorUserId > 0 ? $actorUserId : null);
         }
@@ -593,8 +647,16 @@ final class Sale
         $estateSaleCustomerIdSql = SchemaInspector::hasColumn('sales', 'estate_sale_customer_id')
             ? 's.estate_sale_customer_id'
             : 'NULL AS estate_sale_customer_id';
+        $clientPctSql = SchemaInspector::hasColumn('sales', 'client_percentage')
+            ? 's.client_percentage'
+            : 'NULL AS client_percentage';
+        $paymentMethodSql = SchemaInspector::hasColumn('sales', 'payment_method')
+            ? 's.payment_method'
+            : "'" . self::PAYMENT_METHOD_DEFAULT . "' AS payment_method";
         $createdAtSql = SchemaInspector::hasColumn('sales', 'created_at') ? 's.created_at' : 'NULL';
         $updatedAtSql = SchemaInspector::hasColumn('sales', 'updated_at') ? 's.updated_at' : 'NULL';
+        $createdByIdSql = SchemaInspector::hasColumn('sales', 'created_by') ? 's.created_by' : 'NULL';
+        $createdByNameSql = 'NULL';
         $clientNameSql = 'NULL';
         $jobTitleSql = 'NULL';
         $purchaseTitleSql = 'NULL';
@@ -611,6 +673,21 @@ final class Sale
         if (self::canJoinPurchases()) {
             $joins[] = self::purchaseJoinSql();
             $purchaseTitleSql = self::purchaseTitleExpr();
+        }
+        if (SchemaInspector::hasColumn('sales', 'created_by') && SchemaInspector::hasTable('users')) {
+            $userJoin = 'LEFT JOIN users creator ON creator.id = s.created_by';
+            if (SchemaInspector::hasColumn('users', 'business_id') && SchemaInspector::hasColumn('sales', 'business_id')) {
+                $userJoin .= ' AND creator.business_id = s.business_id';
+            }
+            if (SchemaInspector::hasColumn('users', 'deleted_at')) {
+                $userJoin .= ' AND creator.deleted_at IS NULL';
+            }
+            $joins[] = $userJoin;
+            $createdByNameSql = "COALESCE(
+                NULLIF(TRIM(CONCAT_WS(' ', creator.first_name, creator.last_name)), ''),
+                NULLIF(TRIM(creator.email), ''),
+                CONCAT('User #', s.created_by)
+            )";
         }
 
         $where = [];
@@ -632,8 +709,12 @@ final class Sale
                     {$jobTitleSql} AS job_title,
                     {$purchaseIdSql} AS purchase_id,
                     {$purchaseTitleSql} AS purchase_title,
-                    {$estateSaleIdSql} AS estate_sale_id,
-                    {$estateSaleCustomerIdSql} AS estate_sale_customer_id,
+                    {$estateSaleIdSql},
+                    {$estateSaleCustomerIdSql},
+                    {$clientPctSql},
+                    {$paymentMethodSql},
+                    {$createdByIdSql} AS created_by,
+                    {$createdByNameSql} AS created_by_name,
                     {$createdAtSql} AS created_at,
                     {$updatedAtSql} AS updated_at
                 FROM sales s\n";
@@ -707,6 +788,12 @@ final class Sale
         }
         if (SchemaInspector::hasColumn('sales', 'estate_sale_customer_id')) {
             $append('estate_sale_customer_id', 'estate_sale_customer_id', $payload['estate_sale_customer_id'] ?? null);
+        }
+        if (SchemaInspector::hasColumn('sales', 'client_percentage') && array_key_exists('client_percentage', $payload)) {
+            $append('client_percentage', 'client_percentage', $payload['client_percentage']);
+        }
+        if (SchemaInspector::hasColumn('sales', 'payment_method')) {
+            $append('payment_method', 'payment_method', self::normalizePaymentMethod($payload['payment_method'] ?? null));
         }
         if (SchemaInspector::hasColumn('sales', 'updated_by')) {
             $append('updated_by', 'updated_by', $actorUserId > 0 ? $actorUserId : null);

@@ -458,6 +458,7 @@ final class JobsController extends Controller
             $assignedEmployees[$index]['open_job_id'] = (int) ($openEntry['job_id'] ?? 0);
             $assignedEmployees[$index]['open_job_title'] = (string) ($openEntry['job_title'] ?? '');
             $assignedEmployees[$index]['is_open_for_this_job'] = ((int) ($openEntry['job_id'] ?? 0)) === $jobId && ((int) ($openEntry['is_non_job'] ?? 0)) !== 1;
+            $assignedEmployees[$index]['can_remove'] = !TimeEntry::hasActiveEntryForJob($businessId, $jobId, $employeeId);
         }
 
         $jobStatusOptions = $this->jobStatusOptions($businessId);
@@ -837,6 +838,51 @@ final class JobsController extends Controller
         }
 
         flash('success', 'Employee punched out.');
+        redirect('/jobs/' . (string) $jobId);
+    }
+
+    public function removeEmployee(array $params): void
+    {
+        require_business_role(['general_user', 'admin']);
+
+        $jobId = (int) ($params['id'] ?? 0);
+        $employeeId = (int) ($params['employeeId'] ?? 0);
+        if ($jobId <= 0 || $employeeId <= 0) {
+            http_response_code(404);
+            $this->render('errors/404', ['pageTitle' => 'Not Found']);
+            return;
+        }
+
+        if (!verify_csrf($_POST['csrf_token'] ?? null)) {
+            flash('error', 'Session expired. Please try again.');
+            redirect('/jobs/' . (string) $jobId);
+        }
+
+        $businessId = current_business_id();
+        if (Job::findForBusiness($businessId, $jobId) === null) {
+            http_response_code(404);
+            $this->render('errors/404', ['pageTitle' => 'Not Found']);
+            return;
+        }
+
+        if (Job::findAssignedEmployee($businessId, $jobId, $employeeId) === null) {
+            flash('error', 'Employee is not assigned to this job.');
+            redirect('/jobs/' . (string) $jobId);
+        }
+
+        if (TimeEntry::hasActiveEntryForJob($businessId, $jobId, $employeeId)) {
+            flash('error', 'Cannot remove this employee while they have an open punch on this job.');
+            redirect('/jobs/' . (string) $jobId);
+        }
+
+        $actorUserId = (int) (auth_user_id() ?? 0);
+        if (!Job::unassignEmployee($businessId, $jobId, $employeeId, $actorUserId)) {
+            flash('error', 'Could not remove employee from this job.');
+            redirect('/jobs/' . (string) $jobId);
+        }
+
+        audit('job_employee_unassigned', 'jobs', $jobId, ['employee_id' => $employeeId]);
+        flash('success', 'Employee removed from this job.');
         redirect('/jobs/' . (string) $jobId);
     }
 

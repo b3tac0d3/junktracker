@@ -5,22 +5,13 @@ $sortDir = strtolower(trim((string) ($sortDir ?? 'desc')));
 $fromDate = trim((string) ($fromDate ?? date('Y-01-01')));
 $toDate = trim((string) ($toDate ?? date('Y-m-d')));
 $records = is_array($records ?? null) ? $records : [];
+$recordsReturnTo = trim((string) ($recordsReturnTo ?? '/estate-sale-records'));
 $summary = is_array($summary ?? null) ? $summary : [];
 $pagination = is_array($pagination ?? null) ? $pagination : pagination_meta(1, 25, count($records), count($records));
 $perPage = (int) ($pagination['per_page'] ?? 25);
 
 $formatSaleDate = static function (?string $value): string {
-    $raw = trim((string) ($value ?? ''));
-    if ($raw === '') {
-        return '—';
-    }
-
-    $ts = strtotime($raw);
-    if ($ts === false) {
-        return '—';
-    }
-
-    return date('m/d/Y', $ts);
+    return format_datetime($value);
 };
 ?>
 
@@ -123,7 +114,10 @@ $formatSaleDate = static function (?string $value): string {
                     <?php
                     $recordId = (int) ($record['id'] ?? 0);
                     $estateSaleId = (int) ($record['estate_sale_id'] ?? 0);
-                    $recordUrl = url('/sales/' . (string) $recordId);
+                    $recordUrl = sale_detail_url($recordId, $recordsReturnTo);
+                    $effectiveClientPct = $record['effective_client_percentage'] ?? null;
+                    $clientPctIsOverride = !empty($record['client_percentage_is_override']);
+                    $paymentMethodLabel = \App\Models\Sale::paymentMethodLabel($record['payment_method'] ?? null);
                     $estateSaleUrl = $estateSaleId > 0 ? url('/estate-sales/' . (string) $estateSaleId) : '';
                     ?>
                     <article class="record-row-simple">
@@ -131,14 +125,22 @@ $formatSaleDate = static function (?string $value): string {
                             <div class="record-row-main">
                                 <h3 class="record-title-simple"><?= e(trim((string) ($record['name'] ?? '')) !== '' ? (string) $record['name'] : ('Sale #' . (string) $recordId)) ?></h3>
                             </div>
-                            <div class="record-row-fields record-row-fields-5">
+                            <div class="record-row-fields record-row-fields-7">
                                 <div class="record-field">
-                                    <span class="record-label">Date</span>
+                                    <span class="record-label">Date & time</span>
                                     <span class="record-value"><?= e($formatSaleDate((string) ($record['sale_date'] ?? ''))) ?></span>
+                                </div>
+                                <div class="record-field">
+                                    <span class="record-label">Payment</span>
+                                    <span class="record-value"><?= e($paymentMethodLabel) ?></span>
                                 </div>
                                 <div class="record-field">
                                     <span class="record-label">Gross</span>
                                     <span class="record-value">$<?= e(number_format((float) ($record['gross_amount'] ?? 0), 2)) ?></span>
+                                </div>
+                                <div class="record-field">
+                                    <span class="record-label">Client split</span>
+                                    <span class="record-value<?= $clientPctIsOverride ? ' fw-bold' : '' ?>"><?= e(format_client_percentage(is_numeric($effectiveClientPct) ? (float) $effectiveClientPct : null)) ?></span>
                                 </div>
                                 <div class="record-field">
                                     <span class="record-label">Net</span>

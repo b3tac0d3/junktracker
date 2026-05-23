@@ -1049,4 +1049,76 @@ final class TimeEntry
         $rows = $stmt->fetchAll();
         return is_array($rows) ? $rows : [];
     }
+
+    public static function hasActiveEntryForJob(int $businessId, int $jobId, int $employeeId): bool
+    {
+        if ($jobId <= 0 || $employeeId <= 0 || !SchemaInspector::hasTable('employee_time_entries')) {
+            return false;
+        }
+
+        if (!SchemaInspector::hasColumn('employee_time_entries', 'clock_out_at')) {
+            return false;
+        }
+
+        $where = [
+            't.employee_id = :employee_id',
+            't.clock_out_at IS NULL',
+            't.job_id = :job_id',
+        ];
+        if (SchemaInspector::hasColumn('employee_time_entries', 'business_id')) {
+            $where[] = 't.business_id = :business_id';
+        }
+        if (SchemaInspector::hasColumn('employee_time_entries', 'deleted_at')) {
+            $where[] = 't.deleted_at IS NULL';
+        }
+        if (SchemaInspector::hasColumn('employee_time_entries', 'is_non_job')) {
+            $where[] = 'COALESCE(t.is_non_job, 0) = 0';
+        }
+
+        $sql = 'SELECT COUNT(*) FROM employee_time_entries t WHERE ' . implode(' AND ', $where);
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->bindValue(':employee_id', $employeeId, \PDO::PARAM_INT);
+        $stmt->bindValue(':job_id', $jobId, \PDO::PARAM_INT);
+        if (SchemaInspector::hasColumn('employee_time_entries', 'business_id')) {
+            $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
+        }
+        $stmt->execute();
+
+        return (int) $stmt->fetchColumn() > 0;
+    }
+
+    public static function hasActiveEntryForEstateSale(int $businessId, int $estateSaleId, int $employeeId): bool
+    {
+        if ($estateSaleId <= 0 || $employeeId <= 0 || !SchemaInspector::hasTable('employee_time_entries')) {
+            return false;
+        }
+
+        if (!SchemaInspector::hasColumn('employee_time_entries', 'clock_out_at')
+            || !SchemaInspector::hasColumn('employee_time_entries', 'estate_sale_id')) {
+            return false;
+        }
+
+        $where = [
+            't.employee_id = :employee_id',
+            't.clock_out_at IS NULL',
+            't.estate_sale_id = :estate_sale_id',
+        ];
+        if (SchemaInspector::hasColumn('employee_time_entries', 'business_id')) {
+            $where[] = 't.business_id = :business_id';
+        }
+        if (SchemaInspector::hasColumn('employee_time_entries', 'deleted_at')) {
+            $where[] = 't.deleted_at IS NULL';
+        }
+
+        $sql = 'SELECT COUNT(*) FROM employee_time_entries t WHERE ' . implode(' AND ', $where);
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->bindValue(':employee_id', $employeeId, \PDO::PARAM_INT);
+        $stmt->bindValue(':estate_sale_id', $estateSaleId, \PDO::PARAM_INT);
+        if (SchemaInspector::hasColumn('employee_time_entries', 'business_id')) {
+            $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
+        }
+        $stmt->execute();
+
+        return (int) $stmt->fetchColumn() > 0;
+    }
 }

@@ -433,6 +433,17 @@ function phone_tel_href(?string $value): string
  *
  * @return array<int, int>
  */
+function format_client_percentage(?float $pct): string
+{
+    if ($pct === null) {
+        return '—';
+    }
+
+    $formatted = rtrim(rtrim(number_format($pct, 2, '.', ''), '0'), '.');
+
+    return $formatted . '%';
+}
+
 function pagination_per_page_options(): array
 {
     return [10, 25, 50, 100, 200];
@@ -509,6 +520,30 @@ function pagination_per_page(mixed $value, int $default = 25): int
     }
 
     return in_array($default, $options, true) ? $default : $options[0];
+}
+
+function pagination_remembered_per_page(string $scope, string $param = 'per_page', int $default = 25): int
+{
+    if (array_key_exists($param, $_GET)) {
+        $perPage = pagination_per_page($_GET[$param], $default);
+        if (!isset($_SESSION['pagination']) || !is_array($_SESSION['pagination'])) {
+            $_SESSION['pagination'] = [];
+        }
+        $businessId = max(0, current_business_id());
+        $_SESSION['pagination'][$businessId][$scope] = $perPage;
+
+        return $perPage;
+    }
+
+    $stored = null;
+    if (isset($_SESSION['pagination']) && is_array($_SESSION['pagination'])) {
+        $businessBlock = $_SESSION['pagination'][max(0, current_business_id())] ?? null;
+        if (is_array($businessBlock)) {
+            $stored = $businessBlock[$scope] ?? null;
+        }
+    }
+
+    return pagination_per_page($stored, $default);
 }
 
 function pagination_current_page(mixed $value): int
@@ -619,6 +654,66 @@ function pagination_meta(int $page, int $perPage, int $totalRows, int $currentCo
         'from' => $from,
         'to' => $to,
     ];
+}
+
+function safe_return_path(string $raw): string
+{
+    $path = trim($raw);
+    if ($path === '' || !str_starts_with($path, '/') || str_starts_with($path, '//')) {
+        return '';
+    }
+
+    return $path;
+}
+
+/**
+ * @param array<string, mixed> $sale
+ * @return array{url: string, label: string, path: string}
+ */
+function sale_detail_back_meta(array $sale, string $returnTo = ''): array
+{
+    $path = safe_return_path($returnTo);
+    if ($path === '') {
+        $estateSaleId = (int) ($sale['estate_sale_id'] ?? 0);
+        if ($estateSaleId > 0) {
+            $path = '/estate-sales/' . $estateSaleId . '?tab=sales';
+
+            return [
+                'url' => url($path),
+                'label' => 'Back to Estate Sale',
+                'path' => $path,
+            ];
+        }
+
+        return [
+            'url' => url('/sales'),
+            'label' => 'Back to Sales',
+            'path' => '/sales',
+        ];
+    }
+
+    if (preg_match('#^/estate-sales/\d+/customers/\d+#', $path)) {
+        return ['url' => url($path), 'label' => 'Back to Customer', 'path' => $path];
+    }
+    if (preg_match('#^/estate-sales/\d+#', $path)) {
+        return ['url' => url($path), 'label' => 'Back to Estate Sale', 'path' => $path];
+    }
+    if ($path === '/estate-sale-records' || str_starts_with($path, '/estate-sale-records?')) {
+        return ['url' => url($path), 'label' => 'Back to Estate Sale Records', 'path' => $path];
+    }
+
+    return ['url' => url($path), 'label' => 'Back', 'path' => $path];
+}
+
+function sale_detail_url(int $saleId, string $returnTo = ''): string
+{
+    $url = url('/sales/' . (string) $saleId);
+    $path = safe_return_path($returnTo);
+    if ($path === '') {
+        return $url;
+    }
+
+    return $url . '?return_to=' . rawurlencode($path);
 }
 
 function business_logo_public_path(string $relativePath): string
@@ -808,16 +903,19 @@ function audit_action_label(string $action): string
         'job_adjustment_created' => 'Job adjustment added',
         'job_adjustment_updated' => 'Job adjustment updated',
         'job_adjustment_deleted' => 'Job adjustment deleted',
+        'job_employee_unassigned' => 'Employee removed from job',
         'estate_sale_created' => 'Estate sale created',
         'estate_sale_updated' => 'Estate sale updated',
         'estate_sale_deleted' => 'Estate sale deleted',
         'estate_sale_customer_created' => 'Estate sale customer added',
+        'estate_sale_customer_updated' => 'Estate sale customer updated',
         'estate_sale_customer_removed' => 'Estate sale customer removed',
         'estate_sale_sale_created' => 'Estate sale transaction added',
         'estate_sale_sale_updated' => 'Estate sale transaction updated',
         'estate_sale_expense_created' => 'Estate sale expense added',
         'estate_sale_expense_removed' => 'Estate sale expense removed',
         'estate_sale_employee_assigned' => 'Employee assigned to estate sale',
+        'estate_sale_employee_unassigned' => 'Employee removed from estate sale',
         'sale_created' => 'Sale created',
         'sale_updated' => 'Sale updated',
         'sale_deleted' => 'Sale deleted',

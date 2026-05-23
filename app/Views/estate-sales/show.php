@@ -76,7 +76,10 @@ $employeeAddUrl = url('/estate-sales/' . (string) $estateSaleId . '/employees/ad
 $bulkPunchUrl = url('/estate-sales/' . (string) $estateSaleId . '/employees/bulk-punch');
 $timeEntryCreateUrl = url('/time-tracking/create') . '?estate_sale_id=' . (string) $estateSaleId . '&return_to=' . rawurlencode('/estate-sales/' . (string) $estateSaleId . '?tab=labor');
 $activeTab = strtolower(trim((string) ($activeTab ?? 'details')));
-if (!in_array($activeTab, ['details', 'customers', 'sales', 'expenses', 'labor'], true)) {
+if (!in_array($activeTab, ['details', 'customers', 'sales', 'expenses', 'labor', 'metrics'], true)) {
+    $activeTab = 'details';
+}
+if (in_array($activeTab, ['expenses', 'metrics'], true) && !$canViewFinancials) {
     $activeTab = 'details';
 }
 $detailsTabActive = $activeTab === 'details';
@@ -84,6 +87,8 @@ $customersTabActive = $activeTab === 'customers';
 $salesTabActive = $activeTab === 'sales';
 $expensesTabActive = $activeTab === 'expenses';
 $laborTabActive = $activeTab === 'labor';
+$metricsTabActive = $activeTab === 'metrics';
+$metricsReport = is_array($metricsReport ?? null) ? $metricsReport : [];
 
 $formatDuration = static function (int $minutes): string {
     if ($minutes <= 0) {
@@ -121,12 +126,7 @@ $formatExpenseDate = static function (?string $value): string {
 };
 
 $formatSaleDate = static function (?string $value): string {
-    $raw = trim((string) ($value ?? ''));
-    if ($raw === '') {
-        return '—';
-    }
-    $ts = strtotime($raw);
-    return $ts === false ? '—' : date('m/d/Y', $ts);
+    return format_datetime($value);
 };
 
 $formatVisitDuration = static function (?string $checkedInAt, ?string $checkedOutAt): string {
@@ -323,6 +323,24 @@ $customerActionsMenu = static function (
                     <span class="estate-sale-tab-badge" data-count="<?= e((string) $assignedEmployeeCount) ?>"><?= e((string) $assignedEmployeeCount) ?></span>
                 </button>
             </li>
+            <?php if ($canViewFinancials): ?>
+            <li class="nav-item" role="presentation">
+                <button
+                    class="nav-link estate-sale-tab-link<?= $metricsTabActive ? ' active' : '' ?>"
+                    id="estate-sale-metrics-tab"
+                    type="button"
+                    role="tab"
+                    data-bs-toggle="tab"
+                    data-bs-target="#estate-sale-tab-metrics"
+                    data-tab="metrics"
+                    aria-controls="estate-sale-tab-metrics"
+                    aria-selected="<?= $metricsTabActive ? 'true' : 'false' ?>"
+                >
+                    <span class="estate-sale-tab-icon" aria-hidden="true"><i class="fas fa-chart-line"></i></span>
+                    <span class="estate-sale-tab-label">Metrics</span>
+                </button>
+            </li>
+            <?php endif; ?>
         </ul>
     </div>
     <div class="card-body tab-content" id="estate-sale-tab-content">
@@ -677,8 +695,11 @@ $customerActionsMenu = static function (
                         $saleDate = $formatSaleDate((string) ($sale['sale_date'] ?? ''));
                         $saleAmount = (float) ($sale['gross_amount'] ?? 0);
                         $customerName = trim((string) ($sale['customer_name'] ?? ''));
+                        $effectiveClientPct = $sale['effective_client_percentage'] ?? null;
+                        $clientPctIsOverride = !empty($sale['client_percentage_is_override']);
+                        $paymentMethodLabel = \App\Models\Sale::paymentMethodLabel($sale['payment_method'] ?? null);
                         $saleRowUrl = $canViewFinancials
-                            ? url('/sales/' . (string) $saleId)
+                            ? sale_detail_url($saleId, '/estate-sales/' . (string) $estateSaleId . '?tab=sales')
                             : url('/estate-sales/' . (string) $estateSaleId . '/sales/' . (string) $saleId . '/edit');
                         ?>
                         <article class="record-row-simple">
@@ -689,15 +710,23 @@ $customerActionsMenu = static function (
                                         <div class="small muted"><?= e($customerName) ?></div>
                                     <?php endif; ?>
                                 </div>
-                                <div class="record-row-fields record-row-fields-<?= $canViewFinancials ? '3' : '2' ?> mt-2">
+                                <div class="record-row-fields record-row-fields-<?= $canViewFinancials ? '5' : '3' ?> mt-2">
                                     <div class="record-field">
-                                        <span class="record-label">Date</span>
+                                        <span class="record-label">Date & time</span>
                                         <span class="record-value"><?= e($saleDate) ?></span>
+                                    </div>
+                                    <div class="record-field">
+                                        <span class="record-label">Payment</span>
+                                        <span class="record-value"><?= e($paymentMethodLabel) ?></span>
                                     </div>
                                     <?php if ($canViewFinancials): ?>
                                     <div class="record-field">
                                         <span class="record-label">Gross</span>
                                         <span class="record-value"><?= e($formatMoney($saleAmount)) ?></span>
+                                    </div>
+                                    <div class="record-field">
+                                        <span class="record-label">Client split</span>
+                                        <span class="record-value<?= $clientPctIsOverride ? ' fw-bold' : '' ?>"><?= e(format_client_percentage(is_numeric($effectiveClientPct) ? (float) $effectiveClientPct : null)) ?></span>
                                     </div>
                                     <?php endif; ?>
                                     <div class="record-field">
@@ -889,6 +918,7 @@ $customerActionsMenu = static function (
                         $linkedUserEmail = trim((string) ($employee['linked_user_email'] ?? ''));
                         $canManageEmployeeTime = is_site_admin() || workspace_role() === 'admin';
                         $addTimeEntryUrl = url('/time-tracking/create?estate_sale_id=' . rawurlencode((string) $estateSaleId) . '&employee_id=' . rawurlencode((string) $employeeId) . '&return_to=' . rawurlencode('/estate-sales/' . (string) $estateSaleId . '?tab=labor'));
+                        $canRemoveEmployee = (bool) ($employee['can_remove'] ?? false);
                         ?>
                         <article class="record-row-simple">
                             <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
@@ -914,7 +944,7 @@ $customerActionsMenu = static function (
                                         </div>
                                     </div>
                                 </div>
-                                <div class="d-flex gap-2">
+                                <div class="d-flex gap-2 flex-wrap justify-content-end">
                                     <?php if ($canManageEmployeeTime): ?>
                                         <a class="btn btn-outline-primary btn-sm" href="<?= e($addTimeEntryUrl) ?>"><i class="fas fa-plus me-1"></i>Add Time Entry</a>
                                     <?php endif; ?>
@@ -927,6 +957,12 @@ $customerActionsMenu = static function (
                                         <form method="post" action="<?= e(url('/estate-sales/' . (string) $estateSaleId . '/employees/' . (string) $employeeId . '/punch-in')) ?>">
                                             <?= csrf_field() ?>
                                             <button class="btn btn-success btn-sm" type="submit"><i class="fas fa-play me-1"></i>Punch In</button>
+                                        </form>
+                                    <?php endif; ?>
+                                    <?php if ($canRemoveEmployee): ?>
+                                        <form method="post" action="<?= e(url('/estate-sales/' . (string) $estateSaleId . '/employees/' . (string) $employeeId . '/remove')) ?>" onsubmit="return confirm('Remove this employee from the estate sale?');">
+                                            <?= csrf_field() ?>
+                                            <button class="btn btn-outline-secondary btn-sm" type="submit"><i class="fas fa-user-minus me-1"></i>Remove</button>
                                         </form>
                                     <?php endif; ?>
                                 </div>
@@ -1007,6 +1043,18 @@ $customerActionsMenu = static function (
                 </script>
             <?php endif; ?>
         </div>
+
+        <?php if ($canViewFinancials): ?>
+        <div
+            class="tab-pane fade<?= $metricsTabActive ? ' show active' : '' ?>"
+            id="estate-sale-tab-metrics"
+            role="tabpanel"
+            aria-labelledby="estate-sale-metrics-tab"
+            tabindex="0"
+        >
+            <?php require __DIR__ . '/metrics_tab.php'; ?>
+        </div>
+        <?php endif; ?>
     </div>
 </section>
 
@@ -1018,6 +1066,9 @@ $customerActionsMenu = static function (
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
+                <div id="estate-sale-add-customer-progress" class="jt-submit-progress d-none" role="progressbar" aria-label="Saving customer" aria-hidden="true">
+                    <div class="jt-submit-progress-bar"></div>
+                </div>
                 <div id="estate-sale-add-customer-error" class="alert alert-danger d-none"></div>
                 <div class="row g-3">
                     <div class="col-12 col-md-6">
@@ -1459,6 +1510,9 @@ window.addEventListener('DOMContentLoaded', () => {
             errorBox.classList.add('d-none');
             errorBox.textContent = '';
         }
+        if (saveBtn && window.jtSubmitLock) {
+            window.jtSubmitLock.unlockModalSave(saveBtn);
+        }
     };
 
     const ensureCustomersList = () => {
@@ -1627,9 +1681,15 @@ window.addEventListener('DOMContentLoaded', () => {
 
     if (saveBtn) {
         saveBtn.addEventListener('click', () => {
+            if (saveBtn.disabled || saveBtn.dataset.jtSubmitLocked === '1') {
+                return;
+            }
             if (errorBox) {
                 errorBox.classList.add('d-none');
                 errorBox.textContent = '';
+            }
+            if (!window.jtSubmitLock || !window.jtSubmitLock.lockModalSave(saveBtn, { label: 'Saving…' })) {
+                return;
             }
 
             const body = new URLSearchParams();
@@ -1668,7 +1728,8 @@ window.addEventListener('DOMContentLoaded', () => {
                     if (customersTabTrigger && window.bootstrap) {
                         bootstrap.Tab.getOrCreateInstance(customersTabTrigger).show();
                     }
-                    if (modal) {
+                    if (modal && modalEl) {
+                        modalEl.dataset.jtAllowClose = '1';
                         modal.hide();
                     }
                     clearModal();
@@ -1679,7 +1740,26 @@ window.addEventListener('DOMContentLoaded', () => {
                         errorBox.textContent = error.message || 'Could not save customer.';
                         errorBox.classList.remove('d-none');
                     }
+                })
+                .finally(() => {
+                    if (window.jtSubmitLock) {
+                        window.jtSubmitLock.unlockModalSave(saveBtn);
+                    }
                 });
+        });
+    }
+
+    if (modalEl) {
+        modalEl.addEventListener('hide.bs.modal', (event) => {
+            if (saveBtn?.dataset.jtSubmitLocked === '1' && modalEl.dataset.jtAllowClose !== '1') {
+                event.preventDefault();
+            }
+            delete modalEl.dataset.jtAllowClose;
+        });
+        modalEl.addEventListener('hidden.bs.modal', () => {
+            if (saveBtn && window.jtSubmitLock) {
+                window.jtSubmitLock.unlockModalSave(saveBtn);
+            }
         });
     }
 
