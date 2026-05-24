@@ -908,6 +908,7 @@ function audit_action_label(string $action): string
         'estate_sale_updated' => 'Estate sale updated',
         'estate_sale_deleted' => 'Estate sale deleted',
         'estate_sale_customer_created' => 'Estate sale customer added',
+        'estate_sale_customer_attached' => 'Estate sale customer added to sale',
         'estate_sale_customer_updated' => 'Estate sale customer updated',
         'estate_sale_customer_removed' => 'Estate sale customer removed',
         'estate_sale_sale_created' => 'Estate sale transaction added',

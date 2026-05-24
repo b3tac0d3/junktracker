@@ -218,6 +218,7 @@ $navNotifications = is_array($navNotifications ?? null) ? $navNotifications : ['
                                 <div class="collapse" id="collapseNavPeople" data-bs-parent="#sidenavAccordion">
                                     <nav class="sb-sidenav-menu-nested nav">
                                         <a class="nav-link jt-nav-sublink" href="<?= e(url('/clients')) ?>">Clients</a>
+                                        <a class="nav-link jt-nav-sublink" href="<?= e(url('/estate-customers')) ?>">Estate Customers</a>
                                         <a class="nav-link jt-nav-sublink" href="<?= e(url('/networking')) ?>">Networking</a>
                                         <?php if (\App\Models\ClientBoloProfile::isAvailable()): ?>
                                             <a class="nav-link jt-nav-sublink" href="<?= e(url('/bolo')) ?>">BOLO</a>

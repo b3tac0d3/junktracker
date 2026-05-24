@@ -490,6 +490,268 @@ final class EstateSale
         ];
     }
 
+    private static function useCustomerMemberships(): bool
+    {
+        return SchemaInspector::hasTable('estate_sale_customer_memberships');
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    public static function findCustomerProfile(int $businessId, int $customerId): ?array
+    {
+        if ($businessId <= 0 || $customerId <= 0 || !SchemaInspector::hasTable('estate_sale_customers')) {
+            return null;
+        }
+
+        $nameSql = "COALESCE(NULLIF(TRIM(CONCAT_WS(' ', esc.first_name, esc.last_name)), ''), CONCAT('Customer #', esc.id))";
+        $hasSubscribes = SchemaInspector::hasColumn('estate_sale_customers', 'subscribes_to_future_sales');
+        $hasContactMethod = SchemaInspector::hasColumn('estate_sale_customers', 'future_sales_contact_method');
+        $subscribesSql = $hasSubscribes ? 'esc.subscribes_to_future_sales,' : '0 AS subscribes_to_future_sales,';
+        $contactMethodSql = $hasContactMethod ? 'esc.future_sales_contact_method,' : 'NULL AS future_sales_contact_method,';
+
+        $sql = "SELECT
+                    esc.id,
+                    esc.estate_sale_id,
+                    esc.first_name,
+                    esc.last_name,
+                    esc.email,
+                    esc.phone,
+                    esc.city,
+                    esc.state,
+                    esc.notes,
+                    {$subscribesSql}
+                    {$contactMethodSql}
+                    esc.created_at AS added_at,
+                    {$nameSql} AS customer_name
+                FROM estate_sale_customers esc
+                WHERE esc.business_id = :business_id
+                  AND esc.id = :id
+                  AND esc.deleted_at IS NULL
+                LIMIT 1";
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
+        $stmt->bindValue(':id', $customerId, \PDO::PARAM_INT);
+        $stmt->execute();
+        $row = $stmt->fetch();
+
+        return is_array($row) ? $row : null;
+    }
+
+    public static function isCustomerOnSale(int $businessId, int $estateSaleId, int $customerId): bool
+    {
+        if ($businessId <= 0 || $estateSaleId <= 0 || $customerId <= 0) {
+            return false;
+        }
+
+        if (self::useCustomerMemberships()) {
+            $sql = 'SELECT 1
+                    FROM estate_sale_customer_memberships m
+                    WHERE m.business_id = :business_id
+                      AND m.estate_sale_id = :estate_sale_id
+                      AND m.customer_id = :customer_id
+                      AND m.deleted_at IS NULL
+                    LIMIT 1';
+            $stmt = Database::connection()->prepare($sql);
+            $stmt->execute([
+                'business_id' => $businessId,
+                'estate_sale_id' => $estateSaleId,
+                'customer_id' => $customerId,
+            ]);
+
+            return (bool) $stmt->fetchColumn();
+        }
+
+        return self::findCustomerForSale($businessId, $estateSaleId, $customerId) !== null;
+    }
+
+    public static function attachCustomerToSale(int $businessId, int $estateSaleId, int $customerId, int $actorUserId): bool
+    {
+        if ($estateSaleId <= 0 || $customerId <= 0 || self::findForBusiness($businessId, $estateSaleId) === null) {
+            return false;
+        }
+
+        if (self::findCustomerProfile($businessId, $customerId) === null) {
+            return false;
+        }
+
+        if (self::isCustomerOnSale($businessId, $estateSaleId, $customerId)) {
+            return false;
+        }
+
+        if (!self::useCustomerMemberships()) {
+            return false;
+        }
+
+        return self::upsertCustomerMembership($businessId, $estateSaleId, $customerId, $actorUserId);
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    public static function searchCustomerProfiles(int $businessId, int $estateSaleId, string $query, int $limit = 8): array
+    {
+        if ($businessId <= 0 || !SchemaInspector::hasTable('estate_sale_customers')) {
+            return [];
+        }
+
+        $needle = trim($query);
+        if ($needle === '') {
+            return [];
+        }
+
+        $limit = max(1, min(25, $limit));
+        $nameSql = "COALESCE(NULLIF(TRIM(CONCAT_WS(' ', esc.first_name, esc.last_name)), ''), CONCAT('Customer #', esc.id))";
+        $match = self::customerProfileSearchMatchSql($needle, $nameSql);
+        $saleIdParam = 'profile_sale_id';
+        $membershipJoin = self::useCustomerMemberships()
+            ? ' LEFT JOIN estate_sale_customer_memberships m
+                ON m.business_id = esc.business_id
+               AND m.estate_sale_id = :' . $saleIdParam . '
+               AND m.customer_id = esc.id
+               AND m.deleted_at IS NULL'
+            : '';
+        $onSaleSql = self::useCustomerMemberships()
+            ? ', CASE WHEN m.id IS NOT NULL THEN 1 ELSE 0 END AS already_on_sale'
+            : ', CASE WHEN esc.estate_sale_id = :' . $saleIdParam . ' THEN 1 ELSE 0 END AS already_on_sale';
+
+        $sql = "SELECT
+                    esc.id,
+                    esc.first_name,
+                    esc.last_name,
+                    esc.email,
+                    esc.phone,
+                    esc.city,
+                    esc.state,
+                    {$nameSql} AS customer_name
+                    {$onSaleSql}
+                FROM estate_sale_customers esc{$membershipJoin}
+                WHERE esc.business_id = :business_id
+                  AND esc.deleted_at IS NULL
+                  AND {$match['sql']}
+                ORDER BY already_on_sale ASC, esc.updated_at DESC, esc.id DESC
+                LIMIT {$limit}";
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
+        $stmt->bindValue(':' . $saleIdParam, $estateSaleId, \PDO::PARAM_INT);
+        foreach ($match['params'] as $key => $value) {
+            $stmt->bindValue(':' . $key, $value);
+        }
+        $stmt->execute();
+        $rows = $stmt->fetchAll();
+
+        return is_array($rows) ? $rows : [];
+    }
+
+    private static function upsertCustomerMembership(int $businessId, int $estateSaleId, int $customerId, int $actorUserId): bool
+    {
+        $queueNumber = self::nextCustomerQueueNumber($businessId, $estateSaleId);
+        $actor = $actorUserId > 0 ? $actorUserId : null;
+
+        $restoreSql = 'UPDATE estate_sale_customer_memberships
+                       SET deleted_at = NULL,
+                           deleted_by = NULL,
+                           checked_in_at = NULL,
+                           checked_out_at = NULL,
+                           queue_number = :queue_number,
+                           updated_by = :updated_by,
+                           updated_at = NOW()
+                       WHERE business_id = :business_id
+                         AND estate_sale_id = :estate_sale_id
+                         AND customer_id = :customer_id
+                         AND deleted_at IS NOT NULL';
+        $restoreStmt = Database::connection()->prepare($restoreSql);
+        $restoreStmt->execute([
+            'queue_number' => $queueNumber,
+            'updated_by' => $actor,
+            'business_id' => $businessId,
+            'estate_sale_id' => $estateSaleId,
+            'customer_id' => $customerId,
+        ]);
+        if ($restoreStmt->rowCount() > 0) {
+            return true;
+        }
+
+        return self::insertCustomerMembership($businessId, $estateSaleId, $customerId, $actorUserId, $queueNumber);
+    }
+
+    private static function insertCustomerMembership(
+        int $businessId,
+        int $estateSaleId,
+        int $customerId,
+        int $actorUserId,
+        ?int $queueNumber = null
+    ): bool {
+        $queueNumber = $queueNumber ?? self::nextCustomerQueueNumber($businessId, $estateSaleId);
+        $sql = 'INSERT INTO estate_sale_customer_memberships (
+                    business_id, estate_sale_id, customer_id, queue_number,
+                    created_by, updated_by, created_at, updated_at
+                ) VALUES (
+                    :business_id, :estate_sale_id, :customer_id, :queue_number,
+                    :created_by, :updated_by, NOW(), NOW()
+                )';
+        $stmt = Database::connection()->prepare($sql);
+
+        return $stmt->execute([
+            'business_id' => $businessId,
+            'estate_sale_id' => $estateSaleId,
+            'customer_id' => $customerId,
+            'queue_number' => $queueNumber,
+            'created_by' => $actorUserId > 0 ? $actorUserId : null,
+            'updated_by' => $actorUserId > 0 ? $actorUserId : null,
+        ]);
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private static function customersViaMemberships(int $businessId, int $estateSaleId, int $limit, int $offset, ?string $statusFilter): array
+    {
+        $nameSql = "COALESCE(NULLIF(TRIM(CONCAT_WS(' ', esc.first_name, esc.last_name)), ''), CONCAT('Customer #', esc.id))";
+        $limit = max(1, min($limit, 2000));
+        $offset = max(0, $offset);
+        $statusSql = self::customerStatusFilterSql($statusFilter, 'm');
+
+        $sql = "SELECT
+                    esc.id,
+                    m.estate_sale_id,
+                    m.queue_number,
+                    esc.first_name,
+                    esc.last_name,
+                    esc.email,
+                    esc.phone,
+                    esc.city,
+                    esc.state,
+                    esc.notes,
+                    m.checked_in_at,
+                    m.checked_out_at,
+                    m.created_at AS added_at,
+                    {$nameSql} AS customer_name
+                FROM estate_sale_customer_memberships m
+                INNER JOIN estate_sale_customers esc
+                    ON esc.id = m.customer_id
+                   AND esc.business_id = m.business_id
+                WHERE m.business_id = :business_id
+                  AND m.estate_sale_id = :estate_sale_id
+                  AND m.deleted_at IS NULL
+                  AND esc.deleted_at IS NULL{$statusSql}
+                ORDER BY m.queue_number ASC, esc.id ASC
+                LIMIT :row_limit OFFSET :row_offset";
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
+        $stmt->bindValue(':estate_sale_id', $estateSaleId, \PDO::PARAM_INT);
+        $stmt->bindValue(':row_limit', $limit, \PDO::PARAM_INT);
+        $stmt->bindValue(':row_offset', $offset, \PDO::PARAM_INT);
+        $stmt->execute();
+
+        $rows = $stmt->fetchAll();
+
+        return is_array($rows) ? $rows : [];
+    }
+
     /**
      * @return array<int, array<string, mixed>>
      */
@@ -501,6 +763,10 @@ final class EstateSale
 
         if (!SchemaInspector::hasColumn('estate_sale_customers', 'first_name')) {
             return [];
+        }
+
+        if (self::useCustomerMemberships()) {
+            return self::customersViaMemberships($businessId, $estateSaleId, $limit, $offset, $statusFilter);
         }
 
         $nameSql = "COALESCE(NULLIF(TRIM(CONCAT_WS(' ', esc.first_name, esc.last_name)), ''), CONCAT('Customer #', esc.id))";
@@ -557,6 +823,25 @@ final class EstateSale
             return 0;
         }
 
+        if (self::useCustomerMemberships()) {
+            $statusSql = self::customerStatusFilterSql($statusFilter, 'm');
+            $sql = 'SELECT COUNT(*)
+                    FROM estate_sale_customer_memberships m
+                    INNER JOIN estate_sale_customers esc
+                        ON esc.id = m.customer_id
+                       AND esc.business_id = m.business_id
+                    WHERE m.business_id = :business_id
+                      AND m.estate_sale_id = :estate_sale_id
+                      AND m.deleted_at IS NULL
+                      AND esc.deleted_at IS NULL' . $statusSql;
+            $stmt = Database::connection()->prepare($sql);
+            $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
+            $stmt->bindValue(':estate_sale_id', $estateSaleId, \PDO::PARAM_INT);
+            $stmt->execute();
+
+            return (int) $stmt->fetchColumn();
+        }
+
         $statusSql = self::customerStatusFilterSql($statusFilter);
 
         $sql = 'SELECT COUNT(*)
@@ -587,6 +872,39 @@ final class EstateSale
             $total = self::customersCount($businessId, $estateSaleId);
 
             return ['inside' => 0, 'waiting' => $total, 'left' => 0, 'total_seen' => 0, 'total' => $total];
+        }
+
+        if (self::useCustomerMemberships()) {
+            $sql = "SELECT
+                        COUNT(*) AS total_count,
+                        SUM(CASE WHEN m.checked_in_at IS NOT NULL AND m.checked_out_at IS NULL THEN 1 ELSE 0 END) AS inside_count,
+                        SUM(CASE WHEN m.checked_in_at IS NULL THEN 1 ELSE 0 END) AS waiting_count,
+                        SUM(CASE WHEN m.checked_in_at IS NOT NULL AND m.checked_out_at IS NOT NULL THEN 1 ELSE 0 END) AS left_count,
+                        SUM(CASE WHEN m.checked_in_at IS NOT NULL THEN 1 ELSE 0 END) AS total_seen_count
+                    FROM estate_sale_customer_memberships m
+                    INNER JOIN estate_sale_customers esc
+                        ON esc.id = m.customer_id
+                       AND esc.business_id = m.business_id
+                    WHERE m.business_id = :business_id
+                      AND m.estate_sale_id = :estate_sale_id
+                      AND m.deleted_at IS NULL
+                      AND esc.deleted_at IS NULL";
+            $stmt = Database::connection()->prepare($sql);
+            $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
+            $stmt->bindValue(':estate_sale_id', $estateSaleId, \PDO::PARAM_INT);
+            $stmt->execute();
+            $row = $stmt->fetch();
+            if (!is_array($row)) {
+                return $empty;
+            }
+
+            return [
+                'inside' => (int) ($row['inside_count'] ?? 0),
+                'waiting' => (int) ($row['waiting_count'] ?? 0),
+                'left' => (int) ($row['left_count'] ?? 0),
+                'total_seen' => (int) ($row['total_seen_count'] ?? 0),
+                'total' => (int) ($row['total_count'] ?? 0),
+            ];
         }
 
         $hasCheckedOut = SchemaInspector::hasColumn('estate_sale_customers', 'checked_out_at');
@@ -634,25 +952,35 @@ final class EstateSale
         return in_array($status, ['waiting', 'inside', 'left'], true) ? $status : 'all';
     }
 
-    private static function customerStatusFilterSql(?string $statusFilter): string
+    private static function customerStatusFilterSql(?string $statusFilter, string $alias = 'esc'): string
     {
         $status = self::normalizeCustomersStatusFilter($statusFilter);
-        if ($status === 'all' || !SchemaInspector::hasColumn('estate_sale_customers', 'checked_in_at')) {
+        if ($status === 'all') {
             return '';
         }
 
-        if (!SchemaInspector::hasColumn('estate_sale_customers', 'checked_out_at')) {
+        $hasCheckedIn = self::useCustomerMemberships()
+            ? true
+            : SchemaInspector::hasColumn('estate_sale_customers', 'checked_in_at');
+        if (!$hasCheckedIn) {
+            return '';
+        }
+
+        $hasCheckedOut = self::useCustomerMemberships()
+            ? true
+            : SchemaInspector::hasColumn('estate_sale_customers', 'checked_out_at');
+        if (!$hasCheckedOut) {
             return match ($status) {
-                'waiting' => ' AND esc.checked_in_at IS NULL',
-                'inside' => ' AND esc.checked_in_at IS NOT NULL',
+                'waiting' => " AND {$alias}.checked_in_at IS NULL",
+                'inside' => " AND {$alias}.checked_in_at IS NOT NULL",
                 default => '',
             };
         }
 
         return match ($status) {
-            'waiting' => ' AND esc.checked_in_at IS NULL',
-            'inside' => ' AND esc.checked_in_at IS NOT NULL AND esc.checked_out_at IS NULL',
-            'left' => ' AND esc.checked_in_at IS NOT NULL AND esc.checked_out_at IS NOT NULL',
+            'waiting' => " AND {$alias}.checked_in_at IS NULL",
+            'inside' => " AND {$alias}.checked_in_at IS NOT NULL AND {$alias}.checked_out_at IS NULL",
+            'left' => " AND {$alias}.checked_in_at IS NOT NULL AND {$alias}.checked_out_at IS NOT NULL",
             default => '',
         };
     }
@@ -749,14 +1077,400 @@ final class EstateSale
             $errors['email'] = 'Enter a valid email address.';
         }
 
+        $subscribes = !empty($data['subscribes_to_future_sales']);
+        $contactMethod = self::normalizeFutureSalesContactMethod($data['future_sales_contact_method'] ?? null);
+        if ($subscribes && $contactMethod === null) {
+            $errors['future_sales_contact_method'] = 'Choose how to contact them about future sales.';
+        }
+
         return $errors;
     }
 
     /**
      * @return array<string, string>
      */
+    public static function futureSalesContactMethodOptions(): array
+    {
+        return [
+            'call' => 'Call',
+            'text' => 'Text',
+            'email' => 'Email',
+        ];
+    }
+
+    public static function futureSalesContactMethodLabel(?string $method): string
+    {
+        $normalized = self::normalizeFutureSalesContactMethod($method);
+        if ($normalized === null) {
+            return '';
+        }
+
+        return self::futureSalesContactMethodOptions()[$normalized] ?? ucfirst($normalized);
+    }
+
+    public static function normalizeFutureSalesContactMethod(mixed $value): ?string
+    {
+        $method = strtolower(trim((string) $value));
+        if ($method === '') {
+            return null;
+        }
+
+        return array_key_exists($method, self::futureSalesContactMethodOptions()) ? $method : null;
+    }
+
+    /**
+     * Possible duplicate estate customers (name, phone, email) within the business.
+     *
+     * @return list<array{id: int, display_name: string, estate_sale_id: int, estate_sale_title: string, reasons: list<string>, same_sale: bool}>
+     */
+    public static function findDuplicateCustomerMatches(
+        int $businessId,
+        array $candidate,
+        ?int $excludeCustomerId = null,
+        ?int $currentEstateSaleId = null
+    ): array {
+        if ($businessId <= 0 || !SchemaInspector::hasTable('estate_sale_customers')) {
+            return [];
+        }
+
+        if (!SchemaInspector::hasColumn('estate_sale_customers', 'first_name')) {
+            return [];
+        }
+
+        $n = self::normalizedCustomerDuplicateFields($candidate);
+        $firstName = $n['first_name'];
+        $lastName = $n['last_name'];
+        $phoneDigits = $n['phone_digits'];
+        $emailNorm = $n['email'];
+
+        $or = [];
+        $params = [];
+
+        if ($firstName !== '' && $lastName !== '') {
+            $or[] = '(LOWER(TRIM(COALESCE(esc.first_name, \'\'))) = :dup_first_name AND LOWER(TRIM(COALESCE(esc.last_name, \'\'))) = :dup_last_name)';
+            $params['dup_first_name'] = $firstName;
+            $params['dup_last_name'] = $lastName;
+        }
+
+        if ($phoneDigits !== '' && SchemaInspector::hasColumn('estate_sale_customers', 'phone')) {
+            $digitsExpr = "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(esc.phone, ''), '-', ''), '(', ''), ')', ''), ' ', ''), '.', ''), '+', '')";
+            $or[] = '(' . $digitsExpr . ' = :dup_phone)';
+            $params['dup_phone'] = $phoneDigits;
+        }
+
+        if ($emailNorm !== '' && SchemaInspector::hasColumn('estate_sale_customers', 'email')) {
+            $or[] = "LOWER(TRIM(COALESCE(esc.email, ''))) = :dup_email";
+            $params['dup_email'] = $emailNorm;
+        }
+
+        if ($or === []) {
+            return [];
+        }
+
+        $excludeSql = ($excludeCustomerId !== null && $excludeCustomerId > 0) ? ' AND esc.id <> :exclude_id' : '';
+        $hasSaleTitle = SchemaInspector::hasTable('estate_sales') && SchemaInspector::hasColumn('estate_sales', 'title');
+        $titleSql = $hasSaleTitle
+            ? "COALESCE(NULLIF(TRIM(es.title), ''), CONCAT('Estate Sale #', es.id))"
+            : "CONCAT('Estate Sale #', esc.estate_sale_id)";
+        $joinSql = $hasSaleTitle
+            ? ' INNER JOIN estate_sales es ON es.id = esc.estate_sale_id AND es.business_id = esc.business_id'
+            : '';
+
+        $sql = 'SELECT DISTINCT esc.id, esc.estate_sale_id, ' . $titleSql . ' AS estate_sale_title
+                FROM estate_sale_customers esc' . $joinSql . '
+                WHERE esc.business_id = :business_id
+                  AND esc.deleted_at IS NULL' . $excludeSql . '
+                  AND (' . implode(' OR ', $or) . ')
+                ORDER BY esc.id DESC
+                LIMIT 50';
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
+        if ($excludeCustomerId !== null && $excludeCustomerId > 0) {
+            $stmt->bindValue(':exclude_id', $excludeCustomerId, \PDO::PARAM_INT);
+        }
+        foreach ($params as $key => $value) {
+            $stmt->bindValue(':' . $key, $value);
+        }
+        $stmt->execute();
+
+        $rows = $stmt->fetchAll();
+        if (!is_array($rows) || $rows === []) {
+            return [];
+        }
+
+        $out = [];
+        foreach ($rows as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $id = (int) ($row['id'] ?? 0);
+            if ($id <= 0) {
+                continue;
+            }
+
+            $existing = self::findCustomerProfile($businessId, $id);
+            if ($existing === null) {
+                continue;
+            }
+
+            $reasons = self::customerDuplicateReasonsAgainstCandidate($candidate, $existing);
+            if ($reasons === []) {
+                continue;
+            }
+
+            $estateSaleId = (int) ($row['estate_sale_id'] ?? 0);
+            $sameSale = $currentEstateSaleId !== null
+                && $currentEstateSaleId > 0
+                && self::isCustomerOnSale($businessId, $currentEstateSaleId, $id);
+            $linkSaleId = $sameSale ? $currentEstateSaleId : ($estateSaleId > 0 ? $estateSaleId : 0);
+
+            $out[] = [
+                'id' => $id,
+                'display_name' => self::customerDisplayName($existing),
+                'estate_sale_id' => $estateSaleId,
+                'estate_sale_title' => trim((string) ($row['estate_sale_title'] ?? '')) ?: ('Estate Sale #' . (string) $estateSaleId),
+                'reasons' => $reasons,
+                'same_sale' => $sameSale,
+                'show_url' => $linkSaleId > 0
+                    ? url('/estate-sales/' . (string) $linkSaleId . '/customers/' . (string) $id)
+                    : '',
+            ];
+        }
+
+        return $out;
+    }
+
+    public static function indexCountAllCustomers(int $businessId, string $search = ''): int
+    {
+        if ($businessId <= 0 || !SchemaInspector::hasTable('estate_sale_customers')) {
+            return 0;
+        }
+
+        if (!SchemaInspector::hasColumn('estate_sale_customers', 'first_name')) {
+            return 0;
+        }
+
+        $searchSql = self::allCustomersSearchSql($search);
+        $hasSaleTitle = SchemaInspector::hasTable('estate_sales') && SchemaInspector::hasColumn('estate_sales', 'title');
+        $joinSql = $hasSaleTitle
+            ? ' LEFT JOIN estate_sales es ON es.id = esc.estate_sale_id AND es.business_id = esc.business_id'
+            : '';
+
+        $sql = 'SELECT COUNT(DISTINCT esc.id)
+                FROM estate_sale_customers esc' . $joinSql . '
+                WHERE esc.business_id = :business_id
+                  AND esc.deleted_at IS NULL' . $searchSql['where'];
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
+        foreach ($searchSql['params'] as $key => $value) {
+            $stmt->bindValue(':' . $key, $value);
+        }
+        $stmt->execute();
+
+        return (int) $stmt->fetchColumn();
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    public static function indexListAllCustomers(int $businessId, string $search = '', int $limit = 25, int $offset = 0): array
+    {
+        if ($businessId <= 0 || !SchemaInspector::hasTable('estate_sale_customers')) {
+            return [];
+        }
+
+        if (!SchemaInspector::hasColumn('estate_sale_customers', 'first_name')) {
+            return [];
+        }
+
+        $limit = max(1, min($limit, 200));
+        $offset = max(0, $offset);
+        $searchSql = self::allCustomersSearchSql($search);
+        $nameSql = "COALESCE(NULLIF(TRIM(CONCAT_WS(' ', esc.first_name, esc.last_name)), ''), CONCAT('Customer #', esc.id))";
+        $hasQueueNumber = SchemaInspector::hasColumn('estate_sale_customers', 'queue_number');
+        $queueSql = $hasQueueNumber ? 'esc.queue_number,' : '0 AS queue_number,';
+        $hasSubscribes = SchemaInspector::hasColumn('estate_sale_customers', 'subscribes_to_future_sales');
+        $subscribesSql = $hasSubscribes ? 'esc.subscribes_to_future_sales,' : '0 AS subscribes_to_future_sales,';
+        $hasContactMethod = SchemaInspector::hasColumn('estate_sale_customers', 'future_sales_contact_method');
+        $contactMethodSql = $hasContactMethod ? 'esc.future_sales_contact_method,' : 'NULL AS future_sales_contact_method,';
+        $hasSaleTitle = SchemaInspector::hasTable('estate_sales') && SchemaInspector::hasColumn('estate_sales', 'title');
+        $titleSql = $hasSaleTitle
+            ? "COALESCE(NULLIF(TRIM(es.title), ''), CONCAT('Estate Sale #', es.id)) AS estate_sale_title,"
+            : "CONCAT('Estate Sale #', esc.estate_sale_id) AS estate_sale_title,";
+        $joinSql = $hasSaleTitle
+            ? ' LEFT JOIN estate_sales es ON es.id = esc.estate_sale_id AND es.business_id = esc.business_id'
+            : '';
+
+        $sql = "SELECT
+                    esc.id,
+                    esc.estate_sale_id,
+                    {$queueSql}
+                    esc.first_name,
+                    esc.last_name,
+                    esc.email,
+                    esc.phone,
+                    esc.city,
+                    esc.state,
+                    {$subscribesSql}
+                    {$contactMethodSql}
+                    esc.created_at AS added_at,
+                    {$titleSql}
+                    {$nameSql} AS customer_name
+                FROM estate_sale_customers esc{$joinSql}
+                WHERE esc.business_id = :business_id
+                  AND esc.deleted_at IS NULL{$searchSql['where']}
+                ORDER BY esc.created_at DESC, esc.id DESC
+                LIMIT :row_limit OFFSET :row_offset";
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
+        foreach ($searchSql['params'] as $key => $value) {
+            $stmt->bindValue(':' . $key, $value);
+        }
+        $stmt->bindValue(':row_limit', $limit, \PDO::PARAM_INT);
+        $stmt->bindValue(':row_offset', $offset, \PDO::PARAM_INT);
+        $stmt->execute();
+
+        $rows = $stmt->fetchAll();
+
+        return is_array($rows) ? $rows : [];
+    }
+
+    /**
+     * @return array{where: string, params: array<string, string>, join: string}
+     */
+    private static function allCustomersSearchSql(string $search): array
+    {
+        $needle = trim($search);
+        if ($needle === '') {
+            return ['where' => '', 'params' => [], 'join' => ''];
+        }
+
+        $like = '%' . $needle . '%';
+        $hasSaleTitle = SchemaInspector::hasTable('estate_sales') && SchemaInspector::hasColumn('estate_sales', 'title');
+        $nameSql = "COALESCE(NULLIF(TRIM(CONCAT_WS(' ', esc.first_name, esc.last_name)), ''), CONCAT('Customer #', esc.id))";
+        $match = self::customerProfileSearchMatchSql($needle, $nameSql, 'all_cust');
+        $parts = [$match['sql']];
+        $params = $match['params'];
+        if ($hasSaleTitle) {
+            $parts[] = 'es.title LIKE :all_cust_like_sale';
+            $params['all_cust_like_sale'] = $like;
+        }
+
+        return [
+            'where' => ' AND (' . implode(' OR ', $parts) . ')',
+            'params' => $params,
+            'join' => $hasSaleTitle ? 'es' : '',
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $candidate
+     * @return array{first_name: string, last_name: string, phone_digits: string, email: string}
+     */
+    private static function normalizedCustomerDuplicateFields(array $candidate): array
+    {
+        return [
+            'first_name' => self::normalizeCustomerIdentity((string) ($candidate['first_name'] ?? '')),
+            'last_name' => self::normalizeCustomerIdentity((string) ($candidate['last_name'] ?? '')),
+            'phone_digits' => self::normalizeCustomerPhone((string) ($candidate['phone'] ?? '')),
+            'email' => strtolower(trim((string) ($candidate['email'] ?? ''))),
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $candidate
+     * @param array<string, mixed> $existing
+     * @return list<string>
+     */
+    private static function customerDuplicateReasonsAgainstCandidate(array $candidate, array $existing): array
+    {
+        $n = self::normalizedCustomerDuplicateFields($candidate);
+        $existingFirst = self::normalizeCustomerIdentity((string) ($existing['first_name'] ?? ''));
+        $existingLast = self::normalizeCustomerIdentity((string) ($existing['last_name'] ?? ''));
+        $existingPhone = self::normalizeCustomerPhone((string) ($existing['phone'] ?? ''));
+        $existingEmail = strtolower(trim((string) ($existing['email'] ?? '')));
+
+        $reasons = [];
+        if ($n['first_name'] !== '' && $n['last_name'] !== '' && $existingFirst === $n['first_name'] && $existingLast === $n['last_name']) {
+            $reasons[] = 'name';
+        }
+        if ($n['phone_digits'] !== '' && $existingPhone !== '' && $existingPhone === $n['phone_digits']) {
+            $reasons[] = 'phone';
+        }
+        if ($n['email'] !== '' && $existingEmail !== '' && $n['email'] === $existingEmail) {
+            $reasons[] = 'email';
+        }
+
+        return $reasons;
+    }
+
+    private static function normalizeCustomerIdentity(string $value): string
+    {
+        return strtolower(trim($value));
+    }
+
+    private static function normalizeCustomerPhone(string $value): string
+    {
+        return preg_replace('/\D+/', '', $value) ?? '';
+    }
+
+    private static function customerPhoneDigitsSql(string $alias = 'esc'): string
+    {
+        return "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE({$alias}.phone, ''), '-', ''), '(', ''), ')', ''), ' ', ''), '.', ''), '+', '')";
+    }
+
+    /**
+     * @return array{sql: string, params: array<string, string>}
+     */
+    private static function customerProfileSearchMatchSql(string $needle, string $nameSql, string $paramPrefix = 'profile'): array
+    {
+        $like = '%' . $needle . '%';
+        $parts = [
+            "{$nameSql} LIKE :{$paramPrefix}_like_name",
+            "COALESCE(esc.first_name, '') LIKE :{$paramPrefix}_like_first",
+            "COALESCE(esc.last_name, '') LIKE :{$paramPrefix}_like_last",
+            "COALESCE(esc.email, '') LIKE :{$paramPrefix}_like_email",
+            "COALESCE(esc.phone, '') LIKE :{$paramPrefix}_like_phone",
+            "COALESCE(esc.city, '') LIKE :{$paramPrefix}_like_city",
+            "CAST(esc.id AS CHAR) LIKE :{$paramPrefix}_like_id",
+        ];
+        $params = [
+            "{$paramPrefix}_like_name" => $like,
+            "{$paramPrefix}_like_first" => $like,
+            "{$paramPrefix}_like_last" => $like,
+            "{$paramPrefix}_like_email" => $like,
+            "{$paramPrefix}_like_phone" => $like,
+            "{$paramPrefix}_like_city" => $like,
+            "{$paramPrefix}_like_id" => $like,
+        ];
+
+        $phoneDigits = self::normalizeCustomerPhone($needle);
+        if (strlen($phoneDigits) >= 2) {
+            $phoneDigitsExpr = self::customerPhoneDigitsSql('esc');
+            $parts[] = "{$phoneDigitsExpr} LIKE :{$paramPrefix}_phone_digits";
+            $params["{$paramPrefix}_phone_digits"] = '%' . $phoneDigits . '%';
+        }
+
+        return [
+            'sql' => '(' . implode(' OR ', $parts) . ')',
+            'params' => $params,
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
     public static function customerPayloadFromInput(array $input): array
     {
+        $subscribes = !empty($input['subscribes_to_future_sales']);
+        $contactMethod = self::normalizeFutureSalesContactMethod($input['future_sales_contact_method'] ?? null);
+        if (!$subscribes) {
+            $contactMethod = null;
+        }
+
         return [
             'first_name' => trim((string) ($input['first_name'] ?? '')),
             'last_name' => trim((string) ($input['last_name'] ?? '')),
@@ -764,6 +1478,8 @@ final class EstateSale
             'phone' => trim((string) ($input['phone'] ?? '')),
             'city' => trim((string) ($input['city'] ?? '')),
             'state' => strtoupper(trim((string) ($input['state'] ?? ''))),
+            'subscribes_to_future_sales' => $subscribes ? 1 : 0,
+            'future_sales_contact_method' => $contactMethod,
         ];
     }
 
@@ -782,7 +1498,8 @@ final class EstateSale
         }
 
         $payload = self::customerPayloadFromInput($data);
-        $queueNumber = SchemaInspector::hasColumn('estate_sale_customers', 'queue_number')
+        $useMemberships = self::useCustomerMemberships();
+        $queueNumber = !$useMemberships && SchemaInspector::hasColumn('estate_sale_customers', 'queue_number')
             ? self::nextCustomerQueueNumber($businessId, $estateSaleId)
             : 0;
 
@@ -815,13 +1532,33 @@ final class EstateSale
             $params['queue_number'] = $queueNumber;
         }
 
+        if (SchemaInspector::hasColumn('estate_sale_customers', 'subscribes_to_future_sales')) {
+            $columns[] = 'subscribes_to_future_sales';
+            $values[] = ':subscribes_to_future_sales';
+            $params['subscribes_to_future_sales'] = (int) ($payload['subscribes_to_future_sales'] ?? 0);
+        }
+        if (SchemaInspector::hasColumn('estate_sale_customers', 'future_sales_contact_method')) {
+            $columns[] = 'future_sales_contact_method';
+            $values[] = ':future_sales_contact_method';
+            $params['future_sales_contact_method'] = $payload['future_sales_contact_method'] ?? null;
+        }
+
         $sql = 'INSERT INTO estate_sale_customers (' . implode(', ', $columns) . ')
                 VALUES (' . implode(', ', $values) . ')';
 
         $stmt = Database::connection()->prepare($sql);
         $stmt->execute($params);
 
-        return (int) Database::connection()->lastInsertId();
+        $customerId = (int) Database::connection()->lastInsertId();
+        if ($customerId <= 0) {
+            return 0;
+        }
+
+        if ($useMemberships && !self::insertCustomerMembership($businessId, $estateSaleId, $customerId, $actorUserId)) {
+            return 0;
+        }
+
+        return $customerId;
     }
 
     public static function updateCustomer(int $businessId, int $estateSaleId, int $customerId, array $data, int $actorUserId): bool
@@ -840,23 +1577,17 @@ final class EstateSale
 
         $payload = self::customerPayloadFromInput($data);
 
-        $sql = 'UPDATE estate_sale_customers
-                SET first_name = :first_name,
-                    last_name = :last_name,
-                    email = :email,
-                    phone = :phone,
-                    city = :city,
-                    state = :state,
-                    updated_by = :updated_by,
-                    updated_at = NOW()
-                WHERE business_id = :business_id
-                  AND estate_sale_id = :estate_sale_id
-                  AND id = :id
-                  AND deleted_at IS NULL';
-
-        $stmt = Database::connection()->prepare($sql);
-
-        return $stmt->execute([
+        $setParts = [
+            'first_name = :first_name',
+            'last_name = :last_name',
+            'email = :email',
+            'phone = :phone',
+            'city = :city',
+            'state = :state',
+            'updated_by = :updated_by',
+            'updated_at = NOW()',
+        ];
+        $executeParams = [
             'first_name' => $payload['first_name'],
             'last_name' => $payload['last_name'],
             'email' => $payload['email'],
@@ -867,7 +1598,27 @@ final class EstateSale
             'business_id' => $businessId,
             'estate_sale_id' => $estateSaleId,
             'id' => $customerId,
-        ]);
+        ];
+
+        if (SchemaInspector::hasColumn('estate_sale_customers', 'subscribes_to_future_sales')) {
+            $setParts[] = 'subscribes_to_future_sales = :subscribes_to_future_sales';
+            $executeParams['subscribes_to_future_sales'] = (int) ($payload['subscribes_to_future_sales'] ?? 0);
+        }
+        if (SchemaInspector::hasColumn('estate_sale_customers', 'future_sales_contact_method')) {
+            $setParts[] = 'future_sales_contact_method = :future_sales_contact_method';
+            $executeParams['future_sales_contact_method'] = $payload['future_sales_contact_method'] ?? null;
+        }
+
+        $sql = 'UPDATE estate_sale_customers
+                SET ' . implode(', ', $setParts) . '
+                WHERE business_id = :business_id
+                  AND id = :id
+                  AND deleted_at IS NULL';
+
+        $stmt = Database::connection()->prepare($sql);
+        unset($executeParams['estate_sale_id']);
+
+        return $stmt->execute($executeParams);
     }
 
     public static function findCustomerForSale(int $businessId, int $estateSaleId, int $customerId): ?array
@@ -876,13 +1627,62 @@ final class EstateSale
             return null;
         }
 
+        if (self::useCustomerMemberships()) {
+            $nameSql = "COALESCE(NULLIF(TRIM(CONCAT_WS(' ', esc.first_name, esc.last_name)), ''), CONCAT('Customer #', esc.id))";
+            $hasSubscribes = SchemaInspector::hasColumn('estate_sale_customers', 'subscribes_to_future_sales');
+            $hasContactMethod = SchemaInspector::hasColumn('estate_sale_customers', 'future_sales_contact_method');
+            $subscribesSql = $hasSubscribes ? 'esc.subscribes_to_future_sales,' : '0 AS subscribes_to_future_sales,';
+            $contactMethodSql = $hasContactMethod ? 'esc.future_sales_contact_method,' : 'NULL AS future_sales_contact_method,';
+
+            $sql = "SELECT
+                        esc.id,
+                        m.estate_sale_id,
+                        m.queue_number,
+                        esc.first_name,
+                        esc.last_name,
+                        esc.email,
+                        esc.phone,
+                        esc.city,
+                        esc.state,
+                        esc.notes,
+                        {$subscribesSql}
+                        {$contactMethodSql}
+                        m.checked_in_at,
+                        m.checked_out_at,
+                        m.created_at AS added_at,
+                        {$nameSql} AS customer_name
+                    FROM estate_sale_customer_memberships m
+                    INNER JOIN estate_sale_customers esc
+                        ON esc.id = m.customer_id
+                       AND esc.business_id = m.business_id
+                    WHERE m.business_id = :business_id
+                      AND m.estate_sale_id = :estate_sale_id
+                      AND m.customer_id = :id
+                      AND m.deleted_at IS NULL
+                      AND esc.deleted_at IS NULL
+                    LIMIT 1";
+
+            $stmt = Database::connection()->prepare($sql);
+            $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
+            $stmt->bindValue(':estate_sale_id', $estateSaleId, \PDO::PARAM_INT);
+            $stmt->bindValue(':id', $customerId, \PDO::PARAM_INT);
+            $stmt->execute();
+            $row = $stmt->fetch();
+
+            return is_array($row) ? $row : null;
+        }
+
         $nameSql = "COALESCE(NULLIF(TRIM(CONCAT_WS(' ', esc.first_name, esc.last_name)), ''), CONCAT('Customer #', esc.id))";
         $hasQueueNumber = SchemaInspector::hasColumn('estate_sale_customers', 'queue_number');
         $hasCheckedIn = SchemaInspector::hasColumn('estate_sale_customers', 'checked_in_at');
         $hasCheckedOut = SchemaInspector::hasColumn('estate_sale_customers', 'checked_out_at');
+        $hasSubscribes = SchemaInspector::hasColumn('estate_sale_customers', 'subscribes_to_future_sales');
+        $hasContactMethod = SchemaInspector::hasColumn('estate_sale_customers', 'future_sales_contact_method');
         $queueSql = $hasQueueNumber ? 'esc.queue_number,' : '0 AS queue_number,';
         $checkedInSql = $hasCheckedIn ? 'esc.checked_in_at,' : 'NULL AS checked_in_at,';
         $checkedOutSql = $hasCheckedOut ? 'esc.checked_out_at,' : 'NULL AS checked_out_at,';
+        $subscribesSql = $hasSubscribes ? 'esc.subscribes_to_future_sales,' : '0 AS subscribes_to_future_sales,';
+        $contactMethodSql = $hasContactMethod ? 'esc.future_sales_contact_method,' : 'NULL AS future_sales_contact_method,';
 
         $sql = "SELECT
                     esc.id,
@@ -895,6 +1695,8 @@ final class EstateSale
                     esc.city,
                     esc.state,
                     esc.notes,
+                    {$subscribesSql}
+                    {$contactMethodSql}
                     {$checkedInSql}
                     {$checkedOutSql}
                     esc.created_at AS added_at,
@@ -922,6 +1724,27 @@ final class EstateSale
             return false;
         }
 
+        if (self::useCustomerMemberships()) {
+            $sql = 'UPDATE estate_sale_customer_memberships
+                    SET deleted_at = NOW(),
+                        deleted_by = :deleted_by,
+                        updated_by = :updated_by,
+                        updated_at = NOW()
+                    WHERE business_id = :business_id
+                      AND estate_sale_id = :estate_sale_id
+                      AND customer_id = :customer_id
+                      AND deleted_at IS NULL';
+            $stmt = Database::connection()->prepare($sql);
+
+            return $stmt->execute([
+                'deleted_by' => $actorUserId > 0 ? $actorUserId : null,
+                'updated_by' => $actorUserId > 0 ? $actorUserId : null,
+                'business_id' => $businessId,
+                'estate_sale_id' => $estateSaleId,
+                'customer_id' => $customerId,
+            ]);
+        }
+
         $sql = 'UPDATE estate_sale_customers
                 SET deleted_at = NOW(),
                     deleted_by = :deleted_by,
@@ -947,6 +1770,20 @@ final class EstateSale
     {
         if ($estateSaleId <= 0 || !SchemaInspector::hasTable('estate_sale_customers')) {
             return 1;
+        }
+
+        if (self::useCustomerMemberships()) {
+            $sql = 'SELECT COALESCE(MAX(queue_number), 0) + 1
+                    FROM estate_sale_customer_memberships
+                    WHERE business_id = :business_id
+                      AND estate_sale_id = :estate_sale_id
+                      AND deleted_at IS NULL';
+            $stmt = Database::connection()->prepare($sql);
+            $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
+            $stmt->bindValue(':estate_sale_id', $estateSaleId, \PDO::PARAM_INT);
+            $stmt->execute();
+
+            return max(1, (int) $stmt->fetchColumn());
         }
 
         if (!SchemaInspector::hasColumn('estate_sale_customers', 'queue_number')) {
@@ -1037,7 +1874,7 @@ final class EstateSale
             $estateSaleId <= 0
             || $customerId <= 0
             || !SchemaInspector::hasTable('estate_sale_customers')
-            || !SchemaInspector::hasColumn('estate_sale_customers', 'checked_in_at')
+            || (!self::useCustomerMemberships() && !SchemaInspector::hasColumn('estate_sale_customers', 'checked_in_at'))
         ) {
             return null;
         }
@@ -1055,23 +1892,42 @@ final class EstateSale
         $pdo->beginTransaction();
 
         try {
-            $updateSql = 'UPDATE estate_sale_customers
-                          SET checked_in_at = NOW(),
-                              checked_out_at = NULL,
-                              updated_by = :updated_by,
-                              updated_at = NOW()
-                          WHERE business_id = :business_id
-                            AND estate_sale_id = :estate_sale_id
-                            AND id = :id
-                            AND deleted_at IS NULL';
+            if (self::useCustomerMemberships()) {
+                $updateSql = 'UPDATE estate_sale_customer_memberships
+                              SET checked_in_at = NOW(),
+                                  checked_out_at = NULL,
+                                  updated_by = :updated_by,
+                                  updated_at = NOW()
+                              WHERE business_id = :business_id
+                                AND estate_sale_id = :estate_sale_id
+                                AND customer_id = :customer_id
+                                AND deleted_at IS NULL';
+                $updateParams = [
+                    'updated_by' => $actorUserId > 0 ? $actorUserId : null,
+                    'business_id' => $businessId,
+                    'estate_sale_id' => $estateSaleId,
+                    'customer_id' => $customerId,
+                ];
+            } else {
+                $updateSql = 'UPDATE estate_sale_customers
+                              SET checked_in_at = NOW(),
+                                  checked_out_at = NULL,
+                                  updated_by = :updated_by,
+                                  updated_at = NOW()
+                              WHERE business_id = :business_id
+                                AND estate_sale_id = :estate_sale_id
+                                AND id = :id
+                                AND deleted_at IS NULL';
+                $updateParams = [
+                    'updated_by' => $actorUserId > 0 ? $actorUserId : null,
+                    'business_id' => $businessId,
+                    'estate_sale_id' => $estateSaleId,
+                    'id' => $customerId,
+                ];
+            }
 
             $updateStmt = $pdo->prepare($updateSql);
-            $updateStmt->execute([
-                'updated_by' => $actorUserId > 0 ? $actorUserId : null,
-                'business_id' => $businessId,
-                'estate_sale_id' => $estateSaleId,
-                'id' => $customerId,
-            ]);
+            $updateStmt->execute($updateParams);
 
             if ($updateStmt->rowCount() <= 0) {
                 $pdo->rollBack();
@@ -1114,7 +1970,7 @@ final class EstateSale
             $estateSaleId <= 0
             || $customerId <= 0
             || !SchemaInspector::hasTable('estate_sale_customers')
-            || !SchemaInspector::hasColumn('estate_sale_customers', 'checked_out_at')
+            || (!self::useCustomerMemberships() && !SchemaInspector::hasColumn('estate_sale_customers', 'checked_out_at'))
         ) {
             return null;
         }
@@ -1128,24 +1984,44 @@ final class EstateSale
         $pdo->beginTransaction();
 
         try {
-            $updateSql = 'UPDATE estate_sale_customers
-                          SET checked_out_at = NOW(),
-                              updated_by = :updated_by,
-                              updated_at = NOW()
-                          WHERE business_id = :business_id
-                            AND estate_sale_id = :estate_sale_id
-                            AND id = :id
-                            AND deleted_at IS NULL
-                            AND checked_in_at IS NOT NULL
-                            AND checked_out_at IS NULL';
+            if (self::useCustomerMemberships()) {
+                $updateSql = 'UPDATE estate_sale_customer_memberships
+                              SET checked_out_at = NOW(),
+                                  updated_by = :updated_by,
+                                  updated_at = NOW()
+                              WHERE business_id = :business_id
+                                AND estate_sale_id = :estate_sale_id
+                                AND customer_id = :customer_id
+                                AND deleted_at IS NULL
+                                AND checked_in_at IS NOT NULL
+                                AND checked_out_at IS NULL';
+                $updateParams = [
+                    'updated_by' => $actorUserId > 0 ? $actorUserId : null,
+                    'business_id' => $businessId,
+                    'estate_sale_id' => $estateSaleId,
+                    'customer_id' => $customerId,
+                ];
+            } else {
+                $updateSql = 'UPDATE estate_sale_customers
+                              SET checked_out_at = NOW(),
+                                  updated_by = :updated_by,
+                                  updated_at = NOW()
+                              WHERE business_id = :business_id
+                                AND estate_sale_id = :estate_sale_id
+                                AND id = :id
+                                AND deleted_at IS NULL
+                                AND checked_in_at IS NOT NULL
+                                AND checked_out_at IS NULL';
+                $updateParams = [
+                    'updated_by' => $actorUserId > 0 ? $actorUserId : null,
+                    'business_id' => $businessId,
+                    'estate_sale_id' => $estateSaleId,
+                    'id' => $customerId,
+                ];
+            }
 
             $updateStmt = $pdo->prepare($updateSql);
-            $updateStmt->execute([
-                'updated_by' => $actorUserId > 0 ? $actorUserId : null,
-                'business_id' => $businessId,
-                'estate_sale_id' => $estateSaleId,
-                'id' => $customerId,
-            ]);
+            $updateStmt->execute($updateParams);
 
             if ($updateStmt->rowCount() <= 0) {
                 $pdo->rollBack();
@@ -1306,6 +2182,9 @@ final class EstateSale
             'phone' => trim((string) ($customer['phone'] ?? '')),
             'city' => trim((string) ($customer['city'] ?? '')),
             'state' => trim((string) ($customer['state'] ?? '')),
+            'subscribes_to_future_sales' => !empty($customer['subscribes_to_future_sales']),
+            'future_sales_contact_method' => self::normalizeFutureSalesContactMethod($customer['future_sales_contact_method'] ?? null) ?? '',
+            'future_sales_contact_method_label' => self::futureSalesContactMethodLabel($customer['future_sales_contact_method'] ?? null),
             'added_at' => trim((string) ($customer['added_at'] ?? '')),
             'checked_in_at' => $checkedInAt,
             'checked_out_at' => $checkedOutAt,
@@ -3136,14 +4015,22 @@ final class EstateSale
             return ['wait' => [], 'shopping' => []];
         }
 
-        $sql = 'SELECT esc.created_at, esc.checked_in_at, esc.checked_out_at
-                FROM estate_sale_customers esc
-                WHERE esc.estate_sale_id = :estate_sale_id';
-        if (SchemaInspector::hasColumn('estate_sale_customers', 'business_id')) {
-            $sql .= ' AND esc.business_id = :business_id';
-        }
-        if (SchemaInspector::hasColumn('estate_sale_customers', 'deleted_at')) {
-            $sql .= ' AND esc.deleted_at IS NULL';
+        if (self::useCustomerMemberships()) {
+            $sql = 'SELECT m.created_at, m.checked_in_at, m.checked_out_at
+                    FROM estate_sale_customer_memberships m
+                    WHERE m.estate_sale_id = :estate_sale_id
+                      AND m.business_id = :business_id
+                      AND m.deleted_at IS NULL';
+        } else {
+            $sql = 'SELECT esc.created_at, esc.checked_in_at, esc.checked_out_at
+                    FROM estate_sale_customers esc
+                    WHERE esc.estate_sale_id = :estate_sale_id';
+            if (SchemaInspector::hasColumn('estate_sale_customers', 'business_id')) {
+                $sql .= ' AND esc.business_id = :business_id';
+            }
+            if (SchemaInspector::hasColumn('estate_sale_customers', 'deleted_at')) {
+                $sql .= ' AND esc.deleted_at IS NULL';
+            }
         }
 
         $stmt = Database::connection()->prepare($sql);

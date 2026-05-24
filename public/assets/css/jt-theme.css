@@ -1450,6 +1450,10 @@ a.admin-nav-tile:focus {
   color: #0d6efd;
 }
 
+.jt-billing-total--invoice {
+  color: #198754;
+}
+
 .billing-record-subline {
   margin-top: .1rem;
 }
@@ -1518,6 +1522,18 @@ a.admin-nav-tile:focus {
 .record-value {
   color: var(--jt-text);
   font-size: .92rem;
+}
+
+.record-value.jt-billing-total--estimate {
+  color: #0d6efd;
+}
+
+.record-value.jt-billing-total--invoice {
+  color: #198754;
+}
+
+.record-value.jt-billing-total--unpaid {
+  color: #dc3545;
 }
 
 .record-value-stack {

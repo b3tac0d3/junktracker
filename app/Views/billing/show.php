@@ -6,6 +6,7 @@ $business = is_array($business ?? null) ? $business : [];
 
 $recordId = (int) ($invoice['id'] ?? 0);
 $jobId = (int) ($invoice['job_id'] ?? 0);
+$clientId = (int) ($invoice['client_id'] ?? 0);
 $docType = strtolower(trim((string) ($invoice['type'] ?? 'invoice')));
 if (!in_array($docType, ['estimate', 'invoice'], true)) {
     $docType = 'invoice';
@@ -316,11 +317,23 @@ if ($docType === 'estimate') {
             </div>
             <div class="col-12 col-lg-6">
                 <div class="record-label">Client</div>
-                <div class="record-value fw-semibold"><?= e($clientName) ?></div>
+                <div class="record-value fw-semibold">
+                    <?php if ($clientId > 0 && $clientName !== '—'): ?>
+                        <a class="link-gray-dark fw-semibold text-decoration-none" href="<?= e(url('/clients/' . (string) $clientId)) ?>"><?= e($clientName) ?></a>
+                    <?php else: ?>
+                        <?= e($clientName) ?>
+                    <?php endif; ?>
+                </div>
             </div>
             <div class="col-12">
                 <div class="record-label">Job</div>
-                <div class="record-value fw-semibold"><?= e($jobTitle) ?></div>
+                <div class="record-value fw-semibold">
+                    <?php if ($jobId > 0): ?>
+                        <a class="link-gray-dark fw-semibold text-decoration-none" href="<?= e(url('/jobs/' . (string) $jobId)) ?>"><?= e($jobTitle !== '—' ? $jobTitle : ('Job #' . (string) $jobId)) ?></a>
+                    <?php else: ?>
+                        <?= e($jobTitle) ?>
+                    <?php endif; ?>
+                </div>
             </div>
             <div class="col-12">
                 <div class="record-label">Address</div>

@@ -203,7 +203,16 @@ window.addEventListener('DOMContentLoaded', () => {
           center: 'title',
           right: 'dayGridMonth,timeGridWeek,timeGridDay,listWeek'
         },
-    navLinks: false,
+    navLinks: true,
+    navLinkDayClick: (date) => {
+      calendar.changeView('timeGridDay', date);
+    },
+    dateClick: (info) => {
+      const viewType = info.view.type;
+      if (viewType === 'dayGridMonth' || viewType === 'dayGridWeek') {
+        calendar.changeView('timeGridDay', info.date);
+      }
+    },
     nowIndicator: true,
     dayMaxEvents: true,
     eventTimeFormat: { hour: 'numeric', minute: '2-digit', meridiem: 'short' },

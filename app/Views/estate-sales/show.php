@@ -39,6 +39,7 @@ $mapsAddressUrl = maps_directions_url_from_parts([
 $notes = trim((string) ($estateSale['notes'] ?? ''));
 $csrfToken = csrf_token();
 $stateOptions = us_state_options();
+$contactMethodOptions = \App\Models\EstateSale::futureSalesContactMethodOptions();
 $canRemoveCustomers = (bool) ($canRemoveCustomers ?? false);
 $expenses = is_array($expenses ?? null) ? $expenses : [];
 $expenseCategoryOptions = is_array($expenseCategoryOptions ?? null) ? $expenseCategoryOptions : [];
@@ -1070,41 +1071,77 @@ $customerActionsMenu = static function (
                     <div class="jt-submit-progress-bar"></div>
                 </div>
                 <div id="estate-sale-add-customer-error" class="alert alert-danger d-none"></div>
-                <div class="row g-3">
-                    <div class="col-12 col-md-6">
-                        <label class="form-label" for="estate-sale-customer-first-name">First name</label>
-                        <input id="estate-sale-customer-first-name" class="form-control" maxlength="90" autocomplete="off" />
+                <ul class="nav nav-tabs mb-3" id="estate-sale-add-customer-tabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" id="estate-sale-add-customer-find-tab" data-bs-toggle="tab" data-bs-target="#estate-sale-add-customer-find-pane" type="button" role="tab" aria-controls="estate-sale-add-customer-find-pane" aria-selected="true">Find existing</button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="estate-sale-add-customer-new-tab" data-bs-toggle="tab" data-bs-target="#estate-sale-add-customer-new-pane" type="button" role="tab" aria-controls="estate-sale-add-customer-new-pane" aria-selected="false">Add new</button>
+                    </li>
+                </ul>
+                <div class="tab-content">
+                    <div class="tab-pane fade show active" id="estate-sale-add-customer-find-pane" role="tabpanel" aria-labelledby="estate-sale-add-customer-find-tab" tabindex="0">
+                        <label class="form-label" for="estate-sale-customer-profile-search">Search all estate customers</label>
+                        <input id="estate-sale-customer-profile-search" type="search" class="form-control" placeholder="Name or phone number..." autocomplete="off" />
+                        <div class="form-text mb-3">Search by name or phone to find someone from a past sale and add them here without creating a duplicate.</div>
+                        <div id="estate-sale-customer-profile-results" class="list-group d-none"></div>
+                        <div id="estate-sale-customer-profile-empty" class="small muted d-none">No matching customers found.</div>
+                        <div id="estate-sale-customer-profile-hint" class="small muted">Type at least 2 characters to search.</div>
                     </div>
-                    <div class="col-12 col-md-6">
-                        <label class="form-label" for="estate-sale-customer-last-name">Last name</label>
-                        <input id="estate-sale-customer-last-name" class="form-control" maxlength="90" autocomplete="off" />
-                    </div>
-                    <div class="col-12">
-                        <label class="form-label" for="estate-sale-customer-email">Email</label>
-                        <input id="estate-sale-customer-email" type="email" class="form-control" maxlength="190" autocomplete="off" />
-                    </div>
-                    <div class="col-12 col-md-6">
-                        <label class="form-label" for="estate-sale-customer-phone">Phone</label>
-                        <input id="estate-sale-customer-phone" class="form-control" maxlength="40" autocomplete="off" />
-                    </div>
-                    <div class="col-12 col-md-6">
-                        <label class="form-label" for="estate-sale-customer-city">City</label>
-                        <input id="estate-sale-customer-city" class="form-control" maxlength="120" autocomplete="off" />
-                    </div>
-                    <div class="col-12 col-md-6">
-                        <label class="form-label" for="estate-sale-customer-state">State</label>
-                        <select id="estate-sale-customer-state" class="form-select">
-                            <option value="">—</option>
-                            <?php foreach ($stateOptions as $code => $label): ?>
-                                <option value="<?= e($code) ?>"><?= e($label) ?></option>
-                            <?php endforeach; ?>
-                        </select>
+                    <div class="tab-pane fade" id="estate-sale-add-customer-new-pane" role="tabpanel" aria-labelledby="estate-sale-add-customer-new-tab" tabindex="0">
+                        <div id="estate-sale-add-customer-duplicate-alert" class="alert alert-warning alert-persistent d-none mb-3" role="status" aria-live="polite"></div>
+                        <div class="row g-3">
+                            <div class="col-12 col-md-6">
+                                <label class="form-label" for="estate-sale-customer-first-name">First name</label>
+                                <input id="estate-sale-customer-first-name" class="form-control" maxlength="90" autocomplete="off" />
+                            </div>
+                            <div class="col-12 col-md-6">
+                                <label class="form-label" for="estate-sale-customer-last-name">Last name</label>
+                                <input id="estate-sale-customer-last-name" class="form-control" maxlength="90" autocomplete="off" />
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label" for="estate-sale-customer-email">Email</label>
+                                <input id="estate-sale-customer-email" type="email" class="form-control" maxlength="190" autocomplete="off" />
+                            </div>
+                            <div class="col-12 col-md-6">
+                                <label class="form-label" for="estate-sale-customer-phone">Phone</label>
+                                <input id="estate-sale-customer-phone" class="form-control" maxlength="40" autocomplete="off" />
+                            </div>
+                            <div class="col-12 col-md-6">
+                                <label class="form-label" for="estate-sale-customer-city">City</label>
+                                <input id="estate-sale-customer-city" class="form-control" maxlength="120" autocomplete="off" />
+                            </div>
+                            <div class="col-12 col-md-6">
+                                <label class="form-label" for="estate-sale-customer-state">State</label>
+                                <select id="estate-sale-customer-state" class="form-select">
+                                    <option value="">—</option>
+                                    <?php foreach ($stateOptions as $code => $label): ?>
+                                        <option value="<?= e($code) ?>"><?= e($label) ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                            <div class="col-12">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="estate-sale-customer-subscribes" value="1" />
+                                    <label class="form-check-label" for="estate-sale-customer-subscribes">Subscriber to future sales</label>
+                                </div>
+                            </div>
+                            <div class="col-12 col-md-6">
+                                <label class="form-label" for="estate-sale-customer-contact-method">Preferred contact for future sales</label>
+                                <select id="estate-sale-customer-contact-method" class="form-select" disabled>
+                                    <option value="">Choose...</option>
+                                    <?php foreach ($contactMethodOptions as $value => $label): ?>
+                                        <option value="<?= e($value) ?>"><?= e($label) ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-primary" id="estate-sale-add-customer-save">Save &amp; add</button>
+                <button type="button" class="btn btn-primary d-none" id="estate-sale-add-customer-save">Save &amp; add</button>
             </div>
         </div>
     </div>
@@ -1192,6 +1229,9 @@ window.addEventListener('DOMContentLoaded', () => {
 
     const csrfToken = <?= json_encode($csrfToken) ?>;
     const quickCreateUrl = <?= json_encode(url('/estate-sales/' . (string) $estateSaleId . '/quick-create-customer')) ?>;
+    const attachCustomerUrl = <?= json_encode(url('/estate-sales/' . (string) $estateSaleId . '/attach-customer')) ?>;
+    const customerProfileSearchUrl = <?= json_encode(url('/estate-sales/' . (string) $estateSaleId . '/customer-profile-search')) ?>;
+    const customerDuplicateCheckUrl = <?= json_encode(url('/estate-customers/check-duplicates')) ?>;
     const removeCustomerBase = <?= json_encode(url('/estate-sales/' . (string) $estateSaleId . '/customers/')) ?>;
     const saleCreateBase = <?= json_encode(url('/estate-sales/' . (string) $estateSaleId . '/sales/create')) ?>;
     const estateSaleId = <?= json_encode($estateSaleId) ?>;
@@ -1202,6 +1242,15 @@ window.addEventListener('DOMContentLoaded', () => {
     const modal = modalEl && window.bootstrap ? bootstrap.Modal.getOrCreateInstance(modalEl) : null;
     const saveBtn = document.getElementById('estate-sale-add-customer-save');
     const errorBox = document.getElementById('estate-sale-add-customer-error');
+    const duplicateAlertBox = document.getElementById('estate-sale-add-customer-duplicate-alert');
+    const subscribesInput = document.getElementById('estate-sale-customer-subscribes');
+    const contactMethodInput = document.getElementById('estate-sale-customer-contact-method');
+    const profileSearchInput = document.getElementById('estate-sale-customer-profile-search');
+    const profileResultsBox = document.getElementById('estate-sale-customer-profile-results');
+    const profileEmptyBox = document.getElementById('estate-sale-customer-profile-empty');
+    const profileHintBox = document.getElementById('estate-sale-customer-profile-hint');
+    const addCustomerNewTab = document.getElementById('estate-sale-add-customer-new-tab');
+    const addCustomerFindTab = document.getElementById('estate-sale-add-customer-find-tab');
     const alertBox = document.getElementById('estate-sale-customer-alert');
     const customersList = document.getElementById('estate-sale-customers-list');
     const customersEmpty = document.getElementById('estate-sale-customers-empty');
@@ -1487,7 +1536,318 @@ window.addEventListener('DOMContentLoaded', () => {
         'estate-sale-customer-phone',
         'estate-sale-customer-city',
         'estate-sale-customer-state',
+        'estate-sale-customer-contact-method',
     ];
+
+    const syncAddCustomerContactMethod = () => {
+        if (!contactMethodInput || !subscribesInput) {
+            return;
+        }
+        const enabled = subscribesInput.checked;
+        contactMethodInput.disabled = !enabled;
+        if (!enabled) {
+            contactMethodInput.value = '';
+        }
+    };
+
+    subscribesInput?.addEventListener('change', syncAddCustomerContactMethod);
+
+    const duplicateReasonLabels = {
+        name: 'Same first and last name',
+        phone: 'Same phone number',
+        email: 'Same email address',
+    };
+
+    const customerDuplicateDigitsOnly = (value) => String(value || '').replace(/\D/g, '');
+
+    const shouldCheckCustomerDuplicates = () => {
+        const fn = String(document.getElementById('estate-sale-customer-first-name')?.value || '').trim();
+        const ln = String(document.getElementById('estate-sale-customer-last-name')?.value || '').trim();
+        const phoneDigits = customerDuplicateDigitsOnly(document.getElementById('estate-sale-customer-phone')?.value);
+        const em = String(document.getElementById('estate-sale-customer-email')?.value || '').trim();
+        if (fn !== '' && ln !== '') {
+            return true;
+        }
+        if (phoneDigits.length >= 7) {
+            return true;
+        }
+        return em !== '' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em);
+    };
+
+    const buildCustomerDuplicateQuery = () => {
+        const p = new URLSearchParams();
+        p.set('first_name', String(document.getElementById('estate-sale-customer-first-name')?.value || '').trim());
+        p.set('last_name', String(document.getElementById('estate-sale-customer-last-name')?.value || '').trim());
+        p.set('email', String(document.getElementById('estate-sale-customer-email')?.value || '').trim());
+        p.set('phone', String(document.getElementById('estate-sale-customer-phone')?.value || '').trim());
+        p.set('estate_sale_id', String(estateSaleId));
+        return p.toString();
+    };
+
+    let customerDuplicateDebounce = null;
+
+    const renderCustomerDuplicateAlert = (matches) => {
+        if (!duplicateAlertBox) {
+            return;
+        }
+        duplicateAlertBox.classList.add('d-none');
+        duplicateAlertBox.innerHTML = '';
+        if (!matches || matches.length === 0) {
+            return;
+        }
+        const title = document.createElement('strong');
+        title.textContent = 'Possible duplicate customer(s) already in the system:';
+        duplicateAlertBox.appendChild(title);
+        const list = document.createElement('ul');
+        list.className = 'mb-0 mt-2 ps-3 list-unstyled';
+        matches.forEach((match) => {
+            const item = document.createElement('li');
+            item.className = 'd-flex flex-wrap align-items-center justify-content-between gap-2 py-1';
+            const reasons = (match.reasons || []).map((r) => duplicateReasonLabels[r] || r).join(', ');
+            const saleNote = match.same_sale ? ' (already on this sale)' : (' · ' + (match.estate_sale_title || 'Estate sale'));
+            const text = document.createElement('span');
+            text.textContent = `#${match.id} ${match.display_name}${saleNote}${reasons ? ' — ' + reasons : ''}`;
+            item.appendChild(text);
+            if (!match.same_sale) {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'btn btn-sm btn-outline-primary estate-sale-attach-existing-customer';
+                btn.dataset.customerId = String(match.id);
+                btn.textContent = 'Add to this sale';
+                item.appendChild(btn);
+            }
+            list.appendChild(item);
+        });
+        duplicateAlertBox.appendChild(list);
+        duplicateAlertBox.classList.remove('d-none');
+    };
+
+    const finishCustomerAdded = (customer, presence, message) => {
+        appendCustomerRow(customer || {});
+        if (presence) {
+            updatePresenceSummary(presence);
+        }
+        const customersTabTrigger = document.getElementById('estate-sale-customers-tab');
+        if (customersTabTrigger && window.bootstrap) {
+            bootstrap.Tab.getOrCreateInstance(customersTabTrigger).show();
+        }
+        if (modal && modalEl) {
+            modalEl.dataset.jtAllowClose = '1';
+            modal.hide();
+        }
+        clearModal();
+        showAlert(message || 'Customer added.');
+    };
+
+    const attachExistingCustomer = async (customerId, triggerBtn) => {
+        const id = Number(customerId || 0);
+        if (id <= 0 || !attachCustomerUrl) {
+            return;
+        }
+        if (errorBox) {
+            errorBox.classList.add('d-none');
+            errorBox.textContent = '';
+        }
+        if (triggerBtn && window.jtSubmitLock && !window.jtSubmitLock.lockModalSave(triggerBtn, { label: 'Adding…' })) {
+            return;
+        }
+
+        const body = new URLSearchParams();
+        body.set('csrf_token', csrfToken);
+        body.set('customer_id', String(id));
+
+        try {
+            const response = await fetch(attachCustomerUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'application/json',
+                },
+                body: body.toString(),
+            });
+            const payload = await response.json();
+            if (!response.ok || !payload || !payload.ok) {
+                throw new Error((payload && payload.error) ? payload.error : 'Could not add customer.');
+            }
+            finishCustomerAdded(payload.customer, payload.presence, payload.message || 'Customer added to this sale.');
+        } catch (err) {
+            const message = err instanceof Error ? err.message : 'Could not add customer.';
+            if (errorBox) {
+                errorBox.textContent = message;
+                errorBox.classList.remove('d-none');
+                errorBox.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+            }
+            if (profileEmptyBox) {
+                profileEmptyBox.textContent = message;
+                profileEmptyBox.classList.remove('d-none');
+            }
+        } finally {
+            if (triggerBtn && window.jtSubmitLock) {
+                window.jtSubmitLock.unlockModalSave(triggerBtn);
+            }
+        }
+    };
+
+    let profileSearchDebounce = null;
+
+    const renderProfileSearchResults = (results) => {
+        if (!profileResultsBox || !profileEmptyBox || !profileHintBox) {
+            return;
+        }
+        profileResultsBox.innerHTML = '';
+        profileResultsBox.classList.add('d-none');
+        profileEmptyBox.classList.add('d-none');
+        profileHintBox.classList.add('d-none');
+
+        if (!results || results.length === 0) {
+            profileEmptyBox.classList.remove('d-none');
+            return;
+        }
+
+        results.forEach((row) => {
+            const id = Number(row.id || 0);
+            if (id <= 0) {
+                return;
+            }
+            const item = document.createElement('div');
+            item.className = 'list-group-item d-flex flex-wrap align-items-center justify-content-between gap-2';
+            const metaParts = [row.email || '', row.phone || '', [row.city, row.state].filter(Boolean).join(', ')].filter(Boolean);
+            const alreadyOnSale = !!row.already_on_sale;
+            item.innerHTML = `
+                <div>
+                    <div class="fw-semibold">${String(row.name || ('Customer #' + id)).replace(/</g, '&lt;')}</div>
+                    <div class="small muted">${metaParts.join(' · ').replace(/</g, '&lt;') || '—'}</div>
+                </div>`;
+            if (alreadyOnSale) {
+                const badge = document.createElement('span');
+                badge.className = 'badge bg-secondary';
+                badge.textContent = 'On this sale';
+                item.appendChild(badge);
+            } else {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'btn btn-sm btn-primary estate-sale-attach-existing-customer';
+                btn.dataset.customerId = String(id);
+                btn.textContent = 'Add to sale';
+                item.appendChild(btn);
+            }
+            profileResultsBox.appendChild(item);
+        });
+        profileResultsBox.classList.remove('d-none');
+    };
+
+    const runProfileSearch = async () => {
+        const query = String(profileSearchInput?.value || '').trim();
+        if (!customerProfileSearchUrl || !profileHintBox) {
+            return;
+        }
+        if (query.length < 2) {
+            if (profileResultsBox) {
+                profileResultsBox.classList.add('d-none');
+                profileResultsBox.innerHTML = '';
+            }
+            if (profileEmptyBox) {
+                profileEmptyBox.classList.add('d-none');
+            }
+            profileHintBox.classList.remove('d-none');
+            return;
+        }
+        try {
+            const res = await fetch(`${customerProfileSearchUrl}?q=${encodeURIComponent(query)}`, {
+                credentials: 'same-origin',
+                headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            });
+            const data = await res.json().catch(() => null);
+            if (!res.ok || !data || !data.ok) {
+                if (profileEmptyBox) {
+                    profileEmptyBox.textContent = (data && data.error) ? String(data.error) : 'Could not search customers. Please try again.';
+                    profileEmptyBox.classList.remove('d-none');
+                }
+                return;
+            }
+            if (profileEmptyBox) {
+                profileEmptyBox.textContent = 'No matching customers found.';
+            }
+            renderProfileSearchResults(data.results || []);
+        } catch (_err) {
+            if (profileEmptyBox) {
+                profileEmptyBox.textContent = 'Could not search customers. Please try again.';
+                profileEmptyBox.classList.remove('d-none');
+            }
+        }
+    };
+
+    const syncAddCustomerModalFooter = () => {
+        const newPaneActive = document.getElementById('estate-sale-add-customer-new-pane')?.classList.contains('active');
+        if (saveBtn) {
+            saveBtn.classList.toggle('d-none', !newPaneActive);
+        }
+    };
+
+    addCustomerNewTab?.addEventListener('shown.bs.tab', syncAddCustomerModalFooter);
+    addCustomerFindTab?.addEventListener('shown.bs.tab', syncAddCustomerModalFooter);
+
+    profileSearchInput?.addEventListener('input', () => {
+        clearTimeout(profileSearchDebounce);
+        profileSearchDebounce = setTimeout(() => {
+            void runProfileSearch();
+        }, 300);
+    });
+
+    modalEl?.addEventListener('click', (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) {
+            return;
+        }
+        const attachBtn = target.closest('.estate-sale-attach-existing-customer');
+        if (!attachBtn) {
+            return;
+        }
+        event.preventDefault();
+        void attachExistingCustomer(attachBtn.dataset.customerId, attachBtn);
+    });
+
+    const runCustomerDuplicateCheck = async () => {
+        if (!shouldCheckCustomerDuplicates()) {
+            renderCustomerDuplicateAlert([]);
+            return [];
+        }
+        try {
+            const res = await fetch(`${customerDuplicateCheckUrl}?${buildCustomerDuplicateQuery()}`, {
+                credentials: 'same-origin',
+                headers: { Accept: 'application/json' },
+            });
+            if (!res.ok) {
+                return [];
+            }
+            const data = await res.json();
+            const matches = data.matches || [];
+            renderCustomerDuplicateAlert(matches);
+            return matches;
+        } catch (_err) {
+            return [];
+        }
+    };
+
+    const scheduleCustomerDuplicateCheck = () => {
+        clearTimeout(customerDuplicateDebounce);
+        customerDuplicateDebounce = setTimeout(() => {
+            void runCustomerDuplicateCheck();
+        }, 400);
+    };
+
+    ['estate-sale-customer-first-name', 'estate-sale-customer-last-name', 'estate-sale-customer-email', 'estate-sale-customer-phone'].forEach((id) => {
+        const el = document.getElementById(id);
+        if (!el) {
+            return;
+        }
+        el.addEventListener('input', scheduleCustomerDuplicateCheck);
+        el.addEventListener('blur', () => {
+            clearTimeout(customerDuplicateDebounce);
+            void runCustomerDuplicateCheck();
+        });
+    });
 
     const showAlert = (message, type = 'success') => {
         if (!alertBox) {
@@ -1506,10 +1866,35 @@ window.addEventListener('DOMContentLoaded', () => {
             }
             el.value = '';
         });
+        if (subscribesInput) {
+            subscribesInput.checked = false;
+        }
+        syncAddCustomerContactMethod();
+        if (duplicateAlertBox) {
+            duplicateAlertBox.classList.add('d-none');
+            duplicateAlertBox.innerHTML = '';
+        }
         if (errorBox) {
             errorBox.classList.add('d-none');
             errorBox.textContent = '';
         }
+        if (profileSearchInput) {
+            profileSearchInput.value = '';
+        }
+        if (profileResultsBox) {
+            profileResultsBox.innerHTML = '';
+            profileResultsBox.classList.add('d-none');
+        }
+        if (profileEmptyBox) {
+            profileEmptyBox.classList.add('d-none');
+        }
+        if (profileHintBox) {
+            profileHintBox.classList.remove('d-none');
+        }
+        if (addCustomerFindTab && window.bootstrap) {
+            bootstrap.Tab.getOrCreateInstance(addCustomerFindTab).show();
+        }
+        syncAddCustomerModalFooter();
         if (saveBtn && window.jtSubmitLock) {
             window.jtSubmitLock.unlockModalSave(saveBtn);
         }
@@ -1667,10 +2052,9 @@ window.addEventListener('DOMContentLoaded', () => {
             bootstrap.Tab.getOrCreateInstance(customersTabTrigger).show();
         }
         modal.show();
-        const firstField = document.getElementById('estate-sale-customer-first-name');
-        if (firstField) {
-            firstField.focus();
-        }
+        window.setTimeout(() => {
+            profileSearchInput?.focus();
+        }, 200);
     };
 
     if (addCustomerTriggers.length > 0 && modal) {
@@ -1680,7 +2064,7 @@ window.addEventListener('DOMContentLoaded', () => {
     }
 
     if (saveBtn) {
-        saveBtn.addEventListener('click', () => {
+        saveBtn.addEventListener('click', async () => {
             if (saveBtn.disabled || saveBtn.dataset.jtSubmitLocked === '1') {
                 return;
             }
@@ -1688,6 +2072,33 @@ window.addEventListener('DOMContentLoaded', () => {
                 errorBox.classList.add('d-none');
                 errorBox.textContent = '';
             }
+
+            const subscribes = !!subscribesInput?.checked;
+            const contactMethod = String(contactMethodInput?.value || '').trim();
+            if (subscribes && contactMethod === '') {
+                if (errorBox) {
+                    errorBox.textContent = 'Choose how to contact them about future sales.';
+                    errorBox.classList.remove('d-none');
+                }
+                return;
+            }
+
+            const matches = await runCustomerDuplicateCheck();
+            if (matches.length > 0) {
+                const summary = matches
+                    .map((m) => {
+                        const saleNote = m.same_sale ? ' (this sale)' : (' @ ' + (m.estate_sale_title || 'sale'));
+                        return `#${m.id} ${m.display_name}${saleNote}`;
+                    })
+                    .join('; ');
+                const ok = window.confirm(
+                    `Possible duplicate customer(s) already in the system:\n${summary}\n\nAdd anyway?`
+                );
+                if (!ok) {
+                    return;
+                }
+            }
+
             if (!window.jtSubmitLock || !window.jtSubmitLock.lockModalSave(saveBtn, { label: 'Saving…' })) {
                 return;
             }
@@ -1700,6 +2111,10 @@ window.addEventListener('DOMContentLoaded', () => {
             body.set('phone', String(document.getElementById('estate-sale-customer-phone')?.value || '').trim());
             body.set('city', String(document.getElementById('estate-sale-customer-city')?.value || '').trim());
             body.set('state', String(document.getElementById('estate-sale-customer-state')?.value || '').trim());
+            if (subscribes) {
+                body.set('subscribes_to_future_sales', '1');
+                body.set('future_sales_contact_method', contactMethod);
+            }
 
             fetch(quickCreateUrl, {
                 method: 'POST',

@@ -89,6 +89,7 @@
   color: #334155 !important;
   text-decoration: none !important;
   font-weight: 700;
+  cursor: pointer;
 }
 
 .jt-calendar .fc .fc-day-other a.fc-daygrid-day-number,
@@ -105,6 +106,7 @@
   letter-spacing: 0.04em;
   text-transform: uppercase;
   font-size: 0.78rem;
+  cursor: pointer;
 }
 
 .jt-calendar .fc a.fc-col-header-cell-cushion:hover,

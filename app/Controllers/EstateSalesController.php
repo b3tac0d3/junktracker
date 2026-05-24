@@ -7,6 +7,7 @@ namespace App\Controllers;
 use App\Models\EstateSale;
 use App\Models\FormSelectValue;
 use App\Models\Sale;
+use App\Models\SchemaInspector;
 use App\Models\TimeEntry;
 use Core\Controller;
 
@@ -812,6 +813,67 @@ final class EstateSalesController extends Controller
         ], 201);
     }
 
+    public function attachCustomer(array $params): void
+    {
+        require_business_role(['general_user', 'admin']);
+
+        if (!verify_csrf($_POST['csrf_token'] ?? null)) {
+            $this->json(['ok' => false, 'error' => 'Session expired. Please reload and try again.'], 422);
+            return;
+        }
+
+        $businessId = current_business_id();
+        $estateSaleId = (int) ($params['id'] ?? 0);
+        $customerId = (int) ($_POST['customer_id'] ?? 0);
+        $actorId = (int) (auth_user_id() ?? 0);
+
+        if ($estateSaleId <= 0 || EstateSale::findForBusiness($businessId, $estateSaleId) === null) {
+            $this->json(['ok' => false, 'error' => 'Estate sale not found.'], 404);
+            return;
+        }
+
+        if ($customerId <= 0) {
+            $this->json(['ok' => false, 'error' => 'Choose a customer to add.'], 422);
+            return;
+        }
+
+        if (EstateSale::isCustomerOnSale($businessId, $estateSaleId, $customerId)) {
+            $this->json(['ok' => false, 'error' => 'That customer is already on this sale.'], 422);
+            return;
+        }
+
+        if (!SchemaInspector::hasTable('estate_sale_customer_memberships')) {
+            $this->json([
+                'ok' => false,
+                'error' => 'Adding customers from other sales requires a database update. Run database/migrations/2026-05-24_estate_sale_customer_memberships.sql, then try again.',
+            ], 422);
+            return;
+        }
+
+        if (!EstateSale::attachCustomerToSale($businessId, $estateSaleId, $customerId, $actorId)) {
+            $this->json(['ok' => false, 'error' => 'Could not add customer to this sale. Please try again.'], 422);
+            return;
+        }
+
+        $customer = EstateSale::findCustomerForSale($businessId, $estateSaleId, $customerId);
+        if (!is_array($customer)) {
+            $this->json(['ok' => false, 'error' => 'Could not load customer.'], 422);
+            return;
+        }
+
+        audit('estate_sale_customer_attached', 'estate_sale_customers', $customerId, [
+            'estate_sale_id' => $estateSaleId,
+            'name' => EstateSale::customerDisplayName($customer),
+        ]);
+
+        $this->json([
+            'ok' => true,
+            'message' => 'Customer added to this sale.',
+            'customer' => EstateSale::customerPayloadForJson($customer),
+            'presence' => EstateSale::customerPresenceSummary($businessId, $estateSaleId),
+        ], 201);
+    }
+
     public function showCustomer(array $params): void
     {
         require_business_role(['general_user', 'admin']);
@@ -871,6 +933,7 @@ final class EstateSalesController extends Controller
             'customer' => $customer,
             'form' => $this->customerFormFromRow($customer),
             'errors' => [],
+            'contactMethodOptions' => EstateSale::futureSalesContactMethodOptions(),
         ]);
     }
 
@@ -909,6 +972,7 @@ final class EstateSalesController extends Controller
                 'customer' => $customer,
                 'form' => $form,
                 'errors' => $errors,
+                'contactMethodOptions' => EstateSale::futureSalesContactMethodOptions(),
             ]);
 
             return;
@@ -1115,6 +1179,49 @@ final class EstateSalesController extends Controller
         }
 
         redirect('/estate-sales/' . (string) $estateSaleId . '?tab=expenses');
+    }
+
+    public function customerProfileSearch(array $params): void
+    {
+        require_business_role(['general_user', 'admin']);
+
+        $businessId = current_business_id();
+        $estateSaleId = (int) ($params['id'] ?? 0);
+        if ($estateSaleId <= 0 || EstateSale::findForBusiness($businessId, $estateSaleId) === null) {
+            $this->json(['ok' => false, 'error' => 'Estate sale not found.'], 404);
+            return;
+        }
+
+        $query = trim((string) ($_GET['q'] ?? ''));
+        $items = EstateSale::searchCustomerProfiles($businessId, $estateSaleId, $query, 12);
+
+        $results = [];
+        foreach ($items as $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+
+            $id = (int) ($item['id'] ?? 0);
+            $name = EstateSale::customerDisplayName($item);
+            if ($id <= 0 || $name === '') {
+                continue;
+            }
+
+            $results[] = [
+                'id' => $id,
+                'name' => $name,
+                'phone' => trim((string) ($item['phone'] ?? '')),
+                'email' => trim((string) ($item['email'] ?? '')),
+                'city' => trim((string) ($item['city'] ?? '')),
+                'state' => trim((string) ($item['state'] ?? '')),
+                'already_on_sale' => !empty($item['already_on_sale']),
+            ];
+        }
+
+        $this->json([
+            'ok' => true,
+            'results' => $results,
+        ]);
     }
 
     public function customerSearch(array $params): void
@@ -1737,6 +1844,8 @@ final class EstateSalesController extends Controller
             'phone' => trim((string) ($customer['phone'] ?? '')),
             'city' => trim((string) ($customer['city'] ?? '')),
             'state' => trim((string) ($customer['state'] ?? '')),
+            'subscribes_to_future_sales' => !empty($customer['subscribes_to_future_sales']) ? '1' : '',
+            'future_sales_contact_method' => EstateSale::normalizeFutureSalesContactMethod($customer['future_sales_contact_method'] ?? null) ?? '',
         ];
     }
 

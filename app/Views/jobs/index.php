@@ -38,6 +38,14 @@ foreach ($jobTypeOptionsRaw as $jobTypeValue => $jobTypeLabelRaw) {
     }
     $jobTypeOptions[$value] = $label;
 }
+$jobBillingPriceClass = static function (string $priceState): string {
+    return match ($priceState) {
+        'estimate' => 'jt-billing-total jt-billing-total--estimate',
+        'invoice' => 'jt-billing-total jt-billing-total--invoice',
+        'overdue' => 'jt-billing-total jt-billing-total--unpaid',
+        default => '',
+    };
+};
 ?>
 
 <div class="page-header d-flex flex-wrap align-items-end justify-content-between gap-2">
@@ -52,26 +60,22 @@ foreach ($jobTypeOptionsRaw as $jobTypeValue => $jobTypeLabelRaw) {
 
 <section class="card index-card mb-3">
     <div class="card-body">
-        <div class="record-row-fields record-row-fields-5">
+        <div class="record-row-fields record-row-fields-4">
             <div class="record-field">
-                <span class="record-label">Job Potential</span>
-                <span class="record-value">$<?= e(number_format((float) ($filteredSummary['job_potential'] ?? 0), 2)) ?></span>
+                <span class="record-label">Pending Invoices</span>
+                <span class="record-value jt-billing-total jt-billing-total--invoice">$<?= e(number_format((float) ($filteredSummary['pending_invoices'] ?? 0), 2)) ?></span>
             </div>
             <div class="record-field">
-                <span class="record-label">Gross MTD</span>
-                <span class="record-value">$<?= e(number_format((float) ($filteredSummary['gross_mtd'] ?? 0), 2)) ?></span>
+                <span class="record-label">Past Due Invoices</span>
+                <span class="record-value jt-billing-total jt-billing-total--unpaid">$<?= e(number_format((float) ($filteredSummary['past_due_invoices'] ?? 0), 2)) ?></span>
             </div>
             <div class="record-field">
-                <span class="record-label">Net MTD</span>
-                <span class="record-value">$<?= e(number_format((float) ($filteredSummary['net_mtd'] ?? 0), 2)) ?></span>
+                <span class="record-label">Pending Estimates</span>
+                <span class="record-value jt-billing-total jt-billing-total--estimate">$<?= e(number_format((float) ($filteredSummary['pending_estimates'] ?? 0), 2)) ?></span>
             </div>
             <div class="record-field">
-                <span class="record-label">Gross YTD</span>
-                <span class="record-value">$<?= e(number_format((float) ($filteredSummary['gross_ytd'] ?? 0), 2)) ?></span>
-            </div>
-            <div class="record-field">
-                <span class="record-label">Net YTD</span>
-                <span class="record-value">$<?= e(number_format((float) ($filteredSummary['net_ytd'] ?? 0), 2)) ?></span>
+                <span class="record-label">Total Invoice Due</span>
+                <span class="record-value">$<?= e(number_format((float) ($filteredSummary['total_invoice_due'] ?? 0), 2)) ?></span>
             </div>
         </div>
     </div>
@@ -167,7 +171,7 @@ foreach ($jobTypeOptionsRaw as $jobTypeValue => $jobTypeLabelRaw) {
                                     <span class="badge text-bg-secondary">Deactivated</span>
                                 <?php endif; ?>
                             </div>
-                            <div class="record-row-fields record-row-fields-4">
+                            <div class="record-row-fields record-row-fields-5">
                                 <div class="record-field">
                                     <span class="record-label">Scheduled</span>
                                     <span class="record-value"><?= e(format_datetime((string) ($job['scheduled_start_at'] ?? null))) ?></span>
@@ -183,6 +187,19 @@ foreach ($jobTypeOptionsRaw as $jobTypeValue => $jobTypeLabelRaw) {
                                 <div class="record-field">
                                     <span class="record-label">City</span>
                                     <span class="record-value"><?= e(trim((string) ($job['city'] ?? '')) ?: '—') ?></span>
+                                </div>
+                                <div class="record-field">
+                                    <span class="record-label">Price</span>
+                                    <?php
+                                    $billingTotal = $job['billing_total'] ?? null;
+                                    $billingPriceState = trim((string) ($job['billing_price_state'] ?? ''));
+                                    $billingClass = $jobBillingPriceClass($billingPriceState);
+                                    ?>
+                                    <?php if ($billingTotal !== null && $billingClass !== ''): ?>
+                                        <span class="record-value <?= e($billingClass) ?>"><?= e(format_money_usd((float) $billingTotal)) ?></span>
+                                    <?php else: ?>
+                                        <span class="record-value">—</span>
+                                    <?php endif; ?>
                                 </div>
                             </div>
                         </a>

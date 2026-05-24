@@ -48,6 +48,11 @@ $phone = trim((string) ($customer['phone'] ?? ''));
 $city = trim((string) ($customer['city'] ?? ''));
 $state = trim((string) ($customer['state'] ?? ''));
 $cityState = trim(implode(', ', array_filter([$city, $state], static fn (string $v): bool => $v !== '')));
+$subscribesFutureSales = !empty($customer['subscribes_to_future_sales']);
+$futureSalesContactLabel = \App\Models\EstateSale::futureSalesContactMethodLabel($customer['future_sales_contact_method'] ?? null);
+$futureSalesLabel = $subscribesFutureSales
+    ? ('Yes' . ($futureSalesContactLabel !== '' ? ' · ' . $futureSalesContactLabel : ''))
+    : 'No';
 $csrfToken = csrf_token();
 $backUrl = url('/estate-sales/' . (string) $estateSaleId . '?tab=customers');
 $editUrl = url('/estate-sales/' . (string) $estateSaleId . '/customers/' . (string) $customerId . '/edit');
@@ -124,7 +129,7 @@ $canCheckOut = $checkInStatus === 'inside';
         <strong><i class="fas fa-user me-2"></i>Customer details</strong>
     </div>
     <div class="card-body">
-        <div class="record-row-fields record-row-fields-4">
+        <div class="record-row-fields record-row-fields-5">
             <div class="record-field">
                 <span class="record-label">Email</span>
                 <span class="record-value"><?= e($email !== '' ? $email : '—') ?></span>
@@ -136,6 +141,10 @@ $canCheckOut = $checkInStatus === 'inside';
             <div class="record-field">
                 <span class="record-label">City / State</span>
                 <span class="record-value"><?= e($cityState !== '' ? $cityState : '—') ?></span>
+            </div>
+            <div class="record-field">
+                <span class="record-label">Future sales</span>
+                <span class="record-value"><?= e($futureSalesLabel) ?></span>
             </div>
             <div class="record-field">
                 <span class="record-label">Latest visit</span>

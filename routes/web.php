@@ -16,6 +16,7 @@ use App\Controllers\ClientPortalController;
 use App\Controllers\CronController;
 use App\Controllers\DeliveriesController;
 use App\Controllers\EstateSalesController;
+use App\Controllers\EstateSaleCustomersController;
 use App\Controllers\DepositsController;
 use App\Controllers\BoloController;
 use App\Controllers\ClientsController;
@@ -208,6 +209,9 @@ $router->get('/cron/daily-digest', [CronController::class, 'dailyDigest']);
 
 $router->get('/estate-sale-records', [EstateSalesController::class, 'records']);
 
+$router->get('/estate-customers', [EstateSaleCustomersController::class, 'index']);
+$router->get('/estate-customers/check-duplicates', [EstateSaleCustomersController::class, 'checkDuplicates']);
+
 $router->get('/estate-sales', [EstateSalesController::class, 'index']);
 $router->get('/estate-sales/create', [EstateSalesController::class, 'create']);
 $router->post('/estate-sales', [EstateSalesController::class, 'store']);
@@ -215,6 +219,8 @@ $router->get('/estate-sales/{id}/edit', [EstateSalesController::class, 'edit']);
 $router->post('/estate-sales/{id}/update', [EstateSalesController::class, 'update']);
 $router->post('/estate-sales/{id}/delete', [EstateSalesController::class, 'delete']);
 $router->post('/estate-sales/{id}/quick-create-customer', [EstateSalesController::class, 'quickCreateCustomer']);
+$router->post('/estate-sales/{id}/attach-customer', [EstateSalesController::class, 'attachCustomer']);
+$router->get('/estate-sales/{id}/customer-profile-search', [EstateSalesController::class, 'customerProfileSearch']);
 $router->post('/estate-sales/{id}/quick-create-expense', [EstateSalesController::class, 'quickCreateExpense']);
 $router->post('/estate-sales/{id}/customers/{customerId}/remove', [EstateSalesController::class, 'removeCustomer']);
 $router->post('/estate-sales/{id}/customers/{customerId}/check-in', [EstateSalesController::class, 'checkInCustomer']);

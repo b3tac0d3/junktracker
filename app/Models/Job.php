@@ -168,7 +168,191 @@ final class Job
         $stmt->execute();
 
         $rows = $stmt->fetchAll();
-        return is_array($rows) ? $rows : [];
+        if (!is_array($rows)) {
+            return [];
+        }
+
+        return self::enrichIndexRowsWithBilling($rows, $businessId);
+    }
+
+    /**
+     * @param list<array<string, mixed>> $rows
+     * @return list<array<string, mixed>>
+     */
+    public static function enrichIndexRowsWithBilling(array $rows, int $businessId): array
+    {
+        if ($rows === [] || !SchemaInspector::hasTable('invoices') || !SchemaInspector::hasColumn('invoices', 'job_id')) {
+            return $rows;
+        }
+
+        $jobIds = [];
+        foreach ($rows as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $jobId = (int) ($row['id'] ?? 0);
+            if ($jobId > 0) {
+                $jobIds[$jobId] = $jobId;
+            }
+        }
+        if ($jobIds === []) {
+            return $rows;
+        }
+
+        $billingByJob = self::indexBillingByJobIds($businessId, array_values($jobIds));
+        foreach ($rows as &$row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $jobId = (int) ($row['id'] ?? 0);
+            $billing = $billingByJob[$jobId] ?? null;
+            if (!is_array($billing)) {
+                $row['billing_total'] = null;
+                $row['billing_price_state'] = '';
+                $row['billing_doc_id'] = 0;
+                continue;
+            }
+            $row['billing_total'] = (float) ($billing['total'] ?? 0);
+            $row['billing_price_state'] = self::billingListPriceState($billing);
+            $row['billing_doc_id'] = (int) ($billing['id'] ?? 0);
+        }
+        unset($row);
+
+        return $rows;
+    }
+
+    /**
+     * @param list<int> $jobIds
+     * @return array<int, array<string, mixed>>
+     */
+    public static function indexBillingByJobIds(int $businessId, array $jobIds): array
+    {
+        $jobIds = array_values(array_unique(array_filter(array_map(static fn ($id): int => (int) $id, $jobIds), static fn (int $id): bool => $id > 0)));
+        if ($businessId <= 0 || $jobIds === [] || !SchemaInspector::hasTable('invoices') || !SchemaInspector::hasColumn('invoices', 'job_id')) {
+            return [];
+        }
+
+        $placeholders = implode(', ', array_fill(0, count($jobIds), '?'));
+        $totalSql = SchemaInspector::hasColumn('invoices', 'total')
+            ? 'COALESCE(i.total, 0)'
+            : (SchemaInspector::hasColumn('invoices', 'subtotal') ? 'COALESCE(i.subtotal, 0)' : '0');
+        $dueDateSql = SchemaInspector::hasColumn('invoices', 'due_date') ? 'i.due_date' : 'NULL';
+        $statusSql = SchemaInspector::hasColumn('invoices', 'status') ? 'i.status' : "''";
+        $typeSql = SchemaInspector::hasColumn('invoices', 'type')
+            ? "LOWER(COALESCE(NULLIF(TRIM(i.type), ''), 'invoice'))"
+            : "'invoice'";
+
+        $paidSql = '0';
+        if (SchemaInspector::hasTable('payments') && SchemaInspector::hasColumn('payments', 'invoice_id') && SchemaInspector::hasColumn('payments', 'amount')) {
+            $payDel = SchemaInspector::hasColumn('payments', 'deleted_at') ? 'AND p.deleted_at IS NULL' : '';
+            $payBiz = SchemaInspector::hasColumn('payments', 'business_id') ? 'AND p.business_id = i.business_id' : '';
+            $paidSql = "(SELECT COALESCE(SUM(p.amount), 0)
+                         FROM payments p
+                         WHERE p.invoice_id = i.id {$payDel} {$payBiz})";
+        }
+
+        $where = ['i.job_id IN (' . $placeholders . ')'];
+        if (SchemaInspector::hasColumn('invoices', 'business_id')) {
+            $where[] = 'i.business_id = ?';
+        }
+        if (SchemaInspector::hasColumn('invoices', 'deleted_at')) {
+            $where[] = 'i.deleted_at IS NULL';
+        }
+        if (SchemaInspector::hasColumn('invoices', 'type')) {
+            $where[] = "(LOWER(COALESCE(NULLIF(TRIM(i.type), ''), 'invoice')) IN ('invoice', 'estimate'))";
+        }
+
+        $sql = "SELECT ranked.job_id, ranked.id, ranked.doc_type, ranked.total, ranked.due_date, ranked.status, ranked.paid
+                FROM (
+                    SELECT
+                        i.job_id,
+                        i.id,
+                        {$typeSql} AS doc_type,
+                        {$totalSql} AS total,
+                        {$dueDateSql} AS due_date,
+                        {$statusSql} AS status,
+                        {$paidSql} AS paid,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY i.job_id
+                            ORDER BY
+                                CASE
+                                    WHEN {$typeSql} = 'invoice' THEN 0
+                                    ELSE 1
+                                END,
+                                i.id DESC
+                        ) AS rn
+                    FROM invoices i
+                    WHERE " . implode(' AND ', $where) . "
+                ) ranked
+                WHERE ranked.rn = 1";
+
+        $stmt = Database::connection()->prepare($sql);
+        $bindIndex = 1;
+        foreach ($jobIds as $jobId) {
+            $stmt->bindValue($bindIndex, $jobId, \PDO::PARAM_INT);
+            $bindIndex++;
+        }
+        if (SchemaInspector::hasColumn('invoices', 'business_id')) {
+            $stmt->bindValue($bindIndex, $businessId, \PDO::PARAM_INT);
+        }
+        $stmt->execute();
+
+        $out = [];
+        foreach ($stmt->fetchAll() as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $jobId = (int) ($row['job_id'] ?? 0);
+            if ($jobId <= 0) {
+                continue;
+            }
+            $out[$jobId] = $row;
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param array<string, mixed> $doc
+     */
+    public static function billingListPriceState(array $doc): string
+    {
+        $type = strtolower(trim((string) ($doc['doc_type'] ?? 'invoice')));
+        if ($type === 'estimate') {
+            return 'estimate';
+        }
+
+        if (self::billingDocIsOverdue($doc)) {
+            return 'overdue';
+        }
+
+        return 'invoice';
+    }
+
+    /**
+     * @param array<string, mixed> $doc
+     */
+    public static function billingDocIsOverdue(array $doc): bool
+    {
+        $due = trim((string) ($doc['due_date'] ?? ''));
+        if ($due === '') {
+            return false;
+        }
+
+        $dueTs = strtotime($due . ' 12:00:00');
+        if ($dueTs === false || $dueTs >= strtotime('today 12:00:00')) {
+            return false;
+        }
+
+        $status = strtolower(trim((string) ($doc['status'] ?? '')));
+        if (in_array($status, ['paid', 'paid_in_full', 'cancelled', 'draft', 'declined'], true)) {
+            return false;
+        }
+
+        $total = (float) ($doc['total'] ?? 0);
+        $paid = (float) ($doc['paid'] ?? 0);
+
+        return ($total - $paid) > 0.009;
     }
 
     public static function filteredSummary(
@@ -179,8 +363,15 @@ final class Job
         ?string $fromDate = null,
         ?string $toDate = null
     ): array {
+        $empty = [
+            'pending_invoices' => 0.0,
+            'past_due_invoices' => 0.0,
+            'pending_estimates' => 0.0,
+            'total_invoice_due' => 0.0,
+        ];
+
         if (!SchemaInspector::hasTable('jobs')) {
-            return ['job_potential' => 0.0, 'gross_mtd' => 0.0, 'net_mtd' => 0.0, 'gross_ytd' => 0.0, 'net_ytd' => 0.0];
+            return $empty;
         }
 
         $query = trim($search);
@@ -198,38 +389,6 @@ final class Job
             : (SchemaInspector::hasColumn('jobs', 'name') ? 'j.name' : "CONCAT('Job #', j.id)");
         $citySql = SchemaInspector::hasColumn('jobs', 'city') ? 'j.city' : "''";
 
-        $potentialExpr = '0';
-        if (SchemaInspector::hasTable('invoices') && SchemaInspector::hasColumn('invoices', 'job_id')) {
-            $invoiceTotalExpr = SchemaInspector::hasColumn('invoices', 'total')
-                ? 'COALESCE(i.total, 0)'
-                : (SchemaInspector::hasColumn('invoices', 'subtotal')
-                    ? 'COALESCE(i.subtotal, 0)'
-                    : '0');
-            $invoiceBusinessSql = SchemaInspector::hasColumn('invoices', 'business_id')
-                ? 'AND i.business_id = j.business_id'
-                : '';
-            $invoiceDeletedSql = SchemaInspector::hasColumn('invoices', 'deleted_at')
-                ? 'AND i.deleted_at IS NULL'
-                : '';
-            $invoiceTypeSql = SchemaInspector::hasColumn('invoices', 'type')
-                ? "AND LOWER(COALESCE(i.type, '')) = 'estimate'"
-                : '';
-
-            $potentialExpr = "(SELECT COALESCE(SUM({$invoiceTotalExpr}), 0)
-                FROM invoices i
-                WHERE i.job_id = j.id
-                {$invoiceBusinessSql}
-                {$invoiceDeletedSql}
-                {$invoiceTypeSql})";
-        } elseif (SchemaInspector::hasColumn('jobs', 'job_potential')) {
-            $potentialExpr = 'COALESCE(j.job_potential, 0)';
-        } elseif (SchemaInspector::hasColumn('jobs', 'potential')) {
-            $potentialExpr = 'COALESCE(j.potential, 0)';
-        } elseif (SchemaInspector::hasColumn('jobs', 'potential_amount')) {
-            $potentialExpr = 'COALESCE(j.potential_amount, 0)';
-        }
-        [$grossExpr, $netExpr] = self::filteredSummaryGrossNetExprs();
-
         $joinClient = SchemaInspector::hasTable('clients') && SchemaInspector::hasColumn('jobs', 'client_id');
         $joinSql = '';
         $clientNameSql = "''";
@@ -237,6 +396,76 @@ final class Job
             $clientNameSql = "COALESCE(NULLIF(TRIM(CONCAT_WS(' ', c.first_name, c.last_name)), ''), NULLIF(c.company_name, ''), CONCAT('Client #', c.id))";
             $joinDeleted = SchemaInspector::hasColumn('clients', 'deleted_at') ? 'AND c.deleted_at IS NULL' : '';
             $joinSql = " LEFT JOIN clients c ON c.id = j.client_id {$joinDeleted}";
+        }
+
+        $invoiceJoinSql = '';
+        $paymentsJoinSql = '';
+        $pendingInvoicesExpr = '0';
+        $pastDueInvoicesExpr = '0';
+        $pendingEstimatesExpr = '0';
+        $totalInvoiceDueExpr = '0';
+        $hasPaymentsTable = false;
+
+        if (SchemaInspector::hasTable('invoices') && SchemaInspector::hasColumn('invoices', 'job_id')) {
+            $invoiceJoinOn = ['i.job_id = j.id'];
+            if (SchemaInspector::hasColumn('invoices', 'business_id') && SchemaInspector::hasColumn('jobs', 'business_id')) {
+                $invoiceJoinOn[] = 'i.business_id = j.business_id';
+            }
+            if (SchemaInspector::hasColumn('invoices', 'deleted_at')) {
+                $invoiceJoinOn[] = 'i.deleted_at IS NULL';
+            }
+            $invoiceJoinSql = ' LEFT JOIN invoices i ON ' . implode(' AND ', $invoiceJoinOn);
+
+            $invoiceTotalSql = SchemaInspector::hasColumn('invoices', 'total')
+                ? 'COALESCE(i.total, 0)'
+                : (SchemaInspector::hasColumn('invoices', 'subtotal') ? 'COALESCE(i.subtotal, 0)' : '0');
+            $invoiceTypeSql = SchemaInspector::hasColumn('invoices', 'type')
+                ? "LOWER(COALESCE(NULLIF(TRIM(i.type), ''), 'invoice'))"
+                : "'invoice'";
+            $isInvoiceSql = "{$invoiceTypeSql} = 'invoice'";
+            $isEstimateSql = "{$invoiceTypeSql} = 'estimate'";
+            $openInvoiceStatusSql = SchemaInspector::hasColumn('invoices', 'status')
+                ? "LOWER(TRIM(COALESCE(i.status, ''))) NOT IN ('paid','paid_in_full','cancelled','draft','declined')"
+                : '1=1';
+            $openEstimateStatusSql = SchemaInspector::hasColumn('invoices', 'status')
+                ? "LOWER(TRIM(COALESCE(i.status, ''))) NOT IN ('declined','converted','cancelled')"
+                : '1=1';
+            $isOverdueSql = SchemaInspector::hasColumn('invoices', 'due_date')
+                ? '(i.due_date IS NOT NULL AND DATE(i.due_date) < CURDATE())'
+                : '0';
+            $isNotOverdueSql = SchemaInspector::hasColumn('invoices', 'due_date')
+                ? '(i.due_date IS NULL OR DATE(i.due_date) >= CURDATE())'
+                : '1=1';
+
+            $hasPaymentsTable = SchemaInspector::hasTable('payments')
+                && SchemaInspector::hasColumn('payments', 'invoice_id')
+                && SchemaInspector::hasColumn('payments', 'amount');
+            if ($hasPaymentsTable) {
+                $paymentsWhere = ['p.invoice_id IS NOT NULL'];
+                if (SchemaInspector::hasColumn('payments', 'business_id')) {
+                    $paymentsWhere[] = 'p.business_id = :payments_business_id';
+                }
+                if (SchemaInspector::hasColumn('payments', 'deleted_at')) {
+                    $paymentsWhere[] = 'p.deleted_at IS NULL';
+                }
+                $paymentsJoinSql = ' LEFT JOIN (
+                    SELECT p.invoice_id, COALESCE(SUM(p.amount), 0) AS paid_total
+                    FROM payments p
+                    WHERE ' . implode(' AND ', $paymentsWhere) . '
+                    GROUP BY p.invoice_id
+                ) pmt ON pmt.invoice_id = i.id';
+            } else {
+                $paymentsJoinSql = ' LEFT JOIN (SELECT NULL AS invoice_id, 0 AS paid_total) pmt ON 1=0';
+            }
+
+            $balanceSql = "GREATEST({$invoiceTotalSql} - COALESCE(pmt.paid_total, 0), 0)";
+            $docPresentSql = 'i.id IS NOT NULL';
+            $unpaidInvoiceSql = "{$docPresentSql} AND {$isInvoiceSql} AND {$openInvoiceStatusSql} AND {$balanceSql} > 0.009";
+
+            $pendingInvoicesExpr = "CASE WHEN {$unpaidInvoiceSql} AND {$isNotOverdueSql} THEN {$balanceSql} ELSE 0 END";
+            $pastDueInvoicesExpr = "CASE WHEN {$unpaidInvoiceSql} AND {$isOverdueSql} THEN {$balanceSql} ELSE 0 END";
+            $pendingEstimatesExpr = "CASE WHEN {$docPresentSql} AND {$isEstimateSql} AND {$openEstimateStatusSql} THEN {$invoiceTotalSql} ELSE 0 END";
+            $totalInvoiceDueExpr = "CASE WHEN {$unpaidInvoiceSql} THEN {$balanceSql} ELSE 0 END";
         }
 
         $where = [];
@@ -267,19 +496,25 @@ final class Job
         )";
 
         $sql = "SELECT
-                    COALESCE(SUM({$potentialExpr}), 0) AS job_potential,
-                    COALESCE(SUM(CASE WHEN {$filterDateSql} >= DATE_FORMAT(CURDATE(), '%Y-%m-01') AND {$filterDateSql} <= CURDATE() THEN {$grossExpr} ELSE 0 END), 0) AS gross_mtd,
-                    COALESCE(SUM(CASE WHEN {$filterDateSql} >= DATE_FORMAT(CURDATE(), '%Y-%m-01') AND {$filterDateSql} <= CURDATE() THEN {$netExpr} ELSE 0 END), 0) AS net_mtd,
-                    COALESCE(SUM(CASE WHEN YEAR({$filterDateSql}) = YEAR(CURDATE()) AND {$filterDateSql} <= CURDATE() THEN {$grossExpr} ELSE 0 END), 0) AS gross_ytd,
-                    COALESCE(SUM(CASE WHEN YEAR({$filterDateSql}) = YEAR(CURDATE()) AND {$filterDateSql} <= CURDATE() THEN {$netExpr} ELSE 0 END), 0) AS net_ytd
+                    COALESCE(SUM({$pendingInvoicesExpr}), 0) AS pending_invoices,
+                    COALESCE(SUM({$pastDueInvoicesExpr}), 0) AS past_due_invoices,
+                    COALESCE(SUM({$pendingEstimatesExpr}), 0) AS pending_estimates,
+                    COALESCE(SUM({$totalInvoiceDueExpr}), 0) AS total_invoice_due
                 FROM jobs j
                 {$joinSql}
+                {$invoiceJoinSql}
+                {$paymentsJoinSql}
                 WHERE " . implode(' AND ', $where);
 
         $stmt = Database::connection()->prepare($sql);
         $queryLike = '%' . $query . '%';
         if (SchemaInspector::hasColumn('jobs', 'business_id')) {
             $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
+        }
+        if ($hasPaymentsTable) {
+            if (SchemaInspector::hasColumn('payments', 'business_id')) {
+                $stmt->bindValue(':payments_business_id', $businessId, \PDO::PARAM_INT);
+            }
         }
         if ($status !== '' && $status !== 'dispatch') {
             $stmt->bindValue(':status', $status);
@@ -302,11 +537,10 @@ final class Job
         $row = $stmt->fetch();
 
         return [
-            'job_potential' => (float) ($row['job_potential'] ?? 0),
-            'gross_mtd' => (float) ($row['gross_mtd'] ?? 0),
-            'net_mtd' => (float) ($row['net_mtd'] ?? 0),
-            'gross_ytd' => (float) ($row['gross_ytd'] ?? 0),
-            'net_ytd' => (float) ($row['net_ytd'] ?? 0),
+            'pending_invoices' => (float) ($row['pending_invoices'] ?? 0),
+            'past_due_invoices' => (float) ($row['past_due_invoices'] ?? 0),
+            'pending_estimates' => (float) ($row['pending_estimates'] ?? 0),
+            'total_invoice_due' => (float) ($row['total_invoice_due'] ?? 0),
         ];
     }
 
