@@ -1,4 +1,5 @@
 <?php
+/** Estate sale Metrics tab (overall, per-day, employee labor breakdown). */
 $metricsReport = is_array($metricsReport ?? null) ? $metricsReport : [];
 $overall = is_array($metricsReport['overall'] ?? null) ? $metricsReport['overall'] : [];
 $dayRows = is_array($metricsReport['days'] ?? null) ? $metricsReport['days'] : [];

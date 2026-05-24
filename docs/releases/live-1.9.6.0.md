@@ -36,6 +36,7 @@ Run in filename order (idempotent):
 ## Ops notes
 
 - **Migrations first:** Run both SQL files above before uploading code. Attach-from-search fails with 422 if memberships table is missing.
+- **If upgrading from before 1.9.5.1-beta:** Apply [live-1.9.6.1.md](./live-1.9.6.1.md) (includes `metrics_tab.php`) or upload that file manually.
 - **Smoke test:** Estate sale → Customers → Add customer → Find existing → search by name/phone → Add to sale.
 - **Smoke test:** Jobs list — confirm Price colors and summary totals for pending invoices, past due, estimates.
 - **Smoke test:** Calendar month view — click a date → lands on day view for that date.
