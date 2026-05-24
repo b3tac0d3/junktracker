@@ -1334,6 +1334,19 @@ final class EstateSale
      */
     public static function financialSummary(int $businessId, int $estateSaleId, array $estateSale = []): array
     {
+        if (
+            $estateSaleId > 0
+            && (
+                !array_key_exists('client_percentage', $estateSale)
+                || !array_key_exists('client_split_type', $estateSale)
+            )
+        ) {
+            $loaded = self::findForBusiness($businessId, $estateSaleId);
+            if ($loaded !== null) {
+                $estateSale = array_merge($loaded, $estateSale);
+            }
+        }
+
         $totalSales = 0.0;
         if ($estateSaleId > 0 && SchemaInspector::hasTable('sales') && SchemaInspector::hasColumn('sales', 'estate_sale_id')) {
             $grossSql = SchemaInspector::hasColumn('sales', 'gross_amount')
@@ -1721,7 +1734,16 @@ final class EstateSale
                 continue;
             }
 
-            $financial = self::financialSummary($businessId, $estateSaleId, $row);
+            $estateSale = self::findForBusiness($businessId, $estateSaleId);
+            if ($estateSale === null) {
+                continue;
+            }
+
+            if (array_key_exists('customer_count', $row)) {
+                $estateSale['customer_count'] = (int) ($row['customer_count'] ?? 0);
+            }
+
+            $financial = self::financialSummary($businessId, $estateSaleId, $estateSale);
             $rows[$index]['gross_total'] = (float) ($financial['gross'] ?? 0);
             $rows[$index]['net_total'] = $financial['net'];
         }
@@ -2666,6 +2688,7 @@ final class EstateSale
             'sale_days' => $saleDays,
             'overall' => $overall,
             'days' => $days,
+            'labor' => self::metricsLaborBreakdown($saleDays, $allTimeLogs),
             'charts' => [
                 'split_labels' => $splitLabels,
                 'split_counts' => $splitCounts,
@@ -2674,6 +2697,131 @@ final class EstateSale
                 'daily_gross' => $dailyGross,
                 'daily_customers' => $dailyCustomers,
             ],
+        ];
+    }
+
+    /**
+     * @param array<int, string> $saleDays
+     * @param array<int, array<string, mixed>> $timeLogs
+     * @return array<string, mixed>
+     */
+    private static function metricsLaborBreakdown(array $saleDays, array $timeLogs): array
+    {
+        $dayEmployee = [];
+        $employeeTotals = [];
+        $grandTotal = 0.0;
+
+        foreach ($timeLogs as $log) {
+            if (!is_array($log)) {
+                continue;
+            }
+
+            $employeeId = (int) ($log['employee_id'] ?? 0);
+            if ($employeeId <= 0) {
+                continue;
+            }
+
+            $day = self::metricsDateOnly($log['clock_in_at'] ?? null);
+            if ($day === '') {
+                continue;
+            }
+
+            $name = trim((string) ($log['employee_name'] ?? ''));
+            if ($name === '') {
+                $name = 'Employee #' . (string) $employeeId;
+            }
+
+            $minutes = max(0, (int) ($log['duration_minutes'] ?? 0));
+            $amount = round((float) ($log['labor_cost'] ?? 0), 2);
+            $grandTotal += $amount;
+
+            $dayKey = $day . ':' . (string) $employeeId;
+            if (!isset($dayEmployee[$dayKey])) {
+                $dayEmployee[$dayKey] = [
+                    'employee_id' => $employeeId,
+                    'employee_name' => $name,
+                    'minutes' => 0,
+                    'amount_owed' => 0.0,
+                    'entry_count' => 0,
+                ];
+            }
+            $dayEmployee[$dayKey]['minutes'] += $minutes;
+            $dayEmployee[$dayKey]['amount_owed'] += $amount;
+            $dayEmployee[$dayKey]['entry_count']++;
+
+            if (!isset($employeeTotals[$employeeId])) {
+                $employeeTotals[$employeeId] = [
+                    'employee_id' => $employeeId,
+                    'employee_name' => $name,
+                    'minutes' => 0,
+                    'amount_owed' => 0.0,
+                    'entry_count' => 0,
+                ];
+            }
+            $employeeTotals[$employeeId]['minutes'] += $minutes;
+            $employeeTotals[$employeeId]['amount_owed'] += $amount;
+            $employeeTotals[$employeeId]['entry_count']++;
+        }
+
+        $finalizeEmployeeRow = static function (array $row): array {
+            $minutes = (int) ($row['minutes'] ?? 0);
+            $amount = round((float) ($row['amount_owed'] ?? 0), 2);
+            $hours = $minutes > 0 ? round($minutes / 60, 2) : 0.0;
+
+            return [
+                'employee_id' => (int) ($row['employee_id'] ?? 0),
+                'employee_name' => (string) ($row['employee_name'] ?? ''),
+                'minutes' => $minutes,
+                'hours' => $hours,
+                'hours_display' => self::formatVisitDuration($minutes),
+                'hourly_rate' => $hours > 0 ? round($amount / $hours, 2) : null,
+                'amount_owed' => $amount,
+                'entry_count' => (int) ($row['entry_count'] ?? 0),
+            ];
+        };
+
+        $days = [];
+        $dayNumber = 0;
+        foreach ($saleDays as $day) {
+            $dayNumber++;
+            $employees = [];
+            foreach ($dayEmployee as $key => $row) {
+                if (!str_starts_with($key, $day . ':')) {
+                    continue;
+                }
+                $employees[] = $finalizeEmployeeRow($row);
+            }
+
+            usort($employees, static function (array $a, array $b): int {
+                return strcasecmp((string) ($a['employee_name'] ?? ''), (string) ($b['employee_name'] ?? ''));
+            });
+
+            $dayTotal = 0.0;
+            foreach ($employees as $employee) {
+                $dayTotal += (float) ($employee['amount_owed'] ?? 0);
+            }
+
+            $days[] = [
+                'date' => $day,
+                'label' => date('D, M j, Y', strtotime($day . ' 12:00:00')),
+                'day_number' => $dayNumber,
+                'employees' => $employees,
+                'day_total' => round($dayTotal, 2),
+            ];
+        }
+
+        $employeesOverall = array_map($finalizeEmployeeRow, array_values($employeeTotals));
+        usort($employeesOverall, static function (array $a, array $b): int {
+            return strcasecmp((string) ($a['employee_name'] ?? ''), (string) ($b['employee_name'] ?? ''));
+        });
+        foreach ($employeesOverall as $index => $row) {
+            $employeesOverall[$index]['amount_owed'] = round((float) ($row['amount_owed'] ?? 0), 2);
+        }
+
+        return [
+            'days' => $days,
+            'employees' => $employeesOverall,
+            'grand_total' => round($grandTotal, 2),
         ];
     }
 

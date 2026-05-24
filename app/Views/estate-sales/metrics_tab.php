@@ -4,6 +4,17 @@ $overall = is_array($metricsReport['overall'] ?? null) ? $metricsReport['overall
 $dayRows = is_array($metricsReport['days'] ?? null) ? $metricsReport['days'] : [];
 $charts = is_array($metricsReport['charts'] ?? null) ? $metricsReport['charts'] : [];
 $saleDays = is_array($metricsReport['sale_days'] ?? null) ? $metricsReport['sale_days'] : [];
+$labor = is_array($metricsReport['labor'] ?? null) ? $metricsReport['labor'] : [];
+$laborDays = is_array($labor['days'] ?? null) ? $labor['days'] : [];
+$laborEmployees = is_array($labor['employees'] ?? null) ? $labor['employees'] : [];
+$laborGrandTotal = (float) ($labor['grand_total'] ?? 0);
+$laborByDate = [];
+foreach ($laborDays as $laborDay) {
+    if (!is_array($laborDay)) {
+        continue;
+    }
+    $laborByDate[(string) ($laborDay['date'] ?? '')] = $laborDay;
+}
 $dayCount = count($saleDays);
 
 $formatMoney = static fn (float $amount): string => '$' . number_format($amount, 2);
@@ -120,6 +131,52 @@ $renderProfitSteps = static function (array $steps) use ($formatAmount): void {
     </div>
     <?php
 };
+
+$renderLaborTable = static function (array $employees, ?float $tableTotal = null) use ($formatMoney): void {
+    if ($employees === []) {
+        echo '<div class="record-empty mb-0">No labor recorded for this period.</div>';
+
+        return;
+    }
+    ?>
+    <div class="table-responsive">
+        <table class="table table-sm align-middle mb-0">
+            <thead>
+                <tr>
+                    <th scope="col">Employee</th>
+                    <th scope="col" class="text-end">Hours</th>
+                    <th scope="col" class="text-end">Rate</th>
+                    <th scope="col" class="text-end">Owed</th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php foreach ($employees as $employee): ?>
+                    <?php
+                    if (!is_array($employee)) {
+                        continue;
+                    }
+                    $rate = $employee['hourly_rate'] ?? null;
+                    ?>
+                    <tr>
+                        <td><?= e((string) ($employee['employee_name'] ?? '—')) ?></td>
+                        <td class="text-end"><?= e((string) ($employee['hours_display'] ?? '—')) ?></td>
+                        <td class="text-end"><?= $rate !== null ? e($formatMoney((float) $rate)) . '/hr' : '—' ?></td>
+                        <td class="text-end"><?= e($formatMoney((float) ($employee['amount_owed'] ?? 0))) ?></td>
+                    </tr>
+                <?php endforeach; ?>
+            </tbody>
+            <?php if ($tableTotal !== null): ?>
+            <tfoot>
+                <tr class="table-active fw-semibold">
+                    <td colspan="3">Total</td>
+                    <td class="text-end"><?= e($formatMoney($tableTotal)) ?></td>
+                </tr>
+            </tfoot>
+            <?php endif; ?>
+        </table>
+    </div>
+    <?php
+};
 ?>
 
 <div class="small muted mb-3">
@@ -144,6 +201,55 @@ $renderProfitSteps = static function (array $steps) use ($formatAmount): void {
         <div class="col-12 col-lg-6">
             <h4 class="h6 record-label mb-2">Profit after labor &amp; expenses</h4>
             <?php $renderProfitSteps(is_array($overall['profit_steps'] ?? null) ? $overall['profit_steps'] : []); ?>
+        </div>
+    </div>
+</section>
+
+<section class="mb-4">
+    <h3 class="h6 mb-3"><i class="fas fa-users-cog me-2"></i>Employee labor</h3>
+    <div class="row g-4">
+        <div class="col-12 col-lg-6">
+            <h4 class="h6 record-label mb-2">Total owed (all days)</h4>
+            <?php $renderLaborTable($laborEmployees, $laborGrandTotal); ?>
+        </div>
+        <div class="col-12 col-lg-6">
+            <h4 class="h6 record-label mb-2">Daily labor totals</h4>
+            <?php if ($laborDays === []): ?>
+                <div class="record-empty mb-0">No sale days defined.</div>
+            <?php else: ?>
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th scope="col">Day</th>
+                                <th scope="col" class="text-end">Employees</th>
+                                <th scope="col" class="text-end">Total owed</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($laborDays as $laborDay): ?>
+                                <?php
+                                if (!is_array($laborDay)) {
+                                    continue;
+                                }
+                                $dayEmployees = is_array($laborDay['employees'] ?? null) ? $laborDay['employees'] : [];
+                                ?>
+                                <tr>
+                                    <td><?= e((string) ($laborDay['label'] ?? '')) ?></td>
+                                    <td class="text-end"><?= e((string) count($dayEmployees)) ?></td>
+                                    <td class="text-end"><?= e($formatMoney((float) ($laborDay['day_total'] ?? 0))) ?></td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                        <tfoot>
+                            <tr class="table-active fw-semibold">
+                                <td colspan="2">Grand total</td>
+                                <td class="text-end"><?= e($formatMoney($laborGrandTotal)) ?></td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            <?php endif; ?>
         </div>
     </div>
 </section>
@@ -220,6 +326,15 @@ $renderProfitSteps = static function (array $steps) use ($formatAmount): void {
                                     <h5 class="h6 record-label mb-2">Profit after labor &amp; expenses</h5>
                                     <?php $renderProfitSteps(is_array($dayRow['profit_steps'] ?? null) ? $dayRow['profit_steps'] : []); ?>
                                 </div>
+                            </div>
+                            <?php
+                            $dayLabor = $laborByDate[(string) ($dayRow['date'] ?? '')] ?? null;
+                            $dayLaborEmployees = is_array($dayLabor['employees'] ?? null) ? $dayLabor['employees'] : [];
+                            $dayLaborTotal = is_array($dayLabor) ? (float) ($dayLabor['day_total'] ?? 0) : 0.0;
+                            ?>
+                            <div class="mt-4">
+                                <h5 class="h6 record-label mb-2">Employee labor</h5>
+                                <?php $renderLaborTable($dayLaborEmployees, $dayLaborTotal); ?>
                             </div>
                         </div>
                     </div>
