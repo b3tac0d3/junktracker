@@ -23,7 +23,7 @@ final class EventFeed
 
         $sources = self::parseCsv((string) ($filters['sources'] ?? ''));
         if ($sources === []) {
-            $sources = ['tasks', 'jobs', 'events', 'deliveries', 'quotes', 'estate_sales'];
+            $sources = ['tasks', 'jobs', 'events', 'deliveries', 'quotes', 'purchase_quotes', 'estate_sales'];
         }
         $types = self::parseCsv((string) ($filters['types'] ?? ''));
         $q = trim((string) ($filters['q'] ?? ''));
@@ -43,6 +43,9 @@ final class EventFeed
         }
         if (in_array('quotes', $sources, true)) {
             $events = array_merge($events, self::quoteFollowUpEvents($businessId, $start, $end, $q));
+        }
+        if (in_array('purchase_quotes', $sources, true)) {
+            $events = array_merge($events, self::purchaseQuoteFollowUpEvents($businessId, $start, $end, $q));
         }
         if (in_array('estate_sales', $sources, true)) {
             $events = array_merge($events, self::estateSaleEvents($businessId, $start, $end, $q));
@@ -243,6 +246,100 @@ final class EventFeed
                     'customerName' => $clientName,
                     'customerPhone' => $clientPhone,
                     'eventType' => 'Quote',
+                ],
+            ];
+        }
+
+        return $events;
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private static function purchaseQuoteFollowUpEvents(int $businessId, string $start, string $end, string $q): array
+    {
+        if (!SchemaInspector::hasTable('purchase_quotes') || !SchemaInspector::hasTable('clients')) {
+            return [];
+        }
+
+        $searchWhere = $q !== ''
+            ? 'AND (
+                COALESCE(pq.title, "") LIKE :q
+                OR COALESCE(pq.notes, "") LIKE :q
+                OR COALESCE(NULLIF(TRIM(CONCAT_WS(" ", c.first_name, c.last_name)), ""), NULLIF(c.company_name, ""), CONCAT("Client #", c.id)) LIKE :q
+                OR CAST(pq.id AS CHAR) LIKE :q
+            )'
+            : '';
+
+        $sql = "SELECT
+                    pq.id,
+                    pq.title,
+                    pq.next_follow_up_at,
+                    LOWER(COALESCE(pq.status, 'new')) AS status_key,
+                    COALESCE(NULLIF(TRIM(CONCAT_WS(' ', c.first_name, c.last_name)), ''), NULLIF(c.company_name, ''), CONCAT('Client #', c.id)) AS client_name,
+                    COALESCE(c.phone, '') AS client_phone
+                FROM purchase_quotes pq
+                INNER JOIN clients c ON c.id = pq.client_id
+                    AND c.business_id = pq.business_id
+                    AND c.deleted_at IS NULL
+                WHERE pq.business_id = :business_id
+                  AND pq.deleted_at IS NULL
+                  AND pq.next_follow_up_at IS NOT NULL
+                  AND pq.next_follow_up_at >= :start_at
+                  AND pq.next_follow_up_at < :end_at
+                  AND LOWER(COALESCE(pq.status, '')) IN ('new', 'sent', 'follow_up')
+                  {$searchWhere}
+                ORDER BY pq.next_follow_up_at ASC, pq.id ASC
+                LIMIT 2000";
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
+        $stmt->bindValue(':start_at', $start);
+        $stmt->bindValue(':end_at', $end);
+        if ($q !== '') {
+            $stmt->bindValue(':q', '%' . $q . '%');
+        }
+        $stmt->execute();
+
+        $rows = $stmt->fetchAll();
+        if (!is_array($rows)) {
+            return [];
+        }
+
+        $events = [];
+        foreach ($rows as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+
+            $id = (int) ($row['id'] ?? 0);
+            $followUpAt = trim((string) ($row['next_follow_up_at'] ?? ''));
+            if ($id <= 0 || $followUpAt === '') {
+                continue;
+            }
+
+            $clientName = trim((string) ($row['client_name'] ?? ''));
+            $clientPhone = trim((string) ($row['client_phone'] ?? ''));
+            $title = trim((string) ($row['title'] ?? ''));
+            if ($title === '') {
+                $title = 'Purchase Quote #' . (string) $id;
+            }
+
+            $color = '#ea580c';
+
+            $events[] = [
+                'id' => 'purchase_quote:' . $id,
+                'title' => $title,
+                'start' => self::toIso($followUpAt),
+                'allDay' => false,
+                'backgroundColor' => $color,
+                'borderColor' => $color,
+                'url' => url('/purchase-quotes/' . (string) $id),
+                'editable' => false,
+                'extendedProps' => [
+                    'customerName' => $clientName,
+                    'customerPhone' => $clientPhone,
+                    'eventType' => 'Purchase Quote',
                 ],
             ];
         }

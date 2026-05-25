@@ -159,6 +159,7 @@ $navNotifications = is_array($navNotifications ?? null) ? $navNotifications : ['
                         <?php endif; ?>
                         <li><a class="dropdown-item" href="<?= e(url('/estate-sales/create')) ?>"><i class="fas fa-store me-2"></i>Add Estate Sale</a></li>
                         <?php if ($canViewFinancials): ?>
+                        <li><a class="dropdown-item" href="<?= e(url('/purchase-quotes/create')) ?>"><i class="fas fa-tags me-2"></i>Add Purchase Quote</a></li>
                         <li><a class="dropdown-item" href="<?= e(url('/purchases/create')) ?>"><i class="fas fa-cart-arrow-down me-2"></i>Add Purchase</a></li>
                         <li><a class="dropdown-item" href="<?= e(url('/expenses/create')) ?>"><i class="fas fa-receipt me-2"></i>Add Expense</a></li>
                         <?php endif; ?>
@@ -210,6 +211,11 @@ $navNotifications = is_array($navNotifications ?? null) ? $navNotifications : ['
                             <?php endif; ?>
 
                             <?php if (!$isGlobalSiteAdminContext): ?>
+                                <a class="nav-link" href="<?= e(url('/events')) ?>">
+                                    <div class="sb-nav-link-icon"><i class="fas fa-calendar-days"></i></div>
+                                    Events
+                                </a>
+
                                 <a class="nav-link collapsed" href="#" data-bs-toggle="collapse" data-bs-target="#collapseNavPeople" aria-expanded="false" aria-controls="collapseNavPeople">
                                     <div class="sb-nav-link-icon"><i class="fas fa-users"></i></div>
                                     People
@@ -249,6 +255,7 @@ $navNotifications = is_array($navNotifications ?? null) ? $navNotifications : ['
                                         <a class="nav-link jt-nav-sublink" href="<?= e(url('/sales')) ?>">Sales</a>
                                         <a class="nav-link jt-nav-sublink" href="<?= e(url('/estate-sales')) ?>">Estate Sales</a>
                                         <a class="nav-link jt-nav-sublink" href="<?= e(url('/estate-sale-records')) ?>">Estate Sale Records</a>
+                                        <a class="nav-link jt-nav-sublink" href="<?= e(url('/purchase-quotes')) ?>">Purchase Quotes</a>
                                         <a class="nav-link jt-nav-sublink" href="<?= e(url('/purchases')) ?>">Purchases</a>
                                     </nav>
                                 </div>
@@ -268,7 +275,6 @@ $navNotifications = is_array($navNotifications ?? null) ? $navNotifications : ['
                                     <nav class="sb-sidenav-menu-nested nav">
                                         <a class="nav-link jt-nav-sublink" href="<?= e(url('/deliveries')) ?>">Deliveries</a>
                                         <a class="nav-link jt-nav-sublink" href="<?= e(url('/tasks')) ?>">Tasks</a>
-                                        <a class="nav-link jt-nav-sublink" href="<?= e(url('/events')) ?>">Events</a>
                                     </nav>
                                 </div>
 

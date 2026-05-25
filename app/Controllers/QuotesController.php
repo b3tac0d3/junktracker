@@ -51,6 +51,10 @@ final class QuotesController extends Controller
         require_business_role(['general_user', 'admin']);
 
         $form = $this->defaultForm();
+        $prefillAt = calendar_slot_prefill_at();
+        if ($prefillAt !== '') {
+            $form['next_follow_up_at'] = $prefillAt;
+        }
         $businessId = current_business_id();
         $requestedClientId = (int) ($_GET['client_id'] ?? 0);
         if ($requestedClientId > 0) {

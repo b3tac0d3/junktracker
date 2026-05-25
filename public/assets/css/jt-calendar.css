@@ -223,3 +223,77 @@
     padding: 1rem 0.75rem;
   }
 }
+
+/* Click empty time slots in day/week views */
+.jt-calendar .fc-timegrid-slot-lane,
+.jt-calendar .fc-timegrid-col-frame {
+  cursor: pointer;
+}
+
+.jt-cal-create-picker {
+  position: fixed;
+  inset: 0;
+  z-index: 1080;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.jt-cal-create-picker-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+}
+
+.jt-cal-create-picker-card {
+  position: relative;
+  z-index: 1;
+  width: min(100%, 28rem);
+  max-height: calc(100vh - 2rem);
+  overflow: auto;
+  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.18);
+}
+
+.jt-cal-create-type-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.5rem;
+}
+
+.jt-cal-create-type-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  border-radius: 0.65rem;
+  background: #fff;
+  text-align: left;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.jt-cal-create-type-btn:hover,
+.jt-cal-create-type-btn:focus-visible {
+  border-color: var(--jt-cal-type-color, #2563eb);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--jt-cal-type-color, #2563eb) 18%, transparent);
+  transform: translateY(-1px);
+}
+
+.jt-cal-create-type-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, var(--jt-cal-type-color, #2563eb) 14%, #fff);
+  color: var(--jt-cal-type-color, #2563eb);
+  flex-shrink: 0;
+}
+
+.jt-cal-create-type-label {
+  font-weight: 600;
+  color: #0f172a;
+}

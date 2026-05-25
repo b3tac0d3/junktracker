@@ -151,6 +151,11 @@ final class EstateSalesController extends Controller
 
         $businessId = current_business_id();
         $form = $this->defaultForm();
+        $prefillAt = calendar_slot_prefill_at();
+        if ($prefillAt !== '') {
+            $form['start_at'] = $prefillAt;
+            $form['end_at'] = calendar_slot_prefill_end_at($prefillAt, 60);
+        }
         $statusOptions = EstateSale::statusOptions($businessId);
         if (!in_array((string) ($form['status'] ?? ''), $statusOptions, true)) {
             $form['status'] = (string) ($statusOptions[0] ?? 'scheduled');

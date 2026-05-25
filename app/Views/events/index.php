@@ -1,11 +1,29 @@
 <?php
 $pageTitle = 'Events';
+$canViewFinancials = (bool) ($canViewFinancials ?? can_view_financials());
+$calendarCreateTypes = [
+    ['id' => 'event', 'label' => 'Appointment', 'icon' => 'fa-calendar-check', 'color' => '#b91c1c', 'url' => url('/events/create')],
+    ['id' => 'task', 'label' => 'Task', 'icon' => 'fa-list-check', 'color' => '#16a34a', 'url' => url('/tasks/create')],
+    ['id' => 'job', 'label' => 'Job', 'icon' => 'fa-briefcase', 'color' => '#ea580c', 'url' => url('/jobs/create')],
+    ['id' => 'delivery', 'label' => 'Delivery', 'icon' => 'fa-truck', 'color' => '#0d9488', 'url' => url('/deliveries/create')],
+    ['id' => 'quote', 'label' => 'Quote', 'icon' => 'fa-file-signature', 'color' => '#db2777', 'url' => url('/quotes/create')],
+    ['id' => 'estate_sale', 'label' => 'Estate Sale', 'icon' => 'fa-store', 'color' => '#9333ea', 'url' => url('/estate-sales/create')],
+];
+if ($canViewFinancials) {
+    $calendarCreateTypes[] = [
+        'id' => 'purchase_quote',
+        'label' => 'Purchase Quote',
+        'icon' => 'fa-tags',
+        'color' => '#c2410c',
+        'url' => url('/purchase-quotes/create'),
+    ];
+}
 ?>
 
 <div class="jt-events-screen">
 <div class="page-header">
     <h1>Events</h1>
-    <p class="muted">Calendar for appointments, cancellations, tasks, jobs, deliveries, quotes, and estate sales.</p>
+    <p class="muted">Calendar for appointments, cancellations, tasks, jobs, deliveries, quotes, purchase quotes, and estate sales.</p>
 </div>
 
 <div class="card index-card">
@@ -75,6 +93,10 @@ $pageTitle = 'Events';
                                     <span class="small">Quotes</span>
                                 </label>
                                 <label class="form-check d-flex align-items-center gap-2 m-0">
+                                    <input class="form-check-input" type="checkbox" id="jt-src-purchase-quotes" checked />
+                                    <span class="small">Purchase Quotes</span>
+                                </label>
+                                <label class="form-check d-flex align-items-center gap-2 m-0">
                                     <input class="form-check-input" type="checkbox" id="jt-src-estate-sales" checked />
                                     <span class="small">Estate Sales</span>
                                 </label>
@@ -114,6 +136,91 @@ window.addEventListener('DOMContentLoaded', () => {
     };
   };
 
+  const calendarCreateTypes = <?= json_encode($calendarCreateTypes, JSON_UNESCAPED_SLASHES) ?>;
+
+  const formatAtParam = (date) => {
+    if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
+      return '';
+    }
+    const pad = (n) => String(n).padStart(2, '0');
+    return (
+      date.getFullYear() + '-' +
+      pad(date.getMonth() + 1) + '-' +
+      pad(date.getDate()) + 'T' +
+      pad(date.getHours()) + ':' +
+      pad(date.getMinutes())
+    );
+  };
+
+  const formatWhenLabel = (date) => {
+    if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
+      return '';
+    }
+    return date.toLocaleString(undefined, {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+  };
+
+  const createPicker = document.getElementById('jt-cal-create-picker');
+  const createPickerBackdrop = document.getElementById('jt-cal-create-picker-backdrop');
+  const createPickerClose = document.getElementById('jt-cal-create-picker-close');
+  const createPickerWhen = document.getElementById('jt-cal-create-picker-when');
+  const createPickerTypes = document.getElementById('jt-cal-create-picker-types');
+  let createPickerAt = '';
+
+  const closeCreatePicker = () => {
+    if (!createPicker) {
+      return;
+    }
+    createPicker.classList.add('d-none');
+    createPicker.classList.remove('jt-cal-create-picker-open');
+    createPickerAt = '';
+  };
+
+  const openCreatePicker = (date) => {
+    if (!createPicker || !createPickerWhen || !createPickerTypes) {
+      return;
+    }
+    createPickerAt = formatAtParam(date);
+    if (createPickerAt === '') {
+      return;
+    }
+    createPickerWhen.textContent = formatWhenLabel(date);
+    createPickerTypes.innerHTML = '';
+    calendarCreateTypes.forEach((item) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'jt-cal-create-type-btn';
+      btn.style.setProperty('--jt-cal-type-color', item.color || '#2563eb');
+      btn.innerHTML =
+        '<span class="jt-cal-create-type-icon"><i class="fas ' + String(item.icon || 'fa-circle') + '"></i></span>' +
+        '<span class="jt-cal-create-type-label">' + String(item.label || 'Create') + '</span>';
+      btn.addEventListener('click', () => {
+        const base = String(item.url || '');
+        if (base === '') {
+          return;
+        }
+        const join = base.includes('?') ? '&' : '?';
+        window.location.href = base + join + 'at=' + encodeURIComponent(createPickerAt);
+      });
+      createPickerTypes.appendChild(btn);
+    });
+    createPicker.classList.remove('d-none');
+    createPicker.classList.add('jt-cal-create-picker-open');
+  };
+
+  if (createPickerBackdrop) {
+    createPickerBackdrop.addEventListener('click', closeCreatePicker);
+  }
+  if (createPickerClose) {
+    createPickerClose.addEventListener('click', closeCreatePicker);
+  }
+
   const getSources = () => {
     const sources = [];
     if (document.getElementById('jt-src-events')?.checked) sources.push('events');
@@ -121,6 +228,7 @@ window.addEventListener('DOMContentLoaded', () => {
     if (document.getElementById('jt-src-jobs')?.checked) sources.push('jobs');
     if (document.getElementById('jt-src-deliveries')?.checked) sources.push('deliveries');
     if (document.getElementById('jt-src-quotes')?.checked) sources.push('quotes');
+    if (document.getElementById('jt-src-purchase-quotes')?.checked) sources.push('purchase_quotes');
     if (document.getElementById('jt-src-estate-sales')?.checked) sources.push('estate_sales');
     return sources.join(',');
   };
@@ -211,6 +319,10 @@ window.addEventListener('DOMContentLoaded', () => {
       const viewType = info.view.type;
       if (viewType === 'dayGridMonth' || viewType === 'dayGridWeek') {
         calendar.changeView('timeGridDay', info.date);
+        return;
+      }
+      if (viewType === 'timeGridDay' || viewType === 'timeGridWeek') {
+        openCreatePicker(info.date);
       }
     },
     nowIndicator: true,
@@ -279,6 +391,7 @@ window.addEventListener('DOMContentLoaded', () => {
         else if (rawId.startsWith('job:')) eventType = 'Job';
         else if (rawId.startsWith('delivery:')) eventType = 'Delivery';
         else if (rawId.startsWith('quote:')) eventType = 'Quote';
+        else if (rawId.startsWith('purchase_quote:')) eventType = 'Purchase Quote';
         else if (rawId.startsWith('estate_sale:')) eventType = 'Estate Sale';
         else eventType = 'Event';
       }
@@ -374,6 +487,7 @@ window.addEventListener('DOMContentLoaded', () => {
   document.getElementById('jt-src-jobs')?.addEventListener('change', refetch);
   document.getElementById('jt-src-deliveries')?.addEventListener('change', refetch);
   document.getElementById('jt-src-quotes')?.addEventListener('change', refetch);
+  document.getElementById('jt-src-purchase-quotes')?.addEventListener('change', refetch);
   document.getElementById('jt-src-estate-sales')?.addEventListener('change', refetch);
   document.getElementById('jt-event-q')?.addEventListener('input', debounce(refetch, 250));
 
@@ -422,6 +536,26 @@ window.addEventListener('DOMContentLoaded', () => {
   }
 });
 </script>
+
+<div id="jt-cal-create-picker" class="jt-cal-create-picker d-none">
+    <div id="jt-cal-create-picker-backdrop" class="jt-cal-create-picker-backdrop"></div>
+    <div class="jt-cal-create-picker-card card">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-start mb-2">
+                <div>
+                    <div class="small text-uppercase text-muted fw-bold mb-1">New appointment</div>
+                    <h2 class="h5 m-0">What are you scheduling?</h2>
+                </div>
+                <button type="button" class="btn btn-outline-secondary btn-sm" id="jt-cal-create-picker-close">Close</button>
+            </div>
+            <div class="mb-3">
+                <div class="small text-uppercase text-muted fw-bold mb-1">When</div>
+                <div id="jt-cal-create-picker-when" class="small fw-semibold">—</div>
+            </div>
+            <div id="jt-cal-create-picker-types" class="jt-cal-create-type-grid"></div>
+        </div>
+    </div>
+</div>
 
 <div id="jt-event-quickview" class="jt-event-quickview d-none">
     <div id="jt-event-quickview-backdrop" class="jt-event-quickview-backdrop"></div>

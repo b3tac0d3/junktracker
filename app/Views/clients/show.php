@@ -124,6 +124,7 @@ $canTextClass = $canTextRaw === null ? 'text-flag-neutral' : ((((int) $canTextRa
 $secondaryCanTextRaw = $client['secondary_can_text'] ?? null;
 $secondaryCanTextLabel = $secondaryCanTextRaw === null ? 'Not Set' : (((int) $secondaryCanTextRaw) === 1 ? 'Yes' : 'No');
 $secondaryCanTextClass = $secondaryCanTextRaw === null ? 'text-flag-neutral' : ((((int) $secondaryCanTextRaw) === 1) ? 'text-flag-yes' : 'text-flag-no');
+$lastContact = ($contacts !== [] && is_array($contacts[0])) ? $contacts[0] : null;
 $clientStatus = strtolower(trim((string) ($client['status'] ?? 'active')));
 $isInactive = $clientStatus === 'inactive' || (array_key_exists('is_active', $client) && (int) ($client['is_active'] ?? 1) === 0);
 ?>
@@ -405,6 +406,29 @@ $isInactive = $clientStatus === 'inactive' || (array_key_exists('is_active', $cl
                 <div class="record-field">
                     <span class="record-label">Primary Note</span>
                     <span class="record-value"><?= e($primaryNote !== '' ? $primaryNote : '—') ?></span>
+                </div>
+                <div class="record-field">
+                    <span class="record-label">Last Contact</span>
+                    <span class="record-value record-value-stack">
+                        <?php if ($lastContact !== null): ?>
+                            <?php
+                            $lastContactType = trim((string) ($lastContact['contact_type'] ?? ''));
+                            $lastContactTypeLabel = $lastContactType === '' ? 'Contact' : ucwords(str_replace('_', ' ', strtolower($lastContactType)));
+                            $lastContactedAt = format_datetime((string) ($lastContact['contacted_at'] ?? null));
+                            $lastContactBy = trim((string) ($lastContact['created_by_name'] ?? ''));
+                            $lastContactNote = trim((string) ($lastContact['note'] ?? ''));
+                            ?>
+                            <span><?= e($lastContactTypeLabel) ?> · <?= e($lastContactedAt) ?><?php if ($lastContactBy !== ''): ?> · By <?= e($lastContactBy) ?><?php endif; ?></span>
+                            <?php if ($lastContactNote !== ''): ?>
+                                <span class="muted"><?= e($lastContactNote) ?></span>
+                            <?php endif; ?>
+                            <?php if ($contactCount > 1): ?>
+                                <a class="small" href="<?= e(url('/clients/' . (string) $clientId . '?tab=contacts')) ?>">View all <?= e((string) $contactCount) ?> contacts</a>
+                            <?php endif; ?>
+                        <?php else: ?>
+                            <span>—</span>
+                        <?php endif; ?>
+                    </span>
                 </div>
                 <?php if ($hasReferrals && $referredById > 0): ?>
                     <div class="record-field">

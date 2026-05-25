@@ -369,6 +369,45 @@ function format_date(?string $value): string
     return date('m/d/Y', $timestamp);
 }
 
+/**
+ * Parse ?at= from calendar slot clicks into datetime-local value (Y-m-d\TH:i).
+ */
+function calendar_slot_prefill_at(): string
+{
+    $raw = trim((string) ($_GET['at'] ?? ''));
+    if ($raw === '') {
+        return '';
+    }
+
+    $normalized = str_replace('T', ' ', urldecode($raw));
+    $timestamp = strtotime($normalized);
+    if ($timestamp === false) {
+        return '';
+    }
+
+    return date('Y-m-d\TH:i', $timestamp);
+}
+
+/**
+ * Default end time for calendar-created records (+N minutes from start local value).
+ */
+function calendar_slot_prefill_end_at(string $startLocal = '', int $minutes = 60): string
+{
+    if ($startLocal === '') {
+        $startLocal = calendar_slot_prefill_at();
+    }
+    if ($startLocal === '') {
+        return '';
+    }
+
+    $timestamp = strtotime(str_replace('T', ' ', $startLocal));
+    if ($timestamp === false) {
+        return '';
+    }
+
+    return date('Y-m-d\TH:i', $timestamp + ($minutes * 60));
+}
+
 /** USD for display; negatives render as -$75.00 (minus before the dollar sign). */
 function format_money_usd(float $amount): string
 {
@@ -972,6 +1011,13 @@ function audit_action_label(string $action): string
         'quote_converted_to_job' => 'Quote converted to job',
         'quote_converted_to_estate_sale' => 'Quote converted to estate sale',
         'quote_converted_to_purchase' => 'Quote converted to purchase',
+        'purchase_quote_created' => 'Purchase quote created',
+        'purchase_quote_updated' => 'Purchase quote updated',
+        'purchase_quote_status_updated' => 'Purchase quote status updated',
+        'purchase_quote_converted' => 'Purchase quote converted to purchase',
+        'purchase_quote_marked_lost' => 'Purchase quote marked lost',
+        'purchase_quote_offer_added' => 'Purchase quote offer added',
+        'purchase_quote_contact_logged' => 'Purchase quote contact logged',
         'bank_deposit_created' => 'Bank deposit recorded',
         'bank_deposit_payment_linked' => 'Payment linked to deposit',
         'bank_deposit_payment_unlinked' => 'Payment unlinked from deposit',
@@ -1008,6 +1054,7 @@ function audit_entity_label(string $entity): string
         'invoices' => 'Invoice/estimate',
         'payments' => 'Payment',
         'quotes' => 'Quote',
+        'purchase_quotes' => 'Purchase quote',
         'bank_deposits' => 'Bank deposit',
     ];
 
@@ -1044,6 +1091,7 @@ function audit_entity_url(string $entity, ?int $entityId, array $meta = []): ?st
         'users' => url('/admin/users/' . (string) $entityId . '/edit'),
         'employees' => url('/admin/employees/' . (string) $entityId),
         'quotes' => url('/quotes/' . (string) $entityId),
+        'purchase_quotes' => url('/purchase-quotes/' . (string) $entityId),
         'invoices' => url('/billing/' . (string) $entityId),
         'payments' => url('/billing/payments/' . (string) $entityId),
         'bank_deposits' => url('/billing/deposits/' . (string) $entityId),

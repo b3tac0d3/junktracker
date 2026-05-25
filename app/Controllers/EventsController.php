@@ -16,6 +16,7 @@ final class EventsController extends Controller
 
         $this->render('events/index', [
             'pageTitle' => 'Events',
+            'canViewFinancials' => can_view_financials(),
         ]);
     }
 
@@ -39,6 +40,76 @@ final class EventsController extends Controller
         header('Content-Type: application/json; charset=utf-8');
         echo json_encode($events, JSON_UNESCAPED_SLASHES);
         exit;
+    }
+
+    public function create(): void
+    {
+        require_business_role(['general_user', 'admin', 'site_admin']);
+
+        $at = calendar_slot_prefill_at();
+        $type = strtolower(trim((string) ($_GET['type'] ?? 'appointment')));
+        if (!in_array($type, ['appointment', 'cancellation', 'reminder', 'note', 'other'], true)) {
+            $type = 'appointment';
+        }
+
+        $this->render('events/form', [
+            'pageTitle' => 'Add Event',
+            'mode' => 'create',
+            'actionUrl' => url('/events/create'),
+            'form' => [
+                'title' => '',
+                'type' => $type,
+                'status' => 'scheduled',
+                'start_at' => $at,
+                'end_at' => calendar_slot_prefill_end_at($at, 60),
+                'all_day' => '0',
+                'notes' => '',
+            ],
+            'errors' => [],
+        ]);
+    }
+
+    public function storeForm(): void
+    {
+        require_business_role(['general_user', 'admin', 'site_admin']);
+
+        if (!verify_csrf($_POST['csrf_token'] ?? null)) {
+            flash('error', 'Session expired. Please try again.');
+            redirect('/events/create');
+        }
+
+        $businessId = current_business_id();
+        $actorId = (int) (auth_user_id() ?? 0);
+        $payload = $this->payloadFromPost($_POST);
+        $errors = $this->validatePayload($payload);
+        if ($errors !== []) {
+            $this->render('events/form', [
+                'pageTitle' => 'Add Event',
+                'mode' => 'create',
+                'actionUrl' => url('/events/create'),
+                'form' => [
+                    'title' => trim((string) ($payload['title'] ?? '')),
+                    'type' => trim((string) ($payload['type'] ?? 'appointment')),
+                    'status' => trim((string) ($payload['status'] ?? 'scheduled')),
+                    'start_at' => trim((string) ($payload['start_at'] ?? '')),
+                    'end_at' => trim((string) ($payload['end_at'] ?? '')),
+                    'all_day' => trim((string) ($payload['all_day'] ?? '0')),
+                    'notes' => trim((string) ($payload['notes'] ?? '')),
+                ],
+                'errors' => $errors,
+            ]);
+            return;
+        }
+
+        $id = Event::create($businessId, $payload, $actorId);
+        if ($id <= 0) {
+            flash('error', 'Unable to create event.');
+            redirect('/events/create');
+        }
+
+        audit('event_created', 'events', $id, ['title' => trim((string) ($payload['title'] ?? ''))]);
+        flash('success', 'Event created.');
+        redirect('/events/' . (string) $id);
     }
 
     public function show(array $params): void

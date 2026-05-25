@@ -63,6 +63,11 @@ final class DeliveriesController extends Controller
 
         $businessId = current_business_id();
         $form = $this->defaultForm();
+        $prefillAt = calendar_slot_prefill_at();
+        if ($prefillAt !== '') {
+            $form['scheduled_at'] = $prefillAt;
+            $form['status'] = 'scheduled';
+        }
         $requestedClientId = (int) ($_GET['client_id'] ?? 0);
         if ($requestedClientId > 0) {
             $client = Client::findForBusiness($businessId, $requestedClientId);

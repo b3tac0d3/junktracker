@@ -106,6 +106,10 @@ final class JobsController extends Controller
 
         $businessId = current_business_id();
         $form = $this->defaultForm();
+        $prefillAt = calendar_slot_prefill_at();
+        if ($prefillAt !== '') {
+            $form['scheduled_start_at'] = $prefillAt;
+        }
         $statusOptions = $this->jobStatusOptions($businessId);
         if (!in_array((string) ($form['status'] ?? ''), $statusOptions, true)) {
             $form['status'] = (string) ($statusOptions[0] ?? 'pending');

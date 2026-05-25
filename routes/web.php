@@ -24,6 +24,7 @@ use App\Controllers\ExpensesController;
 use App\Controllers\HomeController;
 use App\Controllers\JobsController;
 use App\Controllers\NetworkingController;
+use App\Controllers\PurchaseQuotesController;
 use App\Controllers\PurchasesController;
 use App\Controllers\QuotesController;
 use App\Controllers\ReportsController;
@@ -50,6 +51,8 @@ $router->post('/settings/update', [SettingsController::class, 'update']);
 $router->get('/search', [SearchController::class, 'index']);
 $router->get('/events', [EventsController::class, 'index']);
 $router->get('/events/feed', [EventsController::class, 'feed']);
+$router->get('/events/create', [EventsController::class, 'create']);
+$router->post('/events/create', [EventsController::class, 'storeForm']);
 $router->get('/events/{id}', [EventsController::class, 'show']);
 $router->get('/events/{id}/json', [EventsController::class, 'json']);
 $router->post('/events', [EventsController::class, 'store']);
@@ -272,6 +275,18 @@ $router->get('/reports/export/sales', [ReportsController::class, 'exportSalesCsv
 $router->get('/reports/export/purchases', [ReportsController::class, 'exportPurchasesCsv']);
 $router->get('/reports/export/expenses', [ReportsController::class, 'exportExpensesCsv']);
 $router->get('/reports/export/service', [ReportsController::class, 'exportServiceCsv']);
+
+$router->get('/purchase-quotes', [PurchaseQuotesController::class, 'index']);
+$router->get('/purchase-quotes/create', [PurchaseQuotesController::class, 'create']);
+$router->post('/purchase-quotes', [PurchaseQuotesController::class, 'store']);
+$router->get('/purchase-quotes/{id}/edit', [PurchaseQuotesController::class, 'edit']);
+$router->post('/purchase-quotes/{id}/update', [PurchaseQuotesController::class, 'update']);
+$router->post('/purchase-quotes/{id}/quick-status', [PurchaseQuotesController::class, 'quickStatus']);
+$router->post('/purchase-quotes/{id}/convert-to-purchase', [PurchaseQuotesController::class, 'convertToPurchase']);
+$router->post('/purchase-quotes/{id}/mark-lost', [PurchaseQuotesController::class, 'markLost']);
+$router->post('/purchase-quotes/{id}/offers', [PurchaseQuotesController::class, 'storeOffer']);
+$router->post('/purchase-quotes/{id}/contacts', [PurchaseQuotesController::class, 'storeContact']);
+$router->get('/purchase-quotes/{id}', [PurchaseQuotesController::class, 'show']);
 
 $router->get('/purchases', [PurchasesController::class, 'index']);
 $router->get('/purchases/create', [PurchasesController::class, 'create']);
