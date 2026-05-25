@@ -18,6 +18,7 @@ $profitYtd = $totalYtdNet;
 $ytdNetMinusPurchases = (float) ($summary['ytd_net_minus_purchases'] ?? 0);
 
 $myTasksDue = is_array($lists['my_tasks_due'] ?? null) ? $lists['my_tasks_due'] : [];
+$pastDueSchedule = is_array($lists['past_due_schedule'] ?? null) ? $lists['past_due_schedule'] : [];
 $upcomingSchedule = is_array($lists['upcoming_schedule'] ?? null) ? $lists['upcoming_schedule'] : [];
 $threeMonthChart = is_array($summary['three_month_chart'] ?? null) ? $summary['three_month_chart'] : ['months' => []];
 $chartMonths = is_array($threeMonthChart['months'] ?? null) ? $threeMonthChart['months'] : [];
@@ -159,6 +160,80 @@ $nowTs = time();
     </a>
 </div>
 <?php endif; ?>
+
+<section class="card index-card shadow-sm mt-3 dashboard-agenda-card dashboard-agenda-card--past-due">
+    <div class="card-header index-card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+        <div>
+            <strong class="fs-5"><i class="fas fa-exclamation-triangle me-2 jt-dashboard-icon--danger" aria-hidden="true"></i>Past due</strong>
+            <div class="small text-muted">Open jobs, quotes, deliveries, purchase quotes, estate sales, tasks, and appointments that should have already happened</div>
+        </div>
+        <a class="btn btn-sm btn-outline-secondary" href="<?= e(url('/events')) ?>">Full calendar</a>
+    </div>
+    <div class="card-body dashboard-agenda-list">
+        <?php if ($pastDueSchedule === []): ?>
+            <div class="record-empty">Nothing past due on the calendar.</div>
+        <?php else: ?>
+            <?php foreach ($pastDueSchedule as $dayGroup): ?>
+                <?php
+                if (!is_array($dayGroup)) {
+                    continue;
+                }
+                $dayItems = is_array($dayGroup['items'] ?? null) ? $dayGroup['items'] : [];
+                if ($dayItems === []) {
+                    continue;
+                }
+                $dayLabel = trim((string) ($dayGroup['label'] ?? ''));
+                $dayIsPast = (bool) ($dayGroup['is_past'] ?? false);
+                $dayIsToday = (bool) ($dayGroup['is_today'] ?? false);
+                ?>
+                <div class="dashboard-agenda-day<?= $dayIsPast ? ' is-past' : '' ?><?= $dayIsToday ? ' is-today' : '' ?>">
+                    <div class="dashboard-agenda-day-label"><?= e($dayLabel !== '' ? $dayLabel : 'Scheduled') ?></div>
+                    <div class="dashboard-agenda-day-items">
+                        <?php foreach ($dayItems as $item): ?>
+                            <?php
+                            if (!is_array($item)) {
+                                continue;
+                            }
+                            $itemTitle = trim((string) ($item['title'] ?? '')) ?: 'Event';
+                            $itemUrl = trim((string) ($item['url'] ?? ''));
+                            $itemType = trim((string) ($item['event_type'] ?? ''));
+                            $itemCustomer = trim((string) ($item['customer_name'] ?? ''));
+                            $itemAllDay = (bool) ($item['all_day'] ?? false);
+                            $itemStart = trim((string) ($item['start'] ?? ''));
+                            $itemTime = $formatEventTime($itemStart, $itemAllDay);
+                            $itemColor = trim((string) ($item['color'] ?? ''));
+                            $metaParts = array_filter([$itemType !== '' ? $itemType : null, $itemCustomer !== '' ? $itemCustomer : null]);
+                            ?>
+                            <?php if ($itemUrl !== ''): ?>
+                                <a class="dashboard-agenda-item is-overdue" href="<?= e($itemUrl) ?>">
+                                    <span class="dashboard-agenda-time"><?= e($itemTime) ?></span>
+                                    <span class="dashboard-agenda-dot"<?= $itemColor !== '' ? ' style="background-color:' . e($itemColor) . '"' : '' ?> aria-hidden="true"></span>
+                                    <span class="dashboard-agenda-body">
+                                        <span class="dashboard-agenda-title"><?= e($itemTitle) ?></span>
+                                        <?php if ($metaParts !== []): ?>
+                                            <span class="dashboard-agenda-meta"><?= e(implode(' · ', $metaParts)) ?></span>
+                                        <?php endif; ?>
+                                    </span>
+                                </a>
+                            <?php else: ?>
+                                <div class="dashboard-agenda-item is-overdue">
+                                    <span class="dashboard-agenda-time"><?= e($itemTime) ?></span>
+                                    <span class="dashboard-agenda-dot"<?= $itemColor !== '' ? ' style="background-color:' . e($itemColor) . '"' : '' ?> aria-hidden="true"></span>
+                                    <span class="dashboard-agenda-body">
+                                        <span class="dashboard-agenda-title"><?= e($itemTitle) ?></span>
+                                        <?php if ($metaParts !== []): ?>
+                                            <span class="dashboard-agenda-meta"><?= e(implode(' · ', $metaParts)) ?></span>
+                                        <?php endif; ?>
+                                    </span>
+                                </div>
+                            <?php endif; ?>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+            <?php endforeach; ?>
+        <?php endif; ?>
+    </div>
+</section>
 
 <section class="card index-card shadow-sm mt-3 dashboard-agenda-card">
     <div class="card-header index-card-header d-flex flex-wrap align-items-center justify-content-between gap-2">

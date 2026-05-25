@@ -16,7 +16,8 @@ final class DashboardSummary
             $cached = AppCache::get($cacheKey);
             if (is_array($cached)
                 && isset($cached['sales'], $cached['estate_sales'], $cached['service'], $cached['lists'])
-                && array_key_exists('upcoming_schedule', $cached['lists'])) {
+                && array_key_exists('upcoming_schedule', $cached['lists'])
+                && array_key_exists('past_due_schedule', $cached['lists'])) {
                 return $cached;
             }
         }
@@ -43,6 +44,7 @@ final class DashboardSummary
             'three_month_chart' => self::lastThreeMonthsChart($businessId),
             'lists' => [
                 'my_tasks_due' => self::myTasksDue($businessId, $ownerUserId),
+                'past_due_schedule' => self::pastDueSchedule($businessId),
                 'upcoming_schedule' => self::upcomingSchedule($businessId),
             ],
         ];
@@ -661,45 +663,69 @@ final class DashboardSummary
     /**
      * @return list<array{date: string, label: string, is_past: bool, is_today: bool, items: list<array{title: string, start: string, url: string, event_type: string, customer_name: string, all_day: bool, color: string}>}>
      */
+    private static function pastDueSchedule(int $businessId, int $lookbackDays = 60): array
+    {
+        $nowTs = time();
+        $start = date('Y-m-d 00:00:00', strtotime('-' . max(1, $lookbackDays) . ' days'));
+        $end = date('Y-m-d 23:59:59');
+        $events = EventFeed::range($businessId, $start, $end, []);
+
+        return self::buildDashboardAgendaDays(
+            $events,
+            $nowTs,
+            static fn (array $event): bool => self::isPastDueDashboardAgendaEvent($event, $nowTs),
+            true
+        );
+    }
+
+    /**
+     * @return list<array{date: string, label: string, is_past: bool, is_today: bool, items: list<array{title: string, start: string, url: string, event_type: string, customer_name: string, all_day: bool, color: string}>}>
+     */
     private static function upcomingSchedule(int $businessId, int $lookaheadDays = 21): array
     {
+        $nowTs = time();
         $start = date('Y-m-d 00:00:00');
         $end = date('Y-m-d 23:59:59', strtotime('+' . max(1, $lookaheadDays) . ' days'));
         $events = EventFeed::range($businessId, $start, $end, []);
-        $nowTs = time();
 
+        return self::buildDashboardAgendaDays(
+            $events,
+            $nowTs,
+            static fn (array $event): bool => self::isOpenDashboardAgendaEvent($event, $nowTs),
+            false
+        );
+    }
+
+    /**
+     * @param list<array<string, mixed>> $events
+     * @param callable(array<string, mixed>): bool $includeEvent
+     * @return list<array{date: string, label: string, is_past: bool, is_today: bool, items: list<array{title: string, start: string, url: string, event_type: string, customer_name: string, all_day: bool, color: string}>}>
+     */
+    private static function buildDashboardAgendaDays(array $events, int $nowTs, callable $includeEvent, bool $pastDueMode): array
+    {
         usort($events, static function (array $a, array $b): int {
             return strcmp((string) ($a['start'] ?? ''), (string) ($b['start'] ?? ''));
         });
 
-        $today = date('Y-m-d');
-        $tomorrow = date('Y-m-d', strtotime('+1 day'));
+        $today = date('Y-m-d', $nowTs);
+        $tomorrow = date('Y-m-d', strtotime('+1 day', $nowTs));
+        $yesterday = date('Y-m-d', strtotime('-1 day', $nowTs));
         $byDate = [];
 
         foreach ($events as $event) {
-            if (!is_array($event) || !self::isOpenDashboardAgendaEvent($event, $nowTs)) {
+            if (!is_array($event) || !$includeEvent($event)) {
                 continue;
             }
-            $startRaw = trim((string) ($event['start'] ?? ''));
-            $startTs = strtotime($startRaw);
+            $item = self::dashboardAgendaItemFromEvent($event);
+            if ($item === null) {
+                continue;
+            }
+            $startTs = strtotime((string) $item['start']);
             if ($startTs === false) {
                 continue;
             }
             $dateKey = date('Y-m-d', $startTs);
-            $props = is_array($event['extendedProps'] ?? null) ? $event['extendedProps'] : [];
-            $eventType = trim((string) ($props['eventType'] ?? ''));
-            if ($eventType === '') {
-                $eventType = trim((string) ($props['jtType'] ?? ''));
-            }
-            $byDate[$dateKey][] = [
-                'title' => trim((string) ($event['title'] ?? '')),
-                'start' => $startRaw,
-                'url' => trim((string) ($event['url'] ?? '')),
-                'event_type' => $eventType,
-                'customer_name' => trim((string) ($props['customerName'] ?? '')),
-                'all_day' => (bool) ($event['allDay'] ?? false),
-                'color' => trim((string) ($event['backgroundColor'] ?? '')),
-            ];
+            $byDate[$dateKey][] = $item;
         }
 
         ksort($byDate);
@@ -709,23 +735,65 @@ final class DashboardSummary
             if ($items === []) {
                 continue;
             }
-            if ($dateKey === $today) {
-                $label = 'Today · ' . date('l, F j', strtotime($dateKey));
-            } elseif ($dateKey === $tomorrow) {
-                $label = 'Tomorrow · ' . date('l, F j', strtotime($dateKey));
-            } else {
-                $label = date('l, F j', strtotime($dateKey));
-            }
             $days[] = [
                 'date' => $dateKey,
-                'label' => $label,
-                'is_past' => false,
+                'label' => self::dashboardAgendaDayLabel($dateKey, $today, $tomorrow, $yesterday, $pastDueMode),
+                'is_past' => $dateKey < $today || ($pastDueMode && $dateKey === $today),
                 'is_today' => $dateKey === $today,
                 'items' => $items,
             ];
         }
 
         return $days;
+    }
+
+    /**
+     * @param array<string, mixed> $event
+     * @return array{title: string, start: string, url: string, event_type: string, customer_name: string, all_day: bool, color: string}|null
+     */
+    private static function dashboardAgendaItemFromEvent(array $event): ?array
+    {
+        $startRaw = trim((string) ($event['start'] ?? ''));
+        if ($startRaw === '' || strtotime($startRaw) === false) {
+            return null;
+        }
+
+        $props = is_array($event['extendedProps'] ?? null) ? $event['extendedProps'] : [];
+        $eventType = trim((string) ($props['eventType'] ?? ''));
+        if ($eventType === '') {
+            $eventType = trim((string) ($props['jtType'] ?? ''));
+        }
+
+        return [
+            'title' => trim((string) ($event['title'] ?? '')),
+            'start' => $startRaw,
+            'url' => trim((string) ($event['url'] ?? '')),
+            'event_type' => $eventType,
+            'customer_name' => trim((string) ($props['customerName'] ?? '')),
+            'all_day' => (bool) ($event['allDay'] ?? false),
+            'color' => trim((string) ($event['backgroundColor'] ?? '')),
+        ];
+    }
+
+    private static function dashboardAgendaDayLabel(
+        string $dateKey,
+        string $today,
+        string $tomorrow,
+        string $yesterday,
+        bool $pastDueMode
+    ): string {
+        $formatted = date('l, F j', strtotime($dateKey));
+        if ($dateKey === $today) {
+            return ($pastDueMode ? 'Today (overdue) · ' : 'Today · ') . $formatted;
+        }
+        if ($dateKey === $tomorrow) {
+            return 'Tomorrow · ' . $formatted;
+        }
+        if ($pastDueMode && $dateKey === $yesterday) {
+            return 'Yesterday · ' . $formatted;
+        }
+
+        return $formatted;
     }
 
     /**
@@ -762,7 +830,7 @@ final class DashboardSummary
         }
 
         if (str_starts_with($eventId, 'task:')) {
-            return true;
+            return !self::isPastDueDashboardAgendaEvent($event, $nowTs);
         }
 
         if ($isAllDay && $eventDate === $todayDate) {
@@ -770,6 +838,56 @@ final class DashboardSummary
         }
 
         return $startTs >= $nowTs;
+    }
+
+    /**
+     * Dashboard past-due: open items whose scheduled/due time has passed, including jobs not marked complete/cancelled.
+     */
+    private static function isPastDueDashboardAgendaEvent(array $event, int $nowTs): bool
+    {
+        $startRaw = trim((string) ($event['start'] ?? ''));
+        if ($startRaw === '') {
+            return false;
+        }
+        $startTs = strtotime($startRaw);
+        if ($startTs === false) {
+            return false;
+        }
+
+        $props = is_array($event['extendedProps'] ?? null) ? $event['extendedProps'] : [];
+        $status = strtolower(trim((string) ($props['jtStatus'] ?? '')));
+        if ($status !== '' && in_array($status, ['closed', 'completed', 'complete', 'cancelled', 'declined', 'converted', 'lost'], true)) {
+            return false;
+        }
+
+        $eventId = trim((string) ($event['id'] ?? ''));
+        $isAllDay = (bool) ($event['allDay'] ?? false);
+        $eventDate = date('Y-m-d', $startTs);
+        $todayDate = date('Y-m-d', $nowTs);
+
+        if (str_starts_with($eventId, 'job:')) {
+            return $startTs < $nowTs;
+        }
+
+        if (str_starts_with($eventId, 'task:')) {
+            if ($eventDate < $todayDate) {
+                return true;
+            }
+            if ($eventDate === $todayDate && !$isAllDay) {
+                return $startTs < $nowTs;
+            }
+
+            return false;
+        }
+
+        if ($eventDate < $todayDate) {
+            return true;
+        }
+        if ($eventDate === $todayDate && !$isAllDay) {
+            return $startTs < $nowTs;
+        }
+
+        return false;
     }
 
     private static function outstandingQuotes(int $businessId, int $limit = 6): array
