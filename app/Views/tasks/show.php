@@ -5,6 +5,8 @@ $title = trim((string) ($task['title'] ?? '')) !== '' ? (string) $task['title'] 
 $status = str_replace('_', ' ', (string) ($task['status'] ?? 'open'));
 $statusRaw = strtolower(trim((string) ($task['status'] ?? 'open')));
 $isClosed = $statusRaw === 'closed';
+$completedByName = trim((string) ($task['completed_by_name'] ?? ''));
+$completedAtText = format_datetime((string) ($task['completed_at'] ?? null));
 $taskOwnerId = (int) ($task['owner_user_id'] ?? 0);
 $currentUserId = (int) (auth_user_id() ?? 0);
 $canTakeOwnership = $currentUserId > 0 && $currentUserId !== $taskOwnerId;
@@ -13,8 +15,29 @@ $canTakeOwnership = $currentUserId > 0 && $currentUserId !== $taskOwnerId;
 <?php $taskId = (int) ($task['id'] ?? 0); ?>
 <div class="page-header d-flex flex-wrap align-items-end justify-content-between gap-2">
     <div>
-        <h1>Task Details</h1>
-        <p class="muted"><?= e($title) ?></p>
+        <h1 class="d-flex flex-wrap align-items-center gap-2">
+            Task Details
+            <?php if ($isClosed): ?>
+                <span class="badge text-bg-success fs-6 fw-semibold">Completed</span>
+            <?php endif; ?>
+        </h1>
+        <p class="muted mb-0<?= $isClosed ? ' text-decoration-line-through' : '' ?>"><?= e($title) ?></p>
+        <?php if ($isClosed): ?>
+            <?php
+            $completedMetaParts = [];
+            if ($completedByName !== '') {
+                $completedMetaParts[] = 'by ' . $completedByName;
+            }
+            if ($completedAtText !== '—') {
+                $completedMetaParts[] = 'on ' . $completedAtText;
+            }
+            ?>
+            <?php if ($completedMetaParts !== []): ?>
+                <p class="small text-success mb-0 mt-1">
+                    <i class="fas fa-circle-check me-1" aria-hidden="true"></i>Completed <?= e(implode(' ', $completedMetaParts)) ?>
+                </p>
+            <?php endif; ?>
+        <?php endif; ?>
     </div>
     <div class="jt-page-header-actions d-grid gap-2 d-md-flex d-md-flex-wrap justify-content-md-end align-items-md-center">
         <div class="dropdown w-100 w-md-auto">
@@ -54,11 +77,34 @@ $canTakeOwnership = $currentUserId > 0 && $currentUserId !== $taskOwnerId;
     </div>
 </div>
 
-<section class="card index-card mb-3">
-    <div class="card-header index-card-header">
+<section class="card index-card mb-3<?= $isClosed ? ' task-show-card--completed' : '' ?>">
+    <div class="card-header index-card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
         <strong><i class="fas fa-list-check me-2"></i>Task Details</strong>
+        <?php if ($isClosed): ?>
+            <span class="badge text-bg-success"><i class="fas fa-check me-1" aria-hidden="true"></i>Done</span>
+        <?php endif; ?>
     </div>
     <div class="card-body">
+        <?php if ($isClosed): ?>
+            <div class="task-show-complete-banner" role="status">
+                <i class="fas fa-circle-check fa-lg" aria-hidden="true"></i>
+                <div>
+                    <div class="task-show-complete-banner-title">This task is complete</div>
+                    <div class="task-show-complete-banner-meta">
+                        <?php
+                        $bannerParts = ['Status: Closed'];
+                        if ($completedByName !== '') {
+                            $bannerParts[] = 'Completed by ' . $completedByName;
+                        }
+                        if ($completedAtText !== '—') {
+                            $bannerParts[] = $completedAtText;
+                        }
+                        echo e(implode(' · ', $bannerParts));
+                        ?>
+                    </div>
+                </div>
+            </div>
+        <?php endif; ?>
         <div class="record-row-fields record-row-fields-4">
             <div class="record-field">
                 <span class="record-label">Task ID</span>
@@ -66,7 +112,13 @@ $canTakeOwnership = $currentUserId > 0 && $currentUserId !== $taskOwnerId;
             </div>
             <div class="record-field">
                 <span class="record-label">Status</span>
-                <span class="record-value text-capitalize"><?= e($status) ?></span>
+                <span class="record-value">
+                    <?php if ($isClosed): ?>
+                        <span class="badge text-bg-success text-capitalize"><?= e($status) ?></span>
+                    <?php else: ?>
+                        <span class="text-capitalize"><?= e($status) ?></span>
+                    <?php endif; ?>
+                </span>
             </div>
             <div class="record-field">
                 <span class="record-label">Priority</span>

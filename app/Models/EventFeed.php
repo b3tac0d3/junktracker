@@ -152,6 +152,7 @@ final class EventFeed
                 'extendedProps' => [
                     'customerName' => $location,
                     'eventType' => 'Estate Sale',
+                    'jtStatus' => $status,
                 ],
             ];
         }
@@ -441,6 +442,7 @@ final class EventFeed
                     'customerName' => $clientName,
                     'customerPhone' => $clientPhone,
                     'eventType' => 'Delivery',
+                    'jtStatus' => $status,
                 ],
             ];
         }
@@ -539,6 +541,7 @@ final class EventFeed
                 'editable' => false,
                 'extendedProps' => [
                     'eventType' => 'Task',
+                    'jtStatus' => $status,
                 ],
             ];
         }
@@ -675,6 +678,7 @@ final class EventFeed
                     'customerPhone' => $customerPhone,
                     'jobType' => $jobType,
                     'eventType' => $jobType === 'quote' ? 'Quote' : 'Job',
+                    'jtStatus' => $status,
                 ],
             ];
         }

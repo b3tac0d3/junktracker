@@ -659,15 +659,14 @@ final class DashboardSummary
     }
 
     /**
-     * Calendar agenda for the dashboard: events grouped by day (same sources as Events calendar).
-     *
      * @return list<array{date: string, label: string, is_past: bool, is_today: bool, items: list<array{title: string, start: string, url: string, event_type: string, customer_name: string, all_day: bool, color: string}>}>
      */
-    private static function upcomingSchedule(int $businessId, int $lookbackDays = 7, int $lookaheadDays = 21): array
+    private static function upcomingSchedule(int $businessId, int $lookaheadDays = 21): array
     {
-        $start = date('Y-m-d 00:00:00', strtotime('-' . max(0, $lookbackDays) . ' days'));
+        $start = date('Y-m-d 00:00:00');
         $end = date('Y-m-d 23:59:59', strtotime('+' . max(1, $lookaheadDays) . ' days'));
         $events = EventFeed::range($businessId, $start, $end, []);
+        $nowTs = time();
 
         usort($events, static function (array $a, array $b): int {
             return strcmp((string) ($a['start'] ?? ''), (string) ($b['start'] ?? ''));
@@ -678,13 +677,10 @@ final class DashboardSummary
         $byDate = [];
 
         foreach ($events as $event) {
-            if (!is_array($event)) {
+            if (!is_array($event) || !self::isOpenDashboardAgendaEvent($event, $nowTs)) {
                 continue;
             }
             $startRaw = trim((string) ($event['start'] ?? ''));
-            if ($startRaw === '') {
-                continue;
-            }
             $startTs = strtotime($startRaw);
             if ($startTs === false) {
                 continue;
@@ -710,6 +706,9 @@ final class DashboardSummary
 
         $days = [];
         foreach ($byDate as $dateKey => $items) {
+            if ($items === []) {
+                continue;
+            }
             if ($dateKey === $today) {
                 $label = 'Today · ' . date('l, F j', strtotime($dateKey));
             } elseif ($dateKey === $tomorrow) {
@@ -720,13 +719,57 @@ final class DashboardSummary
             $days[] = [
                 'date' => $dateKey,
                 'label' => $label,
-                'is_past' => $dateKey < $today,
+                'is_past' => false,
                 'is_today' => $dateKey === $today,
                 'items' => $items,
             ];
         }
 
         return $days;
+    }
+
+    /**
+     * Dashboard work-in-progress: open items only; jobs must be scheduled in the future.
+     */
+    private static function isOpenDashboardAgendaEvent(array $event, int $nowTs): bool
+    {
+        $startRaw = trim((string) ($event['start'] ?? ''));
+        if ($startRaw === '') {
+            return false;
+        }
+        $startTs = strtotime($startRaw);
+        if ($startTs === false) {
+            return false;
+        }
+
+        $props = is_array($event['extendedProps'] ?? null) ? $event['extendedProps'] : [];
+        $status = strtolower(trim((string) ($props['jtStatus'] ?? '')));
+        if ($status !== '' && in_array($status, ['closed', 'completed', 'complete', 'cancelled', 'declined', 'converted', 'lost'], true)) {
+            return false;
+        }
+
+        $eventId = trim((string) ($event['id'] ?? ''));
+        $isAllDay = (bool) ($event['allDay'] ?? false);
+        $eventDate = date('Y-m-d', $startTs);
+        $todayDate = date('Y-m-d', $nowTs);
+
+        if ($eventDate < $todayDate) {
+            return false;
+        }
+
+        if (str_starts_with($eventId, 'job:')) {
+            return $startTs >= $nowTs;
+        }
+
+        if (str_starts_with($eventId, 'task:')) {
+            return true;
+        }
+
+        if ($isAllDay && $eventDate === $todayDate) {
+            return true;
+        }
+
+        return $startTs >= $nowTs;
     }
 
     private static function outstandingQuotes(int $businessId, int $limit = 6): array

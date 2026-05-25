@@ -1613,6 +1613,40 @@ a.admin-nav-tile:focus {
   cursor: pointer;
 }
 
+.task-show-card--completed {
+  border-color: rgba(var(--bs-success-rgb), 0.45);
+}
+
+.task-show-card--completed > .index-card-header {
+  background: rgba(var(--bs-success-rgb), 0.08);
+}
+
+.task-show-complete-banner {
+  align-items: flex-start;
+  background: rgba(var(--bs-success-rgb), 0.1);
+  border: 1px solid rgba(var(--bs-success-rgb), 0.35);
+  border-radius: .5rem;
+  color: var(--bs-success);
+  display: flex;
+  gap: .75rem;
+  margin-bottom: 1rem;
+  padding: .75rem .9rem;
+}
+
+.task-show-complete-banner-title {
+  color: var(--bs-success);
+  font-size: .95rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.task-show-complete-banner-meta {
+  color: rgba(var(--bs-success-rgb), 0.92);
+  font-size: .82rem;
+  line-height: 1.4;
+  margin-top: .15rem;
+}
+
 .record-row-link {
   color: inherit;
   text-decoration: none;

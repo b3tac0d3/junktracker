@@ -164,7 +164,7 @@ $nowTs = time();
     <div class="card-header index-card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
         <div>
             <strong class="fs-5"><i class="fas fa-briefcase me-2 jt-dashboard-icon--income" aria-hidden="true"></i>Work in progress</strong>
-            <div class="small text-muted">Jobs, quotes, deliveries, purchase quotes, estate sales, and appointments</div>
+                <div class="small text-muted">Upcoming open jobs, quotes, deliveries, purchase quotes, estate sales, tasks, and appointments</div>
         </div>
         <a class="btn btn-sm btn-outline-secondary" href="<?= e(url('/events')) ?>">Full calendar</a>
     </div>
