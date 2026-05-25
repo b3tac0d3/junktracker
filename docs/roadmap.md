@@ -4,12 +4,14 @@ Prioritized themes and feature ideas. Order within each section is not strict; p
 
 ## Client-facing & revenue
 
+- **Mass SMS to estate customers** — subscriber opt-in exists (1.9.6); full plan: [plans/mass-sms-estate-customers.md](./plans/mass-sms-estate-customers.md) (Twilio, TCPA, campaigns).
 - **Branded PDF or “print-ready” pack** for estimates/invoices (logo + typography already in app) so “send to client” is not only browser print.
 - **Simple client portal (read-only)** — approve estimate, see invoice balance, download PDF — cuts email back-and-forth and supports “eventually send to clients” properly.
 - **Email from the app** (estimate sent, invoice sent, payment receipt) using existing mail config; a few templates completes the billing loop.
 
 ## Field & crew workflow
 
+- **Purchase prospects module** — split early-stage deals from Purchases; follow-up reminders, convert/lost; plan: [plans/purchase-prospects-module.md](./plans/purchase-prospects-module.md).
 - **Job checklist / close-out** (photos optional later): truck loaded, site clean, signature — supports dispatch → complete without relying on memory.
 - **Notifications or daily digest** (tomorrow’s jobs, open punches, overdue invoices) — email or in-app — reduces “did anyone punch out?”
 

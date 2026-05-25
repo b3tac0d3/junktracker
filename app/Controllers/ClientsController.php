@@ -7,7 +7,9 @@ namespace App\Controllers;
 use App\Models\Client;
 use App\Models\ClientBoloProfile;
 use App\Models\ClientContact;
+use App\Models\ClientFamilyMember;
 use App\Models\FormSelectValue;
+use App\Models\Quote;
 use App\Models\SchemaInspector;
 use Core\Controller;
 
@@ -271,14 +273,38 @@ final class ClientsController extends Controller
         $financial = Client::financialSummary($businessId, $clientId);
         $jobStatusSummary = Client::jobsByStatus($businessId, $clientId);
         $jobs = Client::jobHistory($businessId, $clientId, 50);
+        $quotes = SchemaInspector::hasTable('quotes')
+            ? Quote::forClient($businessId, $clientId, 50)
+            : [];
+        $quoteStatusSummary = SchemaInspector::hasTable('quotes')
+            ? Quote::statusSummaryForClient($businessId, $clientId)
+            : [];
         $sales = Client::salesHistory($businessId, $clientId, 50);
         $purchases = Client::purchaseHistory($businessId, $clientId, 50);
         $contacts = ClientContact::forClient($businessId, $clientId, 50);
+        $familyMembers = ClientFamilyMember::isAvailable()
+            ? ClientFamilyMember::forClient($businessId, $clientId, 100)
+            : [];
         $bolo = ClientBoloProfile::isAvailable() ? ClientBoloProfile::findForClient($businessId, $clientId) : null;
 
         $referralsSent = [];
         if (SchemaInspector::hasColumn('clients', 'referred_by_client_id')) {
             $referralsSent = Client::referralsSentBy($businessId, $clientId, 100);
+        }
+
+        $hasBoloFeature = ClientBoloProfile::isAvailable();
+        $canViewFinancials = can_view_financials();
+        $activeTab = strtolower(trim((string) ($_GET['tab'] ?? 'details')));
+        $allowedTabs = ['details', 'jobs', 'contacts'];
+        if ($canViewFinancials) {
+            $allowedTabs[] = 'financial';
+            $allowedTabs[] = 'transactions';
+        }
+        if ($hasBoloFeature) {
+            $allowedTabs[] = 'bolo';
+        }
+        if (!in_array($activeTab, $allowedTabs, true)) {
+            $activeTab = 'details';
         }
 
         $this->render('clients/show', [
@@ -287,15 +313,22 @@ final class ClientsController extends Controller
             'financial' => $financial,
             'jobStatusSummary' => $jobStatusSummary,
             'jobs' => $jobs,
+            'quotes' => $quotes,
+            'quoteStatusSummary' => $quoteStatusSummary,
+            'hasQuotes' => SchemaInspector::hasTable('quotes'),
             'sales' => $sales,
             'purchases' => $purchases,
             'contacts' => $contacts,
+            'familyMembers' => $familyMembers,
+            'hasFamilyMembers' => ClientFamilyMember::isAvailable(),
             'bolo' => $bolo,
             'hasNewsletter' => SchemaInspector::hasColumn('clients', 'newsletter_subscribed'),
-            'hasBolo' => ClientBoloProfile::isAvailable(),
+            'hasBolo' => $hasBoloFeature,
             'boloHasActiveFlag' => ClientBoloProfile::hasActiveFlag(),
             'hasReferrals' => SchemaInspector::hasColumn('clients', 'referred_by_client_id'),
             'referralsSent' => $referralsSent,
+            'activeTab' => $activeTab,
+            'canViewFinancials' => $canViewFinancials,
         ]);
     }
 
@@ -419,7 +452,221 @@ final class ClientsController extends Controller
 
         audit('client_contact_created', 'clients', $clientId, ['contact_type' => $form['contact_type']]);
         flash('success', 'Contact added.');
-        redirect('/clients/' . (string) $clientId);
+        redirect('/clients/' . (string) $clientId . '?tab=contacts');
+    }
+
+    public function createFamilyMember(array $params): void
+    {
+        require_business_role(['general_user', 'admin']);
+
+        $clientId = (int) ($params['id'] ?? 0);
+        if ($clientId <= 0) {
+            http_response_code(404);
+            $this->render('errors/404', ['pageTitle' => 'Not Found']);
+            return;
+        }
+
+        $businessId = current_business_id();
+        $client = Client::findForBusiness($businessId, $clientId);
+        if ($client === null) {
+            http_response_code(404);
+            $this->render('errors/404', ['pageTitle' => 'Not Found']);
+            return;
+        }
+
+        if (!ClientFamilyMember::isAvailable()) {
+            flash('error', 'Family members require the latest migration.');
+            redirect('/clients/' . (string) $clientId);
+        }
+
+        $this->render('clients/family_member_form', [
+            'pageTitle' => 'Add Family Member',
+            'mode' => 'create',
+            'client' => $client,
+            'clientId' => $clientId,
+            'memberId' => 0,
+            'actionUrl' => url('/clients/' . (string) $clientId . '/family'),
+            'form' => $this->defaultFamilyMemberForm(),
+            'errors' => [],
+            'relationshipOptions' => ClientFamilyMember::relationshipOptions(),
+        ]);
+    }
+
+    public function storeFamilyMember(array $params): void
+    {
+        require_business_role(['general_user', 'admin']);
+
+        $clientId = (int) ($params['id'] ?? 0);
+        if ($clientId <= 0) {
+            http_response_code(404);
+            $this->render('errors/404', ['pageTitle' => 'Not Found']);
+            return;
+        }
+
+        if (!verify_csrf($_POST['csrf_token'] ?? null)) {
+            flash('error', 'Session expired. Please try again.');
+            redirect('/clients/' . (string) $clientId . '/family/create');
+        }
+
+        $businessId = current_business_id();
+        $client = Client::findForBusiness($businessId, $clientId);
+        if ($client === null) {
+            http_response_code(404);
+            $this->render('errors/404', ['pageTitle' => 'Not Found']);
+            return;
+        }
+
+        if (!ClientFamilyMember::isAvailable()) {
+            flash('error', 'Family members require the latest migration.');
+            redirect('/clients/' . (string) $clientId);
+        }
+
+        $form = $this->familyMemberFormFromPost($_POST, $businessId, $clientId);
+        $errors = $this->validateFamilyMemberForm($form, $businessId, $clientId);
+        if ($errors !== []) {
+            $this->render('clients/family_member_form', [
+                'pageTitle' => 'Add Family Member',
+                'mode' => 'create',
+                'client' => $client,
+                'clientId' => $clientId,
+                'memberId' => 0,
+                'actionUrl' => url('/clients/' . (string) $clientId . '/family'),
+                'form' => $form,
+                'errors' => $errors,
+                'relationshipOptions' => ClientFamilyMember::relationshipOptions(),
+            ]);
+            return;
+        }
+
+        $memberId = ClientFamilyMember::create($businessId, $clientId, $form, auth_user_id() ?? 0);
+        if ($memberId <= 0) {
+            flash('error', 'Could not save family member.');
+            redirect('/clients/' . (string) $clientId . '/family/create');
+        }
+
+        audit('client_family_member_created', 'client_family_members', $memberId, [
+            'client_id' => $clientId,
+            'name' => trim(((string) ($form['first_name'] ?? '')) . ' ' . ((string) ($form['last_name'] ?? ''))),
+        ]);
+        flash('success', 'Family member added.');
+        redirect('/clients/' . (string) $clientId . '?tab=details');
+    }
+
+    public function editFamilyMember(array $params): void
+    {
+        require_business_role(['general_user', 'admin']);
+
+        $clientId = (int) ($params['id'] ?? 0);
+        $memberId = (int) ($params['memberId'] ?? 0);
+        if ($clientId <= 0 || $memberId <= 0) {
+            http_response_code(404);
+            $this->render('errors/404', ['pageTitle' => 'Not Found']);
+            return;
+        }
+
+        $businessId = current_business_id();
+        $client = Client::findForBusiness($businessId, $clientId);
+        $member = ClientFamilyMember::findForClient($businessId, $clientId, $memberId);
+        if ($client === null || $member === null) {
+            http_response_code(404);
+            $this->render('errors/404', ['pageTitle' => 'Not Found']);
+            return;
+        }
+
+        $this->render('clients/family_member_form', [
+            'pageTitle' => 'Edit Family Member',
+            'mode' => 'edit',
+            'client' => $client,
+            'clientId' => $clientId,
+            'memberId' => $memberId,
+            'actionUrl' => url('/clients/' . (string) $clientId . '/family/' . (string) $memberId . '/update'),
+            'form' => $this->familyMemberFormFromRow($member, $businessId),
+            'errors' => [],
+            'relationshipOptions' => ClientFamilyMember::relationshipOptions(),
+        ]);
+    }
+
+    public function updateFamilyMember(array $params): void
+    {
+        require_business_role(['general_user', 'admin']);
+
+        $clientId = (int) ($params['id'] ?? 0);
+        $memberId = (int) ($params['memberId'] ?? 0);
+        if ($clientId <= 0 || $memberId <= 0) {
+            http_response_code(404);
+            $this->render('errors/404', ['pageTitle' => 'Not Found']);
+            return;
+        }
+
+        if (!verify_csrf($_POST['csrf_token'] ?? null)) {
+            flash('error', 'Session expired. Please try again.');
+            redirect('/clients/' . (string) $clientId . '/family/' . (string) $memberId . '/edit');
+        }
+
+        $businessId = current_business_id();
+        $client = Client::findForBusiness($businessId, $clientId);
+        $member = ClientFamilyMember::findForClient($businessId, $clientId, $memberId);
+        if ($client === null || $member === null) {
+            http_response_code(404);
+            $this->render('errors/404', ['pageTitle' => 'Not Found']);
+            return;
+        }
+
+        $form = $this->familyMemberFormFromPost($_POST, $businessId, $clientId);
+        $errors = $this->validateFamilyMemberForm($form, $businessId, $clientId);
+        if ($errors !== []) {
+            $this->render('clients/family_member_form', [
+                'pageTitle' => 'Edit Family Member',
+                'mode' => 'edit',
+                'client' => $client,
+                'clientId' => $clientId,
+                'memberId' => $memberId,
+                'actionUrl' => url('/clients/' . (string) $clientId . '/family/' . (string) $memberId . '/update'),
+                'form' => $form,
+                'errors' => $errors,
+                'relationshipOptions' => ClientFamilyMember::relationshipOptions(),
+            ]);
+            return;
+        }
+
+        if (!ClientFamilyMember::update($businessId, $clientId, $memberId, $form, auth_user_id() ?? 0)) {
+            flash('error', 'Could not update family member.');
+            redirect('/clients/' . (string) $clientId . '/family/' . (string) $memberId . '/edit');
+        }
+
+        audit('client_family_member_updated', 'client_family_members', $memberId, ['client_id' => $clientId]);
+        flash('success', 'Family member updated.');
+        redirect('/clients/' . (string) $clientId . '?tab=details');
+    }
+
+    public function deleteFamilyMember(array $params): void
+    {
+        require_business_role(['general_user', 'admin']);
+
+        $clientId = (int) ($params['id'] ?? 0);
+        $memberId = (int) ($params['memberId'] ?? 0);
+        if ($clientId <= 0 || $memberId <= 0) {
+            http_response_code(404);
+            $this->render('errors/404', ['pageTitle' => 'Not Found']);
+            return;
+        }
+
+        if (!verify_csrf($_POST['csrf_token'] ?? null)) {
+            flash('error', 'Session expired. Please try again.');
+            redirect('/clients/' . (string) $clientId);
+        }
+
+        $businessId = current_business_id();
+        if (Client::findForBusiness($businessId, $clientId) === null || ClientFamilyMember::findForClient($businessId, $clientId, $memberId) === null) {
+            http_response_code(404);
+            $this->render('errors/404', ['pageTitle' => 'Not Found']);
+            return;
+        }
+
+        ClientFamilyMember::delete($businessId, $clientId, $memberId, auth_user_id() ?? 0);
+        audit('client_family_member_deleted', 'client_family_members', $memberId, ['client_id' => $clientId]);
+        flash('success', 'Family member removed.');
+        redirect('/clients/' . (string) $clientId . '?tab=details');
     }
 
     public function editBolo(array $params): void
@@ -845,6 +1092,92 @@ final class ClientsController extends Controller
         }
 
         return $out;
+    }
+
+    private function defaultFamilyMemberForm(): array
+    {
+        return [
+            'first_name' => '',
+            'last_name' => '',
+            'relationship' => '',
+            'phone' => '',
+            'linked_client_id' => '',
+            'linked_client_display_name' => '',
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $row
+     * @return array<string, string>
+     */
+    private function familyMemberFormFromRow(array $row, int $businessId): array
+    {
+        $linkedId = (int) ($row['linked_client_id'] ?? 0);
+        $displayName = trim((string) ($row['linked_client_name'] ?? ''));
+        if ($linkedId > 0 && $displayName === '') {
+            $linked = Client::findForBusiness($businessId, $linkedId);
+            if (is_array($linked)) {
+                $displayName = trim(((string) ($linked['first_name'] ?? '')) . ' ' . ((string) ($linked['last_name'] ?? '')));
+                if ($displayName === '') {
+                    $displayName = trim((string) ($linked['company_name'] ?? ''));
+                }
+            }
+        }
+
+        return [
+            'first_name' => trim((string) ($row['first_name'] ?? '')),
+            'last_name' => trim((string) ($row['last_name'] ?? '')),
+            'relationship' => ClientFamilyMember::normalizeRelationship($row['relationship'] ?? '') ?? '',
+            'phone' => trim((string) ($row['phone'] ?? '')),
+            'linked_client_id' => $linkedId > 0 ? (string) $linkedId : '',
+            'linked_client_display_name' => $displayName,
+        ];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function familyMemberFormFromPost(array $input, int $businessId, int $clientId): array
+    {
+        $linkedId = (int) ($input['linked_client_id'] ?? 0);
+        $displayName = trim((string) ($input['linked_client_display_name'] ?? ''));
+        if ($linkedId > 0 && $displayName === '') {
+            $linked = Client::findForBusiness($businessId, $linkedId);
+            if (is_array($linked)) {
+                $displayName = trim(((string) ($linked['first_name'] ?? '')) . ' ' . ((string) ($linked['last_name'] ?? '')));
+                if ($displayName === '') {
+                    $displayName = trim((string) ($linked['company_name'] ?? ''));
+                }
+            }
+        }
+
+        return [
+            'first_name' => trim((string) ($input['first_name'] ?? '')),
+            'last_name' => trim((string) ($input['last_name'] ?? '')),
+            'relationship' => strtolower(trim((string) ($input['relationship'] ?? ''))),
+            'phone' => trim((string) ($input['phone'] ?? '')),
+            'linked_client_id' => $linkedId > 0 ? (string) $linkedId : '',
+            'linked_client_display_name' => $displayName,
+        ];
+    }
+
+    /**
+     * @param array<string, string> $form
+     * @return array<string, string>
+     */
+    private function validateFamilyMemberForm(array $form, int $businessId, int $clientId): array
+    {
+        $errors = ClientFamilyMember::validate($form);
+        $linkedId = (int) ($form['linked_client_id'] ?? 0);
+        if ($linkedId > 0) {
+            if ($linkedId === $clientId) {
+                $errors['linked_client_id'] = 'Cannot link the client to themselves.';
+            } elseif (Client::findForBusiness($businessId, $linkedId) === null) {
+                $errors['linked_client_id'] = 'Linked client not found.';
+            }
+        }
+
+        return $errors;
     }
 
     private function defaultContactForm(): array

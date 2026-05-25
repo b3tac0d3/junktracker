@@ -780,19 +780,28 @@ final class Client
         $salesTotals = Sale::salesTotalsByClient($businessId, $clientId);
         $salesGross = (float) ($salesTotals['gross'] ?? 0);
         $salesNet = (float) ($salesTotals['net'] ?? 0);
+        $salesCount = (int) ($salesTotals['count'] ?? 0);
 
         $purchaseTotals = Purchase::totalsByClient($businessId, $clientId);
         $purchaseSpend = (float) ($purchaseTotals['total_purchase_price'] ?? 0);
+        $purchaseCount = (int) ($purchaseTotals['count'] ?? 0);
 
-        $net = $gross - $expenses;
+        $labor = Job::laborCostByClient($businessId, $clientId);
+        $serviceNet = $gross - $expenses - $labor;
 
         return [
-            'gross_income' => $gross,
-            'expenses' => $expenses,
-            'net_income' => $net,
+            'service_gross' => $gross,
+            'service_expenses' => $expenses,
+            'service_labor' => $labor,
+            'service_net' => $serviceNet,
             'sales_gross' => $salesGross,
             'sales_net' => $salesNet,
+            'sales_count' => $salesCount,
             'purchase_spend' => $purchaseSpend,
+            'purchase_count' => $purchaseCount,
+            'gross_income' => $gross,
+            'expenses' => $expenses,
+            'net_income' => $serviceNet,
         ];
     }
 

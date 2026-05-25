@@ -719,8 +719,9 @@ main .card.index-card-overflow-visible .card-body {
   color: #1e40af;
 }
 
-/* Estate sale detail tabs */
-.index-card-header:has(.estate-sale-tabs) {
+/* Estate sale + client detail tabs */
+.index-card-header:has(.estate-sale-tabs),
+.index-card-header:has(.client-tabs) {
   background: linear-gradient(135deg, #eef2ff 0%, #e8f0ff 45%, #f0f9ff 100%);
   border-bottom: 0;
   padding: .85rem .85rem 0;
@@ -879,19 +880,64 @@ main .card.index-card-overflow-visible .card-body {
   --estate-tab-icon-bg-active: #d1fae5;
 }
 
-.index-card:has(.estate-sale-tabs) > .card-body.tab-content {
+.estate-sale-tab-link[data-tab="jobs"] {
+  --estate-tab-accent: #d97706;
+  --estate-tab-icon-bg: #fffbeb;
+  --estate-tab-icon-bg-hover: #fef3c7;
+  --estate-tab-icon-bg-active: #fef3c7;
+}
+
+.estate-sale-tab-link[data-tab="financial"] {
+  --estate-tab-accent: #059669;
+  --estate-tab-icon-bg: #ecfdf5;
+  --estate-tab-icon-bg-hover: #d1fae5;
+  --estate-tab-icon-bg-active: #d1fae5;
+}
+
+.estate-sale-tab-link[data-tab="bolo"] {
+  --estate-tab-accent: #0891b2;
+  --estate-tab-icon-bg: #ecfeff;
+  --estate-tab-icon-bg-hover: #cffafe;
+  --estate-tab-icon-bg-active: #cffafe;
+}
+
+.estate-sale-tab-link[data-tab="contacts"] {
+  --estate-tab-accent: #db2777;
+  --estate-tab-icon-bg: #fdf2f8;
+  --estate-tab-icon-bg-hover: #fce7f3;
+  --estate-tab-icon-bg-active: #fce7f3;
+}
+
+.estate-sale-tab-link[data-tab="transactions"] {
+  --estate-tab-accent: #7c3aed;
+  --estate-tab-icon-bg: #f5f3ff;
+  --estate-tab-icon-bg-hover: #ede9fe;
+  --estate-tab-icon-bg-active: #ede9fe;
+}
+
+.estate-sale-tab-link[data-tab="tasks"] {
+  --estate-tab-accent: #4f46e5;
+  --estate-tab-icon-bg: #eef2ff;
+  --estate-tab-icon-bg-hover: #e0e7ff;
+  --estate-tab-icon-bg-active: #e0e7ff;
+}
+
+.index-card:has(.estate-sale-tabs) > .card-body.tab-content,
+.index-card:has(.client-tabs) > .card-body.tab-content {
   border-top: 1px solid rgba(214, 224, 255, 0.95);
   margin-top: 0;
 }
 
 @media (max-width: 767.98px) {
-  .index-card-header:has(.estate-sale-tabs) {
+  .index-card-header:has(.estate-sale-tabs),
+  .index-card-header:has(.client-tabs) {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
   }
 
-  .index-card-header:has(.estate-sale-tabs)::-webkit-scrollbar {
+  .index-card-header:has(.estate-sale-tabs)::-webkit-scrollbar,
+  .index-card-header:has(.client-tabs)::-webkit-scrollbar {
     display: none;
   }
 

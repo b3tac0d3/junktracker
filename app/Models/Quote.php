@@ -174,6 +174,90 @@ final class Quote
     }
 
     /**
+     * @return array<string, int>
+     */
+    public static function statusSummaryForClient(int $businessId, int $clientId): array
+    {
+        $summary = [];
+        foreach (self::statusOptions() as $status) {
+            $summary[$status] = 0;
+        }
+
+        if (!SchemaInspector::hasTable('quotes') || $businessId <= 0 || $clientId <= 0) {
+            return $summary;
+        }
+
+        $sql = 'SELECT LOWER(q.status) AS status_key, COUNT(*) AS total
+                FROM quotes q
+                WHERE q.business_id = :business_id
+                  AND q.client_id = :client_id
+                  AND q.deleted_at IS NULL
+                GROUP BY LOWER(q.status)';
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute([
+            'business_id' => $businessId,
+            'client_id' => $clientId,
+        ]);
+        $rows = $stmt->fetchAll();
+        if (!is_array($rows)) {
+            return $summary;
+        }
+
+        foreach ($rows as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $key = strtolower(trim((string) ($row['status_key'] ?? '')));
+            if (array_key_exists($key, $summary)) {
+                $summary[$key] = (int) ($row['total'] ?? 0);
+            }
+        }
+
+        return $summary;
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    public static function forClient(int $businessId, int $clientId, int $limit = 50): array
+    {
+        if (!SchemaInspector::hasTable('quotes') || $businessId <= 0 || $clientId <= 0) {
+            return [];
+        }
+
+        $limit = max(1, min($limit, 200));
+        $sql = 'SELECT
+                    q.id,
+                    q.title,
+                    q.status,
+                    q.service_type,
+                    q.quoted_amount,
+                    q.next_follow_up_at,
+                    q.lost_reason,
+                    q.converted_job_id,
+                    q.converted_estate_sale_id,
+                    q.converted_purchase_id,
+                    q.created_at,
+                    q.updated_at
+                FROM quotes q
+                WHERE q.business_id = :business_id
+                  AND q.client_id = :client_id
+                  AND q.deleted_at IS NULL
+                ORDER BY q.id DESC
+                LIMIT :row_limit';
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
+        $stmt->bindValue(':client_id', $clientId, \PDO::PARAM_INT);
+        $stmt->bindValue(':row_limit', $limit, \PDO::PARAM_INT);
+        $stmt->execute();
+        $rows = $stmt->fetchAll();
+
+        return is_array($rows) ? $rows : [];
+    }
+
+    /**
      * @return array<string, string>
      */
     public static function validate(array $data, int $businessId): array

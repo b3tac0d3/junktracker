@@ -7,24 +7,6 @@
 
 <div class="admin-nav-grid row g-3">
     <div class="col-12 col-sm-6 col-lg-3">
-        <a class="admin-nav-tile" href="<?= e(url('/admin/users')) ?>">
-            <div class="admin-nav-tile-icon admin-nav-tile-icon--users" aria-hidden="true">
-                <i class="fas fa-users"></i>
-            </div>
-            <div class="admin-nav-tile-title">Users</div>
-            <p class="admin-nav-tile-desc">Invite and manage workspace users, roles, and access.</p>
-        </a>
-    </div>
-    <div class="col-12 col-sm-6 col-lg-3">
-        <a class="admin-nav-tile" href="<?= e(url('/admin/employees')) ?>">
-            <div class="admin-nav-tile-icon admin-nav-tile-icon--employees" aria-hidden="true">
-                <i class="fas fa-id-badge"></i>
-            </div>
-            <div class="admin-nav-tile-title">Employees</div>
-            <p class="admin-nav-tile-desc">Employee profiles and user links for punch and time tracking.</p>
-        </a>
-    </div>
-    <div class="col-12 col-sm-6 col-lg-3">
         <a class="admin-nav-tile" href="<?= e(url('/admin/business-details')) ?>">
             <div class="admin-nav-tile-icon admin-nav-tile-icon--business" aria-hidden="true">
                 <i class="fas fa-building"></i>
@@ -43,6 +25,15 @@
         </a>
     </div>
     <div class="col-12 col-sm-6 col-lg-3">
+        <a class="admin-nav-tile" href="<?= e(url('/admin/form-select-values')) ?>">
+            <div class="admin-nav-tile-icon admin-nav-tile-icon--form-values" aria-hidden="true">
+                <i class="fas fa-list-ul"></i>
+            </div>
+            <div class="admin-nav-tile-title">Form Select Values</div>
+            <p class="admin-nav-tile-desc">Centralize dropdown and pick-list values used across forms.</p>
+        </a>
+    </div>
+    <div class="col-12 col-sm-6 col-lg-3">
         <a class="admin-nav-tile" href="<?= e(url('/admin/activity-log')) ?>">
             <div class="admin-nav-tile-icon admin-nav-tile-icon--activity" aria-hidden="true">
                 <i class="fas fa-clipboard-list"></i>
@@ -52,12 +43,21 @@
         </a>
     </div>
     <div class="col-12 col-sm-6 col-lg-3">
-        <a class="admin-nav-tile" href="<?= e(url('/admin/form-select-values')) ?>">
-            <div class="admin-nav-tile-icon admin-nav-tile-icon--form-values" aria-hidden="true">
-                <i class="fas fa-list-ul"></i>
+        <a class="admin-nav-tile" href="<?= e(url('/admin/users')) ?>">
+            <div class="admin-nav-tile-icon admin-nav-tile-icon--users" aria-hidden="true">
+                <i class="fas fa-users"></i>
             </div>
-            <div class="admin-nav-tile-title">Form Select Values</div>
-            <p class="admin-nav-tile-desc">Centralize dropdown and pick-list values used across forms.</p>
+            <div class="admin-nav-tile-title">Users</div>
+            <p class="admin-nav-tile-desc">Invite and manage workspace users, roles, and access.</p>
+        </a>
+    </div>
+    <div class="col-12 col-sm-6 col-lg-3">
+        <a class="admin-nav-tile" href="<?= e(url('/admin/employees')) ?>">
+            <div class="admin-nav-tile-icon admin-nav-tile-icon--employees" aria-hidden="true">
+                <i class="fas fa-id-badge"></i>
+            </div>
+            <div class="admin-nav-tile-title">Employees</div>
+            <p class="admin-nav-tile-desc">Employee profiles and user links for punch and time tracking.</p>
         </a>
     </div>
 </div>

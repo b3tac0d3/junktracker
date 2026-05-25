@@ -1985,6 +1985,70 @@ final class Job
         return (float) $stmt->fetchColumn();
     }
 
+    public static function laborCostByClient(int $businessId, int $clientId): float
+    {
+        if ($clientId <= 0 || !SchemaInspector::hasTable('employee_time_entries') || !SchemaInspector::hasColumn('employee_time_entries', 'job_id')) {
+            return 0.0;
+        }
+        if (!SchemaInspector::hasTable('jobs') || !SchemaInspector::hasColumn('jobs', 'client_id') || !SchemaInspector::hasColumn('employee_time_entries', 'clock_in_at')) {
+            return 0.0;
+        }
+
+        $clockInSql = 't.clock_in_at';
+        $clockOutSql = SchemaInspector::hasColumn('employee_time_entries', 'clock_out_at') ? 't.clock_out_at' : 'NULL';
+        $durationExpr = SchemaInspector::hasColumn('employee_time_entries', 'duration_minutes')
+            ? "CASE
+                    WHEN t.duration_minutes IS NOT NULL AND t.duration_minutes > 0 THEN t.duration_minutes
+                    WHEN {$clockOutSql} IS NOT NULL THEN GREATEST(TIMESTAMPDIFF(MINUTE, {$clockInSql}, {$clockOutSql}), 0)
+                    ELSE GREATEST(TIMESTAMPDIFF(MINUTE, {$clockInSql}, NOW()), 0)
+                END"
+            : "CASE
+                    WHEN {$clockOutSql} IS NOT NULL THEN GREATEST(TIMESTAMPDIFF(MINUTE, {$clockInSql}, {$clockOutSql}), 0)
+                    ELSE GREATEST(TIMESTAMPDIFF(MINUTE, {$clockInSql}, NOW()), 0)
+                END";
+
+        $joinSql = ' INNER JOIN jobs j ON j.id = t.job_id';
+        if (SchemaInspector::hasColumn('jobs', 'business_id') && SchemaInspector::hasColumn('employee_time_entries', 'business_id')) {
+            $joinSql .= ' AND j.business_id = t.business_id';
+        }
+        if (SchemaInspector::hasColumn('jobs', 'deleted_at')) {
+            $joinSql .= ' AND j.deleted_at IS NULL';
+        }
+
+        $employeeJoinSql = '';
+        $hourlyRateSql = '0';
+        if (SchemaInspector::hasTable('employees')) {
+            $employeeJoinSql = ' LEFT JOIN employees e ON e.id = t.employee_id';
+            if (SchemaInspector::hasColumn('employees', 'business_id') && SchemaInspector::hasColumn('employee_time_entries', 'business_id')) {
+                $employeeJoinSql .= ' AND e.business_id = t.business_id';
+            }
+            $hourlyRateSql = SchemaInspector::hasColumn('employees', 'hourly_rate') ? 'COALESCE(e.hourly_rate, 0)' : '0';
+        }
+
+        $where = ['j.client_id = :client_id'];
+        if (SchemaInspector::hasColumn('employee_time_entries', 'business_id')) {
+            $where[] = 't.business_id = :business_id';
+        }
+        if (SchemaInspector::hasColumn('employee_time_entries', 'deleted_at')) {
+            $where[] = 't.deleted_at IS NULL';
+        }
+
+        $sql = "SELECT COALESCE(SUM(({$durationExpr} / 60) * {$hourlyRateSql}), 0)
+                FROM employee_time_entries t
+                {$joinSql}
+                {$employeeJoinSql}
+                WHERE " . implode(' AND ', $where);
+
+        $stmt = Database::connection()->prepare($sql);
+        $params = ['client_id' => $clientId];
+        if (SchemaInspector::hasColumn('employee_time_entries', 'business_id')) {
+            $params['business_id'] = $businessId;
+        }
+        $stmt->execute($params);
+
+        return (float) $stmt->fetchColumn();
+    }
+
     public static function adjustmentTotalByJob(int $businessId, int $jobId): float
     {
         if ($jobId <= 0 || !SchemaInspector::hasTable('job_adjustments') || !SchemaInspector::hasColumn('job_adjustments', 'amount')) {

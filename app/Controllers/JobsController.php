@@ -468,6 +468,17 @@ final class JobsController extends Controller
             $jobStatusForSelect = array_values(array_unique(array_merge([$currentStatus], $jobStatusForSelect)));
         }
 
+        $canViewFinancials = can_view_financials();
+        $activeTab = strtolower(trim((string) ($_GET['tab'] ?? 'details')));
+        $allowedTabs = ['details', 'labor'];
+        if ($canViewFinancials) {
+            $allowedTabs[] = 'financial';
+            $allowedTabs[] = 'transactions';
+        }
+        if (!in_array($activeTab, $allowedTabs, true)) {
+            $activeTab = 'details';
+        }
+
         $this->render('jobs/show', [
             'pageTitle' => 'Job',
             'job' => $job,
@@ -478,6 +489,8 @@ final class JobsController extends Controller
             'adjustments' => $adjustments,
             'assignedEmployees' => $assignedEmployees,
             'jobStatusOptions' => $jobStatusForSelect,
+            'activeTab' => $activeTab,
+            'canViewFinancials' => $canViewFinancials,
             'documents' => [
                 'estimates' => $estimates,
                 'invoices' => $invoices,

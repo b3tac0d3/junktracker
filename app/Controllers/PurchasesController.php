@@ -281,6 +281,12 @@ final class PurchasesController extends Controller
         $purchasePrice = (float) ($purchase['purchase_price'] ?? 0);
         $purchaseProfit = (float) ($salesTotals['net'] ?? 0) - $purchasePrice;
 
+        $activeTab = strtolower(trim((string) ($_GET['tab'] ?? 'details')));
+        $allowedTabs = ['details', 'financial', 'sales', 'tasks'];
+        if (!in_array($activeTab, $allowedTabs, true)) {
+            $activeTab = 'details';
+        }
+
         $this->render('purchases/show', [
             'pageTitle' => 'Purchase Details',
             'purchase' => $purchase,
@@ -288,6 +294,7 @@ final class PurchasesController extends Controller
             'linkedSales' => $linkedSales,
             'salesTotals' => $salesTotals,
             'purchaseProfit' => $purchaseProfit,
+            'activeTab' => $activeTab,
         ]);
     }
 
