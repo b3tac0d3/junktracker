@@ -345,7 +345,7 @@ final class Job
         }
 
         $status = strtolower(trim((string) ($doc['status'] ?? '')));
-        if (in_array($status, ['paid', 'paid_in_full', 'cancelled', 'draft', 'declined'], true)) {
+        if (in_array($status, ['paid', 'paid_in_full', 'cancelled', 'draft', 'declined', 'write_off'], true)) {
             return false;
         }
 
@@ -425,7 +425,7 @@ final class Job
             $isInvoiceSql = "{$invoiceTypeSql} = 'invoice'";
             $isEstimateSql = "{$invoiceTypeSql} = 'estimate'";
             $openInvoiceStatusSql = SchemaInspector::hasColumn('invoices', 'status')
-                ? "LOWER(TRIM(COALESCE(i.status, ''))) NOT IN ('paid','paid_in_full','cancelled','draft','declined')"
+                ? "LOWER(TRIM(COALESCE(i.status, ''))) NOT IN ('paid','paid_in_full','cancelled','draft','declined','write_off')"
                 : '1=1';
             $openEstimateStatusSql = SchemaInspector::hasColumn('invoices', 'status')
                 ? "LOWER(TRIM(COALESCE(i.status, ''))) NOT IN ('declined','converted','cancelled')"
@@ -536,12 +536,14 @@ final class Job
         $stmt->execute();
         $row = $stmt->fetch();
 
-        return [
+        $summary = [
             'pending_invoices' => (float) ($row['pending_invoices'] ?? 0),
-            'past_due_invoices' => (float) ($row['past_due_invoices'] ?? 0),
+            'past_due_invoices' => Invoice::sumPastDueOpenBalances($businessId, true),
             'pending_estimates' => (float) ($row['pending_estimates'] ?? 0),
             'total_invoice_due' => (float) ($row['total_invoice_due'] ?? 0),
         ];
+
+        return $summary;
     }
 
     /**

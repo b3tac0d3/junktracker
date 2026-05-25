@@ -1715,6 +1715,54 @@ a.admin-nav-tile:focus {
   user-select: none;
 }
 
+.billing-buckets {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.billing-bucket-header {
+  align-items: flex-start;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  margin-bottom: .65rem;
+}
+
+.billing-bucket-label {
+  color: var(--bs-emphasis-color);
+  font-size: .78rem;
+  font-weight: 700;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+}
+
+#billing-past-due .billing-bucket-label {
+  color: var(--bs-danger);
+}
+
+.billing-bucket-hint {
+  color: var(--bs-secondary-color);
+  font-size: .82rem;
+  margin-top: .15rem;
+}
+
+.billing-bucket-empty {
+  border: 1px dashed rgba(148, 163, 184, 0.45);
+  border-radius: .65rem;
+  color: var(--bs-secondary-color);
+  font-size: .88rem;
+  padding: .85rem 1rem;
+}
+
+.billing-record-row--past-due {
+  border-left: 3px solid var(--bs-danger);
+  padding-left: calc(.65rem - 3px);
+}
+
+.billing-record-status {
+  white-space: nowrap;
+}
+
 .record-title-simple {
   margin: 0;
   font-size: 1rem;

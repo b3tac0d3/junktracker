@@ -81,7 +81,7 @@ final class Digest
         $dueCol = 'i.due_date';
 
         $statusSkip = SchemaInspector::hasColumn('invoices', 'status')
-            ? "AND LOWER(COALESCE(i.status, '')) NOT IN ('paid_in_full', 'cancelled')"
+            ? "AND LOWER(COALESCE(i.status, '')) NOT IN ('paid_in_full', 'cancelled', 'write_off')"
             : '';
 
         $sql = "SELECT i.id, {$totalCol} AS total

@@ -79,6 +79,7 @@ $formatDocStatus = static function (?string $value): string {
         'sent' => 'Sent',
         'partially_paid', 'partial' => 'Partially Paid',
         'paid_in_full', 'paid' => 'Paid in Full',
+        'write_off' => 'Non Payment / Write Off',
         'draft' => 'Draft',
         'approved' => 'Approved',
         'declined' => 'Declined',

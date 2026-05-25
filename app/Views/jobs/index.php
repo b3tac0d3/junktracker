@@ -46,6 +46,8 @@ $jobBillingPriceClass = static function (string $priceState): string {
         default => '',
     };
 };
+$canViewFinancials = can_view_financials();
+$pastDueBillingUrl = url('/billing?tab=invoices') . '#billing-past-due';
 ?>
 
 <div class="page-header d-flex flex-wrap align-items-end justify-content-between gap-2">
@@ -67,7 +69,11 @@ $jobBillingPriceClass = static function (string $priceState): string {
             </div>
             <div class="record-field">
                 <span class="record-label">Past Due Invoices</span>
-                <span class="record-value jt-billing-total jt-billing-total--unpaid">$<?= e(number_format((float) ($filteredSummary['past_due_invoices'] ?? 0), 2)) ?></span>
+                <?php if ($canViewFinancials): ?>
+                    <a class="record-value jt-billing-total jt-billing-total--unpaid text-decoration-none" href="<?= e($pastDueBillingUrl) ?>">$<?= e(number_format((float) ($filteredSummary['past_due_invoices'] ?? 0), 2)) ?></a>
+                <?php else: ?>
+                    <span class="record-value jt-billing-total jt-billing-total--unpaid">$<?= e(number_format((float) ($filteredSummary['past_due_invoices'] ?? 0), 2)) ?></span>
+                <?php endif; ?>
             </div>
             <div class="record-field">
                 <span class="record-label">Pending Estimates</span>

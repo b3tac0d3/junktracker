@@ -120,6 +120,109 @@ final class Invoice
         return '(' . $t . " <> 'estimate' OR " . $s . " NOT IN ('declined','closed','converted','cancelled'))";
     }
 
+    /**
+     * @return array{join: string, bindBusiness: bool, balanceSql: string, totalSql: string}
+     */
+    private static function openInvoicePaymentsJoinSpec(): array
+    {
+        $invoiceTotalSql = SchemaInspector::hasColumn('invoices', 'total')
+            ? 'COALESCE(i.total, 0)'
+            : (SchemaInspector::hasColumn('invoices', 'subtotal') ? 'COALESCE(i.subtotal, 0)' : '0');
+
+        $hasPaymentsTable = SchemaInspector::hasTable('payments')
+            && SchemaInspector::hasColumn('payments', 'invoice_id')
+            && SchemaInspector::hasColumn('payments', 'amount');
+        if ($hasPaymentsTable) {
+            $paymentsWhere = ['p.invoice_id IS NOT NULL'];
+            if (SchemaInspector::hasColumn('payments', 'business_id')) {
+                $paymentsWhere[] = 'p.business_id = :payments_business_id';
+            }
+            if (SchemaInspector::hasColumn('payments', 'deleted_at')) {
+                $paymentsWhere[] = 'p.deleted_at IS NULL';
+            }
+
+            return [
+                'join' => 'LEFT JOIN (
+                    SELECT p.invoice_id, COALESCE(SUM(p.amount), 0) AS paid_total
+                    FROM payments p
+                    WHERE ' . implode(' AND ', $paymentsWhere) . '
+                    GROUP BY p.invoice_id
+                ) pmt ON pmt.invoice_id = i.id',
+                'bindBusiness' => SchemaInspector::hasColumn('payments', 'business_id'),
+                'balanceSql' => "GREATEST({$invoiceTotalSql} - COALESCE(pmt.paid_total, 0), 0)",
+                'totalSql' => $invoiceTotalSql,
+            ];
+        }
+
+        return [
+            'join' => 'LEFT JOIN (SELECT NULL AS invoice_id, 0 AS paid_total) pmt ON 1=0',
+            'bindBusiness' => false,
+            'balanceSql' => "GREATEST({$invoiceTotalSql}, 0)",
+            'totalSql' => $invoiceTotalSql,
+        ];
+    }
+
+    private static function sqlOpenInvoiceDocuments(string $typeSql, string $statusSql): string
+    {
+        $parts = [];
+        if (SchemaInspector::hasColumn('invoices', 'type')) {
+            $parts[] = "LOWER(COALESCE(NULLIF(TRIM({$typeSql}), ''), 'invoice')) = 'invoice'";
+        }
+        if (SchemaInspector::hasColumn('invoices', 'status')) {
+            $parts[] = "LOWER(TRIM(COALESCE({$statusSql}, ''))) NOT IN ('paid','paid_in_full','cancelled','draft','declined','closed','write_off')";
+        }
+
+        return $parts === [] ? '1=1' : implode(' AND ', $parts);
+    }
+
+    private static function sqlPastDueOpenInvoices(string $typeSql, string $statusSql): string
+    {
+        if (!SchemaInspector::hasColumn('invoices', 'due_date')) {
+            return '0';
+        }
+
+        $payments = self::openInvoicePaymentsJoinSpec();
+
+        return self::sqlOpenInvoiceDocuments($typeSql, $statusSql)
+            . ' AND i.due_date IS NOT NULL AND DATE(i.due_date) < CURDATE()'
+            . ' AND ' . $payments['balanceSql'] . ' > 0.009';
+    }
+
+    public static function sumPastDueOpenBalances(int $businessId, bool $jobLinkedOnly = false): float
+    {
+        if (!SchemaInspector::hasTable('invoices') || !SchemaInspector::hasColumn('invoices', 'due_date')) {
+            return 0.0;
+        }
+
+        $typeSql = SchemaInspector::hasColumn('invoices', 'type') ? 'i.type' : "'invoice'";
+        $statusSql = SchemaInspector::hasColumn('invoices', 'status') ? 'i.status' : "'draft'";
+        $payments = self::openInvoicePaymentsJoinSpec();
+        $where = [
+            SchemaInspector::hasColumn('invoices', 'business_id') ? 'i.business_id = :business_id' : '1=1',
+            SchemaInspector::hasColumn('invoices', 'deleted_at') ? 'i.deleted_at IS NULL' : '1=1',
+            self::sqlPastDueOpenInvoices($typeSql, $statusSql),
+        ];
+        if ($jobLinkedOnly && SchemaInspector::hasColumn('invoices', 'job_id')) {
+            $where[] = 'i.job_id IS NOT NULL AND i.job_id > 0';
+        }
+
+        $sql = 'SELECT COALESCE(SUM(' . $payments['balanceSql'] . "), 0)
+                FROM invoices i
+                {$payments['join']}
+                WHERE " . implode(' AND ', $where);
+
+        $stmt = Database::connection()->prepare($sql);
+        if (SchemaInspector::hasColumn('invoices', 'business_id')) {
+            $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
+        }
+        if ($payments['bindBusiness']) {
+            $stmt->bindValue(':payments_business_id', $businessId, \PDO::PARAM_INT);
+        }
+        $stmt->execute();
+
+        return (float) $stmt->fetchColumn();
+    }
+
     public static function indexList(
         int $businessId,
         string $search = '',
@@ -129,7 +232,8 @@ final class Invoice
         string $sortBy = 'date',
         string $sortDir = 'desc',
         string $dateFrom = '',
-        string $dateTo = ''
+        string $dateTo = '',
+        bool $pastDueOnly = false
     ): array
     {
         if (!SchemaInspector::hasTable('invoices')) {
@@ -207,10 +311,20 @@ final class Invoice
             'date' => "{$dateExpr} {$sortDir}, i.id {$sortDir}",
             'id' => "i.id {$sortDir}",
             'client_name' => "{$clientNameSql} {$sortDir}, i.id {$sortDir}",
+            'due_date' => SchemaInspector::hasColumn('invoices', 'due_date')
+                ? "i.due_date {$sortDir}, i.id {$sortDir}"
+                : "{$dateExpr} {$sortDir}, i.id {$sortDir}",
         ];
         $orderBy = $sortMap[$sortBy] ?? $sortMap['date'];
 
         $jobNameSelect = $jobTitleSql !== 'NULL' ? "{$jobTitleSql} AS job_name" : 'NULL AS job_name';
+
+        $payments = self::openInvoicePaymentsJoinSpec();
+        $paymentsJoinSql = $pastDueOnly ? $payments['join'] : '';
+
+        if ($pastDueOnly) {
+            $where[] = self::sqlPastDueOpenInvoices($typeSql, $statusSql);
+        }
 
         $sql = "SELECT
                     i.id,
@@ -227,6 +341,7 @@ final class Invoice
                 FROM invoices i
                 {$joinSql}
                 {$jobJoinSql}
+                {$paymentsJoinSql}
                 WHERE " . implode(' AND ', $where) . "
                 ORDER BY {$orderBy}
                 LIMIT :row_limit
@@ -254,6 +369,9 @@ final class Invoice
         if ($dateTo !== '') {
             $stmt->bindValue(':date_to', $dateTo);
         }
+        if ($pastDueOnly && $payments['bindBusiness']) {
+            $stmt->bindValue(':payments_business_id', $businessId, \PDO::PARAM_INT);
+        }
         $stmt->bindValue(':row_limit', max(1, min($limit, 1000)), \PDO::PARAM_INT);
         $stmt->bindValue(':row_offset', max(0, $offset), \PDO::PARAM_INT);
         $stmt->execute();
@@ -267,7 +385,8 @@ final class Invoice
         string $search = '',
         string $status = '',
         string $dateFrom = '',
-        string $dateTo = ''
+        string $dateTo = '',
+        bool $pastDueOnly = false
     ): int
     {
         if (!SchemaInspector::hasTable('invoices')) {
@@ -335,10 +454,17 @@ final class Invoice
             $where[] = "DATE({$dateExpr}) <= :date_to";
         }
 
+        $payments = self::openInvoicePaymentsJoinSpec();
+        $paymentsJoinSql = $pastDueOnly ? $payments['join'] : '';
+        if ($pastDueOnly) {
+            $where[] = self::sqlPastDueOpenInvoices($typeSql, $statusSql);
+        }
+
         $sql = "SELECT COUNT(*)
                 FROM invoices i
                 {$joinSql}
                 {$jobJoinSql}
+                {$paymentsJoinSql}
                 WHERE " . implode(' AND ', $where);
 
         $stmt = Database::connection()->prepare($sql);
@@ -363,9 +489,320 @@ final class Invoice
         if ($dateTo !== '') {
             $stmt->bindValue(':date_to', $dateTo);
         }
+        if ($pastDueOnly && $payments['bindBusiness']) {
+            $stmt->bindValue(':payments_business_id', $businessId, \PDO::PARAM_INT);
+        }
         $stmt->execute();
 
         return (int) $stmt->fetchColumn();
+    }
+
+    /**
+     * @return array{
+     *   buckets: array{
+     *     past_due: list<array<string, mixed>>,
+     *     unpaid: list<array<string, mixed>>,
+     *     paid: list<array<string, mixed>>
+     *   },
+     *   totals: array{
+     *     past_due: array{count: int, amount: float},
+     *     unpaid: array{count: int, amount: float},
+     *     paid: array{count: int, amount: float},
+     *     all: array{count: int, amount: float}
+     *   }
+     * }
+     */
+    public static function indexBillingGrouped(
+        int $businessId,
+        string $search = '',
+        string $status = '',
+        string $dateFrom = '',
+        string $dateTo = ''
+    ): array {
+        $empty = [
+            'buckets' => [
+                'past_due' => [],
+                'unpaid' => [],
+                'paid' => [],
+            ],
+            'totals' => [
+                'past_due' => ['count' => 0, 'amount' => 0.0],
+                'unpaid' => ['count' => 0, 'amount' => 0.0],
+                'paid' => ['count' => 0, 'amount' => 0.0],
+                'all' => ['count' => 0, 'amount' => 0.0],
+            ],
+        ];
+
+        if (!SchemaInspector::hasTable('invoices')) {
+            return $empty;
+        }
+
+        $rows = self::indexBillingRecords($businessId, $search, $status, $dateFrom, $dateTo, 'invoice');
+        $buckets = [
+            'past_due' => [],
+            'unpaid' => [],
+            'paid' => [],
+        ];
+        $totals = [
+            'past_due' => ['count' => 0, 'amount' => 0.0],
+            'unpaid' => ['count' => 0, 'amount' => 0.0],
+            'paid' => ['count' => 0, 'amount' => 0.0],
+            'all' => ['count' => 0, 'amount' => 0.0],
+        ];
+
+        foreach ($rows as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $bucket = self::billingPaymentBucket($row);
+            if (!isset($buckets[$bucket])) {
+                continue;
+            }
+            $buckets[$bucket][] = $row;
+
+            $total = (float) ($row['total'] ?? 0);
+            $balance = (float) ($row['balance_due'] ?? $total);
+            $amount = in_array($bucket, ['past_due', 'unpaid'], true) ? $balance : $total;
+            $totals[$bucket]['count']++;
+            $totals[$bucket]['amount'] += $amount;
+            $totals['all']['count']++;
+            $totals['all']['amount'] += $amount;
+        }
+
+        self::sortBillingBucketRows($buckets['past_due'], 'past_due');
+        self::sortBillingBucketRows($buckets['unpaid'], 'unpaid');
+        self::sortBillingBucketRows($buckets['paid'], 'paid');
+
+        foreach (['past_due', 'unpaid', 'paid', 'all'] as $key) {
+            $totals[$key]['amount'] = round($totals[$key]['amount'], 2);
+        }
+
+        return [
+            'buckets' => $buckets,
+            'totals' => $totals,
+        ];
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    public static function indexBillingEstimatesList(
+        int $businessId,
+        string $search = '',
+        string $status = '',
+        string $dateFrom = '',
+        string $dateTo = ''
+    ): array {
+        if (!SchemaInspector::hasTable('invoices')) {
+            return [];
+        }
+
+        $rows = self::indexBillingRecords($businessId, $search, $status, $dateFrom, $dateTo, 'estimate', 'issue_desc');
+        return is_array($rows) ? $rows : [];
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private static function indexBillingRecords(
+        int $businessId,
+        string $search = '',
+        string $status = '',
+        string $dateFrom = '',
+        string $dateTo = '',
+        string $documentType = '',
+        string $sortOrder = 'due_asc'
+    ): array {
+        $query = trim($search);
+        $status = strtolower(trim($status));
+        $dateFrom = trim($dateFrom);
+        $dateTo = trim($dateTo);
+
+        $numberSql = SchemaInspector::hasColumn('invoices', 'invoice_number')
+            ? 'i.invoice_number'
+            : "CONCAT('INV-', i.id)";
+        $typeSql = SchemaInspector::hasColumn('invoices', 'type') ? 'i.type' : "'invoice'";
+        $statusSql = SchemaInspector::hasColumn('invoices', 'status') ? 'i.status' : "'draft'";
+        $totalSql = SchemaInspector::hasColumn('invoices', 'total')
+            ? 'i.total'
+            : (SchemaInspector::hasColumn('invoices', 'subtotal') ? 'i.subtotal' : '0');
+        $issueDateSql = SchemaInspector::hasColumn('invoices', 'issue_date') ? 'i.issue_date' : 'NULL';
+        $dueDateSql = SchemaInspector::hasColumn('invoices', 'due_date') ? 'i.due_date' : 'NULL';
+        $jobIdSql = SchemaInspector::hasColumn('invoices', 'job_id') ? 'i.job_id' : 'NULL';
+        $createdAtSql = SchemaInspector::hasColumn('invoices', 'created_at') ? 'i.created_at' : 'NULL';
+
+        $joinSql = '';
+        $clientNameSql = "'—'";
+        if (SchemaInspector::hasTable('clients') && SchemaInspector::hasColumn('invoices', 'client_id')) {
+            $clientNameSql = "COALESCE(NULLIF(TRIM(CONCAT_WS(' ', c.first_name, c.last_name)), ''), NULLIF(c.company_name, ''), CONCAT('Client #', c.id))";
+            $joinDeleted = SchemaInspector::hasColumn('clients', 'deleted_at') ? 'AND c.deleted_at IS NULL' : '';
+            $joinSql = " LEFT JOIN clients c ON c.id = i.client_id {$joinDeleted}";
+        }
+
+        $jobJoinSql = '';
+        $jobTitleSql = 'NULL';
+        if (SchemaInspector::hasTable('jobs') && SchemaInspector::hasColumn('invoices', 'job_id')) {
+            $titleCol = SchemaInspector::hasColumn('jobs', 'title')
+                ? 'jb.title'
+                : (SchemaInspector::hasColumn('jobs', 'name') ? 'jb.name' : "CONCAT('Job #', jb.id)");
+            $jobTitleSql = "COALESCE(NULLIF({$titleCol}, ''), CONCAT('Job #', jb.id))";
+            $jobDeleted = SchemaInspector::hasColumn('jobs', 'deleted_at') ? 'AND jb.deleted_at IS NULL' : '';
+            $jobJoinSql = " LEFT JOIN jobs jb ON jb.id = i.job_id {$jobDeleted}";
+        }
+
+        $jobLikeClause = $jobTitleSql !== 'NULL'
+            ? " OR {$jobTitleSql} LIKE :query_like_5"
+            : '';
+
+        $where = [];
+        $where[] = SchemaInspector::hasColumn('invoices', 'business_id') ? 'i.business_id = :business_id' : '1=1';
+        $where[] = SchemaInspector::hasColumn('invoices', 'deleted_at') ? 'i.deleted_at IS NULL' : '1=1';
+        $where[] = self::sqlBillingListExcludeTerminalEstimates($typeSql, $statusSql);
+        if ($status !== '') {
+            $where[] = 'LOWER(' . $statusSql . ') = :status';
+        }
+        $where[] = "(
+            :query = ''
+            OR {$numberSql} LIKE :query_like_1
+            OR {$clientNameSql} LIKE :query_like_2
+            OR {$statusSql} LIKE :query_like_3
+            OR CAST(i.id AS CHAR) LIKE :query_like_4
+            {$jobLikeClause}
+        )";
+
+        $createdDateExpr = SchemaInspector::hasColumn('invoices', 'created_at') ? 'DATE(i.created_at)' : 'i.id';
+        $dateExpr = "COALESCE({$issueDateSql}, {$createdDateExpr})";
+        if ($dateFrom !== '') {
+            $where[] = "DATE({$dateExpr}) >= :date_from";
+        }
+        if ($dateTo !== '') {
+            $where[] = "DATE({$dateExpr}) <= :date_to";
+        }
+
+        $documentType = strtolower(trim($documentType));
+        if ($documentType === 'invoice' && SchemaInspector::hasColumn('invoices', 'type')) {
+            $where[] = "LOWER(COALESCE(NULLIF(TRIM({$typeSql}), ''), 'invoice')) = 'invoice'";
+        } elseif ($documentType === 'estimate' && SchemaInspector::hasColumn('invoices', 'type')) {
+            $where[] = "LOWER(COALESCE(NULLIF(TRIM({$typeSql}), ''), 'invoice')) = 'estimate'";
+        }
+
+        $payments = self::openInvoicePaymentsJoinSpec();
+        $jobNameSelect = $jobTitleSql !== 'NULL' ? "{$jobTitleSql} AS job_name" : 'NULL AS job_name';
+        $orderSql = $sortOrder === 'issue_desc'
+            ? "COALESCE({$issueDateSql}, {$createdAtSql}, {$dueDateSql}) DESC, i.id DESC"
+            : "COALESCE({$dueDateSql}, {$issueDateSql}, {$createdAtSql}) ASC, i.id ASC";
+
+        $sql = "SELECT
+                    i.id,
+                    {$numberSql} AS invoice_number,
+                    {$typeSql} AS type,
+                    {$statusSql} AS status,
+                    {$totalSql} AS total,
+                    {$payments['balanceSql']} AS balance_due,
+                    {$issueDateSql} AS issue_date,
+                    {$dueDateSql} AS due_date,
+                    {$jobIdSql} AS job_id,
+                    {$createdAtSql} AS created_at,
+                    {$clientNameSql} AS client_name,
+                    {$jobNameSelect}
+                FROM invoices i
+                {$joinSql}
+                {$jobJoinSql}
+                {$payments['join']}
+                WHERE " . implode(' AND ', $where) . "
+                ORDER BY {$orderSql}
+                LIMIT 1000";
+
+        $stmt = Database::connection()->prepare($sql);
+        $queryLike = '%' . $query . '%';
+        if (SchemaInspector::hasColumn('invoices', 'business_id')) {
+            $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
+        }
+        if ($status !== '') {
+            $stmt->bindValue(':status', $status);
+        }
+        $stmt->bindValue(':query', $query);
+        $stmt->bindValue(':query_like_1', $queryLike);
+        $stmt->bindValue(':query_like_2', $queryLike);
+        $stmt->bindValue(':query_like_3', $queryLike);
+        $stmt->bindValue(':query_like_4', $queryLike);
+        if ($jobTitleSql !== 'NULL') {
+            $stmt->bindValue(':query_like_5', $queryLike);
+        }
+        if ($dateFrom !== '') {
+            $stmt->bindValue(':date_from', $dateFrom);
+        }
+        if ($dateTo !== '') {
+            $stmt->bindValue(':date_to', $dateTo);
+        }
+        if ($payments['bindBusiness']) {
+            $stmt->bindValue(':payments_business_id', $businessId, \PDO::PARAM_INT);
+        }
+        $stmt->execute();
+
+        $rows = $stmt->fetchAll();
+        return is_array($rows) ? $rows : [];
+    }
+
+    /**
+     * @param array<string, mixed> $row
+     */
+    public static function billingPaymentBucket(array $row): string
+    {
+        $status = strtolower(trim((string) ($row['status'] ?? '')));
+        if (in_array($status, ['paid', 'paid_in_full', 'write_off'], true)) {
+            return 'paid';
+        }
+
+        $total = (float) ($row['total'] ?? 0);
+        $balance = (float) ($row['balance_due'] ?? $total);
+        if ($balance <= 0.009) {
+            return 'paid';
+        }
+
+        $due = trim((string) ($row['due_date'] ?? ''));
+        if ($due !== '') {
+            $dueTs = strtotime($due . ' 12:00:00');
+            if ($dueTs !== false && $dueTs < strtotime('today 12:00:00')) {
+                return 'past_due';
+            }
+        }
+
+        return 'unpaid';
+    }
+
+    /**
+     * @param list<array<string, mixed>> $rows
+     */
+    private static function sortBillingBucketRows(array &$rows, string $bucket): void
+    {
+        usort($rows, static function (array $a, array $b) use ($bucket): int {
+            if ($bucket === 'paid') {
+                $aDate = trim((string) ($a['issue_date'] ?? $a['created_at'] ?? ''));
+                $bDate = trim((string) ($b['issue_date'] ?? $b['created_at'] ?? ''));
+                $cmp = strcmp($bDate, $aDate);
+                if ($cmp !== 0) {
+                    return $cmp;
+                }
+
+                return ((int) ($b['id'] ?? 0)) <=> ((int) ($a['id'] ?? 0));
+            }
+
+            $aDue = trim((string) ($a['due_date'] ?? ''));
+            $bDue = trim((string) ($b['due_date'] ?? ''));
+            if ($aDue === '' && $bDue !== '') {
+                return 1;
+            }
+            if ($aDue !== '' && $bDue === '') {
+                return -1;
+            }
+            $cmp = strcmp($aDue, $bDue);
+            if ($cmp !== 0) {
+                return $cmp;
+            }
+
+            return ((int) ($a['id'] ?? 0)) <=> ((int) ($b['id'] ?? 0));
+        });
     }
 
     public static function findForBusiness(int $businessId, int $invoiceId): ?array
@@ -1081,6 +1518,9 @@ final class Invoice
 
             $invoiceTotal = max(0.0, (float) ($row['invoice_total'] ?? 0));
             $currentStatus = self::normalizeStatusForStorage('invoice', (string) ($row['invoice_status'] ?? 'unsent'));
+            if (in_array($currentStatus, ['write_off'], true)) {
+                continue;
+            }
             $nextStatus = $currentStatus;
 
             if ($invoiceTotal > 0.0) {
@@ -1642,7 +2082,7 @@ final class Invoice
 
         $preferred = $type === 'estimate'
             ? ['draft', 'sent', 'approved', 'declined', 'converted']
-            : ['unsent', 'sent', 'partially_paid', 'paid_in_full', 'draft', 'partial', 'paid'];
+            : ['unsent', 'sent', 'partially_paid', 'paid_in_full', 'write_off', 'draft', 'partial', 'paid'];
 
         foreach ($preferred as $candidate) {
             $normalizedCandidate = self::normalizeStatusToken($candidate);

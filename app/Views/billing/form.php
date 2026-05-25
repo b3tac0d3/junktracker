@@ -29,6 +29,7 @@ if ($invoiceStatusOptions === []) {
         'sent' => 'Sent',
         'partially_paid' => 'Partially Paid',
         'paid_in_full' => 'Paid in Full',
+        'write_off' => 'Non Payment / Write Off',
     ];
 }
 $paymentCategoryOptions = is_array($paymentCategoryOptions ?? null) ? $paymentCategoryOptions : [];

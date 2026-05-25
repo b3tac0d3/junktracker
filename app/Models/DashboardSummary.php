@@ -187,7 +187,7 @@ final class DashboardSummary
 
         $statusWhere = '1=1';
         if (SchemaInspector::hasColumn('invoices', 'status')) {
-            $statusWhere = "LOWER(COALESCE(i.status, '')) NOT IN ('paid','paid_in_full','cancelled','declined','closed')";
+            $statusWhere = "LOWER(COALESCE(i.status, '')) NOT IN ('paid','paid_in_full','cancelled','declined','closed','write_off')";
         }
 
         $hasPaymentsTable = SchemaInspector::hasTable('payments');
@@ -670,12 +670,228 @@ final class DashboardSummary
         $end = date('Y-m-d 23:59:59');
         $events = EventFeed::range($businessId, $start, $end, []);
 
-        return self::buildDashboardAgendaDays(
+        $days = self::buildDashboardAgendaDays(
             $events,
             $nowTs,
             static fn (array $event): bool => self::isPastDueDashboardAgendaEvent($event, $nowTs),
             true
         );
+
+        if (\can_view_financials()) {
+            $days = self::mergeDashboardAgendaItems(
+                $days,
+                self::pastDueInvoiceAgendaItems($businessId, $lookbackDays),
+                $nowTs,
+                true
+            );
+        }
+
+        return $days;
+    }
+
+    /**
+     * @return list<array{title: string, start: string, url: string, event_type: string, customer_name: string, all_day: bool, color: string, time_label?: string}>
+     */
+    private static function pastDueInvoiceAgendaItems(int $businessId, int $lookbackDays = 60): array
+    {
+        if (!SchemaInspector::hasTable('invoices') || !SchemaInspector::hasColumn('invoices', 'due_date')) {
+            return [];
+        }
+
+        $lookbackStart = date('Y-m-d', strtotime('-' . max(1, $lookbackDays) . ' days'));
+        $invoiceTotalSql = SchemaInspector::hasColumn('invoices', 'total')
+            ? 'COALESCE(i.total, 0)'
+            : (SchemaInspector::hasColumn('invoices', 'subtotal') ? 'COALESCE(i.subtotal, 0)' : '0');
+        $numberSql = SchemaInspector::hasColumn('invoices', 'invoice_number')
+            ? 'i.invoice_number'
+            : "CAST(i.id AS CHAR)";
+        $invoiceBusinessWhere = SchemaInspector::hasColumn('invoices', 'business_id') ? 'i.business_id = :business_id' : '1=1';
+        $invoiceDeletedWhere = SchemaInspector::hasColumn('invoices', 'deleted_at') ? 'i.deleted_at IS NULL' : '1=1';
+
+        $typeWhere = '1=1';
+        if (SchemaInspector::hasColumn('invoices', 'type')) {
+            $typeWhere = "(LOWER(COALESCE(NULLIF(TRIM(i.type), ''), 'invoice')) = 'invoice')";
+        }
+
+        $statusWhere = '1=1';
+        if (SchemaInspector::hasColumn('invoices', 'status')) {
+            $statusWhere = "LOWER(COALESCE(i.status, '')) NOT IN ('paid','paid_in_full','cancelled','declined','closed','write_off')";
+        }
+
+        $clientJoin = '';
+        $clientNameSql = "''";
+        if (SchemaInspector::hasTable('clients') && SchemaInspector::hasColumn('invoices', 'client_id')) {
+            $clientJoinDeleted = SchemaInspector::hasColumn('clients', 'deleted_at') ? 'AND c.deleted_at IS NULL' : '';
+            $clientJoin = "LEFT JOIN clients c ON c.id = i.client_id {$clientJoinDeleted}";
+            $clientNameSql = "COALESCE(NULLIF(TRIM(CONCAT_WS(' ', c.first_name, c.last_name)), ''), NULLIF(c.company_name, ''), '')";
+        }
+
+        $hasPaymentsTable = SchemaInspector::hasTable('payments');
+        $hasPaymentsInvoiceId = SchemaInspector::hasColumn('payments', 'invoice_id');
+        $paymentsJoin = '';
+        $paymentsWhere = [];
+        if ($hasPaymentsTable && $hasPaymentsInvoiceId) {
+            $paymentsJoin = 'LEFT JOIN (
+                SELECT p.invoice_id, COALESCE(SUM(p.amount), 0) AS paid_total
+                FROM payments p';
+            $paymentsWhere[] = 'p.invoice_id IS NOT NULL';
+            if (SchemaInspector::hasColumn('payments', 'business_id')) {
+                $paymentsWhere[] = 'p.business_id = :payments_business_id';
+            }
+            if (SchemaInspector::hasColumn('payments', 'deleted_at')) {
+                $paymentsWhere[] = 'p.deleted_at IS NULL';
+            }
+            if ($paymentsWhere !== []) {
+                $paymentsJoin .= ' WHERE ' . implode(' AND ', $paymentsWhere);
+            }
+            $paymentsJoin .= ' GROUP BY p.invoice_id
+            ) pmt ON pmt.invoice_id = i.id';
+        } else {
+            $paymentsJoin = 'LEFT JOIN (SELECT NULL AS invoice_id, 0 AS paid_total) pmt ON 1=0';
+        }
+
+        $balanceSql = "GREATEST({$invoiceTotalSql} - COALESCE(pmt.paid_total, 0), 0)";
+
+        $sql = "SELECT
+                    i.id,
+                    {$numberSql} AS invoice_number,
+                    i.due_date,
+                    {$balanceSql} AS balance_due,
+                    {$clientNameSql} AS client_name
+                FROM invoices i
+                {$clientJoin}
+                {$paymentsJoin}
+                WHERE {$invoiceBusinessWhere}
+                  AND {$invoiceDeletedWhere}
+                  AND {$typeWhere}
+                  AND {$statusWhere}
+                  AND i.due_date IS NOT NULL
+                  AND DATE(i.due_date) >= :lookback_start
+                  AND DATE(i.due_date) < CURDATE()
+                  AND {$balanceSql} > 0.009
+                ORDER BY i.due_date ASC, i.id ASC
+                LIMIT 100";
+
+        $stmt = Database::connection()->prepare($sql);
+        if (SchemaInspector::hasColumn('invoices', 'business_id')) {
+            $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
+        }
+        if ($hasPaymentsTable && $hasPaymentsInvoiceId && SchemaInspector::hasColumn('payments', 'business_id')) {
+            $stmt->bindValue(':payments_business_id', $businessId, \PDO::PARAM_INT);
+        }
+        $stmt->bindValue(':lookback_start', $lookbackStart);
+        $stmt->execute();
+
+        $rows = $stmt->fetchAll();
+        if (!is_array($rows)) {
+            return [];
+        }
+
+        $items = [];
+        foreach ($rows as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $id = (int) ($row['id'] ?? 0);
+            if ($id <= 0) {
+                continue;
+            }
+            $dueRaw = trim((string) ($row['due_date'] ?? ''));
+            if ($dueRaw === '') {
+                continue;
+            }
+            $dueTs = strtotime($dueRaw . ' 00:00:00');
+            if ($dueTs === false) {
+                continue;
+            }
+
+            $invoiceNo = trim((string) ($row['invoice_number'] ?? ''));
+            if ($invoiceNo === '') {
+                $invoiceNo = '#' . (string) $id;
+            }
+            $balanceDue = (float) ($row['balance_due'] ?? 0);
+            $clientName = trim((string) ($row['client_name'] ?? ''));
+            $metaClient = $clientName !== '' ? $clientName : 'Open balance';
+
+            $items[] = [
+                'title' => 'Invoice ' . $invoiceNo,
+                'start' => date('c', $dueTs),
+                'url' => url('/billing/' . (string) $id),
+                'event_type' => 'Invoice',
+                'customer_name' => $metaClient . ' · $' . number_format($balanceDue, 2) . ' due',
+                'all_day' => true,
+                'color' => '#ca8a04',
+                'time_label' => 'Due',
+            ];
+        }
+
+        return $items;
+    }
+
+    /**
+     * @param list<array{date: string, label: string, is_past: bool, is_today: bool, items: list<array<string, mixed>>}> $dayGroups
+     * @param list<array<string, mixed>> $items
+     * @return list<array{date: string, label: string, is_past: bool, is_today: bool, items: list<array<string, mixed>>}>
+     */
+    private static function mergeDashboardAgendaItems(array $dayGroups, array $items, int $nowTs, bool $pastDueMode): array
+    {
+        if ($items === []) {
+            return $dayGroups;
+        }
+
+        $today = date('Y-m-d', $nowTs);
+        $tomorrow = date('Y-m-d', strtotime('+1 day', $nowTs));
+        $yesterday = date('Y-m-d', strtotime('-1 day', $nowTs));
+        $byDate = [];
+
+        foreach ($dayGroups as $dayGroup) {
+            if (!is_array($dayGroup)) {
+                continue;
+            }
+            $dateKey = trim((string) ($dayGroup['date'] ?? ''));
+            if ($dateKey === '') {
+                continue;
+            }
+            $byDate[$dateKey] = is_array($dayGroup['items'] ?? null) ? $dayGroup['items'] : [];
+        }
+
+        foreach ($items as $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+            $startTs = strtotime((string) ($item['start'] ?? ''));
+            if ($startTs === false) {
+                continue;
+            }
+            $dateKey = date('Y-m-d', $startTs);
+            $byDate[$dateKey][] = $item;
+        }
+
+        ksort($byDate);
+
+        $days = [];
+        foreach ($byDate as $dateKey => $dayItems) {
+            if ($dayItems === []) {
+                continue;
+            }
+            usort($dayItems, static function (array $a, array $b): int {
+                $cmp = strcmp((string) ($a['start'] ?? ''), (string) ($b['start'] ?? ''));
+                if ($cmp !== 0) {
+                    return $cmp;
+                }
+
+                return strcmp((string) ($a['title'] ?? ''), (string) ($b['title'] ?? ''));
+            });
+            $days[] = [
+                'date' => $dateKey,
+                'label' => self::dashboardAgendaDayLabel($dateKey, $today, $tomorrow, $yesterday, $pastDueMode),
+                'is_past' => $dateKey < $today || ($pastDueMode && $dateKey === $today),
+                'is_today' => $dateKey === $today,
+                'items' => $dayItems,
+            ];
+        }
+
+        return $days;
     }
 
     /**

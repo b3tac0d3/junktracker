@@ -108,7 +108,7 @@ final class FormSelectValue
                     'invoice_status' => [
                         'label' => 'Invoice Status',
                         'hint' => 'Used on invoice forms, quick status updates, and billing filters.',
-                        'defaults' => ['unsent', 'sent', 'partially_paid', 'paid_in_full'],
+                        'defaults' => ['unsent', 'sent', 'partially_paid', 'paid_in_full', 'write_off'],
                     ],
                     'payment_method' => [
                         'label' => 'Payment Method',

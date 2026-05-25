@@ -59,7 +59,7 @@ final class AdminExportController extends Controller
                  WHERE i.business_id = :business_id
                    AND i.deleted_at IS NULL
                    AND LOWER(COALESCE(i.type, \'invoice\')) = \'invoice\'
-                   AND LOWER(COALESCE(i.status, \'\')) NOT IN (\'paid_in_full\', \'cancelled\')
+                   AND LOWER(COALESCE(i.status, \'\')) NOT IN (\'paid_in_full\', \'cancelled\', \'write_off\')
                  ORDER BY i.id DESC
                  LIMIT 2000'
             );

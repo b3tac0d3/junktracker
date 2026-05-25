@@ -165,13 +165,13 @@ $nowTs = time();
     <div class="card-header index-card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
         <div>
             <strong class="fs-5"><i class="fas fa-exclamation-triangle me-2 jt-dashboard-icon--danger" aria-hidden="true"></i>Past due</strong>
-            <div class="small text-muted">Open jobs, quotes, deliveries, purchase quotes, estate sales, tasks, and appointments that should have already happened</div>
+            <div class="small text-muted">Open jobs, quotes, deliveries, purchase quotes, estate sales, tasks, appointments, and invoices that should have already happened</div>
         </div>
         <a class="btn btn-sm btn-outline-secondary" href="<?= e(url('/events')) ?>">Full calendar</a>
     </div>
     <div class="card-body dashboard-agenda-list">
         <?php if ($pastDueSchedule === []): ?>
-            <div class="record-empty">Nothing past due on the calendar.</div>
+            <div class="record-empty">Nothing past due.</div>
         <?php else: ?>
             <?php foreach ($pastDueSchedule as $dayGroup): ?>
                 <?php
@@ -200,7 +200,8 @@ $nowTs = time();
                             $itemCustomer = trim((string) ($item['customer_name'] ?? ''));
                             $itemAllDay = (bool) ($item['all_day'] ?? false);
                             $itemStart = trim((string) ($item['start'] ?? ''));
-                            $itemTime = $formatEventTime($itemStart, $itemAllDay);
+                            $itemTimeLabel = trim((string) ($item['time_label'] ?? ''));
+                            $itemTime = $itemTimeLabel !== '' ? $itemTimeLabel : $formatEventTime($itemStart, $itemAllDay);
                             $itemColor = trim((string) ($item['color'] ?? ''));
                             $metaParts = array_filter([$itemType !== '' ? $itemType : null, $itemCustomer !== '' ? $itemCustomer : null]);
                             ?>

@@ -325,7 +325,7 @@ final class NavNotifications
 
         $statusWhere = '';
         if (SchemaInspector::hasColumn('invoices', 'status')) {
-            $statusWhere = "AND LOWER(TRIM(COALESCE(i.status, ''))) NOT IN ('paid','paid_in_full','cancelled','draft','declined')";
+            $statusWhere = "AND LOWER(TRIM(COALESCE(i.status, ''))) NOT IN ('paid','paid_in_full','cancelled','draft','declined','write_off')";
         }
 
         $unpaidWhere = '';

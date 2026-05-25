@@ -27,6 +27,14 @@ final class BillingController extends Controller
         $sortDir = strtolower(trim((string) ($_GET['sort_dir'] ?? 'desc')));
         $dateFrom = trim((string) ($_GET['date_from'] ?? ''));
         $dateTo = trim((string) ($_GET['date_to'] ?? ''));
+        $pastDueOnly = ((string) ($_GET['past_due'] ?? '')) === '1';
+        $tab = strtolower(trim((string) ($_GET['tab'] ?? 'invoices')));
+        if (!in_array($tab, ['invoices', 'estimates'], true)) {
+            $tab = 'invoices';
+        }
+        if ($pastDueOnly) {
+            $tab = 'invoices';
+        }
         if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateFrom)) {
             $dateFrom = '';
         }
@@ -36,31 +44,42 @@ final class BillingController extends Controller
         if ($dateFrom !== '' && $dateTo !== '' && $dateFrom > $dateTo) {
             [$dateFrom, $dateTo] = [$dateTo, $dateFrom];
         }
-        if (!in_array($sortBy, ['date', 'id', 'client_name'], true)) {
+        if (!in_array($sortBy, ['date', 'id', 'client_name', 'due_date'], true)) {
             $sortBy = 'date';
         }
         if (!in_array($sortDir, ['asc', 'desc'], true)) {
             $sortDir = 'desc';
         }
-        $statusOptions = $this->billingFilterStatusOptions();
-        $allowedStatuses = array_values(array_filter(array_keys($statusOptions), static fn (string $key): bool => $key !== ''));
-        if ($status !== '' && !in_array($status, $allowedStatuses, true)) {
+        if ($pastDueOnly) {
             $status = '';
         }
 
         $businessId = current_business_id();
-        $perPage = pagination_per_page($_GET['per_page'] ?? null);
-        $page = pagination_current_page($_GET['page'] ?? null);
-        $totalRows = Invoice::indexCount($businessId, $search, $status, $dateFrom, $dateTo);
-        $totalPages = pagination_total_pages($totalRows, $perPage);
-        if ($page > $totalPages) {
-            $page = $totalPages;
-        }
-        $offset = pagination_offset($page, $perPage);
+        $estimates = [];
+        $statusOptions = ['' => 'All'];
 
-        $invoices = Invoice::indexList($businessId, $search, $status, $perPage, $offset, $sortBy, $sortDir, $dateFrom, $dateTo);
-        $pagination = pagination_meta($page, $perPage, $totalRows, count($invoices));
-        $summary = Invoice::summary($businessId);
+        if ($tab === 'estimates') {
+            $statusOptions += $this->estimateStatusOptions();
+            $allowedStatuses = array_values(array_filter(array_keys($statusOptions), static fn (string $key): bool => $key !== ''));
+            if ($status !== '' && !in_array($status, $allowedStatuses, true)) {
+                $status = '';
+            }
+            $estimates = Invoice::indexBillingEstimatesList($businessId, $search, $status, $dateFrom, $dateTo);
+        } else {
+            $statusOptions += $this->invoiceStatusOptions();
+            $allowedStatuses = array_values(array_filter(array_keys($statusOptions), static fn (string $key): bool => $key !== ''));
+            if ($status !== '' && !in_array($status, $allowedStatuses, true)) {
+                $status = '';
+            }
+        }
+
+        $billingGrouped = Invoice::indexBillingGrouped(
+            $businessId,
+            $tab === 'estimates' ? '' : $search,
+            $tab === 'estimates' ? '' : $status,
+            $tab === 'estimates' ? '' : $dateFrom,
+            $tab === 'estimates' ? '' : $dateTo
+        );
 
         $this->render('billing/index', [
             'pageTitle' => 'Billing',
@@ -70,10 +89,12 @@ final class BillingController extends Controller
             'sortDir' => $sortDir,
             'dateFrom' => $dateFrom,
             'dateTo' => $dateTo,
+            'pastDueOnly' => $pastDueOnly,
+            'billingTab' => $tab,
+            'billingGrouped' => $billingGrouped,
+            'estimates' => $estimates,
             'statusOptions' => $statusOptions,
-            'invoices' => $invoices,
-            'summary' => $summary,
-            'pagination' => $pagination,
+            'summary' => Invoice::summary($businessId),
         ]);
     }
 
@@ -1048,7 +1069,7 @@ final class BillingController extends Controller
      */
     private function invoiceStatusOptions(): array
     {
-        $fallback = ['unsent', 'sent', 'partially_paid', 'paid_in_full'];
+        $fallback = ['unsent', 'sent', 'partially_paid', 'paid_in_full', 'write_off'];
         return $this->optionLabelMap($this->selectValueList('invoice_status', $fallback));
     }
 
@@ -1308,10 +1329,20 @@ final class BillingController extends Controller
             if ($value === '' || array_key_exists($value, $map)) {
                 continue;
             }
-            $map[$value] = ucwords(str_replace('_', ' ', $value));
+            $map[$value] = $this->billingStatusLabel($value);
         }
 
         return $map;
+    }
+
+    private function billingStatusLabel(string $value): string
+    {
+        return match ($value) {
+            'write_off' => 'Non Payment / Write Off',
+            'paid_in_full' => 'Paid in Full',
+            'partially_paid' => 'Partially Paid',
+            default => ucwords(str_replace('_', ' ', $value)),
+        };
     }
 
     private function formFromModel(array $invoice, array $lineItems = []): array
