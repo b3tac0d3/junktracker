@@ -755,7 +755,7 @@ final class DashboardSummary
         $sql = "SELECT
                     i.id,
                     {$numberSql} AS invoice_number,
-                    i.due_date,
+                    DATE(i.due_date) AS due_date,
                     {$balanceSql} AS balance_due,
                     {$clientNameSql} AS client_name
                 FROM invoices i
@@ -797,11 +797,8 @@ final class DashboardSummary
                 continue;
             }
             $dueRaw = trim((string) ($row['due_date'] ?? ''));
-            if ($dueRaw === '') {
-                continue;
-            }
-            $dueTs = strtotime($dueRaw . ' 00:00:00');
-            if ($dueTs === false) {
+            $dueDateKey = self::dashboardAgendaDateKey($dueRaw);
+            if ($dueDateKey === null) {
                 continue;
             }
 
@@ -815,13 +812,14 @@ final class DashboardSummary
 
             $items[] = [
                 'title' => 'Invoice ' . $invoiceNo,
-                'start' => date('c', $dueTs),
+                'start' => $dueDateKey . 'T12:00:00',
+                'agenda_date' => $dueDateKey,
                 'url' => url('/billing/' . (string) $id),
                 'event_type' => 'Invoice',
                 'customer_name' => $metaClient . ' · $' . number_format($balanceDue, 2) . ' due',
                 'all_day' => true,
                 'color' => '#ca8a04',
-                'time_label' => 'Due',
+                'time_label' => \format_date($dueDateKey),
             ];
         }
 
@@ -859,11 +857,14 @@ final class DashboardSummary
             if (!is_array($item)) {
                 continue;
             }
-            $startTs = strtotime((string) ($item['start'] ?? ''));
-            if ($startTs === false) {
-                continue;
+            $dateKey = trim((string) ($item['agenda_date'] ?? ''));
+            if ($dateKey === '' || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateKey)) {
+                $startTs = strtotime((string) ($item['start'] ?? ''));
+                if ($startTs === false) {
+                    continue;
+                }
+                $dateKey = date('Y-m-d', $startTs);
             }
-            $dateKey = date('Y-m-d', $startTs);
             $byDate[$dateKey][] = $item;
         }
 
@@ -989,6 +990,24 @@ final class DashboardSummary
             'all_day' => (bool) ($event['allDay'] ?? false),
             'color' => trim((string) ($event['backgroundColor'] ?? '')),
         ];
+    }
+
+    private static function dashboardAgendaDateKey(string $raw): ?string
+    {
+        $raw = trim($raw);
+        if ($raw === '') {
+            return null;
+        }
+        if (preg_match('/^(\d{4}-\d{2}-\d{2})/', $raw, $matches)) {
+            return $matches[1];
+        }
+
+        $ts = strtotime($raw);
+        if ($ts === false) {
+            return null;
+        }
+
+        return date('Y-m-d', $ts);
     }
 
     private static function dashboardAgendaDayLabel(

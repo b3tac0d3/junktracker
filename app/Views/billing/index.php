@@ -15,6 +15,7 @@ $billingGrouped = is_array($billingGrouped ?? null) ? $billingGrouped : [];
 $bucketRows = is_array($billingGrouped['buckets'] ?? null) ? $billingGrouped['buckets'] : [];
 $bucketTotals = is_array($billingGrouped['totals'] ?? null) ? $billingGrouped['totals'] : [];
 $estimates = is_array($estimates ?? null) ? $estimates : [];
+$pagination = is_array($pagination ?? null) ? $pagination : pagination_meta(1, 25, 0, 0);
 $statusOptions = is_array($statusOptions ?? null) ? $statusOptions : [];
 if (!array_key_exists('', $statusOptions)) {
     $statusOptions = ['' => 'All'] + $statusOptions;
@@ -24,7 +25,18 @@ $pastDueRows = is_array($bucketRows['past_due'] ?? null) ? $bucketRows['past_due
 $unpaidRows = is_array($bucketRows['unpaid'] ?? null) ? $bucketRows['unpaid'] : [];
 $paidRows = is_array($bucketRows['paid'] ?? null) ? $bucketRows['paid'] : [];
 $invoiceCount = (int) ($bucketTotals['all']['count'] ?? 0);
-$estimateCount = count($estimates);
+$estimateCount = $isEstimatesTab
+    ? (int) ($pagination['total_rows'] ?? count($estimates))
+    : count($estimates);
+
+$billingPaginationParams = array_filter([
+    'tab' => $billingTab,
+    'q' => $search !== '' ? $search : null,
+    'status' => $status !== '' ? $status : null,
+    'date_from' => $dateFrom !== '' ? $dateFrom : null,
+    'date_to' => $dateTo !== '' ? $dateTo : null,
+    'past_due' => $pastDueOnly ? '1' : null,
+], static fn ($value): bool => $value !== null && $value !== '');
 
 $billingSections = [
     'past_due' => [
@@ -272,14 +284,21 @@ $renderBillingRow = static function (
             </div>
         </div>
         <div class="card-body p-2 p-lg-3 billing-buckets">
+            <?php
+            $basePath = '/billing';
+            $fixedQueryParams = $billingPaginationParams;
+            require base_path('app/Views/components/index_pagination.php');
+            ?>
             <?php if ($invoiceCount === 0): ?>
                 <div class="record-empty">No invoices found for the current filter.</div>
             <?php else: ?>
                 <?php foreach ($billingSections as $section): ?>
                     <?php
                     $sectionRows = is_array($section['rows'] ?? null) ? $section['rows'] : [];
-                    $sectionCount = count($sectionRows);
                     $sectionTotal = is_array($section['total'] ?? null) ? $section['total'] : ['count' => 0, 'amount' => 0.0];
+                    if ($sectionRows === [] && (int) ($pagination['total_pages'] ?? 1) > 1) {
+                        continue;
+                    }
                     ?>
                     <div class="billing-bucket" id="<?= e((string) ($section['id'] ?? '')) ?>">
                         <div class="billing-bucket-header">
@@ -289,7 +308,7 @@ $renderBillingRow = static function (
                             </div>
                             <div class="billing-bucket-summary text-end">
                                 <div class="<?= e($billingTotalClass('invoice', '', (string) ($section['amount_class'] ?? ''))) ?>">$<?= e(number_format((float) ($sectionTotal['amount'] ?? 0), 2)) ?></div>
-                                <div class="small text-muted"><?= e((string) $sectionCount) ?> invoice(s)</div>
+                                <div class="small text-muted"><?= e((string) ((int) ($sectionTotal['count'] ?? 0))) ?> invoice(s)</div>
                             </div>
                         </div>
                         <?php if ($sectionRows === []): ?>
@@ -318,6 +337,11 @@ $renderBillingRow = static function (
         </div>
     <?php else: ?>
         <div class="card-body p-2 p-lg-3">
+            <?php
+            $basePath = '/billing';
+            $fixedQueryParams = $billingPaginationParams;
+            require base_path('app/Views/components/index_pagination.php');
+            ?>
             <?php if ($estimates === []): ?>
                 <div class="record-empty">No estimates found for the current filter.</div>
             <?php else: ?>

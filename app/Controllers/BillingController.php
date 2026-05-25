@@ -36,10 +36,10 @@ final class BillingController extends Controller
             $tab = 'invoices';
         }
         if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateFrom)) {
-            $dateFrom = '';
+            $dateFrom = $pastDueOnly ? '' : date('Y-01-01');
         }
         if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateTo)) {
-            $dateTo = '';
+            $dateTo = $pastDueOnly ? '' : date('Y-m-d');
         }
         if ($dateFrom !== '' && $dateTo !== '' && $dateFrom > $dateTo) {
             [$dateFrom, $dateTo] = [$dateTo, $dateFrom];
@@ -55,8 +55,11 @@ final class BillingController extends Controller
         }
 
         $businessId = current_business_id();
+        $perPage = pagination_per_page($_GET['per_page'] ?? null);
+        $page = pagination_current_page($_GET['page'] ?? null);
         $estimates = [];
         $statusOptions = ['' => 'All'];
+        $pagination = pagination_meta(1, $perPage, 0, 0);
 
         if ($tab === 'estimates') {
             $statusOptions += $this->estimateStatusOptions();
@@ -64,7 +67,29 @@ final class BillingController extends Controller
             if ($status !== '' && !in_array($status, $allowedStatuses, true)) {
                 $status = '';
             }
-            $estimates = Invoice::indexBillingEstimatesList($businessId, $search, $status, $dateFrom, $dateTo);
+            $estimateTotalRows = Invoice::indexBillingRecordsCount(
+                $businessId,
+                $search,
+                $status,
+                $dateFrom,
+                $dateTo,
+                'estimate'
+            );
+            $totalPages = pagination_total_pages($estimateTotalRows, $perPage);
+            if ($page > $totalPages) {
+                $page = $totalPages;
+            }
+            $offset = pagination_offset($page, $perPage);
+            $estimates = Invoice::indexBillingEstimatesList(
+                $businessId,
+                $search,
+                $status,
+                $dateFrom,
+                $dateTo,
+                $perPage,
+                $offset
+            );
+            $pagination = pagination_meta($page, $perPage, $estimateTotalRows, count($estimates));
         } else {
             $statusOptions += $this->invoiceStatusOptions();
             $allowedStatuses = array_values(array_filter(array_keys($statusOptions), static fn (string $key): bool => $key !== ''));
@@ -78,8 +103,38 @@ final class BillingController extends Controller
             $tab === 'estimates' ? '' : $search,
             $tab === 'estimates' ? '' : $status,
             $tab === 'estimates' ? '' : $dateFrom,
-            $tab === 'estimates' ? '' : $dateTo
+            $tab === 'estimates' ? '' : $dateTo,
+            $tab === 'invoices' ? $perPage : 0,
+            $tab === 'invoices' ? pagination_offset($page, $perPage) : 0,
+            $pastDueOnly
         );
+
+        if ($tab === 'invoices') {
+            $invoiceTotalRows = (int) ($billingGrouped['totals']['all']['count'] ?? 0);
+            if ($pastDueOnly) {
+                $invoiceTotalRows = (int) ($billingGrouped['totals']['past_due']['count'] ?? 0);
+            }
+            $totalPages = pagination_total_pages($invoiceTotalRows, $perPage);
+            if ($page > $totalPages) {
+                $page = $totalPages;
+                $billingGrouped = Invoice::indexBillingGrouped(
+                    $businessId,
+                    $search,
+                    $status,
+                    $dateFrom,
+                    $dateTo,
+                    $perPage,
+                    pagination_offset($page, $perPage),
+                    $pastDueOnly
+                );
+            }
+            $displayCount = 0;
+            $bucketRows = is_array($billingGrouped['buckets'] ?? null) ? $billingGrouped['buckets'] : [];
+            foreach (['past_due', 'unpaid', 'paid'] as $bucketKey) {
+                $displayCount += count(is_array($bucketRows[$bucketKey] ?? null) ? $bucketRows[$bucketKey] : []);
+            }
+            $pagination = pagination_meta($page, $perPage, $invoiceTotalRows, $displayCount);
+        }
 
         $this->render('billing/index', [
             'pageTitle' => 'Billing',
@@ -94,6 +149,7 @@ final class BillingController extends Controller
             'billingGrouped' => $billingGrouped,
             'estimates' => $estimates,
             'statusOptions' => $statusOptions,
+            'pagination' => $pagination,
             'summary' => Invoice::summary($businessId),
         ]);
     }

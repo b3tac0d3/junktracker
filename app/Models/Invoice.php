@@ -517,7 +517,10 @@ final class Invoice
         string $search = '',
         string $status = '',
         string $dateFrom = '',
-        string $dateTo = ''
+        string $dateTo = '',
+        int $limit = 0,
+        int $offset = 0,
+        bool $pastDueOnly = false
     ): array {
         $empty = [
             'buckets' => [
@@ -573,6 +576,28 @@ final class Invoice
         self::sortBillingBucketRows($buckets['unpaid'], 'unpaid');
         self::sortBillingBucketRows($buckets['paid'], 'paid');
 
+        if ($limit > 0) {
+            $flatRows = $pastDueOnly
+                ? $buckets['past_due']
+                : array_merge($buckets['past_due'], $buckets['unpaid'], $buckets['paid']);
+            $pageRows = array_slice($flatRows, max(0, $offset), $limit);
+            $pageBuckets = [
+                'past_due' => [],
+                'unpaid' => [],
+                'paid' => [],
+            ];
+            foreach ($pageRows as $row) {
+                if (!is_array($row)) {
+                    continue;
+                }
+                $bucket = self::billingPaymentBucket($row);
+                if (isset($pageBuckets[$bucket])) {
+                    $pageBuckets[$bucket][] = $row;
+                }
+            }
+            $buckets = $pageBuckets;
+        }
+
         foreach (['past_due', 'unpaid', 'paid', 'all'] as $key) {
             $totals[$key]['amount'] = round($totals[$key]['amount'], 2);
         }
@@ -591,14 +616,138 @@ final class Invoice
         string $search = '',
         string $status = '',
         string $dateFrom = '',
-        string $dateTo = ''
+        string $dateTo = '',
+        int $limit = 0,
+        int $offset = 0
     ): array {
         if (!SchemaInspector::hasTable('invoices')) {
             return [];
         }
 
-        $rows = self::indexBillingRecords($businessId, $search, $status, $dateFrom, $dateTo, 'estimate', 'issue_desc');
+        $rows = self::indexBillingRecords(
+            $businessId,
+            $search,
+            $status,
+            $dateFrom,
+            $dateTo,
+            'estimate',
+            'issue_desc',
+            $limit,
+            $offset
+        );
         return is_array($rows) ? $rows : [];
+    }
+
+    public static function indexBillingRecordsCount(
+        int $businessId,
+        string $search = '',
+        string $status = '',
+        string $dateFrom = '',
+        string $dateTo = '',
+        string $documentType = ''
+    ): int {
+        if (!SchemaInspector::hasTable('invoices')) {
+            return 0;
+        }
+
+        $query = trim($search);
+        $status = strtolower(trim($status));
+        $dateFrom = trim($dateFrom);
+        $dateTo = trim($dateTo);
+
+        $numberSql = SchemaInspector::hasColumn('invoices', 'invoice_number')
+            ? 'i.invoice_number'
+            : "CONCAT('INV-', i.id)";
+        $typeSql = SchemaInspector::hasColumn('invoices', 'type') ? 'i.type' : "'invoice'";
+        $statusSql = SchemaInspector::hasColumn('invoices', 'status') ? 'i.status' : "'draft'";
+        $issueDateSql = SchemaInspector::hasColumn('invoices', 'issue_date') ? 'i.issue_date' : 'NULL';
+
+        $joinSql = '';
+        $clientNameSql = "'—'";
+        if (SchemaInspector::hasTable('clients') && SchemaInspector::hasColumn('invoices', 'client_id')) {
+            $clientNameSql = "COALESCE(NULLIF(TRIM(CONCAT_WS(' ', c.first_name, c.last_name)), ''), NULLIF(c.company_name, ''), CONCAT('Client #', c.id))";
+            $joinDeleted = SchemaInspector::hasColumn('clients', 'deleted_at') ? 'AND c.deleted_at IS NULL' : '';
+            $joinSql = " LEFT JOIN clients c ON c.id = i.client_id {$joinDeleted}";
+        }
+
+        $jobJoinSql = '';
+        $jobTitleSql = 'NULL';
+        if (SchemaInspector::hasTable('jobs') && SchemaInspector::hasColumn('invoices', 'job_id')) {
+            $titleCol = SchemaInspector::hasColumn('jobs', 'title')
+                ? 'jb.title'
+                : (SchemaInspector::hasColumn('jobs', 'name') ? 'jb.name' : "CONCAT('Job #', jb.id)");
+            $jobTitleSql = "COALESCE(NULLIF({$titleCol}, ''), CONCAT('Job #', jb.id))";
+            $jobDeleted = SchemaInspector::hasColumn('jobs', 'deleted_at') ? 'AND jb.deleted_at IS NULL' : '';
+            $jobJoinSql = " LEFT JOIN jobs jb ON jb.id = i.job_id {$jobDeleted}";
+        }
+
+        $jobLikeClause = $jobTitleSql !== 'NULL'
+            ? " OR {$jobTitleSql} LIKE :query_like_5"
+            : '';
+
+        $where = [];
+        $where[] = SchemaInspector::hasColumn('invoices', 'business_id') ? 'i.business_id = :business_id' : '1=1';
+        $where[] = SchemaInspector::hasColumn('invoices', 'deleted_at') ? 'i.deleted_at IS NULL' : '1=1';
+        $where[] = self::sqlBillingListExcludeTerminalEstimates($typeSql, $statusSql);
+        if ($status !== '') {
+            $where[] = 'LOWER(' . $statusSql . ') = :status';
+        }
+        $where[] = "(
+            :query = ''
+            OR {$numberSql} LIKE :query_like_1
+            OR {$clientNameSql} LIKE :query_like_2
+            OR {$statusSql} LIKE :query_like_3
+            OR CAST(i.id AS CHAR) LIKE :query_like_4
+            {$jobLikeClause}
+        )";
+
+        $createdDateExpr = SchemaInspector::hasColumn('invoices', 'created_at') ? 'DATE(i.created_at)' : 'i.id';
+        $dateExpr = "COALESCE({$issueDateSql}, {$createdDateExpr})";
+        if ($dateFrom !== '') {
+            $where[] = "DATE({$dateExpr}) >= :date_from";
+        }
+        if ($dateTo !== '') {
+            $where[] = "DATE({$dateExpr}) <= :date_to";
+        }
+
+        $documentType = strtolower(trim($documentType));
+        if ($documentType === 'invoice' && SchemaInspector::hasColumn('invoices', 'type')) {
+            $where[] = "LOWER(COALESCE(NULLIF(TRIM({$typeSql}), ''), 'invoice')) = 'invoice'";
+        } elseif ($documentType === 'estimate' && SchemaInspector::hasColumn('invoices', 'type')) {
+            $where[] = "LOWER(COALESCE(NULLIF(TRIM({$typeSql}), ''), 'invoice')) = 'estimate'";
+        }
+
+        $sql = 'SELECT COUNT(DISTINCT i.id)
+                FROM invoices i
+                ' . $joinSql . '
+                ' . $jobJoinSql . '
+                WHERE ' . implode(' AND ', $where);
+
+        $stmt = Database::connection()->prepare($sql);
+        $queryLike = '%' . $query . '%';
+        if (SchemaInspector::hasColumn('invoices', 'business_id')) {
+            $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
+        }
+        if ($status !== '') {
+            $stmt->bindValue(':status', $status);
+        }
+        $stmt->bindValue(':query', $query);
+        $stmt->bindValue(':query_like_1', $queryLike);
+        $stmt->bindValue(':query_like_2', $queryLike);
+        $stmt->bindValue(':query_like_3', $queryLike);
+        $stmt->bindValue(':query_like_4', $queryLike);
+        if ($jobTitleSql !== 'NULL') {
+            $stmt->bindValue(':query_like_5', $queryLike);
+        }
+        if ($dateFrom !== '') {
+            $stmt->bindValue(':date_from', $dateFrom);
+        }
+        if ($dateTo !== '') {
+            $stmt->bindValue(':date_to', $dateTo);
+        }
+        $stmt->execute();
+
+        return (int) $stmt->fetchColumn();
     }
 
     /**
@@ -611,7 +760,9 @@ final class Invoice
         string $dateFrom = '',
         string $dateTo = '',
         string $documentType = '',
-        string $sortOrder = 'due_asc'
+        string $sortOrder = 'due_asc',
+        int $limit = 0,
+        int $offset = 0
     ): array {
         $query = trim($search);
         $status = strtolower(trim($status));
@@ -710,8 +861,11 @@ final class Invoice
                 {$jobJoinSql}
                 {$payments['join']}
                 WHERE " . implode(' AND ', $where) . "
-                ORDER BY {$orderSql}
-                LIMIT 1000";
+                ORDER BY {$orderSql}";
+
+        if ($limit > 0) {
+            $sql .= ' LIMIT :row_limit OFFSET :row_offset';
+        }
 
         $stmt = Database::connection()->prepare($sql);
         $queryLike = '%' . $query . '%';
@@ -737,6 +891,10 @@ final class Invoice
         }
         if ($payments['bindBusiness']) {
             $stmt->bindValue(':payments_business_id', $businessId, \PDO::PARAM_INT);
+        }
+        if ($limit > 0) {
+            $stmt->bindValue(':row_limit', max(1, $limit), \PDO::PARAM_INT);
+            $stmt->bindValue(':row_offset', max(0, $offset), \PDO::PARAM_INT);
         }
         $stmt->execute();
 
