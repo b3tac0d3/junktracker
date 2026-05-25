@@ -442,6 +442,170 @@ button[aria-busy="true"]:disabled {
   }
 }
 
+.dashboard-page-header {
+  align-items: flex-start;
+}
+
+.dashboard-secondary-grid {
+  display: grid;
+  gap: .8rem;
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 768px) {
+  .dashboard-secondary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+  }
+}
+
+.dashboard-tasks-list .simple-list-row.is-overdue {
+  border-left: 3px solid var(--bs-danger);
+  padding-left: calc(.75rem - 3px);
+}
+
+.dashboard-agenda-list {
+  display: grid;
+  gap: 1rem;
+}
+
+.dashboard-agenda-item.is-overdue {
+  border-left: 3px solid var(--bs-danger);
+  padding-left: calc(.65rem - 3px);
+}
+
+.dashboard-agenda-day-label {
+  color: var(--bs-emphasis-color);
+  font-size: .78rem;
+  font-weight: 700;
+  letter-spacing: .03em;
+  margin-bottom: .45rem;
+  text-transform: uppercase;
+}
+
+.dashboard-agenda-day.is-past .dashboard-agenda-day-label {
+  color: var(--bs-danger);
+}
+
+.dashboard-agenda-day.is-today .dashboard-agenda-day-label {
+  color: var(--bs-primary);
+}
+
+.dashboard-agenda-day-items {
+  display: grid;
+  gap: .35rem;
+}
+
+.dashboard-agenda-item {
+  align-items: flex-start;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: .45rem;
+  color: inherit;
+  display: grid;
+  gap: .55rem;
+  grid-template-columns: 4.5rem .55rem minmax(0, 1fr);
+  padding: .55rem .65rem;
+  text-decoration: none;
+  transition: background-color .15s ease;
+}
+
+a.dashboard-agenda-item:hover {
+  background: rgba(148, 163, 184, 0.12);
+  color: inherit;
+}
+
+.dashboard-agenda-time {
+  color: var(--bs-secondary-color);
+  font-size: .82rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+
+.dashboard-agenda-dot {
+  background: var(--bs-secondary);
+  border-radius: 999px;
+  height: .55rem;
+  margin-top: .35rem;
+  width: .55rem;
+}
+
+.dashboard-agenda-body {
+  display: grid;
+  gap: .1rem;
+  min-width: 0;
+}
+
+.dashboard-agenda-title {
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.dashboard-agenda-meta {
+  color: var(--bs-secondary-color);
+  font-size: .82rem;
+  line-height: 1.35;
+}
+
+.jt-dashboard-subsection-title {
+  color: var(--bs-secondary-color);
+  font-size: .72rem;
+  font-weight: 600;
+  letter-spacing: .04em;
+  margin: .85rem 0 .35rem;
+  text-transform: uppercase;
+}
+
+.jt-dashboard-subsection-title:first-child {
+  margin-top: 0;
+}
+
+.dashboard-pipeline-tabs .nav-tabs {
+  border-bottom-color: rgba(148, 163, 184, 0.35);
+}
+
+.dashboard-pipeline-tabs .tab-badge {
+  font-size: .65rem;
+  vertical-align: middle;
+}
+
+.kpi-grid--compact {
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 768px) {
+  .kpi-grid--compact {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1200px) {
+  .kpi-grid--compact {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.dashboard-chart-details > summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.dashboard-chart-details > summary::-webkit-details-marker {
+  display: none;
+}
+
+.dashboard-chart-details > summary::after {
+  color: var(--bs-secondary-color);
+  content: "▸";
+  font-size: .85rem;
+  margin-left: .5rem;
+}
+
+.dashboard-chart-details[open] > summary::after {
+  content: "▾";
+}
+
 /* Dashboard: section header icons (match KPI semantic colors) */
 .jt-dashboard-icon--sales {
   color: var(--jt-kpi-sales) !important;

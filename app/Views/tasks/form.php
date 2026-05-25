@@ -50,6 +50,33 @@ foreach ($userOptions as $user) {
         ];
     }
 }
+$currentUserId = (int) (auth_user_id() ?? 0);
+if ($mode === 'create' && $currentUserId > 0) {
+    if ((int) ($form['owner_user_id'] ?? 0) <= 0) {
+        $form['owner_user_id'] = (string) $currentUserId;
+    }
+    if (!isset($ownerMap[$currentUserId])) {
+        $currentUser = auth_user();
+        $currentUserName = '';
+        if (is_array($currentUser)) {
+            $currentUserName = trim((string) ($currentUser['first_name'] ?? '') . ' ' . (string) ($currentUser['last_name'] ?? ''));
+            if ($currentUserName === '') {
+                $currentUserName = trim((string) ($currentUser['name'] ?? ''));
+            }
+            if ($currentUserName === '') {
+                $currentUserName = trim((string) ($currentUser['email'] ?? ''));
+            }
+        }
+        if ($currentUserName !== '') {
+            $ownerMap[$currentUserId] = $currentUserName;
+            $ownerAutosuggestItems[] = [
+                'id' => $currentUserId,
+                'name' => $currentUserName,
+                'meta' => 'User #' . (string) $currentUserId,
+            ];
+        }
+    }
+}
 $ownerNameValue = trim((string) ($form['owner_user_name'] ?? ''));
 if ($ownerNameValue === '') {
     $selectedOwnerId = (int) ($form['owner_user_id'] ?? 0);

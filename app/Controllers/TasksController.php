@@ -591,14 +591,15 @@ final class TasksController extends Controller
     {
         $businessId = current_business_id();
         $statusOptions = $this->taskStatusOptions($businessId);
+        $ownerUserId = auth_user_id() ?? 0;
 
         return [
             'title' => '',
             'body' => '',
             'status' => (string) ($statusOptions[0] ?? 'open'),
             'priority' => '3',
-            'owner_user_id' => (string) (auth_user_id() ?? 0),
-            'owner_user_name' => '',
+            'owner_user_id' => $ownerUserId > 0 ? (string) $ownerUserId : '',
+            'owner_user_name' => $ownerUserId > 0 ? $this->currentUserDisplayName() : '',
             'due_at' => '',
             'link_type' => '',
             'link_id' => '',
@@ -642,6 +643,10 @@ final class TasksController extends Controller
         $allowedUserIds = [];
         foreach ($userOptions as $row) {
             $allowedUserIds[] = (int) ($row['id'] ?? 0);
+        }
+        $currentUserId = auth_user_id() ?? 0;
+        if ($currentUserId > 0 && !in_array($currentUserId, $allowedUserIds, true)) {
+            $allowedUserIds[] = $currentUserId;
         }
 
         if ($form['title'] === '') {
@@ -709,6 +714,26 @@ final class TasksController extends Controller
     {
         $timestamp = $this->asTimestamp($value);
         return $timestamp === null ? '' : date('Y-m-d\TH:i', $timestamp);
+    }
+
+    private function currentUserDisplayName(): string
+    {
+        $user = auth_user();
+        if (!is_array($user)) {
+            return '';
+        }
+
+        $name = trim((string) ($user['first_name'] ?? '') . ' ' . (string) ($user['last_name'] ?? ''));
+        if ($name !== '') {
+            return $name;
+        }
+
+        $name = trim((string) ($user['name'] ?? ''));
+        if ($name !== '') {
+            return $name;
+        }
+
+        return trim((string) ($user['email'] ?? ''));
     }
 
     private function json(array $payload, int $status = 200): never

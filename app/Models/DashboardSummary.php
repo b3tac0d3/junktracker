@@ -14,7 +14,9 @@ final class DashboardSummary
         $cacheKey = 'dash:' . $businessId . ':' . $ownerUserId . ':' . AppCache::versionSuffix();
         if (AppCache::enabled()) {
             $cached = AppCache::get($cacheKey);
-            if (is_array($cached) && isset($cached['sales'], $cached['estate_sales'], $cached['service'], $cached['lists'])) {
+            if (is_array($cached)
+                && isset($cached['sales'], $cached['estate_sales'], $cached['service'], $cached['lists'])
+                && array_key_exists('upcoming_schedule', $cached['lists'])) {
                 return $cached;
             }
         }
@@ -40,14 +42,8 @@ final class DashboardSummary
             'tasks' => self::tasksSummary($businessId, $ownerUserId),
             'three_month_chart' => self::lastThreeMonthsChart($businessId),
             'lists' => [
-                'dispatch_jobs' => self::dispatchJobs($businessId),
-                'prospects' => self::prospectJobs($businessId),
-                'purchase_prospects' => self::purchaseProspects($businessId),
-                'outstanding_quotes' => self::outstandingQuotes($businessId),
                 'my_tasks_due' => self::myTasksDue($businessId, $ownerUserId),
-                'recent_sales' => self::recentSales($businessId),
-                'recent_estate_sale_records' => self::recentEstateSaleRecords($businessId),
-                'upcoming_deliveries' => self::upcomingDeliveries($businessId),
+                'upcoming_schedule' => self::upcomingSchedule($businessId),
             ],
         ];
         if (AppCache::enabled()) {
@@ -168,6 +164,7 @@ final class DashboardSummary
     {
         $summary = [
             'payments_due' => 0.0,
+            'past_due' => 0.0,
             'open_invoices' => 0,
         ];
 
@@ -215,9 +212,16 @@ final class DashboardSummary
             $paymentsJoin = 'LEFT JOIN (SELECT NULL AS invoice_id, 0 AS paid_total) pmt ON 1=0';
         }
 
+        $balanceSql = "GREATEST({$invoiceTotalSql} - COALESCE(pmt.paid_total, 0), 0)";
+        $openBalanceSql = "CASE WHEN {$balanceSql} > 0.009 THEN {$balanceSql} ELSE 0 END";
+        $isPastDueSql = SchemaInspector::hasColumn('invoices', 'due_date')
+            ? '(i.due_date IS NOT NULL AND DATE(i.due_date) < CURDATE())'
+            : '0';
+
         $sql = "SELECT
-                    COALESCE(SUM(GREATEST({$invoiceTotalSql} - COALESCE(pmt.paid_total, 0), 0)), 0) AS payments_due,
-                    COALESCE(SUM(CASE WHEN GREATEST({$invoiceTotalSql} - COALESCE(pmt.paid_total, 0), 0) > 0.009 THEN 1 ELSE 0 END), 0) AS open_invoices
+                    COALESCE(SUM({$openBalanceSql}), 0) AS payments_due,
+                    COALESCE(SUM(CASE WHEN {$isPastDueSql} AND {$balanceSql} > 0.009 THEN {$balanceSql} ELSE 0 END), 0) AS past_due,
+                    COALESCE(SUM(CASE WHEN {$balanceSql} > 0.009 THEN 1 ELSE 0 END), 0) AS open_invoices
                 FROM invoices i
                 {$paymentsJoin}
                 WHERE {$invoiceBusinessWhere}
@@ -241,6 +245,7 @@ final class DashboardSummary
 
         return [
             'payments_due' => (float) ($row['payments_due'] ?? 0),
+            'past_due' => (float) ($row['past_due'] ?? 0),
             'open_invoices' => (int) ($row['open_invoices'] ?? 0),
         ];
     }
@@ -617,60 +622,111 @@ final class DashboardSummary
         return is_array($rows) ? $rows : [];
     }
 
-    private static function purchaseProspects(int $businessId, int $limit = 5): array
+    private static function outstandingPurchaseQuotes(int $businessId, int $limit = 6): array
     {
-        if (!SchemaInspector::hasTable('purchases')) {
+        if (!SchemaInspector::hasTable('purchase_quotes') || !SchemaInspector::hasTable('clients')) {
             return [];
         }
 
-        $titleSql = SchemaInspector::hasColumn('purchases', 'title') ? 'p.title' : "CONCAT('Purchase #', p.id)";
-        $statusSql = SchemaInspector::hasColumn('purchases', 'status') ? 'p.status' : "''";
-        $purchaseDateSql = SchemaInspector::hasColumn('purchases', 'purchase_date') ? 'p.purchase_date' : 'NULL';
-        $contactDateSql = SchemaInspector::hasColumn('purchases', 'contact_date') ? 'p.contact_date' : 'NULL';
-
-        $joinSql = '';
-        $clientNameSql = "'—'";
-        if (SchemaInspector::hasTable('clients') && SchemaInspector::hasColumn('purchases', 'client_id')) {
-            $joinSql = 'LEFT JOIN clients c ON c.id = p.client_id';
-            if (SchemaInspector::hasColumn('clients', 'business_id') && SchemaInspector::hasColumn('purchases', 'business_id')) {
-                $joinSql .= ' AND c.business_id = p.business_id';
-            }
-            if (SchemaInspector::hasColumn('clients', 'deleted_at')) {
-                $joinSql .= ' AND c.deleted_at IS NULL';
-            }
-            $clientNameSql = "COALESCE(NULLIF(TRIM(CONCAT_WS(' ', c.first_name, c.last_name)), ''), NULLIF(c.company_name, ''), CONCAT('Client #', c.id))";
-        }
-
-        $where = [
-            SchemaInspector::hasColumn('purchases', 'business_id') ? 'p.business_id = :business_id' : '1=1',
-            SchemaInspector::hasColumn('purchases', 'deleted_at') ? 'p.deleted_at IS NULL' : '1=1',
-        ];
-        if (SchemaInspector::hasColumn('purchases', 'status')) {
-            $where[] = "LOWER(COALESCE({$statusSql}, '')) NOT IN ('complete','cancelled')";
-        }
-
-        $sql = "SELECT
-                    p.id,
-                    {$titleSql} AS title,
-                    LOWER(COALESCE({$statusSql}, '')) AS status,
-                    {$purchaseDateSql} AS purchase_date,
-                    {$contactDateSql} AS contact_date,
-                    {$clientNameSql} AS client_name
-                FROM purchases p
-                {$joinSql}
-                WHERE " . implode(' AND ', $where) . "
-                ORDER BY p.id DESC
-                LIMIT :row_limit";
+        $sql = 'SELECT
+                    pq.id,
+                    pq.title,
+                    LOWER(COALESCE(pq.status, "new")) AS status,
+                    pq.next_follow_up_at AS due_date,
+                    pq.contact_date,
+                    COALESCE(NULLIF(TRIM(CONCAT_WS(" ", c.first_name, c.last_name)), ""), NULLIF(c.company_name, ""), CONCAT("Client #", c.id)) AS client_name
+                FROM purchase_quotes pq
+                INNER JOIN clients c ON c.id = pq.client_id
+                    AND c.business_id = pq.business_id
+                    AND c.deleted_at IS NULL
+                WHERE pq.business_id = :business_id
+                  AND pq.deleted_at IS NULL
+                  AND LOWER(COALESCE(pq.status, "new")) IN ("new", "sent", "follow_up")
+                ORDER BY
+                    CASE WHEN pq.next_follow_up_at IS NULL THEN 1 ELSE 0 END,
+                    pq.next_follow_up_at ASC,
+                    pq.id DESC
+                LIMIT :row_limit';
 
         $stmt = Database::connection()->prepare($sql);
-        if (SchemaInspector::hasColumn('purchases', 'business_id')) {
-            $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
-        }
+        $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
         $stmt->bindValue(':row_limit', max(1, min($limit, 20)), \PDO::PARAM_INT);
         $stmt->execute();
 
         $rows = $stmt->fetchAll();
+
         return is_array($rows) ? $rows : [];
+    }
+
+    /**
+     * Calendar agenda for the dashboard: events grouped by day (same sources as Events calendar).
+     *
+     * @return list<array{date: string, label: string, is_past: bool, is_today: bool, items: list<array{title: string, start: string, url: string, event_type: string, customer_name: string, all_day: bool, color: string}>}>
+     */
+    private static function upcomingSchedule(int $businessId, int $lookbackDays = 7, int $lookaheadDays = 21): array
+    {
+        $start = date('Y-m-d 00:00:00', strtotime('-' . max(0, $lookbackDays) . ' days'));
+        $end = date('Y-m-d 23:59:59', strtotime('+' . max(1, $lookaheadDays) . ' days'));
+        $events = EventFeed::range($businessId, $start, $end, []);
+
+        usort($events, static function (array $a, array $b): int {
+            return strcmp((string) ($a['start'] ?? ''), (string) ($b['start'] ?? ''));
+        });
+
+        $today = date('Y-m-d');
+        $tomorrow = date('Y-m-d', strtotime('+1 day'));
+        $byDate = [];
+
+        foreach ($events as $event) {
+            if (!is_array($event)) {
+                continue;
+            }
+            $startRaw = trim((string) ($event['start'] ?? ''));
+            if ($startRaw === '') {
+                continue;
+            }
+            $startTs = strtotime($startRaw);
+            if ($startTs === false) {
+                continue;
+            }
+            $dateKey = date('Y-m-d', $startTs);
+            $props = is_array($event['extendedProps'] ?? null) ? $event['extendedProps'] : [];
+            $eventType = trim((string) ($props['eventType'] ?? ''));
+            if ($eventType === '') {
+                $eventType = trim((string) ($props['jtType'] ?? ''));
+            }
+            $byDate[$dateKey][] = [
+                'title' => trim((string) ($event['title'] ?? '')),
+                'start' => $startRaw,
+                'url' => trim((string) ($event['url'] ?? '')),
+                'event_type' => $eventType,
+                'customer_name' => trim((string) ($props['customerName'] ?? '')),
+                'all_day' => (bool) ($event['allDay'] ?? false),
+                'color' => trim((string) ($event['backgroundColor'] ?? '')),
+            ];
+        }
+
+        ksort($byDate);
+
+        $days = [];
+        foreach ($byDate as $dateKey => $items) {
+            if ($dateKey === $today) {
+                $label = 'Today · ' . date('l, F j', strtotime($dateKey));
+            } elseif ($dateKey === $tomorrow) {
+                $label = 'Tomorrow · ' . date('l, F j', strtotime($dateKey));
+            } else {
+                $label = date('l, F j', strtotime($dateKey));
+            }
+            $days[] = [
+                'date' => $dateKey,
+                'label' => $label,
+                'is_past' => $dateKey < $today,
+                'is_today' => $dateKey === $today,
+                'items' => $items,
+            ];
+        }
+
+        return $days;
     }
 
     private static function outstandingQuotes(int $businessId, int $limit = 6): array
