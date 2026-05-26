@@ -1722,10 +1722,12 @@ a.admin-nav-tile:focus {
 
 .billing-bucket-header {
   align-items: flex-start;
+  border-bottom: 3px dotted #333;
   display: flex;
   gap: 1rem;
   justify-content: space-between;
-  margin-bottom: .65rem;
+  margin-bottom: .85rem;
+  padding-bottom: .65rem;
 }
 
 .billing-bucket-label {
