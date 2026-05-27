@@ -34,7 +34,8 @@ Run in this order:
 Live release rule:
 
 - Build bundles with `scripts/build-live-release.sh` (see script header). **Default is a delta bundle** (files changed since a git tag/ref, e.g. `v1.3.5`). Use **`full`** only when you need the entire codebase uploaded.
-- Default output location is **`htdocs/junktracker_live_releases/<release_name>/upload`** (sibling of this repo). Set `JUNKTRACKER_LIVE_RELEASE_ROOT` to use a different parent folder.
+- Canonical deploy drop: **`htdocs/junktracker_live_releases/live/upload`** — pass `live` as the dest; the script clears that folder before each build (git tags hold release history). Optional named folders under `junktracker_live_releases/` are still supported.
+- Set `JUNKTRACKER_LIVE_RELEASE_ROOT` to use a different parent folder.
 - Release bundles should include only **new/current migrations** needed for that release.
 - Do not re-copy older migrations that were already shipped in previous live releases.
 

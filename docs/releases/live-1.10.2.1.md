@@ -24,10 +24,10 @@ None.
 Delta from 1.10.2:
 
 ```bash
-./scripts/build-live-release.sh junktracker_live_1.10.2.1 v1.10.2
+./scripts/build-live-release.sh live v1.10.2
 ```
 
-Output: `junktracker_live_releases/junktracker_live_1.10.2.1/upload/`.
+Output: `junktracker_live_releases/live/upload/` (replaces any prior live drop; history stays in git).
 
 ## Ops notes
 

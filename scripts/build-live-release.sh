@@ -2,18 +2,21 @@
 # Build a JunkTracker live upload bundle from the repo root.
 #
 # Live bundles default under the sibling folder (next to this repo):
-#   .../junktracker_live_releases/<name>/upload   — files to rsync/scp onto the web root
-#   .../junktracker_live_releases/<name>/migrations/ — SQL only (never inside upload/)
+#   .../junktracker_live_releases/live/upload        — canonical deploy drop (wiped each build)
+#   .../junktracker_live_releases/live/migrations/   — SQL only (never inside upload/)
+#   .../junktracker_live_releases/<name>/upload      — optional one-off named bundle (kept)
 # Override root: JUNKTRACKER_LIVE_RELEASE_ROOT=/path/to/parent
 #
 # Default: changed files only (patch / delta drop) since a git ref — use this unless
 # you explicitly need the full codebase on the server.
+#   ./scripts/build-live-release.sh live v1.10.2
 #   ./scripts/build-live-release.sh junktracker_beta_1.3.6 v1.3.5
 #   ./scripts/build-live-release.sh /custom/path/to/upload v1.3.5
 # Optional keyword "delta" (same behavior):
-#   ./scripts/build-live-release.sh delta junktracker_beta_1.3.6 v1.3.5
+#   ./scripts/build-live-release.sh delta live v1.10.2
 #
 # Full tree (only when you need a complete upload mirror):
+#   ./scripts/build-live-release.sh full live
 #   ./scripts/build-live-release.sh full junktracker_beta_1.3.6
 #   ./scripts/build-live-release.sh full /custom/path/to/upload
 #
@@ -38,11 +41,30 @@ resolve_dest() {
   fi
 }
 
+migrations_staging_dir() {
+  local upload_dest="$1"
+  printf '%s\n' "$(dirname "$upload_dest")/migrations"
+}
+
+maybe_clean_live_drop() {
+  local dest_raw="$1"
+  local upload_dest="$2"
+  if [[ "$dest_raw" != "live" ]]; then
+    return 0
+  fi
+  local release_dir
+  release_dir="$(dirname "$upload_dest")"
+  if [[ -d "$release_dir" ]]; then
+    rm -rf "$release_dir"
+    echo "Cleared previous live drop -> $release_dir"
+  fi
+}
+
 usage() {
   echo "usage: $0 <dest> <base_git_ref>     # delta (changed files only; default)" >&2
   echo "       $0 delta <dest> <base_git_ref>  # same as above" >&2
   echo "       $0 full <dest>                # full codebase (rsync entire tree)" >&2
-  echo "dest: path to upload folder, or short name (no slashes) under junktracker_live_releases" >&2
+  echo "dest: live (canonical; wipes prior drop), path to upload/, or short name under junktracker_live_releases" >&2
   exit 1
 }
 
@@ -76,6 +98,8 @@ fi
 
 DEST="$(resolve_dest "$DEST_RAW")"
 
+maybe_clean_live_drop "$DEST_RAW" "$DEST"
+
 RSYNC_EXCLUDES=(
   --exclude='.git/'
   --exclude='.cursor/'
@@ -92,12 +116,6 @@ RSYNC_EXCLUDES=(
   --exclude='storage/logs/*.log'
   --exclude='database/migrations/'
 )
-
-# Sibling of .../upload/ — run these SQL files on the DB host; do not deploy under public_html.
-migrations_staging_dir() {
-  local upload_dest="$1"
-  printf '%s\n' "$(dirname "$upload_dest")/migrations"
-}
 
 full_release() {
   local dest="$1"

@@ -12,7 +12,7 @@ Short list to keep releases predictable. Pair with delta bundles from `scripts/b
 - **Bundle folder name**: `junktracker_beta_<version>`
 - **Commit title**: `Release <version>: <short summary>`
 
-**“Run live”** (release phrase): bump `config/app.php` to the new version, commit and push, tag `vX.Y.Z` on that commit, then build with `./scripts/build-live-release.sh junktracker_beta_X.Y.Z v<previous_tag>` (delta from the prior tag). Example: `./scripts/build-live-release.sh junktracker_beta_1.5.0 v1.4.0.3`.
+**“Run live”** (release phrase): bump `config/app.php` to the new version, commit and push, tag `vX.Y.Z` on that commit, then build with `./scripts/build-live-release.sh live v<previous_tag>` (delta from the prior tag; wipes `junktracker_live_releases/live/` first). Example: `./scripts/build-live-release.sh live v1.10.2`.
 
 **One-command beta prep:** `./scripts/new-beta-release.sh <major>.<minor>.<patch>-beta "short summary"`  
 Example: `./scripts/new-beta-release.sh 1.8.3-beta "quote reminders and calendar polish"`
