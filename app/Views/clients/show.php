@@ -594,6 +594,16 @@ $isInactive = $clientStatus === 'inactive' || (array_key_exists('is_active', $cl
                             $quoteStatusLabel = ucwords(str_replace('_', ' ', $quoteStatus));
                             $quotedAmount = (float) ($quote['quoted_amount'] ?? 0);
                             $quoteFollowUp = format_datetime((string) ($quote['next_follow_up_at'] ?? null));
+                            $quoteCreated = format_datetime((string) ($quote['created_at'] ?? null));
+                            $quoteUpdated = format_datetime((string) ($quote['updated_at'] ?? null));
+                            $quoteStatusDateLabel = match ($quoteStatus) {
+                                'won' => 'Won',
+                                'lost' => 'Lost',
+                                'expired' => 'Expired',
+                                'sent' => 'Sent',
+                                'follow_up' => 'Follow-up set',
+                                default => 'Updated',
+                            };
                             $quoteLostReason = trim((string) ($quote['lost_reason'] ?? ''));
                             $convertedJobId = (int) ($quote['converted_job_id'] ?? 0);
                             ?>
@@ -602,14 +612,30 @@ $isInactive = $clientStatus === 'inactive' || (array_key_exists('is_active', $cl
                                 <div class="simple-list-meta">
                                     <span>ID #<?= e((string) $quoteId) ?></span>
                                     <span><?= e($quoteStatusLabel) ?></span>
+                                    <?php if ($quoteCreated !== '' && $quoteCreated !== '—'): ?>
+                                        <span>Created <?= e($quoteCreated) ?></span>
+                                    <?php endif; ?>
+                                    <?php if ($quoteFollowUp !== '' && $quoteFollowUp !== '—'): ?>
+                                        <span>Follow-up <?= e($quoteFollowUp) ?></span>
+                                    <?php endif; ?>
+                                    <?php if ($quoteUpdated !== '' && $quoteUpdated !== '—' && in_array($quoteStatus, ['won', 'lost', 'expired', 'sent', 'follow_up'], true)): ?>
+                                        <span><?= e($quoteStatusDateLabel) ?> <?= e($quoteUpdated) ?></span>
+                                    <?php endif; ?>
                                     <?php if ($quotedAmount > 0): ?>
                                         <span>$<?= e(number_format($quotedAmount, 2)) ?></span>
                                     <?php endif; ?>
-                                    <?php if ($quoteFollowUp !== '' && $quoteFollowUp !== '—'): ?>
-                                        <span>Follow up <?= e($quoteFollowUp) ?></span>
-                                    <?php endif; ?>
                                     <?php if ($quoteStatus === 'won' && $convertedJobId > 0): ?>
                                         <span>Job #<?= e((string) $convertedJobId) ?></span>
+                                    <?php endif; ?>
+                                    <?php
+                                    $convertedPurchaseId = (int) ($quote['converted_purchase_id'] ?? 0);
+                                    $convertedEstateSaleId = (int) ($quote['converted_estate_sale_id'] ?? 0);
+                                    ?>
+                                    <?php if ($quoteStatus === 'won' && $convertedPurchaseId > 0): ?>
+                                        <span>Purchase #<?= e((string) $convertedPurchaseId) ?></span>
+                                    <?php endif; ?>
+                                    <?php if ($quoteStatus === 'won' && $convertedEstateSaleId > 0): ?>
+                                        <span>Estate sale #<?= e((string) $convertedEstateSaleId) ?></span>
                                     <?php endif; ?>
                                     <?php if ($quoteStatus === 'lost' && $quoteLostReason !== ''): ?>
                                         <span><?= e($quoteLostReason) ?></span>

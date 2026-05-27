@@ -81,6 +81,14 @@ foreach ($statusOptionsRaw as $opt) {
                     $st = strtolower(trim((string) ($row['status'] ?? 'new')));
                     $followUp = trim((string) ($row['next_follow_up_at'] ?? ''));
                     $followTs = $followUp !== '' ? strtotime($followUp) : false;
+                    $statusDateLabel = match ($st) {
+                        'won' => 'Won',
+                        'lost' => 'Lost',
+                        'expired' => 'Expired',
+                        'sent' => 'Sent',
+                        'follow_up' => 'Follow-up set',
+                        default => 'Updated',
+                    };
                     ?>
                     <article class="record-row-simple">
                         <a class="record-row-link" href="<?= e(url('/quotes/' . (string) $qid)) ?>">
@@ -88,15 +96,25 @@ foreach ($statusOptionsRaw as $opt) {
                                 <h3 class="record-title-simple"><?= e($title) ?></h3>
                                 <p class="record-subtitle-simple"><?= e($clientName) ?></p>
                             </div>
-                            <div class="record-row-fields record-row-fields-2">
+                            <div class="record-row-fields record-row-fields-3">
                                 <div class="record-field">
                                     <span class="record-label">Status</span>
                                     <span class="record-value"><?= e($statusLabel($st)) ?></span>
                                 </div>
                                 <div class="record-field">
-                                    <span class="record-label">Quote Date</span>
+                                    <span class="record-label">Created</span>
+                                    <span class="record-value"><?= e(format_datetime((string) ($row['created_at'] ?? null))) ?></span>
+                                </div>
+                                <div class="record-field">
+                                    <span class="record-label">Follow-up</span>
                                     <span class="record-value"><?= e($followTs === false ? '—' : date('m/d/Y g:i A', $followTs)) ?></span>
                                 </div>
+                                <?php if (in_array($st, ['won', 'lost', 'expired', 'sent', 'follow_up'], true)): ?>
+                                    <div class="record-field">
+                                        <span class="record-label"><?= e($statusDateLabel) ?></span>
+                                        <span class="record-value"><?= e(format_datetime((string) ($row['updated_at'] ?? null))) ?></span>
+                                    </div>
+                                <?php endif; ?>
                             </div>
                         </a>
                     </article>

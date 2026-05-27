@@ -11,6 +11,27 @@ $statusLabel = ucwords(str_replace('_', ' ', $status));
 $statusOptions = is_array($statusOptions ?? null) ? $statusOptions : \App\Models\Quote::statusOptions();
 $followUpAt = trim((string) ($quote['next_follow_up_at'] ?? ''));
 $followUpTs = $followUpAt !== '' ? strtotime($followUpAt) : false;
+$createdAt = trim((string) ($quote['created_at'] ?? ''));
+$updatedAt = trim((string) ($quote['updated_at'] ?? ''));
+$statusDateLabel = match ($status) {
+    'won' => 'Won',
+    'lost' => 'Lost',
+    'expired' => 'Expired',
+    'sent' => 'Sent',
+    'follow_up' => 'Follow-up set',
+    default => 'Updated',
+};
+$headerMeta = [$clientName];
+if (in_array($status, ['won', 'lost', 'expired', 'sent', 'follow_up'], true) && $updatedAt !== '') {
+    $updatedFormatted = format_datetime($updatedAt);
+    if ($updatedFormatted !== '' && $updatedFormatted !== '—') {
+        $headerMeta[] = $statusLabel . ' · ' . $updatedFormatted;
+    } else {
+        $headerMeta[] = $statusLabel;
+    }
+} else {
+    $headerMeta[] = $statusLabel;
+}
 $convertedJobId = (int) ($quote['converted_job_id'] ?? 0);
 $convertedEstateSaleId = (int) ($quote['converted_estate_sale_id'] ?? 0);
 $convertedPurchaseId = (int) ($quote['converted_purchase_id'] ?? 0);
@@ -27,7 +48,7 @@ $mapsAddressUrl = maps_directions_url_from_parts([
 <div class="page-header d-flex flex-wrap align-items-end justify-content-between gap-2">
     <div>
         <h1><?= e(trim((string) ($quote['title'] ?? 'Quote #' . (string) $quoteId))) ?></h1>
-        <p class="muted"><?= e($clientName) ?> · <?= e($statusLabel) ?></p>
+        <p class="muted"><?= e(implode(' · ', $headerMeta)) ?></p>
     </div>
     <div class="jt-page-header-actions d-grid gap-2 d-md-flex d-md-flex-wrap justify-content-md-end align-items-md-center">
         <div class="dropdown w-100 w-md-auto">
@@ -149,7 +170,18 @@ $mapsAddressUrl = maps_directions_url_from_parts([
                     ?>
                     <dd class="col-sm-8"><?= e($serviceTypeDisplay) ?></dd>
 
-                    <dt class="col-sm-4">Quote Date</dt>
+                    <dt class="col-sm-4">Status</dt>
+                    <dd class="col-sm-8">
+                        <?= e($statusLabel) ?>
+                        <?php if (in_array($status, ['won', 'lost', 'expired', 'sent', 'follow_up'], true) && $updatedAt !== ''): ?>
+                            <span class="text-muted">· <?= e($statusDateLabel) ?> <?= e(format_datetime($updatedAt)) ?></span>
+                        <?php endif; ?>
+                    </dd>
+
+                    <dt class="col-sm-4">Created</dt>
+                    <dd class="col-sm-8"><?= e($createdAt !== '' ? format_datetime($createdAt) : '—') ?></dd>
+
+                    <dt class="col-sm-4">Follow-up</dt>
                     <dd class="col-sm-8"><?= e($followUpTs === false ? '—' : date('m/d/Y g:i A', $followUpTs)) ?></dd>
 
                     <dt class="col-sm-4">Address</dt>
