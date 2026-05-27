@@ -12,6 +12,7 @@ use App\Models\Job;
 use App\Models\Sale;
 use App\Models\Task;
 use App\Models\TimeEntry;
+use App\Services\GoogleCalendarSync;
 use Core\Controller;
 
 final class JobsController extends Controller
@@ -301,6 +302,7 @@ final class JobsController extends Controller
         $jobId = Job::create($businessId, $this->payloadForSave($form), $actorUserId);
         $this->maybeCreateFollowUpTask($businessId, $jobId, $form, $actorUserId);
         audit('job_created', 'jobs', $jobId, ['name' => trim((string) ($form['name'] ?? ''))]);
+        GoogleCalendarSync::syncJob($actorUserId, $businessId, $jobId);
         flash('success', 'Job created.');
         redirect('/jobs/' . (string) $jobId);
     }
@@ -387,6 +389,7 @@ final class JobsController extends Controller
         Job::update($businessId, $jobId, $this->payloadForSave($form), $actorUserId);
         $this->syncEstimatesForJobStatusChange($businessId, $jobId, $previousStatus, $nextStatus, $actorUserId);
         audit('job_updated', 'jobs', $jobId, ['status' => $nextStatus]);
+        GoogleCalendarSync::syncJob($actorUserId, $businessId, $jobId);
         flash('success', 'Job updated.');
         redirect('/jobs/' . (string) $jobId);
     }
@@ -417,6 +420,7 @@ final class JobsController extends Controller
 
         Job::deactivate($businessId, $jobId, auth_user_id() ?? 0);
         audit('job_deactivated', 'jobs', $jobId);
+        GoogleCalendarSync::removeJob((int) (auth_user_id() ?? 0), $jobId);
         flash('success', 'Job deactivated.');
         redirect('/jobs');
     }
@@ -542,6 +546,7 @@ final class JobsController extends Controller
         if (Job::updateStatus($businessId, $jobId, $status, $actor)) {
             $this->syncEstimatesForJobStatusChange($businessId, $jobId, $current, $status, $actor);
             audit('job_status_updated', 'jobs', $jobId, ['status' => $status]);
+            GoogleCalendarSync::syncJob($actor, $businessId, $jobId);
             flash('success', 'Job status updated.');
         } else {
             flash('error', 'Could not update status.');

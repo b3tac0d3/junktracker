@@ -8,6 +8,7 @@ $startAt = (string) ($event['start_at'] ?? '');
 $endAt = (string) ($event['end_at'] ?? '');
 $notes = (string) ($event['notes'] ?? '');
 $allDay = (int) ($event['all_day'] ?? 0) === 1;
+$canManageEvent = (bool) ($canManageEvent ?? false);
 ?>
 
 <div class="page-header d-flex flex-wrap align-items-end justify-content-between gap-2">
@@ -16,6 +17,13 @@ $allDay = (int) ($event['all_day'] ?? 0) === 1;
         <p class="muted"><?= e(ucfirst($type)) ?> · <?= e($status === 'cancelled' ? 'Cancelled' : 'Scheduled') ?></p>
     </div>
     <div class="d-flex flex-wrap gap-2">
+        <?php if ($canManageEvent): ?>
+            <a class="btn btn-primary" href="<?= e(url('/events/' . (string) $id . '/edit')) ?>">Edit</a>
+            <form method="post" action="<?= e(url('/events/' . (string) $id . '/delete')) ?>" class="m-0" onsubmit="return confirm('Delete this event? It will also be removed from Google Calendar if connected.');">
+                <?= csrf_field() ?>
+                <button type="submit" class="btn btn-outline-danger">Delete</button>
+            </form>
+        <?php endif; ?>
         <a class="btn btn-outline-secondary" href="<?= e(url('/events')) ?>">Back to Events</a>
     </div>
 </div>

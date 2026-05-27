@@ -3,6 +3,7 @@ $form = is_array($form ?? null) ? $form : [];
 $errors = is_array($errors ?? null) ? $errors : [];
 $mode = (string) ($mode ?? 'create');
 $actionUrl = (string) ($actionUrl ?? url('/events/create'));
+$cancelUrl = (string) ($cancelUrl ?? url('/events'));
 $typeOptions = [
     'appointment' => 'Appointment',
     'reminder' => 'Reminder',
@@ -90,7 +91,7 @@ $toInputDatetime = static function (string $value): string {
 
             <div class="col-12 d-flex gap-2">
                 <button class="btn btn-primary" type="submit"><?= e($mode === 'edit' ? 'Save Changes' : 'Create Event') ?></button>
-                <a class="btn btn-outline-secondary" href="<?= e(url('/events')) ?>">Cancel</a>
+                <a class="btn btn-outline-secondary" href="<?= e($cancelUrl) ?>">Cancel</a>
             </div>
         </form>
     </div>

@@ -23,10 +23,12 @@ function config(string $key, mixed $default = null): mixed
         $app = require base_path('config/app.php');
         $database = require base_path('config/database.php');
         $mail = require base_path('config/mail.php');
+        $google = require base_path('config/google.php');
         $__appConfig = [
             'app' => $app,
             'database' => $database,
             'mail' => $mail,
+            'google' => $google,
         ];
     }
 
@@ -277,6 +279,10 @@ function require_auth(): void
     $allowedPaths = [
         url('/settings'),
         url('/settings/update'),
+        url('/settings/google-calendar/connect'),
+        url('/settings/google-calendar/callback'),
+        url('/settings/google-calendar/disconnect'),
+        url('/settings/google-calendar/backfill'),
         url('/logout'),
     ];
 

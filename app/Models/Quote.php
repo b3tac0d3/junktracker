@@ -529,7 +529,7 @@ final class Quote
             'service_type' => trim((string) ($quote['service_type'] ?? '')),
             'quoted_amount' => (string) ($quote['quoted_amount'] ?? ''),
             'notes' => trim((string) ($quote['notes'] ?? '')),
-            'next_follow_up_at' => '',
+            'next_follow_up_at' => trim((string) ($quote['next_follow_up_at'] ?? '')),
             'lost_reason' => '',
             'converted_job_id' => (string) ((int) ($quote['converted_job_id'] ?? 0)),
             'converted_estate_sale_id' => (string) ((int) ($quote['converted_estate_sale_id'] ?? 0)),

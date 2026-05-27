@@ -83,3 +83,54 @@ $hasError = static function (string $field) use ($errors): bool {
         </form>
     </div>
 </section>
+
+<?php
+$googleCalendarConfigured = (bool) ($googleCalendarConfigured ?? false);
+$googleCalendarConnected = (bool) ($googleCalendarConnected ?? false);
+$googleCalendarEmail = trim((string) ($googleCalendarEmail ?? ''));
+$googleCalendarCalendarId = trim((string) ($googleCalendarCalendarId ?? 'primary')) ?: 'primary';
+?>
+<section class="card index-card mt-3">
+    <div class="card-header index-card-header">
+        <strong><i class="fas fa-calendar-plus me-2"></i>Google Calendar</strong>
+    </div>
+    <div class="card-body">
+        <p class="small muted mb-3">
+            Push JunkTracker appointments and scheduled jobs to your Google Calendar. Changes in JunkTracker update Google automatically.
+        </p>
+
+        <?php if (!$googleCalendarConfigured): ?>
+            <div class="alert alert-warning mb-0">
+                Google Calendar sync is not configured on this server yet. Add your OAuth client secret in <code>config/google.local.php</code>.
+            </div>
+        <?php else: ?>
+            <p class="small text-muted mb-3">
+                OAuth redirect URI for Google Cloud:
+                <code><?= e(absolute_url('/settings/google-calendar/callback')) ?></code>
+            </p>
+        <?php endif; ?>
+        <?php if ($googleCalendarConfigured && $googleCalendarConnected): ?>
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
+                <div>
+                    <div class="fw-semibold">Connected</div>
+                    <div class="small text-muted">
+                        <?= e($googleCalendarEmail !== '' ? $googleCalendarEmail : 'Google account connected') ?>
+                        · Calendar: <code><?= e($googleCalendarCalendarId) ?></code>
+                    </div>
+                </div>
+                <div class="d-flex flex-wrap gap-2">
+                    <form method="post" action="<?= e(url('/settings/google-calendar/backfill')) ?>">
+                        <?= csrf_field() ?>
+                        <button type="submit" class="btn btn-outline-primary btn-sm">Sync upcoming events</button>
+                    </form>
+                    <form method="post" action="<?= e(url('/settings/google-calendar/disconnect')) ?>" onsubmit="return confirm('Disconnect Google Calendar? Existing Google events will not be removed automatically.');">
+                        <?= csrf_field() ?>
+                        <button type="submit" class="btn btn-outline-secondary btn-sm">Disconnect</button>
+                    </form>
+                </div>
+            </div>
+        <?php elseif ($googleCalendarConfigured): ?>
+            <a class="btn btn-primary" href="<?= e(url('/settings/google-calendar/connect')) ?>">Connect Google Calendar</a>
+        <?php endif; ?>
+    </div>
+</section>

@@ -349,7 +349,7 @@ final class PurchaseQuote
             'status' => strtolower(trim((string) ($purchaseQuote['status'] ?? 'new'))),
             'contact_date' => trim((string) ($purchaseQuote['contact_date'] ?? '')),
             'notes' => trim((string) ($purchaseQuote['notes'] ?? '')),
-            'next_follow_up_at' => '',
+            'next_follow_up_at' => trim((string) ($purchaseQuote['next_follow_up_at'] ?? '')),
             'lost_reason' => '',
             'converted_purchase_id' => (string) ((int) ($purchaseQuote['converted_purchase_id'] ?? 0)),
         ], $overrides);

@@ -8,4 +8,4 @@ storage/
 config/database.local.php
 config/app.local.php
 config/mail.local.php
-config/mail.local.php
+config/google.local.php

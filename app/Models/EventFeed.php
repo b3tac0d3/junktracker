@@ -194,7 +194,6 @@ final class EventFeed
                   AND q.next_follow_up_at IS NOT NULL
                   AND q.next_follow_up_at >= :start_at
                   AND q.next_follow_up_at < :end_at
-                  AND LOWER(COALESCE(q.status, '')) IN ('new', 'sent', 'follow_up')
                   {$searchWhere}
                 ORDER BY q.next_follow_up_at ASC, q.id ASC
                 LIMIT 2000";
@@ -232,7 +231,12 @@ final class EventFeed
                 $title = 'Quote #' . (string) $id;
             }
 
-            $color = '#db2777';
+            $status = (string) ($row['status_key'] ?? 'new');
+            $color = match ($status) {
+                'won' => '#64748b',
+                'lost', 'expired' => '#94a3b8',
+                default => '#db2777',
+            };
 
             $events[] = [
                 'id' => 'quote:' . $id,
@@ -247,6 +251,7 @@ final class EventFeed
                     'customerName' => $clientName,
                     'customerPhone' => $clientPhone,
                     'eventType' => 'Quote',
+                    'jtStatus' => $status,
                 ],
             ];
         }
@@ -276,6 +281,7 @@ final class EventFeed
                     pq.id,
                     pq.title,
                     pq.next_follow_up_at,
+                    pq.contact_date,
                     LOWER(COALESCE(pq.status, 'new')) AS status_key,
                     COALESCE(NULLIF(TRIM(CONCAT_WS(' ', c.first_name, c.last_name)), ''), NULLIF(c.company_name, ''), CONCAT('Client #', c.id)) AS client_name,
                     COALESCE(c.phone, '') AS client_phone
@@ -285,12 +291,20 @@ final class EventFeed
                     AND c.deleted_at IS NULL
                 WHERE pq.business_id = :business_id
                   AND pq.deleted_at IS NULL
-                  AND pq.next_follow_up_at IS NOT NULL
-                  AND pq.next_follow_up_at >= :start_at
-                  AND pq.next_follow_up_at < :end_at
-                  AND LOWER(COALESCE(pq.status, '')) IN ('new', 'sent', 'follow_up')
+                  AND (
+                    pq.next_follow_up_at IS NOT NULL
+                    OR pq.contact_date IS NOT NULL
+                  )
+                  AND COALESCE(
+                    pq.next_follow_up_at,
+                    CONCAT(pq.contact_date, ' 09:00:00')
+                  ) >= :start_at
+                  AND COALESCE(
+                    pq.next_follow_up_at,
+                    CONCAT(pq.contact_date, ' 09:00:00')
+                  ) < :end_at
                   {$searchWhere}
-                ORDER BY pq.next_follow_up_at ASC, pq.id ASC
+                ORDER BY COALESCE(pq.next_follow_up_at, CONCAT(pq.contact_date, ' 09:00:00')) ASC, pq.id ASC
                 LIMIT 2000";
 
         $stmt = Database::connection()->prepare($sql);
@@ -315,6 +329,12 @@ final class EventFeed
 
             $id = (int) ($row['id'] ?? 0);
             $followUpAt = trim((string) ($row['next_follow_up_at'] ?? ''));
+            if ($followUpAt === '') {
+                $contactDate = trim((string) ($row['contact_date'] ?? ''));
+                if ($contactDate !== '') {
+                    $followUpAt = $contactDate . ' 09:00:00';
+                }
+            }
             if ($id <= 0 || $followUpAt === '') {
                 continue;
             }
@@ -326,7 +346,12 @@ final class EventFeed
                 $title = 'Purchase Quote #' . (string) $id;
             }
 
-            $color = '#ea580c';
+            $status = (string) ($row['status_key'] ?? 'new');
+            $color = match ($status) {
+                'won' => '#64748b',
+                'lost', 'expired' => '#94a3b8',
+                default => '#ea580c',
+            };
 
             $events[] = [
                 'id' => 'purchase_quote:' . $id,
@@ -341,6 +366,7 @@ final class EventFeed
                     'customerName' => $clientName,
                     'customerPhone' => $clientPhone,
                     'eventType' => 'Purchase Quote',
+                    'jtStatus' => $status,
                 ],
             ];
         }
@@ -575,7 +601,9 @@ final class EventFeed
         $jobTypeSql = SchemaInspector::hasColumn('jobs', 'job_type') ? 'LOWER(COALESCE(j.job_type, ""))' : "''";
         $deletedWhere = SchemaInspector::hasColumn('jobs', 'deleted_at') ? 'AND j.deleted_at IS NULL' : '';
         $activeWhere = SchemaInspector::hasColumn('jobs', 'is_active') ? 'AND COALESCE(j.is_active, 1) = 1' : '';
-        $inactiveStatusWhere = SchemaInspector::hasColumn('jobs', 'status') ? "AND LOWER(COALESCE(j.status, '')) <> 'inactive'" : '';
+        $inactiveStatusWhere = SchemaInspector::hasColumn('jobs', 'status')
+            ? "AND LOWER(COALESCE(j.status, '')) NOT IN ('inactive', 'cancelled')"
+            : '';
         $businessWhere = SchemaInspector::hasColumn('jobs', 'business_id') ? 'j.business_id = :business_id' : '1=1';
         $joinClient = SchemaInspector::hasTable('clients') && SchemaInspector::hasColumn('jobs', 'client_id');
         $clientNameSql = 'NULL';

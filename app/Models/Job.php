@@ -906,6 +906,99 @@ final class Job
         return is_array($row) ? $row : null;
     }
 
+    /**
+     * Jobs with a schedule in range (for Google Calendar backfill).
+     *
+     * @return list<array<string, mixed>>
+     */
+    public static function scheduledForCalendarSync(int $businessId, string $start, string $end): array
+    {
+        if (!SchemaInspector::hasTable('jobs')) {
+            return [];
+        }
+
+        $startSql = SchemaInspector::hasColumn('jobs', 'scheduled_start_at')
+            ? 'j.scheduled_start_at'
+            : (SchemaInspector::hasColumn('jobs', 'start_date') ? 'j.start_date' : null);
+        if ($startSql === null) {
+            return [];
+        }
+
+        $titleSql = SchemaInspector::hasColumn('jobs', 'title')
+            ? 'j.title'
+            : (SchemaInspector::hasColumn('jobs', 'name') ? 'j.name' : "CONCAT('Job #', j.id)");
+        $endSql = SchemaInspector::hasColumn('jobs', 'scheduled_end_at')
+            ? 'j.scheduled_end_at'
+            : (SchemaInspector::hasColumn('jobs', 'end_date') ? 'j.end_date' : 'NULL');
+        $statusSql = SchemaInspector::hasColumn('jobs', 'status') ? 'j.status' : "'pending'";
+        $jobTypeSql = SchemaInspector::hasColumn('jobs', 'job_type') ? 'j.job_type' : 'NULL';
+        $activeSql = SchemaInspector::hasColumn('jobs', 'is_active') ? 'j.is_active' : '1';
+        $notesSql = SchemaInspector::hasColumn('jobs', 'notes') ? 'j.notes' : "''";
+        $address1Sql = SchemaInspector::hasColumn('jobs', 'address_line1') ? 'j.address_line1' : "''";
+        $address2Sql = SchemaInspector::hasColumn('jobs', 'address_line2') ? 'j.address_line2' : "''";
+        $citySql = SchemaInspector::hasColumn('jobs', 'city') ? 'j.city' : "''";
+        $stateSql = SchemaInspector::hasColumn('jobs', 'state') ? 'j.state' : "''";
+        $postalSql = SchemaInspector::hasColumn('jobs', 'postal_code') ? 'j.postal_code' : "''";
+        $deletedWhere = SchemaInspector::hasColumn('jobs', 'deleted_at') ? 'AND j.deleted_at IS NULL' : '';
+        $businessWhere = SchemaInspector::hasColumn('jobs', 'business_id') ? 'j.business_id = :business_id' : '1=1';
+
+        $joinClient = SchemaInspector::hasTable('clients') && SchemaInspector::hasColumn('jobs', 'client_id');
+        $clientNameSql = "''";
+        $joinSql = '';
+        if ($joinClient) {
+            $clientNameSql = "COALESCE(NULLIF(TRIM(CONCAT_WS(' ', c.first_name, c.last_name)), ''), NULLIF(c.company_name, ''), '')";
+            $joinDeleted = SchemaInspector::hasColumn('clients', 'deleted_at') ? 'AND c.deleted_at IS NULL' : '';
+            $joinSql = " LEFT JOIN clients c ON c.id = j.client_id {$joinDeleted}";
+        }
+
+        $sql = "SELECT
+                    j.id,
+                    {$titleSql} AS title,
+                    {$jobTypeSql} AS job_type,
+                    {$statusSql} AS status,
+                    {$activeSql} AS is_active,
+                    {$startSql} AS scheduled_start_at,
+                    {$endSql} AS scheduled_end_at,
+                    {$notesSql} AS notes,
+                    {$address1Sql} AS address_line1,
+                    {$address2Sql} AS address_line2,
+                    {$citySql} AS city,
+                    {$stateSql} AS state,
+                    {$postalSql} AS postal_code,
+                    {$clientNameSql} AS client_name
+                FROM jobs j
+                {$joinSql}
+                WHERE {$businessWhere}
+                  {$deletedWhere}
+                  AND {$startSql} IS NOT NULL
+                  AND {$startSql} >= :start_at
+                  AND {$startSql} < :end_at
+                ORDER BY {$startSql} ASC, j.id ASC
+                LIMIT 2000";
+
+        $stmt = Database::connection()->prepare($sql);
+        if (SchemaInspector::hasColumn('jobs', 'business_id')) {
+            $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
+        }
+        $stmt->bindValue(':start_at', $start);
+        $stmt->bindValue(':end_at', $end);
+        $stmt->execute();
+
+        $rows = $stmt->fetchAll();
+        if (!is_array($rows)) {
+            return [];
+        }
+
+        $jobs = [];
+        foreach ($rows as $row) {
+            if (is_array($row)) {
+                $jobs[] = $row;
+            }
+        }
+
+        return $jobs;
+    }
+
     public static function financialSummary(int $businessId, int $jobId): array
     {
         $gross = 0.0;

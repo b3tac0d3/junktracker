@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Models\User;
+use App\Models\GoogleCalendarConnection;
+use App\Services\GoogleCalendarSync;
 use Core\Controller;
 
 final class SettingsController extends Controller
@@ -21,12 +23,19 @@ final class SettingsController extends Controller
             return;
         }
 
+        $userId = (int) (auth_user_id() ?? 0);
+        $googleConnection = GoogleCalendarConnection::findByUserId($userId);
+
         $this->render('settings/edit', [
             'pageTitle' => 'Settings',
             'actionUrl' => url('/settings/update'),
             'form' => $this->formFromUser($user),
             'errors' => [],
             'mustChangePassword' => auth_requires_password_change(),
+            'googleCalendarConfigured' => GoogleCalendarSync::isConfigured(),
+            'googleCalendarConnected' => GoogleCalendarConnection::isConnected($userId),
+            'googleCalendarEmail' => trim((string) ($googleConnection['google_account_email'] ?? '')),
+            'googleCalendarCalendarId' => trim((string) ($googleConnection['calendar_id'] ?? 'primary')) ?: 'primary',
         ]);
     }
 
@@ -51,12 +60,17 @@ final class SettingsController extends Controller
         $mustChangePassword = auth_requires_password_change();
         $errors = $this->validateForm($form, $userId, $mustChangePassword);
         if ($errors !== []) {
+            $googleConnection = GoogleCalendarConnection::findByUserId($userId);
             $this->render('settings/edit', [
                 'pageTitle' => 'Settings',
                 'actionUrl' => url('/settings/update'),
                 'form' => $form,
                 'errors' => $errors,
                 'mustChangePassword' => $mustChangePassword,
+                'googleCalendarConfigured' => GoogleCalendarSync::isConfigured(),
+                'googleCalendarConnected' => GoogleCalendarConnection::isConnected($userId),
+                'googleCalendarEmail' => trim((string) ($googleConnection['google_account_email'] ?? '')),
+                'googleCalendarCalendarId' => trim((string) ($googleConnection['calendar_id'] ?? 'primary')) ?: 'primary',
             ]);
             return;
         }
