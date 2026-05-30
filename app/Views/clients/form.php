@@ -7,7 +7,11 @@ $hasClientType = (bool) ($hasClientType ?? false);
 $hasNewsletter = (bool) ($hasNewsletter ?? false);
 $clientTypeOptions = is_array($clientTypeOptions ?? null) ? $clientTypeOptions : ['client', 'company', 'realtor', 'other'];
 $clientId = (int) ($clientId ?? 0);
+$returnTab = (string) ($returnTab ?? '');
 $referralsSent = is_array($referralsSent ?? null) ? $referralsSent : [];
+$backUrl = $mode === 'edit' && $clientId > 0
+    ? url(detail_path_with_tab('/clients/' . (string) $clientId, $returnTab))
+    : url('/clients');
 
 $fieldError = static function (string $field) use ($errors): string {
     return isset($errors[$field]) ? (string) $errors[$field] : '';
@@ -29,7 +33,7 @@ if ($selectedState !== '' && !array_key_exists($selectedState, $stateOptions)) {
         <p class="muted">Contact details and client classification</p>
     </div>
     <div>
-        <a class="btn btn-outline-secondary" href="<?= e(url('/clients')) ?>">Back to Clients</a>
+        <a class="btn btn-outline-secondary" href="<?= e($backUrl) ?>"><?= e($mode === 'edit' ? 'Back to Client' : 'Back to Clients') ?></a>
     </div>
 </div>
 
@@ -93,6 +97,7 @@ if ($selectedState !== '' && !array_key_exists($selectedState, $stateOptions)) {
             data-client-id="<?= (string) $clientId ?>"
         >
             <?= csrf_field() ?>
+            <?= detail_tab_hidden_field($returnTab) ?>
 
             <div class="col-12 col-lg-4">
                 <label class="form-label fw-semibold" for="client-first-name">First Name</label>

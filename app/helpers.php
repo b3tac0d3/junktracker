@@ -711,6 +711,60 @@ function safe_return_path(string $raw): string
     return $path;
 }
 
+function sanitize_detail_tab(string $tab, array $allowed, string $default = 'details'): string
+{
+    $tab = strtolower(trim($tab));
+    return in_array($tab, $allowed, true) ? $tab : $default;
+}
+
+function request_detail_tab(array $allowed, string $default = 'details'): string
+{
+    foreach (['return_tab', 'tab'] as $key) {
+        $raw = $_POST[$key] ?? $_GET[$key] ?? null;
+        if (is_string($raw) && trim($raw) !== '') {
+            return sanitize_detail_tab($raw, $allowed, $default);
+        }
+    }
+
+    return $default;
+}
+
+function detail_path_with_tab(string $basePath, ?string $tab = null, string $defaultTab = 'details'): string
+{
+    $basePath = '/' . ltrim(trim($basePath), '/');
+    $tab = strtolower(trim((string) $tab));
+    if ($tab === '' || $tab === strtolower($defaultTab)) {
+        return $basePath;
+    }
+
+    return $basePath . '?tab=' . rawurlencode($tab);
+}
+
+function detail_return_tab_query(?string $tab = null, string $defaultTab = 'details'): string
+{
+    $tab = strtolower(trim((string) $tab));
+    if ($tab === '' || $tab === strtolower($defaultTab)) {
+        return '';
+    }
+
+    return '?return_tab=' . rawurlencode($tab);
+}
+
+function redirect_to_detail(string $basePath, ?string $tab = null, string $defaultTab = 'details'): never
+{
+    redirect(detail_path_with_tab($basePath, $tab, $defaultTab));
+}
+
+function detail_tab_hidden_field(?string $tab = null, string $defaultTab = 'details'): string
+{
+    $tab = strtolower(trim((string) $tab));
+    if ($tab === '' || $tab === strtolower($defaultTab)) {
+        return '';
+    }
+
+    return '<input type="hidden" name="return_tab" value="' . e($tab) . '" />';
+}
+
 /**
  * @param array<string, mixed> $sale
  * @return array{url: string, label: string, path: string}

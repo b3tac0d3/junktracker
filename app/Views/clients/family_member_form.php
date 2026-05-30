@@ -7,6 +7,8 @@ $form = is_array($form ?? null) ? $form : [];
 $errors = is_array($errors ?? null) ? $errors : [];
 $relationshipOptions = is_array($relationshipOptions ?? null) ? $relationshipOptions : \App\Models\ClientFamilyMember::relationshipOptions();
 $actionUrl = (string) ($actionUrl ?? url('/clients/' . (string) $clientId . '/family'));
+$returnTab = (string) ($returnTab ?? 'details');
+$backUrl = url(detail_path_with_tab('/clients/' . (string) $clientId, $returnTab));
 $isEdit = $mode === 'edit';
 
 $displayName = trim(((string) ($client['first_name'] ?? '')) . ' ' . ((string) ($client['last_name'] ?? '')));
@@ -32,7 +34,7 @@ $hasError = static function (string $field) use ($errors): bool {
         <p class="muted"><?= e($displayName) ?></p>
     </div>
     <div>
-        <a class="btn btn-outline-secondary" href="<?= e(url('/clients/' . (string) $clientId)) ?>">Back to Client</a>
+        <a class="btn btn-outline-secondary" href="<?= e($backUrl) ?>">Back to Client</a>
     </div>
 </div>
 
@@ -43,6 +45,7 @@ $hasError = static function (string $field) use ($errors): bool {
     <div class="card-body">
         <form method="post" action="<?= e($actionUrl) ?>" class="row g-3">
             <?= csrf_field() ?>
+            <?= detail_tab_hidden_field($returnTab) ?>
 
             <div class="col-12 col-md-6">
                 <label class="form-label fw-semibold" for="family-member-first-name">First Name</label>

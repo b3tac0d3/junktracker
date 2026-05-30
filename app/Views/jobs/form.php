@@ -7,6 +7,11 @@ $jobTypeOptionsRaw = is_array($jobTypeOptions ?? null) ? $jobTypeOptions : [];
 $statusOptionsRaw = is_array($statusOptions ?? null) ? $statusOptions : ['prospect', 'pending', 'active', 'complete', 'cancelled'];
 $mode = (string) ($mode ?? 'create');
 $actionUrl = (string) ($actionUrl ?? url('/jobs'));
+$jobId = (int) ($jobId ?? 0);
+$returnTab = (string) ($returnTab ?? '');
+$backUrl = $mode === 'edit' && $jobId > 0
+    ? url(detail_path_with_tab('/jobs/' . (string) $jobId, $returnTab))
+    : url('/jobs');
 
 $statusOptions = [];
 foreach ($statusOptionsRaw as $statusOptionRaw) {
@@ -75,7 +80,7 @@ if ($selectedState !== '' && !array_key_exists($selectedState, $stateOptions)) {
         <p class="muted">Job site, status, and assignment</p>
     </div>
     <div>
-        <a class="btn btn-outline-secondary" href="<?= e(url('/jobs')) ?>">Back to Jobs</a>
+        <a class="btn btn-outline-secondary" href="<?= e($backUrl) ?>"><?= e($mode === 'edit' ? 'Back to Job' : 'Back to Jobs') ?></a>
     </div>
 </div>
 
@@ -86,6 +91,7 @@ if ($selectedState !== '' && !array_key_exists($selectedState, $stateOptions)) {
     <div class="card-body">
         <form method="post" action="<?= e($actionUrl) ?>" class="row g-3">
             <?= csrf_field() ?>
+            <?= detail_tab_hidden_field($returnTab) ?>
 
             <div class="col-12 col-lg-4">
                 <label class="form-label fw-semibold" for="job-title">Job Name</label>

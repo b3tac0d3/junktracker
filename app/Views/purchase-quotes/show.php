@@ -72,7 +72,7 @@ $followUpOverdue = $followUpTs !== false && $followUpTs < $nowTs && in_array($st
     </div>
 </div>
 
-<ul class="nav nav-tabs index-card-tabs estate-sale-tabs mb-3" role="tablist">
+<ul class="nav nav-tabs index-card-tabs estate-sale-tabs mb-3" role="tablist" data-detail-tabs>
     <li class="nav-item" role="presentation">
         <button
             class="nav-link estate-sale-tab-link<?= $detailsTabActive ? ' active' : '' ?>"

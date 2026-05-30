@@ -154,6 +154,12 @@ final class ReportsController extends Controller
 
         fputcsv($out, ['Totals']);
         fputcsv($out, ['Metric', 'Amount']);
+        fputcsv($out, ['Sales gross', $this->csvMoney($sales['gross'] ?? 0)]);
+        fputcsv($out, ['Sales net', $this->csvMoney($sales['net'] ?? 0)]);
+        fputcsv($out, ['Service gross', $this->csvMoney($service['gross'] ?? 0)]);
+        fputcsv($out, ['Service net', $this->csvMoney($service['net'] ?? 0)]);
+        fputcsv($out, ['Estate sales gross', $this->csvMoney($estateSales['gross'] ?? 0)]);
+        fputcsv($out, ['Estate sales net', $this->csvMoney($estateSales['net'] ?? 0)]);
         fputcsv($out, ['Overall gross', $this->csvMoney($overall['gross'] ?? 0)]);
         fputcsv($out, ['Overall net', $this->csvMoney($overall['net'] ?? 0)]);
         fputcsv($out, ['Net minus purchases', $this->csvMoney($overall['net_minus_purchases'] ?? 0)]);
@@ -178,10 +184,30 @@ final class ReportsController extends Controller
 
         fputcsv($out, ['Estate sales (summary)']);
         fputcsv($out, ['Field', 'Value']);
-        fputcsv($out, ['Count', (string) ((int) ($estateSales['count'] ?? 0))]);
+        fputcsv($out, ['Estate sales', (string) ((int) ($estateSales['estate_sale_count'] ?? 0))]);
+        fputcsv($out, ['Transactions', (string) ((int) ($estateSales['transaction_count'] ?? $estateSales['count'] ?? 0))]);
         fputcsv($out, ['Gross', $this->csvMoney($estateSales['gross'] ?? 0)]);
         fputcsv($out, ['Net', $this->csvMoney($estateSales['net'] ?? 0)]);
         fputcsv($out, []);
+
+        $estateSalesByEvent = is_array($estateSales['by_event'] ?? null) ? $estateSales['by_event'] : [];
+        if ($estateSalesByEvent !== []) {
+            fputcsv($out, ['Estate sales (by event)']);
+            fputcsv($out, ['Estate sale ID', 'Title', 'Transactions', 'Gross', 'Net']);
+            foreach ($estateSalesByEvent as $eventRow) {
+                if (!is_array($eventRow)) {
+                    continue;
+                }
+                fputcsv($out, [
+                    (string) ((int) ($eventRow['estate_sale_id'] ?? 0)),
+                    (string) ($eventRow['title'] ?? ''),
+                    (string) ((int) ($eventRow['transaction_count'] ?? 0)),
+                    $this->csvMoney($eventRow['gross'] ?? 0),
+                    $this->csvMoney($eventRow['net'] ?? 0),
+                ]);
+            }
+            fputcsv($out, []);
+        }
 
         fputcsv($out, ['Expenses']);
         fputcsv($out, ['Field', 'Value']);

@@ -119,4 +119,24 @@ window.addEventListener('DOMContentLoaded', event => {
         }
     }
 
+    document.querySelectorAll('.index-card-tabs[data-detail-tabs]').forEach((tabList) => {
+        const root = tabList.closest('.index-card') || tabList.closest('section') || document.body;
+        root.querySelectorAll('form[method="post"]').forEach((form) => {
+            form.addEventListener('submit', () => {
+                if (form.querySelector('input[name="return_tab"]')) {
+                    return;
+                }
+                const tab = new URLSearchParams(window.location.search).get('tab');
+                if (!tab) {
+                    return;
+                }
+                const input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = 'return_tab';
+                input.value = tab;
+                form.appendChild(input);
+            });
+        });
+    });
+
 });

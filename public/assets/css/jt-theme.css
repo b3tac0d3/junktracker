@@ -17,7 +17,7 @@
 
   /**
    * KPI strip + semantic accents (dashboard cards, icons, charts).
-   * Order: Sales → Service → Total income → Purchases → Expenses → Profit YTD
+   * Order: Sales → Service → Total income → Purchases → Expenses → Profit MTD/YTD
    */
   --jt-kpi-sales: #1d4ed8;
   --jt-kpi-estate-sales: #7e22ce;
@@ -1585,6 +1585,15 @@ a.admin-nav-tile:focus {
   box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
 }
 
+.jt-client-appointment-history {
+  border-top: 1px solid var(--jt-border);
+  padding-top: .55rem;
+}
+
+.jt-client-appointment-history-item + .jt-client-appointment-history-item {
+  border-top: 1px dashed rgba(148, 163, 184, 0.35);
+}
+
 .task-row-head {
   display: flex;
   align-items: flex-start;
@@ -1619,6 +1628,20 @@ a.admin-nav-tile:focus {
   width: 1.15rem;
   height: 1.15rem;
   cursor: pointer;
+}
+
+.task-client-line {
+  line-height: 1.3;
+  margin-top: 0.1rem;
+}
+
+.task-client-line a {
+  color: var(--jt-text-muted, #64748b);
+  font-weight: 600;
+}
+
+.task-client-line a:hover {
+  color: var(--jt-link-hover, #0d6efd);
 }
 
 .task-show-card--completed {

@@ -319,8 +319,8 @@ $sumInvoiceGross = static function (array $rows, string $from, string $to): floa
 };
 $serviceInvoiceMtd = $sumInvoiceGross($invoices, $mtdFrom, $asOf);
 $serviceInvoiceYtd = $sumInvoiceGross($invoices, $ytdFrom, $asOf);
-$serviceNetMtd = round($serviceInvoiceMtd - $jobExpensesMtd, 2);
-$serviceNetYtd = round($serviceInvoiceYtd - $jobExpensesYtd, 2);
+$serviceNetMtd = round($serviceMtd['gross'] - $jobExpensesMtd, 2);
+$serviceNetYtd = round($serviceYtd['gross'] - $jobExpensesYtd, 2);
 $reportMtdNet = round($salesMtd['net'] + $estateNetMtd + $serviceNetMtd - $generalExpensesMtd, 2);
 $reportYtdNet = round($salesYtd['net'] + $estateNetYtd + $serviceNetYtd - $generalExpensesYtd, 2);
 $profitAfterPurchases = round($reportYtdNet - $purchasesYtd['total'], 2);

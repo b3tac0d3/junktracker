@@ -6,6 +6,9 @@ $jobs = is_array($jobs ?? null) ? $jobs : [];
 $quotes = is_array($quotes ?? null) ? $quotes : [];
 $quoteStatusSummary = is_array($quoteStatusSummary ?? null) ? $quoteStatusSummary : [];
 $hasQuotes = (bool) ($hasQuotes ?? false);
+$hasEstateSales = (bool) ($hasEstateSales ?? false);
+$estateSales = is_array($estateSales ?? null) ? $estateSales : [];
+$estateSaleStatusSummary = is_array($estateSaleStatusSummary ?? null) ? $estateSaleStatusSummary : [];
 $sales = is_array($sales ?? null) ? $sales : [];
 $purchases = is_array($purchases ?? null) ? $purchases : [];
 $contacts = is_array($contacts ?? null) ? $contacts : [];
@@ -21,7 +24,8 @@ $canViewFinancials = (bool) ($canViewFinancials ?? can_view_financials());
 $clientId = (int) ($client['id'] ?? 0);
 $jobCount = count($jobs);
 $quoteCount = count($quotes);
-$jobsTabCount = $jobCount + $quoteCount;
+$estateSaleCount = count($estateSales);
+$jobsTabCount = $jobCount + $quoteCount + $estateSaleCount;
 $salesCount = count($sales);
 $purchaseCount = count($purchases);
 $contactCount = count($contacts);
@@ -144,7 +148,7 @@ $isInactive = $clientStatus === 'inactive' || (array_key_exists('is_active', $cl
             </button>
             <ul class="dropdown-menu dropdown-menu-end">
                 <li>
-                    <a class="dropdown-item" href="<?= e(url('/clients/' . (string) $clientId . '/edit')) ?>">
+                    <a class="dropdown-item" href="<?= e(url('/clients/' . (string) $clientId . '/edit' . detail_return_tab_query($activeTab))) ?>">
                         <i class="fas fa-pen me-2"></i>Edit Client
                     </a>
                 </li>
@@ -181,20 +185,20 @@ $isInactive = $clientStatus === 'inactive' || (array_key_exists('is_active', $cl
                     </a>
                 </li>
                 <li>
-                    <a class="dropdown-item" href="<?= e(url('/clients/' . (string) $clientId . '/contacts/create')) ?>">
+                    <a class="dropdown-item" href="<?= e(url('/clients/' . (string) $clientId . '/contacts/create' . detail_return_tab_query('contacts'))) ?>">
                         <i class="fas fa-phone-volume me-2"></i>Add Contact
                     </a>
                 </li>
                 <?php if ($hasFamilyMembers): ?>
                 <li>
-                    <a class="dropdown-item" href="<?= e(url('/clients/' . (string) $clientId . '/family/create')) ?>">
+                    <a class="dropdown-item" href="<?= e(url('/clients/' . (string) $clientId . '/family/create' . detail_return_tab_query('details'))) ?>">
                         <i class="fas fa-people-roof me-2"></i>Add Family Member
                     </a>
                 </li>
                 <?php endif; ?>
                 <?php if ($hasBolo): ?>
                     <li>
-                        <a class="dropdown-item" href="<?= e(url('/clients/' . (string) $clientId . '/bolo/edit')) ?>">
+                        <a class="dropdown-item" href="<?= e(url('/clients/' . (string) $clientId . '/bolo/edit' . detail_return_tab_query('bolo'))) ?>">
                             <i class="fas fa-binoculars me-2"></i>Edit BOLO profile
                         </a>
                     </li>
@@ -216,7 +220,7 @@ $isInactive = $clientStatus === 'inactive' || (array_key_exists('is_active', $cl
 
 <section class="card index-card index-card-overflow-visible">
     <div class="card-header index-card-header p-0 border-bottom-0">
-        <ul class="nav nav-tabs index-card-tabs estate-sale-tabs client-tabs" id="client-tabs" role="tablist">
+        <ul class="nav nav-tabs index-card-tabs estate-sale-tabs client-tabs" id="client-tabs" role="tablist" data-detail-tabs>
             <li class="nav-item" role="presentation">
                 <button
                     class="nav-link estate-sale-tab-link<?= $detailsTabActive ? ' active' : '' ?>"
@@ -444,7 +448,7 @@ $isInactive = $clientStatus === 'inactive' || (array_key_exists('is_active', $cl
                 <hr class="my-4">
                 <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
                     <h2 class="h6 mb-0"><i class="fas fa-people-roof me-2"></i>Family</h2>
-                    <a class="btn btn-sm btn-outline-primary" href="<?= e(url('/clients/' . (string) $clientId . '/family/create')) ?>">Add Family Member</a>
+                    <a class="btn btn-sm btn-outline-primary" href="<?= e(url('/clients/' . (string) $clientId . '/family/create' . detail_return_tab_query('details'))) ?>">Add Family Member</a>
                 </div>
                 <?php if ($familyMembers === []): ?>
                     <div class="record-empty">No family members yet.</div>
@@ -494,7 +498,7 @@ $isInactive = $clientStatus === 'inactive' || (array_key_exists('is_active', $cl
                                         </div>
                                     </div>
                                     <div class="d-flex flex-wrap gap-2">
-                                        <a class="btn btn-sm btn-outline-secondary" href="<?= e(url('/clients/' . (string) $clientId . '/family/' . (string) $memberId . '/edit')) ?>">Edit</a>
+                                        <a class="btn btn-sm btn-outline-secondary" href="<?= e(url('/clients/' . (string) $clientId . '/family/' . (string) $memberId . '/edit' . detail_return_tab_query('details'))) ?>">Edit</a>
                                         <form method="post" action="<?= e(url('/clients/' . (string) $clientId . '/family/' . (string) $memberId . '/delete')) ?>" onsubmit="return confirm('Remove this family member?');">
                                             <?= csrf_field() ?>
                                             <button class="btn btn-sm btn-outline-danger" type="submit">Remove</button>
@@ -679,7 +683,7 @@ $isInactive = $clientStatus === 'inactive' || (array_key_exists('is_active', $cl
             <?php if ($jobs === []): ?>
                 <div class="record-empty">No jobs for this client yet.</div>
             <?php else: ?>
-                <div class="simple-list-table">
+                <div class="simple-list-table mb-4">
                     <?php foreach ($jobs as $job): ?>
                         <a class="simple-list-row simple-list-row-link" href="<?= e(url('/jobs/' . (string) ((int) ($job['id'] ?? 0)))) ?>">
                             <div class="simple-list-title"><?= e(trim((string) ($job['title'] ?? '')) !== '' ? (string) $job['title'] : ('Job #' . (string) ((int) ($job['id'] ?? 0)))) ?></div>
@@ -691,6 +695,68 @@ $isInactive = $clientStatus === 'inactive' || (array_key_exists('is_active', $cl
                         </a>
                     <?php endforeach; ?>
                 </div>
+            <?php endif; ?>
+
+            <?php if ($hasEstateSales): ?>
+                <hr class="my-4">
+
+                <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+                    <h2 class="h6 mb-0"><i class="fas fa-store me-2"></i>Estate Sales</h2>
+                    <a class="btn btn-sm btn-outline-primary" href="<?= e(url('/estate-sales/create') . '?client_id=' . (string) $clientId) ?>">Add Estate Sale</a>
+                </div>
+                <div class="record-row-fields record-row-fields-4 mb-3">
+                    <?php foreach (\App\Models\EstateSale::statusOptions(current_business_id()) as $estateStatus): ?>
+                        <?php
+                        $estateStatusKey = strtolower(trim((string) $estateStatus));
+                        $estateStatusTotal = (int) ($estateSaleStatusSummary[$estateStatusKey] ?? 0);
+                        $estateStatusLabel = ucwords(str_replace('_', ' ', $estateStatusKey));
+                        ?>
+                        <div class="record-field">
+                            <span class="record-label"><?= e($estateStatusLabel) ?></span>
+                            <span class="record-value"><?= e((string) $estateStatusTotal) ?></span>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+
+                <?php if ($estateSales === []): ?>
+                    <div class="record-empty">No estate sales for this client yet.</div>
+                <?php else: ?>
+                    <div class="simple-list-table">
+                        <?php foreach ($estateSales as $estateSale): ?>
+                            <?php
+                            if (!is_array($estateSale)) {
+                                continue;
+                            }
+                            $estateSaleId = (int) ($estateSale['id'] ?? 0);
+                            if ($estateSaleId <= 0) {
+                                continue;
+                            }
+                            $estateSaleTitle = trim((string) ($estateSale['title'] ?? ''));
+                            if ($estateSaleTitle === '') {
+                                $estateSaleTitle = 'Estate sale #' . (string) $estateSaleId;
+                            }
+                            $estateSaleStatus = strtolower(trim((string) ($estateSale['status'] ?? 'scheduled')));
+                            $estateSaleStatusLabel = ucwords(str_replace('_', ' ', $estateSaleStatus));
+                            $estateSaleCity = trim((string) ($estateSale['city'] ?? ''));
+                            $estateSaleCreated = format_datetime((string) ($estateSale['created_at'] ?? null));
+                            ?>
+                            <a class="simple-list-row simple-list-row-link" href="<?= e(url('/estate-sales/' . (string) $estateSaleId)) ?>">
+                                <div class="simple-list-title"><?= e($estateSaleTitle) ?></div>
+                                <div class="simple-list-meta">
+                                    <span>ID #<?= e((string) $estateSaleId) ?></span>
+                                    <span><?= e($estateSaleStatusLabel) ?></span>
+                                    <?php if ($estateSaleCreated !== '' && $estateSaleCreated !== '—'): ?>
+                                        <span>Created <?= e($estateSaleCreated) ?></span>
+                                    <?php endif; ?>
+                                    <span><?= e(format_datetime((string) ($estateSale['start_at'] ?? null))) ?></span>
+                                    <?php if ($estateSaleCity !== ''): ?>
+                                        <span><?= e($estateSaleCity) ?></span>
+                                    <?php endif; ?>
+                                </div>
+                            </a>
+                        <?php endforeach; ?>
+                    </div>
+                <?php endif; ?>
             <?php endif; ?>
         </div>
 
@@ -867,7 +933,7 @@ $isInactive = $clientStatus === 'inactive' || (array_key_exists('is_active', $cl
                 </div>
                 <div class="d-flex flex-wrap gap-2">
                     <a class="btn btn-sm btn-outline-secondary" href="<?= e(url('/bolo')) ?>">BOLO list</a>
-                    <a class="btn btn-sm btn-outline-primary" href="<?= e(url('/clients/' . (string) $clientId . '/bolo/edit')) ?>">Edit</a>
+                    <a class="btn btn-sm btn-outline-primary" href="<?= e(url('/clients/' . (string) $clientId . '/bolo/edit' . detail_return_tab_query('bolo'))) ?>">Edit</a>
                 </div>
             </div>
 
@@ -930,7 +996,7 @@ $isInactive = $clientStatus === 'inactive' || (array_key_exists('is_active', $cl
         >
             <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
                 <h2 class="h6 mb-0"><i class="fas fa-phone-volume me-2"></i>Contact Log</h2>
-                <a class="btn btn-sm btn-outline-primary" href="<?= e(url('/clients/' . (string) $clientId . '/contacts/create')) ?>">Add Contact</a>
+                <a class="btn btn-sm btn-outline-primary" href="<?= e(url('/clients/' . (string) $clientId . '/contacts/create' . detail_return_tab_query('contacts'))) ?>">Add Contact</a>
             </div>
             <?php if ($contacts === []): ?>
                 <div class="record-empty">No contact records yet.</div>

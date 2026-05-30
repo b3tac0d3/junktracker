@@ -6,6 +6,11 @@ $actionUrl = (string) ($actionUrl ?? url('/purchases'));
 $statusOptions = is_array($statusOptions ?? null) ? $statusOptions : [];
 $clientTypeOptions = is_array($clientTypeOptions ?? null) ? $clientTypeOptions : ['client', 'company', 'realtor', 'other'];
 $searchUrl = (string) ($searchUrl ?? url('/purchases/client-search'));
+$purchaseId = (int) ($purchaseId ?? 0);
+$returnTab = (string) ($returnTab ?? '');
+$backUrl = $mode === 'edit' && $purchaseId > 0
+    ? url(detail_path_with_tab('/purchases/' . (string) $purchaseId, $returnTab))
+    : url('/purchases');
 $stateOptions = us_state_options();
 
 $fieldError = static function (string $field) use ($errors): string {
@@ -27,7 +32,7 @@ $statusLabel = static function (string $value): string {
         <p class="muted">Purchase order, seller, and terms</p>
     </div>
     <div>
-        <a class="btn btn-outline-secondary" href="<?= e($mode === 'edit' && isset($purchaseId) ? url('/purchases/' . (string) ((int) $purchaseId)) : url('/purchases')) ?>">Back to Purchases</a>
+        <a class="btn btn-outline-secondary" href="<?= e($backUrl) ?>"><?= e($mode === 'edit' ? 'Back to Purchase' : 'Back to Purchases') ?></a>
     </div>
 </div>
 
@@ -38,6 +43,7 @@ $statusLabel = static function (string $value): string {
     <div class="card-body">
         <form method="post" action="<?= e($actionUrl) ?>" class="row g-3">
             <?= csrf_field() ?>
+            <?= detail_tab_hidden_field($returnTab) ?>
 
             <div class="col-12 col-lg-5">
                 <label class="form-label fw-semibold" for="purchase-title">Name</label>

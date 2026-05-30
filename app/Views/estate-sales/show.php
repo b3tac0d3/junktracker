@@ -237,7 +237,7 @@ $customerActionsMenu = static function (
 
 <section class="card index-card index-card-overflow-visible">
     <div class="card-header index-card-header p-0 border-bottom-0">
-        <ul class="nav nav-tabs index-card-tabs estate-sale-tabs" id="estate-sale-tabs" role="tablist">
+        <ul class="nav nav-tabs index-card-tabs estate-sale-tabs" id="estate-sale-tabs" role="tablist" data-detail-tabs>
             <li class="nav-item" role="presentation">
                 <button
                     class="nav-link estate-sale-tab-link<?= $detailsTabActive ? ' active' : '' ?>"

@@ -47,10 +47,10 @@ if ($clientId > 0) {
     $purchaseQuery['client_id'] = (string) $clientId;
 }
 $purchaseCreateUrl = url('/purchases/create') . '?' . http_build_query($purchaseQuery);
-$expenseCreateUrl = url('/jobs/' . (string) $jobId . '/expenses/create');
-$adjustmentCreateUrl = url('/jobs/' . (string) $jobId . '/adjustments/create');
+$expenseCreateUrl = url('/jobs/' . (string) $jobId . '/expenses/create' . detail_return_tab_query('financial'));
+$adjustmentCreateUrl = url('/jobs/' . (string) $jobId . '/adjustments/create' . detail_return_tab_query('financial'));
 $timeEntryCreateUrl = url('/time-tracking/create') . '?job_id=' . (string) $jobId . '&return_to=' . urlencode('/jobs/' . (string) $jobId . '?tab=labor');
-$employeeAddUrl = url('/jobs/' . (string) $jobId . '/employees/add');
+$employeeAddUrl = url('/jobs/' . (string) $jobId . '/employees/add' . detail_return_tab_query('labor'));
 $bulkPunchUrl = url('/jobs/' . (string) $jobId . '/employees/bulk-punch');
 $jobStatus = strtolower(trim((string) ($job['status'] ?? 'pending')));
 $isInactive = $jobStatus === 'inactive' || (array_key_exists('is_active', $job) && (int) ($job['is_active'] ?? 1) === 0);
@@ -242,7 +242,7 @@ $hasCloseout = array_key_exists('closeout_truck_loaded', $job);
                 <i class="fas fa-ellipsis-h me-2"></i>Actions
             </button>
             <ul class="dropdown-menu dropdown-menu-end">
-                <li><a class="dropdown-item" href="<?= e(url('/jobs/' . (string) $jobId . '/edit')) ?>"><i class="fas fa-pen me-2"></i>Edit Job</a></li>
+                <li><a class="dropdown-item" href="<?= e(url('/jobs/' . (string) $jobId . '/edit' . detail_return_tab_query($activeTab))) ?>"><i class="fas fa-pen me-2"></i>Edit Job</a></li>
                 <li><a class="dropdown-item" href="<?= e($timeEntryCreateUrl) ?>"><i class="fas fa-clock me-2"></i>Add Time Entry</a></li>
                 <li><a class="dropdown-item" href="<?= e($employeeAddUrl) ?>"><i class="fas fa-user-plus me-2"></i>Add Employee</a></li>
                 <li><a class="dropdown-item" href="<?= e($estimateCreateUrl) ?>"><i class="fas fa-file-signature me-2"></i>Add Estimate</a></li>
@@ -269,7 +269,7 @@ $hasCloseout = array_key_exists('closeout_truck_loaded', $job);
 
 <section class="card index-card index-card-overflow-visible">
     <div class="card-header index-card-header p-0 border-bottom-0">
-        <ul class="nav nav-tabs index-card-tabs estate-sale-tabs client-tabs" id="job-tabs" role="tablist">
+        <ul class="nav nav-tabs index-card-tabs estate-sale-tabs client-tabs" id="job-tabs" role="tablist" data-detail-tabs>
             <li class="nav-item" role="presentation">
                 <button
                     class="nav-link estate-sale-tab-link<?= $detailsTabActive ? ' active' : '' ?>"

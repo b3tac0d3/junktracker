@@ -12,6 +12,7 @@ $overall = is_array($report['overall'] ?? null) ? $report['overall'] : [];
 
 $expensesByCategory = is_array($expenses['by_category'] ?? null) ? $expenses['by_category'] : [];
 $salesByType = is_array($sales['by_type'] ?? null) ? $sales['by_type'] : [];
+$estateSalesByEvent = is_array($estateSales['by_event'] ?? null) ? $estateSales['by_event'] : [];
 $marginByJob = is_array($report['margin_by_job'] ?? null) ? $report['margin_by_job'] : [];
 
 $formatMoney = static function ($value): string {
@@ -71,8 +72,29 @@ $resetHref = url('/reports/income');
                 <strong><i class="fas fa-chart-column me-2 jt-report-icon--totals" aria-hidden="true"></i>Summary</strong>
             </div>
             <div class="card-body">
-                <p class="small text-muted mb-3 mb-md-2">Period summary</p>
+                <p class="small text-muted mb-3 mb-md-2">Sales + estate sales + service (invoices), less general expenses</p>
                 <div class="row g-3">
+                    <div class="col-6 col-md-4">
+                        <div class="jt-report-summary-metric">
+                            <div class="jt-report-summary-label small">Sales net</div>
+                            <div class="fs-5 fw-semibold"><span class="jt-report-in"><?= e($formatMoney($sales['net'] ?? 0)) ?></span></div>
+                            <div class="small text-muted">Gross <?= e($formatMoney($sales['gross'] ?? 0)) ?> · <?= e((string) ((int) ($sales['count'] ?? 0))) ?> sale(s)</div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-4">
+                        <div class="jt-report-summary-metric">
+                            <div class="jt-report-summary-label small">Service net</div>
+                            <div class="fs-5 fw-semibold"><span class="jt-report-in"><?= e($formatMoney($service['net'] ?? 0)) ?></span></div>
+                            <div class="small text-muted">Gross <?= e($formatMoney($service['gross'] ?? 0)) ?> · <?= e((string) ((int) ($service['count'] ?? 0))) ?> invoice(s)</div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-4">
+                        <div class="jt-report-summary-metric">
+                            <div class="jt-report-summary-label small">Estate sales net</div>
+                            <div class="fs-5 fw-semibold"><span class="jt-report-in"><?= e($formatMoney($estateSales['net'] ?? 0)) ?></span></div>
+                            <div class="small text-muted">Gross <?= e($formatMoney($estateSales['gross'] ?? 0)) ?> · <?= e((string) ((int) ($estateSales['transaction_count'] ?? $estateSales['count'] ?? 0))) ?> txn · <?= e((string) ((int) ($estateSales['estate_sale_count'] ?? 0))) ?> sale(s)</div>
+                        </div>
+                    </div>
                     <div class="col-6 col-md-4">
                         <div class="jt-report-summary-metric">
                             <div class="jt-report-summary-label small">Gross</div>
@@ -232,11 +254,43 @@ $resetHref = url('/reports/income');
             <div class="card-header index-card-header"><strong><i class="fas fa-store me-2 jt-report-icon--service" aria-hidden="true"></i>Estate Sales</strong></div>
             <div class="card-body">
                 <p class="small text-muted mb-3">On-site transactions recorded during estate sales. Net is our share after the agreed client split.</p>
-                <div class="record-row-fields record-row-fields-3">
-                    <div class="record-field"><span class="record-label">Count</span><span class="record-value"><span class="jt-report-count"><?= e((string) ((int) ($estateSales['count'] ?? 0))) ?></span></span></div>
+                <div class="record-row-fields record-row-fields-4 mb-3">
+                    <div class="record-field"><span class="record-label">Estate sales</span><span class="record-value"><span class="jt-report-count"><?= e((string) ((int) ($estateSales['estate_sale_count'] ?? 0))) ?></span></span></div>
+                    <div class="record-field"><span class="record-label">Transactions</span><span class="record-value"><span class="jt-report-count"><?= e((string) ((int) ($estateSales['transaction_count'] ?? $estateSales['count'] ?? 0))) ?></span></span></div>
                     <div class="record-field"><span class="record-label">Gross</span><span class="record-value"><span class="jt-report-in"><?= e($formatMoney($estateSales['gross'] ?? 0)) ?></span></span></div>
                     <div class="record-field"><span class="record-label">Net</span><span class="record-value"><span class="jt-report-in"><?= e($formatMoney($estateSales['net'] ?? 0)) ?></span></span></div>
                 </div>
+                <?php if ($estateSalesByEvent === []): ?>
+                    <div class="record-empty">No estate sale transactions in this period.</div>
+                <?php else: ?>
+                    <div class="simple-list-table">
+                        <?php foreach ($estateSalesByEvent as $eventRow): ?>
+                            <?php
+                            if (!is_array($eventRow)) {
+                                continue;
+                            }
+                            $estateSaleId = (int) ($eventRow['estate_sale_id'] ?? 0);
+                            $eventTitle = trim((string) ($eventRow['title'] ?? '')) ?: ('Estate sale #' . (string) $estateSaleId);
+                            ?>
+                            <div class="simple-list-row">
+                                <span class="simple-list-title">
+                                    <?php if ($estateSaleId > 0): ?>
+                                        <a href="<?= e(url('/estate-sales/' . (string) $estateSaleId)) ?>"><?= e($eventTitle) ?></a>
+                                    <?php else: ?>
+                                        <?= e($eventTitle) ?>
+                                    <?php endif; ?>
+                                </span>
+                                <span class="simple-list-meta">
+                                    <span class="jt-report-muted">Gross</span> <span class="jt-report-in"><?= e($formatMoney($eventRow['gross'] ?? 0)) ?></span>
+                                    <span class="jt-report-muted">·</span>
+                                    <span class="jt-report-muted">Net</span> <span class="jt-report-in"><?= e($formatMoney($eventRow['net'] ?? 0)) ?></span>
+                                    <span class="jt-report-muted">·</span>
+                                    <span class="jt-report-count"><?= e((string) ((int) ($eventRow['transaction_count'] ?? 0))) ?> txn</span>
+                                </span>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                <?php endif; ?>
                 <div class="mt-3">
                     <a class="small fw-semibold text-decoration-none" href="<?= e(url('/estate-sale-records')) ?>">View estate sale records</a>
                 </div>

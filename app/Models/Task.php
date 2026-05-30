@@ -82,18 +82,22 @@ final class Task
             $joinSql .= " LEFT JOIN users done_u ON done_u.id = t.completed_by {$joinDeleted}";
         }
 
+        $clientJoin = self::linkedClientJoinParts('t');
+        $joinSql .= $clientJoin['join'];
+
         $where = [];
         $where[] = SchemaInspector::hasColumn('tasks', 'business_id') ? 't.business_id = :business_id' : '1=1';
         $where[] = SchemaInspector::hasColumn('tasks', 'deleted_at') ? 't.deleted_at IS NULL' : '1=1';
         if ($status !== '') {
             $where[] = 'LOWER(' . $statusSql . ') = :status';
         }
+        $clientSearchSql = $clientJoin['searchable'] ? " OR {$clientJoin['clientNameSql']} LIKE :query_like_5" : '';
         $where[] = "(
             :query = ''
             OR {$titleSql} LIKE :query_like_1
             OR {$ownerNameSql} LIKE :query_like_2
             OR COALESCE({$statusSql}, '') LIKE :query_like_3
-            OR CAST(t.id AS CHAR) LIKE :query_like_4
+            OR CAST(t.id AS CHAR) LIKE :query_like_4{$clientSearchSql}
         )";
 
         $sortBy = strtolower(trim($sortBy));
@@ -116,7 +120,9 @@ final class Task
                     {$ownerNameSql} AS owner_name,
                     {$completedAtSql} AS completed_at,
                     {$completedBySql} AS completed_by,
-                    {$completedByNameSql} AS completed_by_name
+                    {$completedByNameSql} AS completed_by_name,
+                    {$clientJoin['clientIdSql']} AS client_id,
+                    {$clientJoin['clientNameSql']} AS client_name
                 FROM tasks t
                 {$joinSql}
                 WHERE " . implode(' AND ', $where) . "
@@ -137,6 +143,9 @@ final class Task
         $stmt->bindValue(':query_like_2', $queryLike);
         $stmt->bindValue(':query_like_3', $queryLike);
         $stmt->bindValue(':query_like_4', $queryLike);
+        if ($clientJoin['searchable']) {
+            $stmt->bindValue(':query_like_5', $queryLike);
+        }
         $stmt->bindValue(':row_limit', max(1, min($limit, 1000)), \PDO::PARAM_INT);
         $stmt->bindValue(':row_offset', max(0, $offset), \PDO::PARAM_INT);
         $stmt->execute();
@@ -165,18 +174,22 @@ final class Task
             $joinSql = " LEFT JOIN users u ON u.id = t.owner_user_id {$joinDeleted}";
         }
 
+        $clientJoin = self::linkedClientJoinParts('t');
+        $joinSql .= $clientJoin['join'];
+
         $where = [];
         $where[] = SchemaInspector::hasColumn('tasks', 'business_id') ? 't.business_id = :business_id' : '1=1';
         $where[] = SchemaInspector::hasColumn('tasks', 'deleted_at') ? 't.deleted_at IS NULL' : '1=1';
         if ($status !== '') {
             $where[] = 'LOWER(' . $statusSql . ') = :status';
         }
+        $clientSearchSql = $clientJoin['searchable'] ? " OR {$clientJoin['clientNameSql']} LIKE :query_like_5" : '';
         $where[] = "(
             :query = ''
             OR {$titleSql} LIKE :query_like_1
             OR {$ownerNameSql} LIKE :query_like_2
             OR COALESCE({$statusSql}, '') LIKE :query_like_3
-            OR CAST(t.id AS CHAR) LIKE :query_like_4
+            OR CAST(t.id AS CHAR) LIKE :query_like_4{$clientSearchSql}
         )";
 
         $sql = "SELECT COUNT(*)
@@ -197,9 +210,61 @@ final class Task
         $stmt->bindValue(':query_like_2', $queryLike);
         $stmt->bindValue(':query_like_3', $queryLike);
         $stmt->bindValue(':query_like_4', $queryLike);
+        if ($clientJoin['searchable']) {
+            $stmt->bindValue(':query_like_5', $queryLike);
+        }
         $stmt->execute();
 
         return (int) $stmt->fetchColumn();
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    public static function dueListForOwner(int $businessId, int $ownerUserId, int $limit = 5): array
+    {
+        if (!SchemaInspector::hasTable('tasks') || !SchemaInspector::hasColumn('tasks', 'owner_user_id')) {
+            return [];
+        }
+
+        $titleSql = SchemaInspector::hasColumn('tasks', 'title') ? 't.title' : "CONCAT('Task #', t.id)";
+        $statusSql = SchemaInspector::hasColumn('tasks', 'status') ? 't.status' : "'open'";
+        $dueSql = SchemaInspector::hasColumn('tasks', 'due_at') ? 't.due_at' : 'NULL';
+        $clientJoin = self::linkedClientJoinParts('t');
+
+        $where = [
+            SchemaInspector::hasColumn('tasks', 'business_id') ? 't.business_id = :business_id' : '1=1',
+            SchemaInspector::hasColumn('tasks', 'deleted_at') ? 't.deleted_at IS NULL' : '1=1',
+            't.owner_user_id = :owner_user_id',
+            "LOWER({$statusSql}) IN ('open','in_progress')",
+        ];
+
+        $sql = "SELECT
+                    t.id,
+                    {$titleSql} AS title,
+                    LOWER({$statusSql}) AS status,
+                    {$dueSql} AS due_at,
+                    {$clientJoin['clientIdSql']} AS client_id,
+                    {$clientJoin['clientNameSql']} AS client_name
+                FROM tasks t
+                {$clientJoin['join']}
+                WHERE " . implode(' AND ', $where) . "
+                ORDER BY
+                    CASE WHEN {$dueSql} IS NULL THEN 1 ELSE 0 END,
+                    {$dueSql} ASC,
+                    t.id DESC
+                LIMIT :row_limit";
+
+        $stmt = Database::connection()->prepare($sql);
+        if (SchemaInspector::hasColumn('tasks', 'business_id')) {
+            $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
+        }
+        $stmt->bindValue(':owner_user_id', $ownerUserId, \PDO::PARAM_INT);
+        $stmt->bindValue(':row_limit', max(1, min($limit, 20)), \PDO::PARAM_INT);
+        $stmt->execute();
+
+        $rows = $stmt->fetchAll();
+        return is_array($rows) ? $rows : [];
     }
 
     public static function findForBusiness(int $businessId, int $taskId): ?array
@@ -250,6 +315,9 @@ final class Task
             }
         }
 
+        $clientJoin = self::linkedClientJoinParts('t');
+        $joinSql .= $clientJoin['join'];
+
         $where = [];
         $where[] = SchemaInspector::hasColumn('tasks', 'business_id') ? 't.business_id = :business_id' : '1=1';
         $where[] = SchemaInspector::hasColumn('tasks', 'deleted_at') ? 't.deleted_at IS NULL' : '1=1';
@@ -270,7 +338,9 @@ final class Task
                     {$completedByIdSql} AS completed_by,
                     {$ownerNameSql} AS owner_name,
                     {$assignedNameSql} AS assigned_name,
-                    {$completedByNameSql} AS completed_by_name
+                    {$completedByNameSql} AS completed_by_name,
+                    {$clientJoin['clientIdSql']} AS client_id,
+                    {$clientJoin['clientNameSql']} AS client_name
                 FROM tasks t
                 {$joinSql}
                 WHERE " . implode(' AND ', $where) . '
@@ -542,5 +612,82 @@ final class Task
             'task_id' => $taskId,
             'business_id' => $businessId,
         ]);
+    }
+
+    /**
+     * @param array<string, mixed> $task
+     */
+    public static function displayTitle(array $task): string
+    {
+        $taskId = (int) ($task['id'] ?? 0);
+        $title = trim((string) ($task['title'] ?? ''));
+        if ($title === '') {
+            return 'Task #' . ($taskId > 0 ? (string) $taskId : '0');
+        }
+
+        $clientName = trim((string) ($task['client_name'] ?? ''));
+        if ($clientName === '') {
+            return $title;
+        }
+
+        if (preg_match('/^Client Follow-Up:\s*(.+)$/i', $title, $matches) === 1) {
+            if (strcasecmp(trim((string) ($matches[1] ?? '')), $clientName) === 0) {
+                return 'Client Follow-Up';
+            }
+        }
+
+        return $title;
+    }
+
+    /**
+     * @return array{join: string, clientNameSql: string, clientIdSql: string, searchable: bool}
+     */
+    public static function linkedClientJoinParts(string $taskAlias = 't'): array
+    {
+        $empty = [
+            'join' => '',
+            'clientNameSql' => "''",
+            'clientIdSql' => 'NULL',
+            'searchable' => false,
+        ];
+
+        if (!SchemaInspector::hasTable('clients')
+            || !SchemaInspector::hasColumn('tasks', 'link_type')
+            || !SchemaInspector::hasColumn('tasks', 'link_id')) {
+            return $empty;
+        }
+
+        $clientIdParts = ["CASE WHEN LOWER(COALESCE({$taskAlias}.link_type, '')) = 'client' THEN {$taskAlias}.link_id END"];
+        $join = '';
+
+        if (SchemaInspector::hasTable('jobs') && SchemaInspector::hasColumn('jobs', 'client_id')) {
+            $jobDeleted = SchemaInspector::hasColumn('jobs', 'deleted_at') ? 'AND task_job.deleted_at IS NULL' : '';
+            $join .= " LEFT JOIN jobs task_job ON task_job.id = {$taskAlias}.link_id
+                AND LOWER(COALESCE({$taskAlias}.link_type, '')) = 'job' {$jobDeleted}";
+            $clientIdParts[] = 'task_job.client_id';
+        }
+
+        if (SchemaInspector::hasTable('purchases') && SchemaInspector::hasColumn('purchases', 'client_id')) {
+            $purchaseDeleted = SchemaInspector::hasColumn('purchases', 'deleted_at') ? 'AND task_purchase.deleted_at IS NULL' : '';
+            $join .= " LEFT JOIN purchases task_purchase ON task_purchase.id = {$taskAlias}.link_id
+                AND LOWER(COALESCE({$taskAlias}.link_type, '')) = 'purchase' {$purchaseDeleted}";
+            $clientIdParts[] = 'task_purchase.client_id';
+        }
+
+        $resolvedClientId = 'COALESCE(' . implode(', ', $clientIdParts) . ')';
+        $clientDeleted = SchemaInspector::hasColumn('clients', 'deleted_at') ? 'AND task_client.deleted_at IS NULL' : '';
+        $clientBiz = SchemaInspector::hasColumn('clients', 'business_id') && SchemaInspector::hasColumn('tasks', 'business_id')
+            ? "AND task_client.business_id = {$taskAlias}.business_id"
+            : '';
+        $join .= " LEFT JOIN clients task_client ON task_client.id = {$resolvedClientId} {$clientBiz} {$clientDeleted}";
+
+        $clientNameExpr = "COALESCE(NULLIF(TRIM(CONCAT_WS(' ', task_client.first_name, task_client.last_name)), ''), NULLIF(task_client.company_name, ''), CONCAT('Client #', task_client.id))";
+
+        return [
+            'join' => $join,
+            'clientNameSql' => "COALESCE({$clientNameExpr}, '')",
+            'clientIdSql' => 'task_client.id',
+            'searchable' => true,
+        ];
     }
 }

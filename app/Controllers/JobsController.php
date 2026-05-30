@@ -304,7 +304,7 @@ final class JobsController extends Controller
         audit('job_created', 'jobs', $jobId, ['name' => trim((string) ($form['name'] ?? ''))]);
         GoogleCalendarSync::syncJob($actorUserId, $businessId, $jobId);
         flash('success', 'Job created.');
-        redirect('/jobs/' . (string) $jobId);
+        $this->redirectToJob($jobId);
     }
 
     public function edit(array $params): void
@@ -337,6 +337,7 @@ final class JobsController extends Controller
             'clientOptions' => Job::clientOptions($businessId),
             'clientTypeOptions' => FormSelectValue::optionsForSection($businessId, 'client_type'),
             'jobId' => $jobId,
+            'returnTab' => request_detail_tab($this->jobAllowedTabs()),
         ]);
     }
 
@@ -391,7 +392,7 @@ final class JobsController extends Controller
         audit('job_updated', 'jobs', $jobId, ['status' => $nextStatus]);
         GoogleCalendarSync::syncJob($actorUserId, $businessId, $jobId);
         flash('success', 'Job updated.');
-        redirect('/jobs/' . (string) $jobId);
+        $this->redirectToJob($jobId);
     }
 
     public function deactivate(array $params): void
@@ -407,7 +408,7 @@ final class JobsController extends Controller
 
         if (!verify_csrf($_POST['csrf_token'] ?? null)) {
             flash('error', 'Session expired. Please try again.');
-            redirect('/jobs/' . (string) $jobId);
+            $this->redirectToJob($jobId);
         }
 
         $businessId = current_business_id();
@@ -520,7 +521,7 @@ final class JobsController extends Controller
 
         if (!verify_csrf($_POST['csrf_token'] ?? null)) {
             flash('error', 'Session expired. Please try again.');
-            redirect('/jobs/' . (string) $jobId);
+            $this->redirectToJob($jobId);
         }
 
         $businessId = current_business_id();
@@ -534,12 +535,12 @@ final class JobsController extends Controller
         $allowed = $this->jobStatusOptions($businessId);
         if (!in_array($status, $allowed, true)) {
             flash('error', 'Choose a valid status.');
-            redirect('/jobs/' . (string) $jobId);
+            $this->redirectToJob($jobId);
         }
 
         $current = strtolower(trim((string) ($job['status'] ?? '')));
         if ($status === $current) {
-            redirect('/jobs/' . (string) $jobId);
+            $this->redirectToJob($jobId);
         }
 
         $actor = (int) (auth_user_id() ?? 0);
@@ -552,7 +553,7 @@ final class JobsController extends Controller
             flash('error', 'Could not update status.');
         }
 
-        redirect('/jobs/' . (string) $jobId);
+        $this->redirectToJob($jobId);
     }
 
     public function saveCloseout(array $params): void
@@ -589,7 +590,7 @@ final class JobsController extends Controller
         } else {
             flash('error', 'Could not save close-out (run latest migrations?).');
         }
-        redirect('/jobs/' . (string) $jobId);
+        $this->redirectToJob($jobId);
     }
 
     public function addEmployee(array $params): void
@@ -756,12 +757,12 @@ final class JobsController extends Controller
         if ($ok > 0 && $fail === 0) {
             $msg = $ok === 1 ? 'Employee added to job.' : (string) $ok . ' employees added to job.';
             flash('success', $msg);
-            redirect('/jobs/' . (string) $jobId);
+            $this->redirectToJob($jobId, null, 'labor');
         }
 
         if ($ok > 0 && $fail > 0) {
             flash('success', 'Added ' . (string) $ok . ' employee(s). ' . (string) $fail . ' could not be added (inactive or invalid).');
-            redirect('/jobs/' . (string) $jobId);
+            $this->redirectToJob($jobId, null, 'labor');
         }
 
         flash('error', 'Unable to add employee(s) to this job.');
@@ -782,7 +783,7 @@ final class JobsController extends Controller
 
         if (!verify_csrf($_POST['csrf_token'] ?? null)) {
             flash('error', 'Session expired. Please try again.');
-            redirect('/jobs/' . (string) $jobId);
+            $this->redirectToJob($jobId);
         }
 
         $businessId = current_business_id();
@@ -796,17 +797,17 @@ final class JobsController extends Controller
         $employee = Job::findAssignedEmployee($businessId, $jobId, $employeeId);
         if ($employee === null) {
             flash('error', 'Employee is not assigned to this job.');
-            redirect('/jobs/' . (string) $jobId);
+            $this->redirectToJob($jobId);
         }
         $employeeStatus = strtolower(trim((string) ($employee['employee_status'] ?? 'active')));
         if ($employeeStatus === 'inactive') {
             flash('error', 'Inactive employees cannot be punched in.');
-            redirect('/jobs/' . (string) $jobId);
+            $this->redirectToJob($jobId);
         }
 
         if (TimeEntry::openEntryForEmployee($businessId, $employeeId) !== null) {
             flash('error', 'This employee is already punched in.');
-            redirect('/jobs/' . (string) $jobId);
+            $this->redirectToJob($jobId);
         }
 
         TimeEntry::punchInNow(
@@ -819,7 +820,7 @@ final class JobsController extends Controller
         );
 
         flash('success', 'Employee punched in.');
-        redirect('/jobs/' . (string) $jobId);
+        $this->redirectToJob($jobId, null, 'labor');
     }
 
     public function punchOutEmployee(array $params): void
@@ -836,7 +837,7 @@ final class JobsController extends Controller
 
         if (!verify_csrf($_POST['csrf_token'] ?? null)) {
             flash('error', 'Session expired. Please try again.');
-            redirect('/jobs/' . (string) $jobId);
+            $this->redirectToJob($jobId);
         }
 
         $businessId = current_business_id();
@@ -850,17 +851,17 @@ final class JobsController extends Controller
         $employee = Job::findAssignedEmployee($businessId, $jobId, $employeeId);
         if ($employee === null) {
             flash('error', 'Employee is not assigned to this job.');
-            redirect('/jobs/' . (string) $jobId);
+            $this->redirectToJob($jobId);
         }
 
         $entryId = TimeEntry::punchOutOpenEntry($businessId, $employeeId, auth_user_id() ?? 0);
         if (($entryId ?? 0) <= 0) {
             flash('error', 'No open time entry found for this employee.');
-            redirect('/jobs/' . (string) $jobId);
+            $this->redirectToJob($jobId);
         }
 
         flash('success', 'Employee punched out.');
-        redirect('/jobs/' . (string) $jobId);
+        $this->redirectToJob($jobId, null, 'labor');
     }
 
     public function removeEmployee(array $params): void
@@ -877,7 +878,7 @@ final class JobsController extends Controller
 
         if (!verify_csrf($_POST['csrf_token'] ?? null)) {
             flash('error', 'Session expired. Please try again.');
-            redirect('/jobs/' . (string) $jobId);
+            $this->redirectToJob($jobId);
         }
 
         $businessId = current_business_id();
@@ -889,23 +890,23 @@ final class JobsController extends Controller
 
         if (Job::findAssignedEmployee($businessId, $jobId, $employeeId) === null) {
             flash('error', 'Employee is not assigned to this job.');
-            redirect('/jobs/' . (string) $jobId);
+            $this->redirectToJob($jobId);
         }
 
         if (TimeEntry::hasActiveEntryForJob($businessId, $jobId, $employeeId)) {
             flash('error', 'Cannot remove this employee while they have an open punch on this job.');
-            redirect('/jobs/' . (string) $jobId);
+            $this->redirectToJob($jobId);
         }
 
         $actorUserId = (int) (auth_user_id() ?? 0);
         if (!Job::unassignEmployee($businessId, $jobId, $employeeId, $actorUserId)) {
             flash('error', 'Could not remove employee from this job.');
-            redirect('/jobs/' . (string) $jobId);
+            $this->redirectToJob($jobId);
         }
 
         audit('job_employee_unassigned', 'jobs', $jobId, ['employee_id' => $employeeId]);
         flash('success', 'Employee removed from this job.');
-        redirect('/jobs/' . (string) $jobId);
+        $this->redirectToJob($jobId, null, 'labor');
     }
 
     public function bulkPunchEmployees(array $params): void
@@ -921,13 +922,13 @@ final class JobsController extends Controller
 
         if (!verify_csrf($_POST['csrf_token'] ?? null)) {
             flash('error', 'Session expired. Please try again.');
-            redirect('/jobs/' . (string) $jobId);
+            $this->redirectToJob($jobId);
         }
 
         $action = strtolower(trim((string) ($_POST['bulk_action'] ?? '')));
         if ($action !== 'in' && $action !== 'out') {
             flash('error', 'Choose a valid bulk punch action.');
-            redirect('/jobs/' . (string) $jobId);
+            $this->redirectToJob($jobId);
         }
 
         $rawIds = $_POST['employee_ids'] ?? [];
@@ -945,7 +946,7 @@ final class JobsController extends Controller
 
         if ($employeeIds === []) {
             flash('error', 'Select at least one employee.');
-            redirect('/jobs/' . (string) $jobId);
+            $this->redirectToJob($jobId);
         }
 
         $businessId = current_business_id();
@@ -999,7 +1000,7 @@ final class JobsController extends Controller
             flash('success', 'No changes were needed for the selected employees.');
         }
 
-        redirect('/jobs/' . (string) $jobId);
+        $this->redirectToJob($jobId, null, 'labor');
     }
 
     public function createExpense(array $params): void
@@ -1028,6 +1029,7 @@ final class JobsController extends Controller
             'form' => $this->defaultExpenseForm(),
             'errors' => [],
             'categoryOptions' => Expense::categoryOptions($businessId),
+            'returnTab' => request_detail_tab($this->jobAllowedTabs(), 'financial'),
         ]);
     }
 
@@ -1065,6 +1067,7 @@ final class JobsController extends Controller
                 'form' => $form,
                 'errors' => $errors,
                 'categoryOptions' => Expense::categoryOptions($businessId),
+                'returnTab' => $this->jobReturnTab('financial'),
             ]);
             return;
         }
@@ -1077,7 +1080,7 @@ final class JobsController extends Controller
 
         audit('job_expense_created', 'jobs', $jobId, ['expense_id' => $expenseId, 'amount' => $form['amount'] ?? '']);
         flash('success', 'Expense added.');
-        redirect('/jobs/' . (string) $jobId);
+        $this->redirectToJob($jobId, null, 'financial');
     }
 
     public function editExpense(array $params): void
@@ -1116,6 +1119,7 @@ final class JobsController extends Controller
             'form' => $this->expenseFormFromModel($expense),
             'errors' => [],
             'categoryOptions' => Expense::categoryOptions($businessId),
+            'returnTab' => request_detail_tab($this->jobAllowedTabs(), 'financial'),
         ]);
     }
 
@@ -1163,6 +1167,7 @@ final class JobsController extends Controller
                 'form' => $form,
                 'errors' => $errors,
                 'categoryOptions' => Expense::categoryOptions($businessId),
+                'returnTab' => $this->jobReturnTab('financial'),
             ]);
             return;
         }
@@ -1174,7 +1179,7 @@ final class JobsController extends Controller
         } else {
             flash('error', 'Unable to update expense.');
         }
-        redirect('/jobs/' . (string) $jobId . '/expenses/' . (string) $expenseId);
+        $this->redirectToJob($jobId, null, 'financial');
     }
 
     public function showExpense(array $params): void
@@ -1243,7 +1248,7 @@ final class JobsController extends Controller
         } else {
             flash('error', 'Unable to delete expense.');
         }
-        redirect('/jobs/' . (string) $jobId);
+        $this->redirectToJob($jobId, null, 'financial');
     }
 
     public function createAdjustment(array $params): void
@@ -1319,7 +1324,7 @@ final class JobsController extends Controller
 
         audit('job_adjustment_created', 'jobs', $jobId, ['adjustment_id' => $adjustmentId]);
         flash('success', 'Adjustment added.');
-        redirect('/jobs/' . (string) $jobId);
+        $this->redirectToJob($jobId, null, 'financial');
     }
 
     public function editAdjustment(array $params): void
@@ -1414,7 +1419,7 @@ final class JobsController extends Controller
         } else {
             flash('error', 'Unable to update adjustment.');
         }
-        redirect('/jobs/' . (string) $jobId . '/adjustments/' . (string) $adjustmentId);
+        $this->redirectToJob($jobId, null, 'financial');
     }
 
     public function showAdjustment(array $params): void
@@ -1483,7 +1488,7 @@ final class JobsController extends Controller
         } else {
             flash('error', 'Unable to delete adjustment.');
         }
-        redirect('/jobs/' . (string) $jobId);
+        $this->redirectToJob($jobId, null, 'financial');
     }
 
     private function defaultForm(): array
@@ -1903,5 +1908,35 @@ final class JobsController extends Controller
         header('Content-Type: application/json; charset=utf-8');
         echo json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         exit;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function jobAllowedTabs(): array
+    {
+        $tabs = ['details', 'labor'];
+        if (can_view_financials()) {
+            $tabs[] = 'financial';
+            $tabs[] = 'transactions';
+        }
+
+        return $tabs;
+    }
+
+    private function jobReturnTab(string $fallbackTab = 'details'): string
+    {
+        return request_detail_tab($this->jobAllowedTabs(), $fallbackTab);
+    }
+
+    private function redirectToJob(int $jobId, ?string $tab = null, string $fallbackTab = 'details'): never
+    {
+        $allowed = $this->jobAllowedTabs();
+        if ($tab === null) {
+            $tab = request_detail_tab($allowed, $fallbackTab);
+        } else {
+            $tab = sanitize_detail_tab($tab, $allowed, $fallbackTab);
+        }
+        redirect_to_detail('/jobs/' . (string) $jobId, $tab);
     }
 }

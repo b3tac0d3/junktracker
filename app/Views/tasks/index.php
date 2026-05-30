@@ -135,7 +135,9 @@ foreach ($statusOptionsRaw as $statusOptionRaw) {
             <?php foreach ($tasks as $task): ?>
                 <?php
                 $taskId = (int) ($task['id'] ?? 0);
-                $taskTitle = trim((string) ($task['title'] ?? '')) !== '' ? (string) $task['title'] : ('Task #' . (string) $taskId);
+                $taskTitle = \App\Models\Task::displayTitle($task);
+                $clientName = trim((string) ($task['client_name'] ?? ''));
+                $clientId = (int) ($task['client_id'] ?? 0);
                 $taskStatusRaw = strtolower(trim((string) ($task['status'] ?? 'open')));
                 $taskStatus = str_replace('_', ' ', $taskStatusRaw);
                 $isDone = $taskStatusRaw === 'closed';
@@ -160,6 +162,15 @@ foreach ($statusOptionsRaw as $statusOptionRaw) {
                         <a class="record-row-link flex-grow-1" href="<?= e(url('/tasks/' . (string) $taskId)) ?>">
                             <div class="record-row-main">
                                 <h3 class="record-title-simple task-title-text<?= $isDone ? ' text-decoration-line-through text-muted' : '' ?>"><?= e($taskTitle) ?></h3>
+                                <?php if ($clientName !== ''): ?>
+                                    <div class="task-client-line muted small">
+                                        <?php if ($clientId > 0): ?>
+                                            <a class="text-decoration-none" href="<?= e(url('/clients/' . (string) $clientId)) ?>"><?= e($clientName) ?></a>
+                                        <?php else: ?>
+                                            <?= e($clientName) ?>
+                                        <?php endif; ?>
+                                    </div>
+                                <?php endif; ?>
                                 <div class="record-subline muted small">
                                     <span>#<?= e((string) $taskId) ?></span>
                                     <span>&middot;</span>
@@ -432,9 +443,36 @@ window.addEventListener('DOMContentLoaded', () => {
         applyCompletionMeta(article, taskPayload);
     };
 
+    const displayTaskTitle = (task) => {
+        const id = Number(task.id || 0);
+        const rawTitle = String(task.title || task.raw_title || '').trim();
+        const title = rawTitle !== '' ? rawTitle : ('Task #' + id);
+        const clientName = String(task.client_name || '').trim();
+        if (clientName === '') {
+            return title;
+        }
+        const match = /^Client Follow-Up:\s*(.+)$/i.exec(title);
+        if (match && match[1].trim().localeCompare(clientName, undefined, { sensitivity: 'accent' }) === 0) {
+            return 'Client Follow-Up';
+        }
+        return title;
+    };
+
+    const buildTaskClientLine = (task) => {
+        const clientName = String(task.client_name || '').trim();
+        if (clientName === '') {
+            return '';
+        }
+        const clientId = Number(task.client_id || 0);
+        if (clientId > 0) {
+            return `<div class="task-client-line muted small"><a class="text-decoration-none" href="<?= e(url('/clients')) ?>/${escapeHtml(String(clientId))}">${escapeHtml(clientName)}</a></div>`;
+        }
+        return `<div class="task-client-line muted small">${escapeHtml(clientName)}</div>`;
+    };
+
     const buildTaskRow = (task) => {
         const id = Number(task.id || 0);
-        const titleText = String(task.title || ('Task #' + id));
+        const titleText = displayTaskTitle(task);
         const ownerName = String(task.owner_name || '—').trim() || '—';
         const ownerId = Number(task.owner_user_id || 0);
         const dueDisplay = String(task.due_at_display || task.due_at || '').trim();
@@ -457,6 +495,7 @@ window.addEventListener('DOMContentLoaded', () => {
                 <a class="record-row-link flex-grow-1" href="${escapeHtml(href)}">
                     <div class="record-row-main">
                         <h3 class="record-title-simple task-title-text${statusKey === 'closed' ? ' text-decoration-line-through text-muted' : ''}">${escapeHtml(titleText)}</h3>
+                        ${buildTaskClientLine(task)}
                         <div class="record-subline muted small">
                             <span>#${escapeHtml(String(id))}</span>
                             <span>&middot;</span>

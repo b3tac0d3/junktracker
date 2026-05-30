@@ -268,7 +268,7 @@ final class NavNotifications
                 FROM jobs j
                 WHERE j.business_id = :business_id
                   {$deletedWhere}
-                  AND {$statusSql} IN ('pending','active')
+                  AND {$statusSql} IN ('prospect','pending')
                   AND {$startSql} IS NOT NULL
                   AND {$startSql} < NOW()
                 ORDER BY {$startSql} ASC

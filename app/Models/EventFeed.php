@@ -505,13 +505,19 @@ final class EventFeed
         $deletedWhere = SchemaInspector::hasColumn('tasks', 'deleted_at') ? 'AND t.deleted_at IS NULL' : '';
         $businessWhere = SchemaInspector::hasColumn('tasks', 'business_id') ? 't.business_id = :business_id' : '1=1';
         $searchWhere = $q !== '' ? "AND ({$titleSql} LIKE :q)" : '';
+        $clientJoin = Task::linkedClientJoinParts('t');
+        if ($q !== '' && $clientJoin['searchable']) {
+            $searchWhere = "AND ({$titleSql} LIKE :q OR {$clientJoin['clientNameSql']} LIKE :q)";
+        }
 
         $sql = "SELECT
                     t.id,
                     {$titleSql} AS title,
                     t.due_at,
-                    {$statusSql} AS status_key
+                    {$statusSql} AS status_key,
+                    {$clientJoin['clientNameSql']} AS client_name
                 FROM tasks t
+                {$clientJoin['join']}
                 WHERE {$businessWhere}
                   {$deletedWhere}
                   {$searchWhere}
@@ -556,9 +562,15 @@ final class EventFeed
                 default => '#1d4ed8',
             };
 
+            $customerName = trim((string) ($row['client_name'] ?? ''));
+
             $events[] = [
                 'id' => 'task:' . $id,
-                'title' => (string) ($row['title'] ?? ('Task #' . $id)),
+                'title' => Task::displayTitle([
+                    'id' => $id,
+                    'title' => (string) ($row['title'] ?? ('Task #' . $id)),
+                    'client_name' => $customerName,
+                ]),
                 'start' => self::toIso($dueAt),
                 'allDay' => false,
                 'backgroundColor' => $color,
@@ -568,6 +580,7 @@ final class EventFeed
                 'extendedProps' => [
                     'eventType' => 'Task',
                     'jtStatus' => $status,
+                    'customerName' => $customerName,
                 ],
             ];
         }

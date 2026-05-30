@@ -254,7 +254,7 @@ final class PurchasesController extends Controller
 
         audit('purchase_created', 'purchases', $purchaseId, ['name' => trim((string) ($form['name'] ?? ''))]);
         flash('success', 'Purchase order created.');
-        redirect('/purchases/' . (string) $purchaseId);
+        $this->redirectToPurchase($purchaseId);
     }
 
     public function show(array $params): void
@@ -326,6 +326,7 @@ final class PurchasesController extends Controller
             'clientTypeOptions' => $this->clientTypeOptions(current_business_id()),
             'searchUrl' => url('/purchases/client-search'),
             'purchaseId' => $purchaseId,
+            'returnTab' => request_detail_tab($this->purchaseAllowedTabs()),
         ]);
     }
 
@@ -366,6 +367,7 @@ final class PurchasesController extends Controller
                 'clientTypeOptions' => $this->clientTypeOptions($businessId),
                 'searchUrl' => url('/purchases/client-search'),
                 'purchaseId' => $purchaseId,
+                'returnTab' => request_detail_tab($this->purchaseAllowedTabs()),
             ]);
             return;
         }
@@ -375,7 +377,7 @@ final class PurchasesController extends Controller
 
         audit('purchase_updated', 'purchases', $purchaseId);
         flash('success', 'Purchase order updated.');
-        redirect('/purchases/' . (string) $purchaseId);
+        $this->redirectToPurchase($purchaseId);
     }
 
     public function delete(array $params): void
@@ -391,7 +393,7 @@ final class PurchasesController extends Controller
 
         if (!verify_csrf($_POST['csrf_token'] ?? null)) {
             flash('error', 'Session expired. Please try again.');
-            redirect('/purchases/' . (string) $purchaseId);
+            $this->redirectToPurchase($purchaseId);
         }
 
         $purchase = Purchase::findForBusiness(current_business_id(), $purchaseId);
@@ -404,12 +406,31 @@ final class PurchasesController extends Controller
         $deleted = Purchase::softDelete(current_business_id(), $purchaseId, auth_user_id() ?? 0);
         if (!$deleted) {
             flash('error', 'Unable to delete purchase order.');
-            redirect('/purchases/' . (string) $purchaseId);
+            $this->redirectToPurchase($purchaseId);
         }
 
         audit('purchase_deleted', 'purchases', $purchaseId);
         flash('success', 'Purchase order deleted.');
         redirect('/purchases');
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function purchaseAllowedTabs(): array
+    {
+        return ['details', 'financial', 'sales', 'tasks'];
+    }
+
+    private function redirectToPurchase(int $purchaseId, ?string $tab = null, string $fallbackTab = 'details'): never
+    {
+        $allowed = $this->purchaseAllowedTabs();
+        if ($tab === null) {
+            $tab = request_detail_tab($allowed, $fallbackTab);
+        } else {
+            $tab = sanitize_detail_tab($tab, $allowed, $fallbackTab);
+        }
+        redirect_to_detail('/purchases/' . (string) $purchaseId, $tab);
     }
 
     private function defaultForm(): array

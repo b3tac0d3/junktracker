@@ -68,6 +68,95 @@ final class EstateSale
         return $normalized !== [] ? $normalized : $fallback;
     }
 
+    /**
+     * @return array<string, int>
+     */
+    public static function statusSummaryForClient(int $businessId, int $clientId): array
+    {
+        $summary = [];
+        foreach (self::statusOptions($businessId) as $status) {
+            $summary[$status] = 0;
+        }
+
+        if (
+            $businessId <= 0
+            || $clientId <= 0
+            || !SchemaInspector::hasTable('estate_sales')
+            || !SchemaInspector::hasColumn('estate_sales', 'client_id')
+        ) {
+            return $summary;
+        }
+
+        $sql = 'SELECT LOWER(es.status) AS status_key, COUNT(*) AS total
+                FROM estate_sales es
+                WHERE es.business_id = :business_id
+                  AND es.client_id = :client_id
+                  AND es.deleted_at IS NULL
+                GROUP BY LOWER(es.status)';
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute([
+            'business_id' => $businessId,
+            'client_id' => $clientId,
+        ]);
+        $rows = $stmt->fetchAll();
+        if (!is_array($rows)) {
+            return $summary;
+        }
+
+        foreach ($rows as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $key = strtolower(trim((string) ($row['status_key'] ?? '')));
+            if (array_key_exists($key, $summary)) {
+                $summary[$key] = (int) ($row['total'] ?? 0);
+            }
+        }
+
+        return $summary;
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    public static function forClient(int $businessId, int $clientId, int $limit = 50): array
+    {
+        if (
+            $businessId <= 0
+            || $clientId <= 0
+            || !SchemaInspector::hasTable('estate_sales')
+            || !SchemaInspector::hasColumn('estate_sales', 'client_id')
+        ) {
+            return [];
+        }
+
+        $limit = max(1, min($limit, 200));
+        $sql = 'SELECT
+                    es.id,
+                    es.title,
+                    es.status,
+                    es.start_at,
+                    es.end_at,
+                    es.city,
+                    es.created_at
+                FROM estate_sales es
+                WHERE es.business_id = :business_id
+                  AND es.client_id = :client_id
+                  AND es.deleted_at IS NULL
+                ORDER BY es.id DESC
+                LIMIT :row_limit';
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
+        $stmt->bindValue(':client_id', $clientId, \PDO::PARAM_INT);
+        $stmt->bindValue(':row_limit', $limit, \PDO::PARAM_INT);
+        $stmt->execute();
+        $rows = $stmt->fetchAll();
+
+        return is_array($rows) ? $rows : [];
+    }
+
     public static function findForBusiness(int $businessId, int $id): ?array
     {
         if (!SchemaInspector::hasTable('estate_sales') || $businessId <= 0 || $id <= 0) {
@@ -2543,6 +2632,71 @@ final class EstateSale
             'transaction_count' => $transactionCount,
             'estate_sale_count' => count($periodByEstateSale),
         ];
+    }
+
+    /**
+     * Per-estate-sale totals for on-site transactions in a date range.
+     *
+     * @return list<array{estate_sale_id:int, title:string, transaction_count:int, gross:float, net:float}>
+     */
+    public static function periodBreakdownForRange(int $businessId, string $fromDate, string $toDate): array
+    {
+        $fromDate = trim($fromDate);
+        $toDate = trim($toDate);
+        if ($businessId <= 0 || $fromDate === '' || $toDate === '') {
+            return [];
+        }
+
+        $periodByEstateSale = self::salesTotalsByEstateSaleInPeriod($businessId, $fromDate, $toDate);
+        if ($periodByEstateSale === []) {
+            return [];
+        }
+
+        $rows = [];
+        foreach ($periodByEstateSale as $estateSaleId => $periodTotals) {
+            if (!is_array($periodTotals)) {
+                continue;
+            }
+
+            $estateSaleId = (int) $estateSaleId;
+            if ($estateSaleId <= 0) {
+                continue;
+            }
+
+            $periodGross = (float) ($periodTotals['gross'] ?? 0);
+            $periodCount = (int) ($periodTotals['count'] ?? 0);
+            if ($periodGross <= 0.0001 && $periodCount <= 0) {
+                continue;
+            }
+
+            $estateSale = self::findForBusiness($businessId, $estateSaleId) ?? [];
+            $title = trim((string) ($estateSale['title'] ?? ''));
+            if ($title === '') {
+                $title = 'Estate sale #' . (string) $estateSaleId;
+            }
+
+            $financial = self::financialSummary($businessId, $estateSaleId, $estateSale);
+            $transactionNet = self::transactionNetShare($periodGross, $financial);
+
+            $rows[] = [
+                'estate_sale_id' => $estateSaleId,
+                'title' => $title,
+                'transaction_count' => $periodCount,
+                'gross' => round($periodGross, 2),
+                'net' => round($transactionNet ?? 0.0, 2),
+            ];
+        }
+
+        usort($rows, static function (array $a, array $b): int {
+            $grossCmp = ($b['gross'] ?? 0) <=> ($a['gross'] ?? 0);
+            if ($grossCmp !== 0) {
+                return $grossCmp;
+            }
+
+            return strcmp((string) ($a['title'] ?? ''), (string) ($b['title'] ?? ''));
+        });
+
+        return $rows;
     }
 
     /**

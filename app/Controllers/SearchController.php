@@ -8,6 +8,7 @@ use App\Models\Business;
 use App\Models\Client;
 use App\Models\ClientBoloProfile;
 use App\Models\Employee;
+use App\Models\EstateSale;
 use App\Models\Expense;
 use App\Models\Invoice;
 use App\Models\Job;
@@ -34,6 +35,7 @@ final class SearchController extends Controller
             'bolo_matches' => [],
             'jobs' => [],
             'tasks' => [],
+            'estate_sales' => [],
             'sales' => [],
             'purchases' => [],
             'billing' => [],
@@ -47,6 +49,7 @@ final class SearchController extends Controller
             'bolo_matches' => 0,
             'jobs' => 0,
             'tasks' => 0,
+            'estate_sales' => 0,
             'sales' => 0,
             'purchases' => 0,
             'billing' => 0,
@@ -78,6 +81,7 @@ final class SearchController extends Controller
                     $results['bolo_matches'] = ClientBoloProfile::searchMatches($businessId, $query, $limit);
                     $results['jobs'] = Job::indexList($businessId, $query, '', '', $limit, 0);
                     $results['tasks'] = Task::indexList($businessId, $query, '', $limit, 0);
+                    $results['estate_sales'] = EstateSale::indexList($businessId, $query, '', '', '', $limit, 0);
                     if (can_view_financials()) {
                         $searchFromDate = '';
                         $searchToDate = '';
@@ -92,6 +96,7 @@ final class SearchController extends Controller
                     $totals['bolo_matches'] = ClientBoloProfile::searchMatchesCount($businessId, $query);
                     $totals['jobs'] = Job::indexCount($businessId, $query, '');
                     $totals['tasks'] = Task::indexCount($businessId, $query, '');
+                    $totals['estate_sales'] = EstateSale::indexCount($businessId, $query, '');
                     if (can_view_financials()) {
                         $totals['sales'] = Sale::indexCount($businessId, $query, '', '', '', Sale::ESTATE_SCOPE_GENERAL);
                         $totals['purchases'] = Purchase::indexCount($businessId, $query, '');
@@ -103,12 +108,40 @@ final class SearchController extends Controller
             }
         }
 
+        $clientAppointmentHistory = [];
+        if ($query !== '' && !$isGlobalSiteAdminContext && workspace_role() !== 'punch_only') {
+            $historyBusinessId = current_business_id();
+            if ($historyBusinessId > 0) {
+                $historyClientIds = [];
+                foreach ($results['clients'] as $clientRow) {
+                    if (!is_array($clientRow)) {
+                        continue;
+                    }
+                    $historyClientId = (int) ($clientRow['id'] ?? 0);
+                    if ($historyClientId > 0) {
+                        $historyClientIds[] = $historyClientId;
+                    }
+                }
+                foreach ($results['bolo_matches'] as $boloRow) {
+                    if (!is_array($boloRow)) {
+                        continue;
+                    }
+                    $historyClientId = (int) ($boloRow['client_id'] ?? 0);
+                    if ($historyClientId > 0) {
+                        $historyClientIds[] = $historyClientId;
+                    }
+                }
+                $clientAppointmentHistory = Client::appointmentHistoryByClientIds($historyBusinessId, $historyClientIds, 5);
+            }
+        }
+
         $this->render('search/index', [
             'pageTitle' => 'Search',
             'query' => $query,
             'isGlobalSiteAdminContext' => $isGlobalSiteAdminContext,
             'results' => $results,
             'totals' => $totals,
+            'clientAppointmentHistory' => $clientAppointmentHistory,
         ]);
     }
 

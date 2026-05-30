@@ -552,15 +552,20 @@ final class Purchase
             return [];
         }
 
+        $clientJoin = \App\Models\Task::linkedClientJoinParts('t');
+
         $sql = 'SELECT
                     t.id,
                     t.title,
                     t.status,
                     t.due_at,
-                    COALESCE(NULLIF(TRIM(CONCAT_WS(" ", u.first_name, u.last_name)), ""), NULLIF(u.email, ""), CONCAT("User #", u.id)) AS owner_name
+                    COALESCE(NULLIF(TRIM(CONCAT_WS(" ", u.first_name, u.last_name)), ""), NULLIF(u.email, ""), CONCAT("User #", u.id)) AS owner_name,
+                    ' . $clientJoin['clientIdSql'] . ' AS client_id,
+                    ' . $clientJoin['clientNameSql'] . ' AS client_name
                 FROM tasks t
                 LEFT JOIN users u ON u.id = t.owner_user_id
                     AND u.deleted_at IS NULL
+                ' . $clientJoin['join'] . '
                 WHERE t.business_id = :business_id
                   AND t.deleted_at IS NULL
                   AND t.link_type = :link_type

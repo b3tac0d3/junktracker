@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Controllers;
 
+use App\Models\Client;
 use App\Models\EstateSale;
 use App\Models\FormSelectValue;
 use App\Models\Sale;
@@ -151,6 +152,18 @@ final class EstateSalesController extends Controller
 
         $businessId = current_business_id();
         $form = $this->defaultForm();
+        $prefillClientId = (int) ($_GET['client_id'] ?? 0);
+        if ($prefillClientId > 0 && SchemaInspector::hasColumn('estate_sales', 'client_id')) {
+            $client = Client::findForBusiness($businessId, $prefillClientId);
+            if ($client !== null) {
+                $form['client_id'] = (string) $prefillClientId;
+                $clientName = trim(((string) ($client['first_name'] ?? '')) . ' ' . ((string) ($client['last_name'] ?? '')));
+                if ($clientName === '') {
+                    $clientName = trim((string) ($client['company_name'] ?? ''));
+                }
+                $form['client_name'] = $clientName;
+            }
+        }
         $prefillAt = calendar_slot_prefill_at();
         if ($prefillAt !== '') {
             $form['start_at'] = $prefillAt;
@@ -743,7 +756,7 @@ final class EstateSalesController extends Controller
         EstateSale::update($businessId, $id, EstateSale::payloadFromForm($form), auth_user_id() ?? 0);
         audit('estate_sale_updated', 'estate_sales', $id);
         flash('success', 'Estate sale updated.');
-        redirect('/estate-sales/' . (string) $id);
+        redirect_to_detail('/estate-sales/' . (string) $id, request_detail_tab(['details', 'customers', 'sales', 'expenses', 'labor', 'metrics']));
     }
 
     public function delete(array $params): void

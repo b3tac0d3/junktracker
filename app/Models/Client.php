@@ -899,6 +899,340 @@ final class Client
         return is_array($rows) ? $rows : [];
     }
 
+    /**
+     * Recent scheduled items for search / quick context: jobs, calendar events, quote follow-ups, deliveries.
+     *
+     * @param list<int> $clientIds
+     * @return array<int, list<array{at:string, kind:string, title:string, status:string, url:string}>>
+     */
+    public static function appointmentHistoryByClientIds(int $businessId, array $clientIds, int $limitPerClient = 5): array
+    {
+        if ($businessId <= 0) {
+            return [];
+        }
+
+        $clientIds = array_values(array_unique(array_filter(array_map(
+            static fn ($id): int => (int) $id,
+            $clientIds
+        ), static fn (int $id): bool => $id > 0)));
+
+        if ($clientIds === []) {
+            return [];
+        }
+
+        $limitPerClient = max(1, min($limitPerClient, 20));
+        $buckets = [];
+        foreach ($clientIds as $clientId) {
+            $buckets[$clientId] = [];
+        }
+
+        $inSql = [];
+        $inParams = [];
+        foreach ($clientIds as $i => $clientId) {
+            $key = 'client_id_' . $i;
+            $inSql[] = ':' . $key;
+            $inParams[$key] = $clientId;
+        }
+        $inClause = implode(', ', $inSql);
+
+        $appendRows = static function (array $rows, string $kind, callable $urlBuilder) use (&$buckets): void {
+            foreach ($rows as $row) {
+                if (!is_array($row)) {
+                    continue;
+                }
+                $clientId = (int) ($row['client_id'] ?? 0);
+                if ($clientId <= 0 || !array_key_exists($clientId, $buckets)) {
+                    continue;
+                }
+                $at = trim((string) ($row['at'] ?? ''));
+                if ($at === '') {
+                    continue;
+                }
+                $recordId = (int) ($row['record_id'] ?? 0);
+                $title = trim((string) ($row['title'] ?? ''));
+                if ($title === '' && $recordId > 0) {
+                    $title = ucfirst($kind) . ' #' . (string) $recordId;
+                }
+                $buckets[$clientId][] = [
+                    'at' => $at,
+                    'kind' => self::appointmentKindLabel($kind, (string) ($row['subtype'] ?? '')),
+                    'title' => $title,
+                    'status' => strtolower(trim((string) ($row['status'] ?? ''))),
+                    'url' => $urlBuilder($row),
+                ];
+            }
+        };
+
+        if (self::hasTable('jobs') && self::hasColumn('jobs', 'client_id')) {
+            $startSql = self::hasColumn('jobs', 'scheduled_start_at')
+                ? 'j.scheduled_start_at'
+                : (self::hasColumn('jobs', 'start_date') ? 'j.start_date' : null);
+            if ($startSql !== null) {
+                $titleSql = self::hasColumn('jobs', 'title')
+                    ? 'j.title'
+                    : (self::hasColumn('jobs', 'name') ? 'j.name' : "CONCAT('Job #', j.id)");
+                $statusSql = self::hasColumn('jobs', 'status') ? 'j.status' : "'pending'";
+                $businessWhere = self::hasColumn('jobs', 'business_id') ? 'j.business_id = :business_id' : '1 = 1';
+                $deletedWhere = self::hasColumn('jobs', 'deleted_at') ? 'AND j.deleted_at IS NULL' : '';
+
+                $sql = "SELECT
+                            j.client_id,
+                            j.id AS record_id,
+                            {$titleSql} AS title,
+                            {$startSql} AS at,
+                            {$statusSql} AS status
+                        FROM jobs j
+                        WHERE {$businessWhere}
+                          AND j.client_id IN ({$inClause})
+                          {$deletedWhere}
+                          AND {$startSql} IS NOT NULL
+                        ORDER BY {$startSql} DESC, j.id DESC
+                        LIMIT 500";
+
+                $stmt = Database::connection()->prepare($sql);
+                if (self::hasColumn('jobs', 'business_id')) {
+                    $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
+                }
+                foreach ($inParams as $key => $value) {
+                    $stmt->bindValue(':' . $key, $value, \PDO::PARAM_INT);
+                }
+                $stmt->execute();
+                $jobRows = $stmt->fetchAll();
+                $appendRows(
+                    is_array($jobRows) ? $jobRows : [],
+                    'job',
+                    static fn (array $row): string => url('/jobs/' . (string) ((int) ($row['record_id'] ?? 0)))
+                );
+            }
+        }
+
+        if (self::hasTable('events')) {
+            $businessWhere = self::hasColumn('events', 'business_id') ? 'e.business_id = :business_id' : '1 = 1';
+            $deletedWhere = self::hasColumn('events', 'deleted_at') ? 'AND e.deleted_at IS NULL' : '';
+
+            $sql = "SELECT
+                        e.link_id AS client_id,
+                        e.id AS record_id,
+                        e.title,
+                        e.start_at AS at,
+                        e.status,
+                        e.type AS subtype
+                    FROM events e
+                    WHERE {$businessWhere}
+                      {$deletedWhere}
+                      AND LOWER(COALESCE(e.link_type, '')) = 'client'
+                      AND e.link_id IN ({$inClause})
+                      AND e.start_at IS NOT NULL
+                    ORDER BY e.start_at DESC, e.id DESC
+                    LIMIT 500";
+
+            $stmt = Database::connection()->prepare($sql);
+            if (self::hasColumn('events', 'business_id')) {
+                $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
+            }
+            foreach ($inParams as $key => $value) {
+                $stmt->bindValue(':' . $key, $value, \PDO::PARAM_INT);
+            }
+            $stmt->execute();
+            $clientEventRows = $stmt->fetchAll();
+            $appendRows(
+                is_array($clientEventRows) ? $clientEventRows : [],
+                'event',
+                static fn (array $row): string => url('/events/' . (string) ((int) ($row['record_id'] ?? 0)))
+            );
+
+            if (self::hasTable('jobs') && self::hasColumn('jobs', 'client_id')) {
+                $jobBusinessWhere = self::hasColumn('jobs', 'business_id') ? 'j.business_id = :job_business_id' : '1 = 1';
+                $jobDeletedWhere = self::hasColumn('jobs', 'deleted_at') ? 'AND j.deleted_at IS NULL' : '';
+
+                $sql = "SELECT
+                            j.client_id,
+                            e.id AS record_id,
+                            e.title,
+                            e.start_at AS at,
+                            e.status,
+                            e.type AS subtype
+                        FROM events e
+                        INNER JOIN jobs j ON j.id = e.link_id
+                            AND LOWER(COALESCE(e.link_type, '')) = 'job'
+                            {$jobDeletedWhere}
+                        WHERE {$businessWhere}
+                          {$deletedWhere}
+                          AND {$jobBusinessWhere}
+                          AND j.client_id IN ({$inClause})
+                          AND e.start_at IS NOT NULL
+                        ORDER BY e.start_at DESC, e.id DESC
+                        LIMIT 500";
+
+                $stmt = Database::connection()->prepare($sql);
+                if (self::hasColumn('events', 'business_id')) {
+                    $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
+                }
+                if (self::hasColumn('jobs', 'business_id')) {
+                    $stmt->bindValue(':job_business_id', $businessId, \PDO::PARAM_INT);
+                }
+                foreach ($inParams as $key => $value) {
+                    $stmt->bindValue(':' . $key, $value, \PDO::PARAM_INT);
+                }
+                $stmt->execute();
+                $jobEventRows = $stmt->fetchAll();
+                $appendRows(
+                    is_array($jobEventRows) ? $jobEventRows : [],
+                    'event',
+                    static fn (array $row): string => url('/events/' . (string) ((int) ($row['record_id'] ?? 0)))
+                );
+            }
+        }
+
+        if (self::hasTable('quotes') && self::hasColumn('quotes', 'client_id') && self::hasColumn('quotes', 'next_follow_up_at')) {
+            $businessWhere = self::hasColumn('quotes', 'business_id') ? 'q.business_id = :business_id' : '1 = 1';
+            $deletedWhere = self::hasColumn('quotes', 'deleted_at') ? 'AND q.deleted_at IS NULL' : '';
+            $titleSql = self::hasColumn('quotes', 'title') ? 'q.title' : "CONCAT('Quote #', q.id)";
+            $statusSql = self::hasColumn('quotes', 'status') ? 'q.status' : "'new'";
+
+            $sql = "SELECT
+                        q.client_id,
+                        q.id AS record_id,
+                        {$titleSql} AS title,
+                        q.next_follow_up_at AS at,
+                        {$statusSql} AS status
+                    FROM quotes q
+                    WHERE {$businessWhere}
+                      AND q.client_id IN ({$inClause})
+                      {$deletedWhere}
+                      AND q.next_follow_up_at IS NOT NULL
+                    ORDER BY q.next_follow_up_at DESC, q.id DESC
+                    LIMIT 500";
+
+            $stmt = Database::connection()->prepare($sql);
+            if (self::hasColumn('quotes', 'business_id')) {
+                $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
+            }
+            foreach ($inParams as $key => $value) {
+                $stmt->bindValue(':' . $key, $value, \PDO::PARAM_INT);
+            }
+            $stmt->execute();
+            $quoteRows = $stmt->fetchAll();
+            $appendRows(
+                is_array($quoteRows) ? $quoteRows : [],
+                'quote',
+                static fn (array $row): string => url('/quotes/' . (string) ((int) ($row['record_id'] ?? 0)))
+            );
+        }
+
+        if (self::hasTable('client_deliveries') && self::hasColumn('client_deliveries', 'scheduled_at')) {
+            $businessWhere = self::hasColumn('client_deliveries', 'business_id') ? 'd.business_id = :business_id' : '1 = 1';
+            $deletedWhere = self::hasColumn('client_deliveries', 'deleted_at') ? 'AND d.deleted_at IS NULL' : '';
+            $statusSql = self::hasColumn('client_deliveries', 'status') ? 'd.status' : "'scheduled'";
+
+            $sql = "SELECT
+                        d.client_id,
+                        d.id AS record_id,
+                        CONCAT('Delivery #', d.id) AS title,
+                        d.scheduled_at AS at,
+                        {$statusSql} AS status
+                    FROM client_deliveries d
+                    WHERE {$businessWhere}
+                      AND d.client_id IN ({$inClause})
+                      {$deletedWhere}
+                      AND d.scheduled_at IS NOT NULL
+                    ORDER BY d.scheduled_at DESC, d.id DESC
+                    LIMIT 500";
+
+            $stmt = Database::connection()->prepare($sql);
+            if (self::hasColumn('client_deliveries', 'business_id')) {
+                $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
+            }
+            foreach ($inParams as $key => $value) {
+                $stmt->bindValue(':' . $key, $value, \PDO::PARAM_INT);
+            }
+            $stmt->execute();
+            $deliveryRows = $stmt->fetchAll();
+            $appendRows(
+                is_array($deliveryRows) ? $deliveryRows : [],
+                'delivery',
+                static fn (array $row): string => url('/deliveries/' . (string) ((int) ($row['record_id'] ?? 0)))
+            );
+        }
+
+        if (self::hasTable('purchase_quotes') && self::hasColumn('purchase_quotes', 'client_id')) {
+            $hasFollowUp = self::hasColumn('purchase_quotes', 'next_follow_up_at');
+            $hasContactDate = self::hasColumn('purchase_quotes', 'contact_date');
+            if ($hasFollowUp || $hasContactDate) {
+                $atSql = $hasFollowUp && $hasContactDate
+                    ? 'COALESCE(pq.next_follow_up_at, CONCAT(pq.contact_date, " 09:00:00"))'
+                    : ($hasFollowUp ? 'pq.next_follow_up_at' : 'CONCAT(pq.contact_date, " 09:00:00")');
+                $businessWhere = self::hasColumn('purchase_quotes', 'business_id') ? 'pq.business_id = :business_id' : '1 = 1';
+                $deletedWhere = self::hasColumn('purchase_quotes', 'deleted_at') ? 'AND pq.deleted_at IS NULL' : '';
+                $titleSql = self::hasColumn('purchase_quotes', 'title') ? 'pq.title' : "CONCAT('Purchase quote #', pq.id)";
+                $statusSql = self::hasColumn('purchase_quotes', 'status') ? 'pq.status' : "'new'";
+
+                $sql = "SELECT
+                            pq.client_id,
+                            pq.id AS record_id,
+                            {$titleSql} AS title,
+                            {$atSql} AS at,
+                            {$statusSql} AS status
+                        FROM purchase_quotes pq
+                        WHERE {$businessWhere}
+                          AND pq.client_id IN ({$inClause})
+                          {$deletedWhere}
+                          AND {$atSql} IS NOT NULL
+                        ORDER BY {$atSql} DESC, pq.id DESC
+                        LIMIT 500";
+
+                $stmt = Database::connection()->prepare($sql);
+                if (self::hasColumn('purchase_quotes', 'business_id')) {
+                    $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
+                }
+                foreach ($inParams as $key => $value) {
+                    $stmt->bindValue(':' . $key, $value, \PDO::PARAM_INT);
+                }
+                $stmt->execute();
+                $purchaseQuoteRows = $stmt->fetchAll();
+                $appendRows(
+                    is_array($purchaseQuoteRows) ? $purchaseQuoteRows : [],
+                    'purchase_quote',
+                    static fn (array $row): string => url('/purchase-quotes/' . (string) ((int) ($row['record_id'] ?? 0)))
+                );
+            }
+        }
+
+        $out = [];
+        foreach ($clientIds as $clientId) {
+            $items = $buckets[$clientId] ?? [];
+            usort($items, static function (array $a, array $b): int {
+                return strcmp((string) ($b['at'] ?? ''), (string) ($a['at'] ?? ''));
+            });
+            $out[$clientId] = array_slice($items, 0, $limitPerClient);
+        }
+
+        return $out;
+    }
+
+    private static function appointmentKindLabel(string $kind, string $subtype = ''): string
+    {
+        $kind = strtolower(trim($kind));
+        if ($kind === 'event') {
+            $subtype = strtolower(trim($subtype));
+            return match ($subtype) {
+                'appointment' => 'Appointment',
+                'cancellation' => 'Cancellation',
+                'reminder' => 'Reminder',
+                'note' => 'Note',
+                default => $subtype !== '' ? ucwords(str_replace('_', ' ', $subtype)) : 'Appointment',
+            };
+        }
+
+        return match ($kind) {
+            'job' => 'Job',
+            'quote' => 'Quote follow-up',
+            'purchase_quote' => 'Purchase quote',
+            'delivery' => 'Delivery',
+            default => ucwords(str_replace('_', ' ', $kind)),
+        };
+    }
+
     public static function salesHistory(int $businessId, int $clientId, int $limit = 50): array
     {
         return Sale::salesByClient($businessId, $clientId, $limit);

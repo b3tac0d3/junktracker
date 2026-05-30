@@ -12,9 +12,10 @@ $jobTitle = trim((string) ($job['title'] ?? ''));
 if ($jobTitle === '') {
     $jobTitle = 'Job #' . (string) $jobId;
 }
+$returnTab = (string) ($returnTab ?? 'financial');
 $cancelUrl = $mode === 'edit' && $expenseId > 0
     ? url('/jobs/' . (string) $jobId . '/expenses/' . (string) $expenseId)
-    : url('/jobs/' . (string) $jobId);
+    : url(detail_path_with_tab('/jobs/' . (string) $jobId, $returnTab));
 
 $fieldError = static function (string $field) use ($errors): string {
     return isset($errors[$field]) ? (string) $errors[$field] : '';
@@ -49,6 +50,7 @@ $categoryOptions = array_values($categoryOptions);
     <div class="card-body">
         <form method="post" action="<?= e($actionUrl) ?>" class="row g-3">
             <?= csrf_field() ?>
+            <?= detail_tab_hidden_field($returnTab) ?>
 
             <div class="col-12 col-lg-6">
                 <label class="form-label fw-semibold" for="expense-date">Date</label>

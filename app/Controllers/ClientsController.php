@@ -8,6 +8,7 @@ use App\Models\Client;
 use App\Models\ClientBoloProfile;
 use App\Models\ClientContact;
 use App\Models\ClientFamilyMember;
+use App\Models\EstateSale;
 use App\Models\FormSelectValue;
 use App\Models\Quote;
 use App\Models\SchemaInspector;
@@ -158,7 +159,7 @@ final class ClientsController extends Controller
         if ($nextAction === 'quote') {
             redirect('/quotes/create?client_id=' . (string) $clientId);
         }
-        redirect('/clients/' . (string) $clientId);
+        $this->redirectToClient($clientId);
     }
 
     public function edit(array $params): void
@@ -196,6 +197,7 @@ final class ClientsController extends Controller
             'clientTypeOptions' => FormSelectValue::optionsForSection($businessId, 'client_type'),
             'clientId' => $clientId,
             'referralsSent' => $referralsSent,
+            'returnTab' => request_detail_tab($this->clientAllowedTabs()),
         ]);
     }
 
@@ -241,6 +243,7 @@ final class ClientsController extends Controller
                 'clientTypeOptions' => FormSelectValue::optionsForSection($businessId, 'client_type'),
                 'clientId' => $clientId,
                 'referralsSent' => $referralsSent,
+                'returnTab' => $this->clientReturnTab(),
             ]);
             return;
         }
@@ -248,7 +251,7 @@ final class ClientsController extends Controller
         Client::update($businessId, $clientId, $this->payloadForSave($form, false, $client), auth_user_id() ?? 0);
         audit('client_updated', 'clients', $clientId);
         flash('success', 'Client updated.');
-        redirect('/clients/' . (string) $clientId);
+        $this->redirectToClient($clientId);
     }
 
     public function show(array $params): void
@@ -278,6 +281,14 @@ final class ClientsController extends Controller
             : [];
         $quoteStatusSummary = SchemaInspector::hasTable('quotes')
             ? Quote::statusSummaryForClient($businessId, $clientId)
+            : [];
+        $hasEstateSales = SchemaInspector::hasTable('estate_sales')
+            && SchemaInspector::hasColumn('estate_sales', 'client_id');
+        $estateSales = $hasEstateSales
+            ? EstateSale::forClient($businessId, $clientId, 50)
+            : [];
+        $estateSaleStatusSummary = $hasEstateSales
+            ? EstateSale::statusSummaryForClient($businessId, $clientId)
             : [];
         $sales = Client::salesHistory($businessId, $clientId, 50);
         $purchases = Client::purchaseHistory($businessId, $clientId, 50);
@@ -316,6 +327,9 @@ final class ClientsController extends Controller
             'quotes' => $quotes,
             'quoteStatusSummary' => $quoteStatusSummary,
             'hasQuotes' => SchemaInspector::hasTable('quotes'),
+            'hasEstateSales' => $hasEstateSales,
+            'estateSales' => $estateSales,
+            'estateSaleStatusSummary' => $estateSaleStatusSummary,
             'sales' => $sales,
             'purchases' => $purchases,
             'contacts' => $contacts,
@@ -345,7 +359,7 @@ final class ClientsController extends Controller
 
         if (!verify_csrf($_POST['csrf_token'] ?? null)) {
             flash('error', 'Session expired. Please try again.');
-            redirect('/clients/' . (string) $clientId);
+            $this->redirectToClient($clientId);
         }
 
         $businessId = current_business_id();
@@ -359,7 +373,7 @@ final class ClientsController extends Controller
         Client::deactivate($businessId, $clientId, auth_user_id() ?? 0);
         audit('client_deactivated', 'clients', $clientId);
         flash('success', 'Client deactivated.');
-        redirect('/clients/' . (string) $clientId);
+        $this->redirectToClient($clientId);
     }
 
     public function createContact(array $params): void
@@ -383,7 +397,7 @@ final class ClientsController extends Controller
 
         if (!ClientContact::isAvailable()) {
             flash('error', 'Contact log table is missing. Run the latest migration.');
-            redirect('/clients/' . (string) $clientId);
+            $this->redirectToClient($clientId);
         }
 
         $this->render('clients/contact_form', [
@@ -393,6 +407,7 @@ final class ClientsController extends Controller
             'actionUrl' => url('/clients/' . (string) $clientId . '/contacts'),
             'form' => $this->defaultContactForm(),
             'errors' => [],
+            'returnTab' => request_detail_tab($this->clientAllowedTabs(), 'contacts'),
         ]);
     }
 
@@ -409,7 +424,7 @@ final class ClientsController extends Controller
 
         if (!verify_csrf($_POST['csrf_token'] ?? null)) {
             flash('error', 'Session expired. Please try again.');
-            redirect('/clients/' . (string) $clientId . '/contacts/create');
+            redirect('/clients/' . (string) $clientId . '/contacts/create' . detail_return_tab_query($this->clientReturnTab('contacts')));
         }
 
         $businessId = current_business_id();
@@ -422,7 +437,7 @@ final class ClientsController extends Controller
 
         if (!ClientContact::isAvailable()) {
             flash('error', 'Contact log table is missing. Run the latest migration.');
-            redirect('/clients/' . (string) $clientId);
+            $this->redirectToClient($clientId);
         }
 
         $form = $this->contactFormFromPost($_POST);
@@ -435,6 +450,7 @@ final class ClientsController extends Controller
                 'actionUrl' => url('/clients/' . (string) $clientId . '/contacts'),
                 'form' => $form,
                 'errors' => $errors,
+                'returnTab' => $this->clientReturnTab('contacts'),
             ]);
             return;
         }
@@ -452,7 +468,7 @@ final class ClientsController extends Controller
 
         audit('client_contact_created', 'clients', $clientId, ['contact_type' => $form['contact_type']]);
         flash('success', 'Contact added.');
-        redirect('/clients/' . (string) $clientId . '?tab=contacts');
+        $this->redirectToClient($clientId, null, 'contacts');
     }
 
     public function createFamilyMember(array $params): void
@@ -476,7 +492,7 @@ final class ClientsController extends Controller
 
         if (!ClientFamilyMember::isAvailable()) {
             flash('error', 'Family members require the latest migration.');
-            redirect('/clients/' . (string) $clientId);
+            $this->redirectToClient($clientId);
         }
 
         $this->render('clients/family_member_form', [
@@ -489,6 +505,7 @@ final class ClientsController extends Controller
             'form' => $this->defaultFamilyMemberForm(),
             'errors' => [],
             'relationshipOptions' => ClientFamilyMember::relationshipOptions(),
+            'returnTab' => request_detail_tab($this->clientAllowedTabs(), 'details'),
         ]);
     }
 
@@ -505,7 +522,7 @@ final class ClientsController extends Controller
 
         if (!verify_csrf($_POST['csrf_token'] ?? null)) {
             flash('error', 'Session expired. Please try again.');
-            redirect('/clients/' . (string) $clientId . '/family/create');
+            redirect('/clients/' . (string) $clientId . '/family/create' . detail_return_tab_query($this->clientReturnTab('details')));
         }
 
         $businessId = current_business_id();
@@ -518,7 +535,7 @@ final class ClientsController extends Controller
 
         if (!ClientFamilyMember::isAvailable()) {
             flash('error', 'Family members require the latest migration.');
-            redirect('/clients/' . (string) $clientId);
+            $this->redirectToClient($clientId);
         }
 
         $form = $this->familyMemberFormFromPost($_POST, $businessId, $clientId);
@@ -534,6 +551,7 @@ final class ClientsController extends Controller
                 'form' => $form,
                 'errors' => $errors,
                 'relationshipOptions' => ClientFamilyMember::relationshipOptions(),
+                'returnTab' => $this->clientReturnTab('details'),
             ]);
             return;
         }
@@ -541,7 +559,7 @@ final class ClientsController extends Controller
         $memberId = ClientFamilyMember::create($businessId, $clientId, $form, auth_user_id() ?? 0);
         if ($memberId <= 0) {
             flash('error', 'Could not save family member.');
-            redirect('/clients/' . (string) $clientId . '/family/create');
+            redirect('/clients/' . (string) $clientId . '/family/create' . detail_return_tab_query($this->clientReturnTab('details')));
         }
 
         audit('client_family_member_created', 'client_family_members', $memberId, [
@@ -549,7 +567,7 @@ final class ClientsController extends Controller
             'name' => trim(((string) ($form['first_name'] ?? '')) . ' ' . ((string) ($form['last_name'] ?? ''))),
         ]);
         flash('success', 'Family member added.');
-        redirect('/clients/' . (string) $clientId . '?tab=details');
+        $this->redirectToClient($clientId, null, 'details');
     }
 
     public function editFamilyMember(array $params): void
@@ -583,6 +601,7 @@ final class ClientsController extends Controller
             'form' => $this->familyMemberFormFromRow($member, $businessId),
             'errors' => [],
             'relationshipOptions' => ClientFamilyMember::relationshipOptions(),
+            'returnTab' => request_detail_tab($this->clientAllowedTabs(), 'details'),
         ]);
     }
 
@@ -600,7 +619,7 @@ final class ClientsController extends Controller
 
         if (!verify_csrf($_POST['csrf_token'] ?? null)) {
             flash('error', 'Session expired. Please try again.');
-            redirect('/clients/' . (string) $clientId . '/family/' . (string) $memberId . '/edit');
+            redirect('/clients/' . (string) $clientId . '/family/' . (string) $memberId . '/edit' . detail_return_tab_query($this->clientReturnTab('details')));
         }
 
         $businessId = current_business_id();
@@ -625,18 +644,19 @@ final class ClientsController extends Controller
                 'form' => $form,
                 'errors' => $errors,
                 'relationshipOptions' => ClientFamilyMember::relationshipOptions(),
+                'returnTab' => $this->clientReturnTab('details'),
             ]);
             return;
         }
 
         if (!ClientFamilyMember::update($businessId, $clientId, $memberId, $form, auth_user_id() ?? 0)) {
             flash('error', 'Could not update family member.');
-            redirect('/clients/' . (string) $clientId . '/family/' . (string) $memberId . '/edit');
+            redirect('/clients/' . (string) $clientId . '/family/' . (string) $memberId . '/edit' . detail_return_tab_query($this->clientReturnTab('details')));
         }
 
         audit('client_family_member_updated', 'client_family_members', $memberId, ['client_id' => $clientId]);
         flash('success', 'Family member updated.');
-        redirect('/clients/' . (string) $clientId . '?tab=details');
+        $this->redirectToClient($clientId, null, 'details');
     }
 
     public function deleteFamilyMember(array $params): void
@@ -653,7 +673,7 @@ final class ClientsController extends Controller
 
         if (!verify_csrf($_POST['csrf_token'] ?? null)) {
             flash('error', 'Session expired. Please try again.');
-            redirect('/clients/' . (string) $clientId);
+            $this->redirectToClient($clientId);
         }
 
         $businessId = current_business_id();
@@ -666,7 +686,7 @@ final class ClientsController extends Controller
         ClientFamilyMember::delete($businessId, $clientId, $memberId, auth_user_id() ?? 0);
         audit('client_family_member_deleted', 'client_family_members', $memberId, ['client_id' => $clientId]);
         flash('success', 'Family member removed.');
-        redirect('/clients/' . (string) $clientId . '?tab=details');
+        $this->redirectToClient($clientId, null, 'details');
     }
 
     public function editBolo(array $params): void
@@ -690,7 +710,7 @@ final class ClientsController extends Controller
 
         if (!ClientBoloProfile::isAvailable()) {
             flash('error', 'BOLO profile tables are missing. Run the latest database migration.');
-            redirect('/clients/' . (string) $clientId);
+            $this->redirectToClient($clientId);
         }
 
         $bolo = ClientBoloProfile::findForClient($businessId, $clientId);
@@ -709,6 +729,7 @@ final class ClientsController extends Controller
             'errors' => [],
             'boloHasActiveFlag' => ClientBoloProfile::hasActiveFlag(),
             'boloIsActive' => $boloIsActive,
+            'returnTab' => request_detail_tab($this->clientAllowedTabs(), 'bolo'),
         ]);
     }
 
@@ -725,7 +746,7 @@ final class ClientsController extends Controller
 
         if (!verify_csrf($_POST['csrf_token'] ?? null)) {
             flash('error', 'Session expired. Please try again.');
-            redirect('/clients/' . (string) $clientId . '/bolo/edit');
+            redirect('/clients/' . (string) $clientId . '/bolo/edit' . detail_return_tab_query($this->clientReturnTab('bolo')));
         }
 
         $businessId = current_business_id();
@@ -738,7 +759,7 @@ final class ClientsController extends Controller
 
         if (!ClientBoloProfile::isAvailable()) {
             flash('error', 'BOLO profile tables are missing. Run the latest database migration.');
-            redirect('/clients/' . (string) $clientId);
+            $this->redirectToClient($clientId);
         }
 
         $form = $this->boloFormFromPost($_POST);
@@ -752,7 +773,7 @@ final class ClientsController extends Controller
 
         audit('client_bolo_saved', 'clients', $clientId);
         flash('success', 'BOLO profile saved.');
-        redirect('/clients/' . (string) $clientId);
+        $this->redirectToClient($clientId, null, 'bolo');
     }
 
     public function deactivateBolo(array $params): void
@@ -768,7 +789,7 @@ final class ClientsController extends Controller
 
         if (!verify_csrf($_POST['csrf_token'] ?? null)) {
             flash('error', 'Session expired. Please try again.');
-            redirect('/clients/' . (string) $clientId);
+            $this->redirectToClient($clientId);
         }
 
         $businessId = current_business_id();
@@ -781,13 +802,13 @@ final class ClientsController extends Controller
 
         if (!ClientBoloProfile::hasActiveFlag()) {
             flash('error', 'BOLO active flag is missing. Run the latest database migration.');
-            redirect('/clients/' . (string) $clientId);
+            $this->redirectToClient($clientId);
         }
 
         ClientBoloProfile::setProfileActive($businessId, $clientId, false);
         audit('client_bolo_deactivated', 'clients', $clientId);
         flash('success', 'BOLO profile deactivated. It will not appear in the BOLO list or search until reactivated.');
-        redirect('/clients/' . (string) $clientId);
+        $this->redirectToClient($clientId, null, 'bolo');
     }
 
     public function reactivateBolo(array $params): void
@@ -803,7 +824,7 @@ final class ClientsController extends Controller
 
         if (!verify_csrf($_POST['csrf_token'] ?? null)) {
             flash('error', 'Session expired. Please try again.');
-            redirect('/clients/' . (string) $clientId);
+            $this->redirectToClient($clientId);
         }
 
         $businessId = current_business_id();
@@ -816,13 +837,13 @@ final class ClientsController extends Controller
 
         if (!ClientBoloProfile::hasActiveFlag()) {
             flash('error', 'BOLO active flag is missing. Run the latest database migration.');
-            redirect('/clients/' . (string) $clientId);
+            $this->redirectToClient($clientId);
         }
 
         ClientBoloProfile::setProfileActive($businessId, $clientId, true);
         audit('client_bolo_reactivated', 'clients', $clientId);
         flash('success', 'BOLO profile reactivated.');
-        redirect('/clients/' . (string) $clientId);
+        $this->redirectToClient($clientId, null, 'bolo');
     }
 
     private function json(array $payload, int $status = 200): never
@@ -1226,5 +1247,29 @@ final class ClientsController extends Controller
         }
 
         return date('Y-m-d H:i:s', $timestamp);
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function clientAllowedTabs(): array
+    {
+        return ['details', 'jobs', 'financial', 'transactions', 'bolo', 'contacts'];
+    }
+
+    private function clientReturnTab(string $fallbackTab = 'details'): string
+    {
+        return request_detail_tab($this->clientAllowedTabs(), $fallbackTab);
+    }
+
+    private function redirectToClient(int $clientId, ?string $tab = null, string $fallbackTab = 'details'): never
+    {
+        $allowed = $this->clientAllowedTabs();
+        if ($tab === null) {
+            $tab = request_detail_tab($allowed, $fallbackTab);
+        } else {
+            $tab = sanitize_detail_tab($tab, $allowed, $fallbackTab);
+        }
+        redirect_to_detail('/clients/' . (string) $clientId, $tab);
     }
 }

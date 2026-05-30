@@ -13,7 +13,7 @@
                     <i class="fas fa-chart-line"></i>
                 </div>
                 <div class="admin-nav-tile-title">Income report</div>
-                <p class="admin-nav-tile-desc">Period totals, chart, margin by job, service, sales, expenses, and purchases.</p>
+                <p class="admin-nav-tile-desc">Period totals, chart, margin by job, service, sales, estate sales, expenses, and purchases.</p>
             </a>
         </div>
         <div class="col-12 col-sm-6 col-xl-4">

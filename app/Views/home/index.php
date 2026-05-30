@@ -14,7 +14,9 @@ $totalMtdGross = (float) ($sales['mtd_gross'] ?? 0) + (float) ($estateSales['mtd
 $totalYtdGross = (float) ($sales['ytd_gross'] ?? 0) + (float) ($estateSales['ytd_gross'] ?? 0) + (float) ($service['ytd_gross'] ?? 0);
 $totalMtdNet = (float) ($summary['mtd_overall_net'] ?? 0);
 $totalYtdNet = (float) ($summary['ytd_overall_net'] ?? 0);
+$profitMtd = $totalMtdNet;
 $profitYtd = $totalYtdNet;
+$mtdNetMinusPurchases = (float) ($summary['mtd_net_minus_purchases'] ?? 0);
 $ytdNetMinusPurchases = (float) ($summary['ytd_net_minus_purchases'] ?? 0);
 
 $myTasksDue = is_array($lists['my_tasks_due'] ?? null) ? $lists['my_tasks_due'] : [];
@@ -131,7 +133,7 @@ $nowTs = time();
     <a class="kpi-card kpi-card-link kpi-card--income" href="<?= e(url('/reports')) ?>">
         <span>Total Income MTD / YTD</span>
         <strong>$<?= e(number_format($totalMtdGross, 2)) ?> / $<?= e(number_format($totalYtdGross, 2)) ?></strong>
-        <small>Net MTD $<?= e(number_format($totalMtdNet, 2)) ?> · Net YTD $<?= e(number_format($totalYtdNet, 2)) ?> · sales + estate + service, less general expenses</small>
+        <small>Net MTD $<?= e(number_format($totalMtdNet, 2)) ?> · Net YTD $<?= e(number_format($totalYtdNet, 2)) ?> · sales + estate + service payments, less general expenses</small>
     </a>
     <a class="kpi-card kpi-card-link kpi-card--purchases" href="<?= e(url('/purchases')) ?>">
         <span>Purchases MTD / YTD</span>
@@ -154,9 +156,9 @@ $nowTs = time();
         <small><?= e((string) ((int) ($receivables['open_invoices'] ?? 0))) ?> open invoice(s)</small>
     </a>
     <a class="kpi-card kpi-card-link kpi-card--profit" href="<?= e(url('/reports')) ?>">
-        <span>Profit YTD</span>
-        <strong>$<?= e(number_format($profitYtd, 2)) ?><span class="kpi-card-subamount"> ($<?= e(number_format($ytdNetMinusPurchases, 2)) ?>)</span></strong>
-        <small>Net YTD less general expenses · After purchase costs (YTD) in parentheses</small>
+        <span>Profit MTD / YTD</span>
+        <strong>$<?= e(number_format($profitMtd, 2)) ?> / $<?= e(number_format($profitYtd, 2)) ?><span class="kpi-card-subamount"> ($<?= e(number_format($mtdNetMinusPurchases, 2)) ?> / $<?= e(number_format($ytdNetMinusPurchases, 2)) ?>)</span></strong>
+        <small>Payments received, less general expenses · After purchase costs (MTD / YTD) in parentheses</small>
     </a>
 </div>
 <?php endif; ?>
@@ -410,7 +412,9 @@ $nowTs = time();
                     <?php foreach ($myTasksDue as $task): ?>
                         <?php
                         $taskId = (int) ($task['id'] ?? 0);
-                        $title = trim((string) ($task['title'] ?? '')) ?: ('Task #' . (string) $taskId);
+                        $title = \App\Models\Task::displayTitle($task);
+                        $clientName = trim((string) ($task['client_name'] ?? ''));
+                        $clientId = (int) ($task['client_id'] ?? 0);
                         $status = strtolower(trim((string) ($task['status'] ?? 'open')));
                         $dueRaw = trim((string) ($task['due_at'] ?? ''));
                         $due = $formatDate($dueRaw !== '' ? $dueRaw : null);
@@ -419,6 +423,9 @@ $nowTs = time();
                         ?>
                         <a class="simple-list-row simple-list-row-link<?= $taskOverdue ? ' is-overdue' : '' ?>" href="<?= e(url('/tasks/' . (string) $taskId)) ?>">
                             <span class="simple-list-title"><?= e($title) ?></span>
+                            <?php if ($clientName !== ''): ?>
+                                <span class="simple-list-meta task-client-line"><?= e($clientName) ?></span>
+                            <?php endif; ?>
                             <span class="simple-list-meta"><?= e(str_replace('_', ' ', ucfirst($status))) ?> · <?= e($due) ?></span>
                         </a>
                     <?php endforeach; ?>

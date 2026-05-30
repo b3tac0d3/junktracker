@@ -7,6 +7,7 @@ $totals = is_array($totals ?? null) ? $totals : [];
 $clients = is_array($results['clients'] ?? null) ? $results['clients'] : [];
 $jobs = is_array($results['jobs'] ?? null) ? $results['jobs'] : [];
 $tasks = is_array($results['tasks'] ?? null) ? $results['tasks'] : [];
+$estateSales = is_array($results['estate_sales'] ?? null) ? $results['estate_sales'] : [];
 $sales = is_array($results['sales'] ?? null) ? $results['sales'] : [];
 $purchases = is_array($results['purchases'] ?? null) ? $results['purchases'] : [];
 $billing = is_array($results['billing'] ?? null) ? $results['billing'] : [];
@@ -15,6 +16,7 @@ $timeEntries = is_array($results['time_entries'] ?? null) ? $results['time_entri
 $businesses = is_array($results['businesses'] ?? null) ? $results['businesses'] : [];
 $siteAdminUsers = is_array($results['site_admin_users'] ?? null) ? $results['site_admin_users'] : [];
 $boloMatches = is_array($results['bolo_matches'] ?? null) ? $results['bolo_matches'] : [];
+$clientAppointmentHistory = is_array($clientAppointmentHistory ?? null) ? $clientAppointmentHistory : [];
 
 $displayName = static function (array $row, string $fallback): string {
     $full = trim(((string) ($row['first_name'] ?? '')) . ' ' . ((string) ($row['last_name'] ?? '')));
@@ -96,7 +98,7 @@ $queryEncoded = rawurlencode($query);
                     class="form-control"
                     name="global_q"
                     value="<?= e($query) ?>"
-                    placeholder="Search clients (including BOLO), jobs, tasks, sales, billing, expenses..."
+                    placeholder="Search clients (including BOLO), jobs, tasks, estate sales, sales, billing, expenses..."
                     autocomplete="off"
                 />
             </div>
@@ -244,6 +246,7 @@ $queryEncoded = rawurlencode($query);
                                                 </div>
                                             </div>
                                         </a>
+                                        <?php require base_path('app/Views/search/partials/client_appointment_history.php'); ?>
                                     </article>
                                 <?php endforeach; ?>
                             </div>
@@ -309,12 +312,24 @@ $queryEncoded = rawurlencode($query);
                                     $taskId = (int) ($task['id'] ?? 0);
                                     $taskStatus = strtolower(trim((string) ($task['status'] ?? 'open')));
                                     $isClosed = $taskStatus === 'closed';
+                                    $taskTitle = \App\Models\Task::displayTitle($task);
+                                    $clientName = trim((string) ($task['client_name'] ?? ''));
+                                    $clientId = (int) ($task['client_id'] ?? 0);
                                     ?>
                                     <article class="record-row-simple">
                                         <div class="d-flex align-items-center justify-content-between gap-2">
                                             <a class="record-row-link flex-grow-1" href="<?= e(url('/tasks/' . (string) $taskId)) ?>">
                                                 <div class="record-row-main">
-                                                    <h3 class="record-title-simple<?= $isClosed ? ' text-decoration-line-through text-muted' : '' ?>"><?= e(trim((string) ($task['title'] ?? '')) ?: ('Task #' . $taskId)) ?></h3>
+                                                    <h3 class="record-title-simple<?= $isClosed ? ' text-decoration-line-through text-muted' : '' ?>"><?= e($taskTitle) ?></h3>
+                                                    <?php if ($clientName !== ''): ?>
+                                                        <div class="task-client-line muted small">
+                                                            <?php if ($clientId > 0): ?>
+                                                                <a class="text-decoration-none" href="<?= e(url('/clients/' . (string) $clientId)) ?>"><?= e($clientName) ?></a>
+                                                            <?php else: ?>
+                                                                <?= e($clientName) ?>
+                                                            <?php endif; ?>
+                                                        </div>
+                                                    <?php endif; ?>
                                                 </div>
                                                 <div class="record-row-fields record-row-fields-compact">
                                                     <div class="record-field">
@@ -332,6 +347,47 @@ $queryEncoded = rawurlencode($query);
                                                 </div>
                                             </a>
                                         </div>
+                                    </article>
+                                <?php endforeach; ?>
+                            </div>
+                        <?php endif; ?>
+                    </div>
+                </section>
+            </div>
+
+            <div class="col-12 col-xl-6">
+                <section class="card index-card h-100">
+                    <div class="card-header index-card-header d-flex align-items-center justify-content-between">
+                        <strong><i class="fas fa-store me-2"></i>Estate Sales</strong>
+                        <a class="small fw-semibold text-decoration-none" href="<?= e(url('/estate-sales?q=' . $queryEncoded)) ?>">Open Estate Sales</a>
+                    </div>
+                    <div class="card-body p-2 p-lg-3">
+                        <?php if ($estateSales === []): ?>
+                            <div class="record-empty">No estate sales matched.</div>
+                        <?php else: ?>
+                            <div class="record-list-simple">
+                                <?php foreach ($estateSales as $estateSale): ?>
+                                    <?php $estateSaleId = (int) ($estateSale['id'] ?? 0); ?>
+                                    <article class="record-row-simple">
+                                        <a class="record-row-link" href="<?= e(url('/estate-sales/' . (string) $estateSaleId)) ?>">
+                                            <div class="record-row-main">
+                                                <h3 class="record-title-simple"><?= e(trim((string) ($estateSale['title'] ?? '')) ?: ('Estate sale #' . $estateSaleId)) ?></h3>
+                                            </div>
+                                            <div class="record-row-fields record-row-fields-compact">
+                                                <div class="record-field">
+                                                    <span class="record-label">Status</span>
+                                                    <span class="record-value"><?= e(ucwords(str_replace('_', ' ', (string) ($estateSale['status'] ?? '')))) ?></span>
+                                                </div>
+                                                <div class="record-field">
+                                                    <span class="record-label">Start</span>
+                                                    <span class="record-value"><?= e(format_datetime((string) ($estateSale['start_at'] ?? ''))) ?></span>
+                                                </div>
+                                                <div class="record-field">
+                                                    <span class="record-label">City</span>
+                                                    <span class="record-value"><?= e(trim((string) ($estateSale['city'] ?? '')) ?: '—') ?></span>
+                                                </div>
+                                            </div>
+                                        </a>
                                     </article>
                                 <?php endforeach; ?>
                             </div>
@@ -581,6 +637,7 @@ $queryEncoded = rawurlencode($query);
                                                 </div>
                                             </div>
                                         </a>
+                                        <?php $clientId = $hitClientId; require base_path('app/Views/search/partials/client_appointment_history.php'); ?>
                                     </article>
                                 <?php endforeach; ?>
                             </div>

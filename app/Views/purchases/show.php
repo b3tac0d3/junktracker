@@ -58,7 +58,7 @@ $formatDate = static function (?string $value): string {
                 <i class="fas fa-ellipsis-h me-2"></i>Actions
             </button>
             <ul class="dropdown-menu dropdown-menu-end">
-                <li><a class="dropdown-item" href="<?= e(url('/purchases/' . (string) $purchaseId . '/edit')) ?>"><i class="fas fa-pen me-2"></i>Edit Purchase</a></li>
+                <li><a class="dropdown-item" href="<?= e(url('/purchases/' . (string) $purchaseId . '/edit' . detail_return_tab_query($activeTab))) ?>"><i class="fas fa-pen me-2"></i>Edit Purchase</a></li>
                 <li>
                     <form method="post" action="<?= e(url('/purchases/' . (string) $purchaseId . '/delete')) ?>" class="m-0" onsubmit="return confirm('Delete this purchase order?');">
                         <?= csrf_field() ?>
@@ -73,7 +73,7 @@ $formatDate = static function (?string $value): string {
 
 <section class="card index-card index-card-overflow-visible">
     <div class="card-header index-card-header p-0 border-bottom-0">
-        <ul class="nav nav-tabs index-card-tabs estate-sale-tabs client-tabs" id="purchase-tabs" role="tablist">
+        <ul class="nav nav-tabs index-card-tabs estate-sale-tabs client-tabs" id="purchase-tabs" role="tablist" data-detail-tabs>
             <li class="nav-item" role="presentation">
                 <button
                     class="nav-link estate-sale-tab-link<?= $detailsTabActive ? ' active' : '' ?>"
@@ -288,12 +288,24 @@ $formatDate = static function (?string $value): string {
                         $taskId = (int) ($task['id'] ?? 0);
                         $taskStatus = strtolower(trim((string) ($task['status'] ?? 'open')));
                         $isClosed = $taskStatus === 'closed';
+                        $taskTitle = \App\Models\Task::displayTitle($task);
+                        $clientName = trim((string) ($task['client_name'] ?? ''));
+                        $clientId = (int) ($task['client_id'] ?? 0);
                         ?>
                         <article class="record-row-simple">
                             <div class="d-flex align-items-center justify-content-between gap-2">
                                 <a class="record-row-link flex-grow-1" href="<?= e(url('/tasks/' . (string) $taskId)) ?>">
                                     <div class="record-row-main">
-                                        <h3 class="record-title-simple<?= $isClosed ? ' text-decoration-line-through text-muted' : '' ?>"><?= e(trim((string) ($task['title'] ?? '')) !== '' ? (string) $task['title'] : ('Task #' . (string) $taskId)) ?></h3>
+                                        <h3 class="record-title-simple<?= $isClosed ? ' text-decoration-line-through text-muted' : '' ?>"><?= e($taskTitle) ?></h3>
+                                        <?php if ($clientName !== ''): ?>
+                                            <div class="task-client-line muted small">
+                                                <?php if ($clientId > 0): ?>
+                                                    <a class="text-decoration-none" href="<?= e(url('/clients/' . (string) $clientId)) ?>"><?= e($clientName) ?></a>
+                                                <?php else: ?>
+                                                    <?= e($clientName) ?>
+                                                <?php endif; ?>
+                                            </div>
+                                        <?php endif; ?>
                                     </div>
                                     <div class="record-row-fields record-row-fields-3">
                                         <div class="record-field">

@@ -123,7 +123,7 @@ final class PurchaseQuotesController extends Controller
         }
         AuditLog::write('purchase_quote_created', 'purchase_quotes', $purchaseQuoteId, $businessId, $actorUserId, []);
         flash('success', 'Purchase quote created.');
-        redirect('/purchase-quotes/' . (string) $purchaseQuoteId);
+        redirect_to_detail('/purchase-quotes/' . (string) , request_detail_tab(['details', 'offers', 'contacts']));
     }
 
     public function show(array $params): void
@@ -252,7 +252,7 @@ final class PurchaseQuotesController extends Controller
         PurchaseQuote::update($businessId, $purchaseQuoteId, $form, $actorUserId);
         AuditLog::write('purchase_quote_updated', 'purchase_quotes', $purchaseQuoteId, $businessId, $actorUserId, []);
         flash('success', 'Purchase quote updated.');
-        redirect('/purchase-quotes/' . (string) $purchaseQuoteId);
+        redirect_to_detail('/purchase-quotes/' . (string) , request_detail_tab(['details', 'offers', 'contacts']));
     }
 
     public function quickStatus(array $params): void
@@ -265,7 +265,7 @@ final class PurchaseQuotesController extends Controller
         }
         if (!verify_csrf($_POST['csrf_token'] ?? null)) {
             flash('error', 'Session expired. Please try again.');
-            redirect('/purchase-quotes/' . (string) $purchaseQuoteId);
+            redirect_to_detail('/purchase-quotes/' . (string) , request_detail_tab(['details', 'offers', 'contacts']));
         }
 
         $businessId = current_business_id();
@@ -278,7 +278,7 @@ final class PurchaseQuotesController extends Controller
         $status = strtolower(trim((string) ($_POST['status'] ?? '')));
         if (!in_array($status, PurchaseQuote::statusOptions(), true)) {
             flash('error', 'Choose a valid status.');
-            redirect('/purchase-quotes/' . (string) $purchaseQuoteId);
+            redirect_to_detail('/purchase-quotes/' . (string) , request_detail_tab(['details', 'offers', 'contacts']));
         }
 
         $current = strtolower(trim((string) ($purchaseQuote['status'] ?? 'new')));
@@ -293,7 +293,7 @@ final class PurchaseQuotesController extends Controller
             }
         }
 
-        redirect('/purchase-quotes/' . (string) $purchaseQuoteId);
+        redirect_to_detail('/purchase-quotes/' . (string) , request_detail_tab(['details', 'offers', 'contacts']));
     }
 
     public function convertToPurchase(array $params): void
@@ -310,7 +310,7 @@ final class PurchaseQuotesController extends Controller
         $purchaseId = PurchaseQuote::convertToPurchase($businessId, $purchaseQuoteId, $actorUserId);
         if ($purchaseId <= 0) {
             flash('error', 'Unable to convert to purchase.');
-            redirect('/purchase-quotes/' . (string) $purchaseQuoteId);
+            redirect_to_detail('/purchase-quotes/' . (string) , request_detail_tab(['details', 'offers', 'contacts']));
         }
         AuditLog::write('purchase_quote_converted', 'purchase_quotes', $purchaseQuoteId, $businessId, $actorUserId, [
             'purchase_id' => $purchaseId,
@@ -334,13 +334,13 @@ final class PurchaseQuotesController extends Controller
 
         if (!PurchaseQuote::markLost($businessId, $purchaseQuoteId, $lostReason, $actorUserId)) {
             flash('error', 'Unable to mark as lost.');
-            redirect('/purchase-quotes/' . (string) $purchaseQuoteId);
+            redirect_to_detail('/purchase-quotes/' . (string) , request_detail_tab(['details', 'offers', 'contacts']));
         }
         AuditLog::write('purchase_quote_marked_lost', 'purchase_quotes', $purchaseQuoteId, $businessId, $actorUserId, [
             'lost_reason' => $lostReason,
         ]);
         flash('success', 'Marked as lost.');
-        redirect('/purchase-quotes/' . (string) $purchaseQuoteId);
+        redirect_to_detail('/purchase-quotes/' . (string) , request_detail_tab(['details', 'offers', 'contacts']));
     }
 
     public function storeOffer(array $params): void

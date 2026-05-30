@@ -4,6 +4,8 @@ $clientId = (int) ($clientId ?? ($client['id'] ?? 0));
 $form = is_array($form ?? null) ? $form : [];
 $errors = is_array($errors ?? null) ? $errors : [];
 $actionUrl = (string) ($actionUrl ?? url('/clients/' . (string) $clientId . '/contacts'));
+$returnTab = (string) ($returnTab ?? 'contacts');
+$backUrl = url(detail_path_with_tab('/clients/' . (string) $clientId, $returnTab));
 
 $displayName = trim(((string) ($client['first_name'] ?? '')) . ' ' . ((string) ($client['last_name'] ?? '')));
 if ($displayName === '') {
@@ -40,7 +42,7 @@ $typeOptions = [
         <p class="muted"><?= e($displayName) ?></p>
     </div>
     <div>
-        <a class="btn btn-outline-secondary" href="<?= e(url('/clients/' . (string) $clientId)) ?>">Back to Client</a>
+        <a class="btn btn-outline-secondary" href="<?= e($backUrl) ?>">Back to Client</a>
     </div>
 </div>
 
@@ -66,6 +68,7 @@ $typeOptions = [
 
         <form method="post" action="<?= e($actionUrl) ?>" class="row g-3">
             <?= csrf_field() ?>
+            <?= detail_tab_hidden_field($returnTab) ?>
 
             <div class="col-12 col-md-4">
                 <label class="form-label fw-semibold" for="client-contact-contacted-at">Contacted At</label>

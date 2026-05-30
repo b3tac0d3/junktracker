@@ -52,7 +52,7 @@ $navNotifications = is_array($navNotifications ?? null) ? $navNotifications : ['
                 <li class="nav-item d-none d-md-block me-2">
                     <form class="form-inline" method="get" action="<?= e(url('/search')) ?>">
                         <div class="input-group">
-                            <input class="form-control" type="text" name="global_q" value="<?= e($globalSearchQuery) ?>" placeholder="Clients, BOLO, jobs, sales..." aria-label="Search" autocomplete="off" />
+                            <input class="form-control" type="text" name="global_q" value="<?= e($globalSearchQuery) ?>" placeholder="Clients, BOLO, jobs, estate sales..." aria-label="Search" autocomplete="off" />
                             <button class="btn btn-primary" type="submit"><i class="fas fa-search"></i></button>
                         </div>
                     </form>
@@ -255,8 +255,18 @@ $navNotifications = is_array($navNotifications ?? null) ? $navNotifications : ['
                                         <a class="nav-link jt-nav-sublink" href="<?= e(url('/sales')) ?>">Sales</a>
                                         <a class="nav-link jt-nav-sublink" href="<?= e(url('/estate-sales')) ?>">Estate Sales</a>
                                         <a class="nav-link jt-nav-sublink" href="<?= e(url('/estate-sale-records')) ?>">Estate Sale Records</a>
-                                        <a class="nav-link jt-nav-sublink" href="<?= e(url('/purchase-quotes')) ?>">Purchase Quotes</a>
+                                    </nav>
+                                </div>
+
+                                <a class="nav-link collapsed" href="#" data-bs-toggle="collapse" data-bs-target="#collapseNavPurchases" aria-expanded="false" aria-controls="collapseNavPurchases">
+                                    <div class="sb-nav-link-icon"><i class="fas fa-cart-arrow-down"></i></div>
+                                    Purchases
+                                    <div class="sb-sidenav-collapse-arrow"><i class="fas fa-angle-down"></i></div>
+                                </a>
+                                <div class="collapse" id="collapseNavPurchases" data-bs-parent="#sidenavAccordion">
+                                    <nav class="sb-sidenav-menu-nested nav">
                                         <a class="nav-link jt-nav-sublink" href="<?= e(url('/purchases')) ?>">Purchases</a>
+                                        <a class="nav-link jt-nav-sublink" href="<?= e(url('/purchase-quotes')) ?>">Purchase Quotes</a>
                                     </nav>
                                 </div>
                                 <?php else: ?>

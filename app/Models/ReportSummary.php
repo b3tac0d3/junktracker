@@ -85,7 +85,7 @@ final class ReportSummary
     /**
      * Estate sale transaction aggregates for the period.
      *
-     * @return array{count:int, gross:float, net:float}
+     * @return array{count:int, transaction_count:int, estate_sale_count:int, gross:float, net:float, by_event: list<array{estate_sale_id:int, title:string, transaction_count:int, gross:float, net:float}>}
      */
     public static function estateSalesTotalsForRange(int $businessId, string $fromDate, string $toDate): array
     {
@@ -110,6 +110,36 @@ final class ReportSummary
     public static function serviceTotalsForRange(int $businessId, string $fromDate, string $toDate): array
     {
         return self::serviceSummary($businessId, $fromDate, $toDate);
+    }
+
+    /**
+     * Service payment aggregates for the period (cash received on service invoices).
+     *
+     * @return array{count:int, gross:float, job_expenses:float, net:float}
+     */
+    public static function servicePaymentsTotalsForRange(int $businessId, string $fromDate, string $toDate): array
+    {
+        return self::servicePaymentsSummary($businessId, $fromDate, $toDate);
+    }
+
+    /**
+     * Overall net for dashboard KPIs: sales + estate + service payments − general expenses.
+     *
+     * @return array{net:float, net_minus_purchases:float}
+     */
+    public static function overallNetForRange(int $businessId, string $fromDate, string $toDate): array
+    {
+        $sales = self::salesSummary($businessId, $fromDate, $toDate);
+        $estateSales = self::estateSalesSummary($businessId, $fromDate, $toDate);
+        $service = self::servicePaymentsSummary($businessId, $fromDate, $toDate);
+        $expenses = self::expenseSummary($businessId, $fromDate, $toDate);
+        $purchases = self::purchaseSummary($businessId, $fromDate, $toDate);
+        $net = $sales['net'] + $estateSales['net'] + $service['net'] - $expenses['general_total'];
+
+        return [
+            'net' => round($net, 2),
+            'net_minus_purchases' => round($net - $purchases['total'], 2),
+        ];
     }
 
     /**
@@ -343,7 +373,7 @@ final class ReportSummary
     }
 
     /**
-     * @return array{count:int, gross:float, net:float}
+     * @return array{count:int, transaction_count:int, estate_sale_count:int, gross:float, net:float, by_event: list<array{estate_sale_id:int, title:string, transaction_count:int, gross:float, net:float}>}
      */
     private static function estateSalesSummary(int $businessId, string $fromDate, string $toDate): array
     {
@@ -351,8 +381,11 @@ final class ReportSummary
 
         return [
             'count' => (int) ($totals['transaction_count'] ?? 0),
+            'transaction_count' => (int) ($totals['transaction_count'] ?? 0),
+            'estate_sale_count' => (int) ($totals['estate_sale_count'] ?? 0),
             'gross' => (float) ($totals['gross'] ?? 0),
             'net' => (float) ($totals['net'] ?? 0),
+            'by_event' => EstateSale::periodBreakdownForRange($businessId, $fromDate, $toDate),
         ];
     }
 
@@ -411,6 +444,60 @@ final class ReportSummary
             $params['to_date'] = $toDate;
         }
         $stmt->execute($params);
+        $row = $stmt->fetch();
+
+        $gross = (float) ($row['gross_total'] ?? 0);
+        $jobExpenses = self::expensesTotal($businessId, $fromDate, $toDate, true);
+
+        return [
+            'count' => (int) ($row['item_count'] ?? 0),
+            'gross' => $gross,
+            'job_expenses' => $jobExpenses,
+            'net' => round($gross - $jobExpenses, 2),
+        ];
+    }
+
+    private static function servicePaymentsSummary(int $businessId, string $fromDate, string $toDate): array
+    {
+        if (!SchemaInspector::hasTable('payments') || !SchemaInspector::hasTable('invoices')) {
+            return ['count' => 0, 'gross' => 0.0, 'job_expenses' => 0.0, 'net' => 0.0];
+        }
+
+        $amountSql = SchemaInspector::hasColumn('payments', 'amount') ? 'COALESCE(p.amount, 0)' : '0';
+        $dateSql = SchemaInspector::hasColumn('payments', 'paid_at') ? 'DATE(p.paid_at)' : 'DATE(p.created_at)';
+
+        $where = [
+            SchemaInspector::hasColumn('payments', 'business_id') ? 'p.business_id = :business_id' : '1=1',
+            SchemaInspector::hasColumn('invoices', 'business_id') ? 'i.business_id = :invoice_business_id' : '1=1',
+            SchemaInspector::hasColumn('payments', 'invoice_id') ? 'p.invoice_id = i.id' : '1=0',
+            SchemaInspector::hasColumn('payments', 'deleted_at') ? 'p.deleted_at IS NULL' : '1=1',
+            SchemaInspector::hasColumn('invoices', 'deleted_at') ? 'i.deleted_at IS NULL' : '1=1',
+            "{$dateSql} BETWEEN :from_date AND :to_date",
+        ];
+        if (SchemaInspector::hasColumn('invoices', 'type')) {
+            $where[] = "(LOWER(COALESCE(NULLIF(TRIM(i.type), ''), 'invoice')) = 'invoice')";
+        }
+        if (SchemaInspector::hasColumn('invoices', 'status')) {
+            $where[] = "LOWER(COALESCE(i.status, '')) NOT IN ('cancelled','declined','closed')";
+        }
+
+        $sql = "SELECT
+                    COUNT(*) AS item_count,
+                    COALESCE(SUM({$amountSql}), 0) AS gross_total
+                FROM payments p
+                INNER JOIN invoices i ON i.id = p.invoice_id
+                WHERE " . implode(' AND ', $where);
+
+        $stmt = Database::connection()->prepare($sql);
+        if (SchemaInspector::hasColumn('payments', 'business_id')) {
+            $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
+        }
+        if (SchemaInspector::hasColumn('invoices', 'business_id')) {
+            $stmt->bindValue(':invoice_business_id', $businessId, \PDO::PARAM_INT);
+        }
+        $stmt->bindValue(':from_date', $fromDate, \PDO::PARAM_STR);
+        $stmt->bindValue(':to_date', $toDate, \PDO::PARAM_STR);
+        $stmt->execute();
         $row = $stmt->fetch();
 
         $gross = (float) ($row['gross_total'] ?? 0);

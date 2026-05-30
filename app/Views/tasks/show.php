@@ -1,7 +1,9 @@
 <?php
 $task = is_array($task ?? null) ? $task : [];
 $taskLink = is_array($taskLink ?? null) ? $taskLink : ['state' => 'empty'];
-$title = trim((string) ($task['title'] ?? '')) !== '' ? (string) $task['title'] : ('Task #' . (string) ((int) ($task['id'] ?? 0)));
+$title = \App\Models\Task::displayTitle($task);
+$clientName = trim((string) ($task['client_name'] ?? ''));
+$clientId = (int) ($task['client_id'] ?? 0);
 $status = str_replace('_', ' ', (string) ($task['status'] ?? 'open'));
 $statusRaw = strtolower(trim((string) ($task['status'] ?? 'open')));
 $isClosed = $statusRaw === 'closed';
@@ -22,6 +24,16 @@ $canTakeOwnership = $currentUserId > 0 && $currentUserId !== $taskOwnerId;
             <?php endif; ?>
         </h1>
         <p class="muted mb-0<?= $isClosed ? ' text-decoration-line-through' : '' ?>"><?= e($title) ?></p>
+        <?php if ($clientName !== ''): ?>
+            <p class="small mb-0 mt-1">
+                Client:
+                <?php if ($clientId > 0): ?>
+                    <a href="<?= e(url('/clients/' . (string) $clientId)) ?>"><?= e($clientName) ?></a>
+                <?php else: ?>
+                    <?= e($clientName) ?>
+                <?php endif; ?>
+            </p>
+        <?php endif; ?>
         <?php if ($isClosed): ?>
             <?php
             $completedMetaParts = [];

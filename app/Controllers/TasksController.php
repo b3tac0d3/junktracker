@@ -74,8 +74,7 @@ final class TasksController extends Controller
         if ($requestedClientId > 0) {
             $client = Client::findForBusiness($businessId, $requestedClientId);
             if ($client !== null) {
-                $clientName = Client::displayName($client);
-                $form['title'] = 'Client Follow-Up: ' . $clientName;
+                $form['title'] = 'Client Follow-Up';
                 $form['link_type'] = 'client';
                 $form['link_id'] = (string) $requestedClientId;
             }
@@ -164,7 +163,10 @@ final class TasksController extends Controller
             'ok' => true,
             'task' => [
                 'id' => (int) ($task['id'] ?? 0),
-                'title' => (string) ($task['title'] ?? ''),
+                'title' => Task::displayTitle($task),
+                'raw_title' => (string) ($task['title'] ?? ''),
+                'client_name' => trim((string) ($task['client_name'] ?? '')),
+                'client_id' => (int) ($task['client_id'] ?? 0),
                 'status' => (string) ($task['status'] ?? 'open'),
                 'owner_user_id' => (int) ($task['owner_user_id'] ?? 0),
                 'owner_name' => (string) ($task['owner_name'] ?? ''),

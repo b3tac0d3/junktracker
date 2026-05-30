@@ -26,8 +26,8 @@ final class DashboardSummary
         $ytdTo = date('Y-m-d');
         $mtdFrom = date('Y-m-01');
         $mtdTo = date('Y-m-d');
-        $ytdIncome = ReportSummary::build($businessId, $ytdFrom, $ytdTo);
-        $mtdIncome = ReportSummary::build($businessId, $mtdFrom, $mtdTo);
+        $mtdOverall = ReportSummary::overallNetForRange($businessId, $mtdFrom, $mtdTo);
+        $ytdOverall = ReportSummary::overallNetForRange($businessId, $ytdFrom, $ytdTo);
 
         $payload = [
             'sales' => self::salesSummary($businessId),
@@ -36,14 +36,15 @@ final class DashboardSummary
             'receivables' => self::receivablesSummary($businessId),
             'expenses' => self::expensesSummary($businessId),
             'purchases' => self::purchasesSummary($businessId),
-            'mtd_overall_net' => round((float) ($mtdIncome['overall']['net'] ?? 0), 2),
-            'ytd_overall_net' => round((float) ($ytdIncome['overall']['net'] ?? 0), 2),
-            'ytd_net_minus_purchases' => round((float) ($ytdIncome['overall']['net_minus_purchases'] ?? 0), 2),
+            'mtd_overall_net' => (float) ($mtdOverall['net'] ?? 0),
+            'ytd_overall_net' => (float) ($ytdOverall['net'] ?? 0),
+            'mtd_net_minus_purchases' => (float) ($mtdOverall['net_minus_purchases'] ?? 0),
+            'ytd_net_minus_purchases' => (float) ($ytdOverall['net_minus_purchases'] ?? 0),
             'jobs' => self::jobsSummary($businessId),
             'tasks' => self::tasksSummary($businessId, $ownerUserId),
             'three_month_chart' => self::lastThreeMonthsChart($businessId),
             'lists' => [
-                'my_tasks_due' => self::myTasksDue($businessId, $ownerUserId),
+                'my_tasks_due' => Task::dueListForOwner($businessId, $ownerUserId),
                 'past_due_schedule' => self::pastDueSchedule($businessId),
                 'upcoming_schedule' => self::upcomingSchedule($businessId),
             ],
@@ -94,71 +95,20 @@ final class DashboardSummary
 
     private static function serviceSummary(int $businessId): array
     {
-        $summary = [
-            'mtd_gross' => 0.0,
-            'mtd_net' => 0.0,
-            'mtd_count' => 0,
-            'ytd_gross' => 0.0,
-            'ytd_net' => 0.0,
-            'ytd_count' => 0,
-        ];
-
-        if (!SchemaInspector::hasTable('payments') || !SchemaInspector::hasTable('invoices')) {
-            return $summary;
-        }
-
-        $amountSql = SchemaInspector::hasColumn('payments', 'amount') ? 'COALESCE(p.amount, 0)' : '0';
-        $dateSql = SchemaInspector::hasColumn('payments', 'paid_at') ? 'DATE(p.paid_at)' : 'DATE(p.created_at)';
-
-        $where = [
-            SchemaInspector::hasColumn('payments', 'business_id') ? 'p.business_id = :business_id' : '1=1',
-            SchemaInspector::hasColumn('invoices', 'business_id') ? 'i.business_id = :invoice_business_id' : '1=1',
-            SchemaInspector::hasColumn('payments', 'invoice_id') ? 'p.invoice_id = i.id' : '1=0',
-            SchemaInspector::hasColumn('payments', 'deleted_at') ? 'p.deleted_at IS NULL' : '1=1',
-            SchemaInspector::hasColumn('invoices', 'deleted_at') ? 'i.deleted_at IS NULL' : '1=1',
-        ];
-        if (SchemaInspector::hasColumn('invoices', 'type')) {
-            $where[] = "(LOWER(COALESCE(NULLIF(TRIM(i.type), ''), 'invoice')) = 'invoice')";
-        }
-        if (SchemaInspector::hasColumn('invoices', 'status')) {
-            $where[] = "LOWER(COALESCE(i.status, '')) NOT IN ('cancelled','declined','closed')";
-        }
-
-        $sql = "SELECT
-                    COALESCE(SUM(CASE WHEN {$dateSql} >= DATE_FORMAT(CURDATE(), '%Y-%m-01') AND {$dateSql} <= CURDATE() THEN {$amountSql} ELSE 0 END), 0) AS mtd_gross,
-                    COALESCE(SUM(CASE WHEN {$dateSql} >= DATE_FORMAT(CURDATE(), '%Y-%m-01') AND {$dateSql} <= CURDATE() THEN 1 ELSE 0 END), 0) AS mtd_count,
-                    COALESCE(SUM(CASE WHEN {$dateSql} >= DATE_FORMAT(CURDATE(), '%Y-01-01') AND {$dateSql} <= CURDATE() THEN {$amountSql} ELSE 0 END), 0) AS ytd_gross,
-                    COALESCE(SUM(CASE WHEN {$dateSql} >= DATE_FORMAT(CURDATE(), '%Y-01-01') AND {$dateSql} <= CURDATE() THEN 1 ELSE 0 END), 0) AS ytd_count
-                FROM payments p
-                INNER JOIN invoices i ON i.id = p.invoice_id
-                WHERE " . implode(' AND ', $where);
-
-        $stmt = Database::connection()->prepare($sql);
-        if (SchemaInspector::hasColumn('payments', 'business_id')) {
-            $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
-        }
-        if (SchemaInspector::hasColumn('invoices', 'business_id')) {
-            $stmt->bindValue(':invoice_business_id', $businessId, \PDO::PARAM_INT);
-        }
-        $stmt->execute();
-
-        $row = $stmt->fetch();
-        if (!is_array($row)) {
-            return $summary;
-        }
-
-        $mtdGross = (float) ($row['mtd_gross'] ?? 0);
-        $ytdGross = (float) ($row['ytd_gross'] ?? 0);
-        $mtdExpenses = self::expensesTotalBetween($businessId, date('Y-m-01'), date('Y-m-d'), true);
-        $ytdExpenses = self::expensesTotalBetween($businessId, date('Y-01-01'), date('Y-m-d'), true);
+        $mtdFrom = date('Y-m-01');
+        $mtdTo = date('Y-m-d');
+        $ytdFrom = date('Y-01-01');
+        $ytdTo = date('Y-m-d');
+        $mtd = ReportSummary::servicePaymentsTotalsForRange($businessId, $mtdFrom, $mtdTo);
+        $ytd = ReportSummary::servicePaymentsTotalsForRange($businessId, $ytdFrom, $ytdTo);
 
         return [
-            'mtd_gross' => $mtdGross,
-            'mtd_net' => round($mtdGross - $mtdExpenses, 2),
-            'mtd_count' => (int) ($row['mtd_count'] ?? 0),
-            'ytd_gross' => $ytdGross,
-            'ytd_net' => round($ytdGross - $ytdExpenses, 2),
-            'ytd_count' => (int) ($row['ytd_count'] ?? 0),
+            'mtd_gross' => (float) ($mtd['gross'] ?? 0),
+            'mtd_net' => (float) ($mtd['net'] ?? 0),
+            'mtd_count' => (int) ($mtd['count'] ?? 0),
+            'ytd_gross' => (float) ($ytd['gross'] ?? 0),
+            'ytd_net' => (float) ($ytd['net'] ?? 0),
+            'ytd_count' => (int) ($ytd['count'] ?? 0),
         ];
     }
 
@@ -582,48 +532,6 @@ final class DashboardSummary
         return is_array($rows) ? $rows : [];
     }
 
-    private static function myTasksDue(int $businessId, int $ownerUserId, int $limit = 5): array
-    {
-        if (!SchemaInspector::hasTable('tasks') || !SchemaInspector::hasColumn('tasks', 'owner_user_id')) {
-            return [];
-        }
-
-        $titleSql = SchemaInspector::hasColumn('tasks', 'title') ? 't.title' : "CONCAT('Task #', t.id)";
-        $statusSql = SchemaInspector::hasColumn('tasks', 'status') ? 't.status' : "'open'";
-        $dueSql = SchemaInspector::hasColumn('tasks', 'due_at') ? 't.due_at' : 'NULL';
-
-        $where = [
-            SchemaInspector::hasColumn('tasks', 'business_id') ? 't.business_id = :business_id' : '1=1',
-            SchemaInspector::hasColumn('tasks', 'deleted_at') ? 't.deleted_at IS NULL' : '1=1',
-            't.owner_user_id = :owner_user_id',
-            "LOWER({$statusSql}) IN ('open','in_progress')",
-        ];
-
-        $sql = "SELECT
-                    t.id,
-                    {$titleSql} AS title,
-                    LOWER({$statusSql}) AS status,
-                    {$dueSql} AS due_at
-                FROM tasks t
-                WHERE " . implode(' AND ', $where) . "
-                ORDER BY
-                    CASE WHEN {$dueSql} IS NULL THEN 1 ELSE 0 END,
-                    {$dueSql} ASC,
-                    t.id DESC
-                LIMIT :row_limit";
-
-        $stmt = Database::connection()->prepare($sql);
-        if (SchemaInspector::hasColumn('tasks', 'business_id')) {
-            $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
-        }
-        $stmt->bindValue(':owner_user_id', $ownerUserId, \PDO::PARAM_INT);
-        $stmt->bindValue(':row_limit', max(1, min($limit, 20)), \PDO::PARAM_INT);
-        $stmt->execute();
-
-        $rows = $stmt->fetchAll();
-        return is_array($rows) ? $rows : [];
-    }
-
     private static function outstandingPurchaseQuotes(int $businessId, int $limit = 6): array
     {
         if (!SchemaInspector::hasTable('purchase_quotes') || !SchemaInspector::hasTable('clients')) {
@@ -1032,6 +940,30 @@ final class DashboardSummary
     }
 
     /**
+     * Statuses that should not appear on dashboard Past due or Work in progress agendas.
+     */
+    private static function isClosedDashboardAgendaStatus(string $status): bool
+    {
+        if ($status === '') {
+            return false;
+        }
+
+        return in_array($status, [
+            'active',
+            'won',
+            'expired',
+            'inactive',
+            'closed',
+            'completed',
+            'complete',
+            'cancelled',
+            'declined',
+            'converted',
+            'lost',
+        ], true);
+    }
+
+    /**
      * Dashboard work-in-progress: open items only; jobs must be scheduled in the future.
      */
     private static function isOpenDashboardAgendaEvent(array $event, int $nowTs): bool
@@ -1047,7 +979,7 @@ final class DashboardSummary
 
         $props = is_array($event['extendedProps'] ?? null) ? $event['extendedProps'] : [];
         $status = strtolower(trim((string) ($props['jtStatus'] ?? '')));
-        if ($status !== '' && in_array($status, ['closed', 'completed', 'complete', 'cancelled', 'declined', 'converted', 'lost'], true)) {
+        if (self::isClosedDashboardAgendaStatus($status)) {
             return false;
         }
 
@@ -1076,7 +1008,8 @@ final class DashboardSummary
     }
 
     /**
-     * Dashboard past-due: open items whose scheduled/due time has passed, including jobs not marked complete/cancelled.
+     * Dashboard past-due: open items whose scheduled/due time has passed.
+     * Active jobs and won/expired quotes are excluded — work has started or the quote closed.
      */
     private static function isPastDueDashboardAgendaEvent(array $event, int $nowTs): bool
     {
@@ -1091,7 +1024,7 @@ final class DashboardSummary
 
         $props = is_array($event['extendedProps'] ?? null) ? $event['extendedProps'] : [];
         $status = strtolower(trim((string) ($props['jtStatus'] ?? '')));
-        if ($status !== '' && in_array($status, ['closed', 'completed', 'complete', 'cancelled', 'declined', 'converted', 'lost'], true)) {
+        if (self::isClosedDashboardAgendaStatus($status)) {
             return false;
         }
 
@@ -1362,7 +1295,7 @@ final class DashboardSummary
 
     /**
      * Last three calendar months (oldest → newest): total gross (sales + estate + service), sales gross, estate sales gross, service gross, expenses total, net profit.
-     * Net matches reports: sales net + service net − general expenses; service net = invoice gross − job expenses in month.
+     * Net uses payments received for service income, not invoiced totals.
      *
      * @return array{months: list<array{label: string, total_gross: float, sales_gross: float, service_gross: float, expenses_total: float, net_profit: float}>}
      */
@@ -1380,10 +1313,11 @@ final class DashboardSummary
             $salesNet = self::monthlySalesNet($businessId, $from, $to, Sale::ESTATE_SCOPE_GENERAL);
             $estatePeriod = EstateSale::periodFinancialTotals($businessId, $from, $to);
             $estateSalesNet = (float) ($estatePeriod['net'] ?? 0);
-            $serviceGross = self::monthlyServiceInvoiceGross($businessId, $from, $to);
+            $servicePayments = ReportSummary::servicePaymentsTotalsForRange($businessId, $from, $to);
+            $serviceGross = (float) ($servicePayments['gross'] ?? 0);
+            $serviceNet = (float) ($servicePayments['net'] ?? 0);
             $jobExp = self::expensesTotalBetween($businessId, $from, $to, true);
             $generalExp = self::expensesTotalBetween($businessId, $from, $to, false);
-            $serviceNet = round($serviceGross - $jobExp, 2);
             $expensesTotal = round($jobExp + $generalExp, 2);
             $netProfit = round($salesNet + $estateSalesNet + $serviceNet - $generalExp, 2);
             $totalGross = round($salesGross + $estateSalesGross + $serviceGross, 2);
@@ -1456,35 +1390,5 @@ final class DashboardSummary
         $row = $stmt->fetch();
 
         return (float) ($row['net_total'] ?? 0);
-    }
-
-    private static function monthlyServiceInvoiceGross(int $businessId, string $from, string $to): float
-    {
-        if (!SchemaInspector::hasTable('invoices')) {
-            return 0.0;
-        }
-        $totalSql = SchemaInspector::hasColumn('invoices', 'total')
-            ? 'COALESCE(i.total, 0)'
-            : (SchemaInspector::hasColumn('invoices', 'subtotal') ? 'COALESCE(i.subtotal, 0)' : '0');
-        $dateSql = SchemaInspector::hasColumn('invoices', 'issue_date') ? 'DATE(i.issue_date)' : 'DATE(i.created_at)';
-        $where = [
-            SchemaInspector::hasColumn('invoices', 'business_id') ? 'i.business_id = :business_id' : '1=1',
-            SchemaInspector::hasColumn('invoices', 'deleted_at') ? 'i.deleted_at IS NULL' : '1=1',
-            "{$dateSql} BETWEEN :from_date AND :to_date",
-        ];
-        if (SchemaInspector::hasColumn('invoices', 'type')) {
-            $where[] = "(LOWER(COALESCE(NULLIF(TRIM(i.type), ''), 'invoice')) = 'invoice')";
-        }
-        $sql = "SELECT COALESCE(SUM({$totalSql}), 0) AS gross_total FROM invoices i WHERE " . implode(' AND ', $where);
-        $stmt = Database::connection()->prepare($sql);
-        if (SchemaInspector::hasColumn('invoices', 'business_id')) {
-            $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
-        }
-        $stmt->bindValue(':from_date', $from, \PDO::PARAM_STR);
-        $stmt->bindValue(':to_date', $to, \PDO::PARAM_STR);
-        $stmt->execute();
-        $row = $stmt->fetch();
-
-        return (float) ($row['gross_total'] ?? 0);
     }
 }
