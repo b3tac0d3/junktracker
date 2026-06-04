@@ -15,7 +15,7 @@ final class Expense
     {
         $defaults = FormSelectValue::defaultOptions('expense_category');
         if ($defaults === []) {
-            $defaults = ['Fuel', 'Disposal', 'Materials', 'Labor', 'Payroll', 'Supplies', 'Rent', 'Utilities', 'Other'];
+            $defaults = ['Fuel', 'Disposal', 'Materials', 'Labor', 'Bonus', 'Payroll', 'Supplies', 'Rent', 'Utilities', 'Other'];
         }
 
         $configured = FormSelectValue::optionsForSection($businessId, 'expense_category');
@@ -60,6 +60,179 @@ final class Expense
         $merged = array_values(array_unique(array_merge($defaults, $dbOptions)));
         natcasesort($merged);
         return array_values($merged);
+    }
+
+    public static function supportsDisposalWeight(): bool
+    {
+        return SchemaInspector::hasColumn('expenses', 'weight');
+    }
+
+    public static function supportsEmployeeLink(): bool
+    {
+        return SchemaInspector::hasColumn('expenses', 'employee_id');
+    }
+
+    public static function isBonusCategory(?string $category): bool
+    {
+        return strtolower(trim((string) $category)) === 'bonus';
+    }
+
+    public static function isLaborExpenseCategory(?string $category): bool
+    {
+        return self::isBonusCategory($category);
+    }
+
+    /**
+     * SQL expression (no alias) for bare `expenses` table category column, or empty string.
+     */
+    public static function categoryColumnName(): string
+    {
+        if (SchemaInspector::hasColumn('expenses', 'category')) {
+            return 'category';
+        }
+        if (SchemaInspector::hasColumn('expenses', 'expense_type')) {
+            return 'expense_type';
+        }
+        if (SchemaInspector::hasColumn('expenses', 'type')) {
+            return 'type';
+        }
+
+        return '';
+    }
+
+    /**
+     * Qualified column for WHERE clauses, e.g. `e.category`.
+     */
+    public static function categoryColumnSql(string $tableAlias = 'e'): string
+    {
+        $column = self::categoryColumnName();
+        if ($column === '') {
+            return '';
+        }
+
+        return $tableAlias . '.' . $column;
+    }
+
+    public static function sqlCategoryIsLaborExpense(string $categoryColumnSql): string
+    {
+        if ($categoryColumnSql === '') {
+            return '0 = 1';
+        }
+
+        return 'LOWER(TRIM(' . $categoryColumnSql . ")) = 'bonus'";
+    }
+
+    public static function sqlWhereNotLaborExpense(string $tableAlias = 'e'): string
+    {
+        $categoryColumnSql = self::categoryColumnSql($tableAlias);
+        if ($categoryColumnSql === '') {
+            return '1=1';
+        }
+
+        return 'NOT (' . self::sqlCategoryIsLaborExpense($categoryColumnSql) . ')';
+    }
+
+    /**
+     * @return int|null Employee id for DB when category is Bonus; null otherwise.
+     */
+    public static function employeeIdForSave(string $category, mixed $employeeIdInput): ?int
+    {
+        if (!self::supportsEmployeeLink()) {
+            return null;
+        }
+
+        if (!self::isBonusCategory($category)) {
+            return null;
+        }
+
+        $employeeId = (int) $employeeIdInput;
+
+        return $employeeId > 0 ? $employeeId : null;
+    }
+
+    public static function validateBonusEmployee(string $category, mixed $employeeIdInput, array &$errors, string $field = 'employee_id'): void
+    {
+        if (!self::supportsEmployeeLink()) {
+            return;
+        }
+
+        if (!self::isBonusCategory($category)) {
+            return;
+        }
+
+        if ((int) $employeeIdInput <= 0) {
+            $errors[$field] = 'Select an employee for this bonus payout.';
+        }
+    }
+
+    public static function isDisposalCategory(?string $category): bool
+    {
+        return strtolower(trim((string) $category)) === 'disposal';
+    }
+
+    public static function formatWeightDisplay(mixed $weight): string
+    {
+        if ($weight === null || $weight === '') {
+            return '';
+        }
+
+        $value = (float) $weight;
+        if ($value <= 0) {
+            return '';
+        }
+
+        $formatted = rtrim(rtrim(number_format($value, 3, '.', ','), '0'), '.');
+
+        return $formatted . ' lbs';
+    }
+
+    /**
+     * @return float|null Pounds for DB when category is Disposal; null otherwise.
+     */
+    public static function weightForSave(string $category, string $weightInput): ?float
+    {
+        if (!SchemaInspector::hasColumn('expenses', 'weight')) {
+            return null;
+        }
+
+        if (!self::isDisposalCategory($category)) {
+            return null;
+        }
+
+        $raw = trim($weightInput);
+        if ($raw === '') {
+            return null;
+        }
+
+        return round((float) $raw, 3);
+    }
+
+    public static function validateDisposalWeight(string $category, string $weightInput, array &$errors, string $field = 'weight'): void
+    {
+        if (!SchemaInspector::hasColumn('expenses', 'weight')) {
+            return;
+        }
+
+        if (!self::isDisposalCategory($category)) {
+            return;
+        }
+
+        $raw = trim($weightInput);
+        if ($raw === '') {
+            $errors[$field] = 'Enter disposal weight in pounds.';
+
+            return;
+        }
+
+        if (!is_numeric($raw)) {
+            $errors[$field] = 'Enter a valid weight in pounds.';
+
+            return;
+        }
+
+        if ((float) $raw <= 0) {
+            $errors[$field] = 'Weight must be greater than 0.';
+        }
     }
 
     public static function indexList(
@@ -316,6 +489,13 @@ final class Expense
         if (SchemaInspector::hasColumn('expenses', 'job_id')) {
             $append('job_id', ':job_id', ($jobId !== null && $jobId > 0) ? $jobId : null);
         }
+
+        $category = trim((string) ($data['category'] ?? ''));
+
+        if (SchemaInspector::hasColumn('expenses', 'employee_id')) {
+            $append('employee_id', ':employee_id', self::employeeIdForSave($category, $data['employee_id'] ?? 0));
+        }
+
         if (SchemaInspector::hasColumn('expenses', 'expense_date')) {
             $append('expense_date', ':expense_date', $data['expense_date'] ?? null);
         } elseif (SchemaInspector::hasColumn('expenses', 'date')) {
@@ -323,8 +503,12 @@ final class Expense
         }
         $append('amount', ':amount', (float) ($data['amount'] ?? 0));
 
+        if (SchemaInspector::hasColumn('expenses', 'weight')) {
+            $append('weight', ':weight', self::weightForSave($category, (string) ($data['weight'] ?? '')));
+        }
+
         if (SchemaInspector::hasColumn('expenses', 'category')) {
-            $append('category', ':category', trim((string) ($data['category'] ?? '')));
+            $append('category', ':category', $category);
         } elseif (SchemaInspector::hasColumn('expenses', 'expense_type')) {
             $append('expense_type', ':category', trim((string) ($data['category'] ?? '')));
         } elseif (SchemaInspector::hasColumn('expenses', 'type')) {
@@ -382,6 +566,7 @@ final class Expense
             ? 'e.expense_date'
             : (SchemaInspector::hasColumn('expenses', 'date') ? 'e.date' : 'NULL');
         $amountSql = SchemaInspector::hasColumn('expenses', 'amount') ? 'e.amount' : '0';
+        $weightSql = SchemaInspector::hasColumn('expenses', 'weight') ? 'e.weight' : 'NULL';
         $nameSql = SchemaInspector::hasColumn('expenses', 'name') ? 'e.name' : "CONCAT('Expense #', e.id)";
         $categorySql = SchemaInspector::hasColumn('expenses', 'category')
             ? 'e.category'
@@ -433,6 +618,7 @@ final class Expense
                     {$jobIdSql} AS job_id,
                     {$dateSql} AS expense_date,
                     {$amountSql} AS amount,
+                    {$weightSql} AS weight,
                     {$nameSql} AS name,
                     {$categorySql} AS category,
                     {$paymentMethodSql} AS payment_method,
@@ -481,15 +667,27 @@ final class Expense
             $params['amount'] = (float) ($data['amount'] ?? 0);
         }
 
+        $category = trim((string) ($data['category'] ?? ''));
+
         if (SchemaInspector::hasColumn('expenses', 'category')) {
             $setParts[] = 'category = :category';
-            $params['category'] = trim((string) ($data['category'] ?? ''));
+            $params['category'] = $category;
         } elseif (SchemaInspector::hasColumn('expenses', 'expense_type')) {
             $setParts[] = 'expense_type = :category';
-            $params['category'] = trim((string) ($data['category'] ?? ''));
+            $params['category'] = $category;
         } elseif (SchemaInspector::hasColumn('expenses', 'type')) {
             $setParts[] = '`type` = :category';
-            $params['category'] = trim((string) ($data['category'] ?? ''));
+            $params['category'] = $category;
+        }
+
+        if (SchemaInspector::hasColumn('expenses', 'weight')) {
+            $setParts[] = 'weight = :weight';
+            $params['weight'] = self::weightForSave($category, (string) ($data['weight'] ?? ''));
+        }
+
+        if (SchemaInspector::hasColumn('expenses', 'employee_id')) {
+            $setParts[] = 'employee_id = :employee_id';
+            $params['employee_id'] = self::employeeIdForSave($category, $data['employee_id'] ?? 0);
         }
 
         if (SchemaInspector::hasColumn('expenses', 'payment_method')) {

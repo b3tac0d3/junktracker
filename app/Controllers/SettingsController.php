@@ -36,7 +36,32 @@ final class SettingsController extends Controller
             'googleCalendarConnected' => GoogleCalendarConnection::isConnected($userId),
             'googleCalendarEmail' => trim((string) ($googleConnection['google_account_email'] ?? '')),
             'googleCalendarCalendarId' => trim((string) ($googleConnection['calendar_id'] ?? 'primary')) ?: 'primary',
+            'appointmentGmailNotifyEnabled' => GoogleCalendarConnection::appointmentGmailNotifyEnabled($userId),
+            'appointmentGmailNotifyTo' => trim((string) ($googleConnection['appointment_gmail_notify_to'] ?? '')),
         ]);
+    }
+
+    public function updateGoogleAppointmentGmail(): void
+    {
+        require_auth();
+
+        if (!verify_csrf($_POST['csrf_token'] ?? null)) {
+            flash('error', 'Session expired. Please try again.');
+            redirect('/settings');
+        }
+
+        $userId = (int) (auth_user_id() ?? 0);
+        if (!GoogleCalendarConnection::isConnected($userId)) {
+            flash('error', 'Connect Google Calendar first.');
+            redirect('/settings');
+        }
+
+        $enabled = isset($_POST['appointment_gmail_notify_enabled']);
+        $notifyTo = trim((string) ($_POST['appointment_gmail_notify_to'] ?? ''));
+        GoogleCalendarConnection::updateAppointmentGmailNotify($userId, $enabled, $notifyTo);
+
+        flash('success', $enabled ? 'Appointment Gmail notifications enabled.' : 'Appointment Gmail notifications disabled.');
+        redirect('/settings');
     }
 
     public function update(): void
@@ -71,6 +96,8 @@ final class SettingsController extends Controller
                 'googleCalendarConnected' => GoogleCalendarConnection::isConnected($userId),
                 'googleCalendarEmail' => trim((string) ($googleConnection['google_account_email'] ?? '')),
                 'googleCalendarCalendarId' => trim((string) ($googleConnection['calendar_id'] ?? 'primary')) ?: 'primary',
+                'appointmentGmailNotifyEnabled' => GoogleCalendarConnection::appointmentGmailNotifyEnabled($userId),
+                'appointmentGmailNotifyTo' => trim((string) ($googleConnection['appointment_gmail_notify_to'] ?? '')),
             ]);
             return;
         }

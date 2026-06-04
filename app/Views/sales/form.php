@@ -33,6 +33,9 @@ $hasError = static function (string $field) use ($errors): bool {
     <div class="card-body">
         <form method="post" action="<?= e($actionUrl) ?>" class="row g-3">
             <?= csrf_field() ?>
+            <input type="hidden" name="from" value="<?= e((string) ($form['from'] ?? '')) ?>" />
+            <input type="hidden" name="return_job_id" value="<?= e((string) ($form['return_job_id'] ?? '')) ?>" />
+            <input type="hidden" name="return_tab" value="<?= e((string) ($form['return_tab'] ?? '')) ?>" />
 
             <div class="col-12 col-lg-6">
                 <label class="form-label fw-semibold" for="sale-name">Name</label>
@@ -126,7 +129,7 @@ $hasError = static function (string $field) use ($errors): bool {
                         id="sale-job-search"
                         class="form-control <?= $hasError('job_id') ? 'is-invalid' : '' ?>"
                         value="<?= e((string) ($form['job_title'] ?? '')) ?>"
-                        placeholder="Search job by title, id, city..."
+                        placeholder="Search job by title, client, id, or city..."
                         autocomplete="off"
                         data-search-url="<?= e(url('/sales/job-search')) ?>"
                     />
@@ -330,7 +333,12 @@ window.addEventListener('DOMContentLoaded', () => {
         searchUrl: String((document.getElementById('sale-job-search') || {}).dataset?.searchUrl || ''),
         emptyMessage: 'No jobs found',
         labelFromItem: (item) => String(item && item.title ? item.title : ''),
-        metaFromItem: (item) => String(item && item.city ? item.city : ''),
+        metaFromItem: (item) => {
+            const date = String(item && item.job_date ? item.job_date : '').trim();
+            const client = String(item && item.client_name ? item.client_name : '').trim();
+            const city = String(item && item.city ? item.city : '').trim();
+            return [date, client || city].filter(Boolean).join(' · ');
+        },
         onSelected: () => purchaseField.clear(),
     });
 

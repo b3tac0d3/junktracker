@@ -1,8 +1,22 @@
 <?php
+
+use App\Models\Expense;
+
 $job = is_array($job ?? null) ? $job : [];
 $financial = is_array($financial ?? null) ? $financial : [];
 $timeSummary = is_array($timeSummary ?? null) ? $timeSummary : [];
 $timeLogs = is_array($timeLogs ?? null) ? $timeLogs : [];
+$employeeLaborTotals = is_array($employeeLaborTotals ?? null) ? $employeeLaborTotals : [];
+$laborTotalsByEmployeeId = [];
+foreach ($employeeLaborTotals as $laborTotalRow) {
+    if (!is_array($laborTotalRow)) {
+        continue;
+    }
+    $laborEmployeeId = (int) ($laborTotalRow['employee_id'] ?? 0);
+    if ($laborEmployeeId > 0) {
+        $laborTotalsByEmployeeId[$laborEmployeeId] = $laborTotalRow;
+    }
+}
 $expenses = is_array($expenses ?? null) ? $expenses : [];
 $adjustments = is_array($adjustments ?? null) ? $adjustments : [];
 $documents = is_array($documents ?? null) ? $documents : [];
@@ -51,7 +65,12 @@ $expenseCreateUrl = url('/jobs/' . (string) $jobId . '/expenses/create' . detail
 $adjustmentCreateUrl = url('/jobs/' . (string) $jobId . '/adjustments/create' . detail_return_tab_query('financial'));
 $timeEntryCreateUrl = url('/time-tracking/create') . '?job_id=' . (string) $jobId . '&return_to=' . urlencode('/jobs/' . (string) $jobId . '?tab=labor');
 $employeeAddUrl = url('/jobs/' . (string) $jobId . '/employees/add' . detail_return_tab_query('labor'));
+$bonusPayoutCreateUrl = url('/jobs/' . (string) $jobId . '/expenses/create?preset=bonus&return_tab=labor');
 $bulkPunchUrl = url('/jobs/' . (string) $jobId . '/employees/bulk-punch');
+$laborBonusesByEmployeeId = is_array($laborBonusesByEmployeeId ?? null) ? $laborBonusesByEmployeeId : [];
+$bonusPayoutUrlForEmployee = static function (int $employeeId) use ($jobId): string {
+    return url('/jobs/' . (string) $jobId . '/expenses/create?preset=bonus&employee_id=' . (string) $employeeId . '&return_tab=labor');
+};
 $jobStatus = strtolower(trim((string) ($job['status'] ?? 'pending')));
 $isInactive = $jobStatus === 'inactive' || (array_key_exists('is_active', $job) && (int) ($job['is_active'] ?? 1) === 0);
 $jobStatusOptions = is_array($jobStatusOptions ?? null) ? $jobStatusOptions : ['prospect', 'pending', 'active', 'complete', 'cancelled'];
@@ -107,6 +126,17 @@ if ($canViewFinancials) {
 if (!in_array($activeTab, $allowedTabs, true)) {
     $activeTab = 'details';
 }
+
+$saleReturnTab = in_array($activeTab, ['financial', 'transactions'], true) ? $activeTab : 'transactions';
+$saleCreateQuery = [
+    'from' => 'job',
+    'job_id' => (string) $jobId,
+    'return_tab' => $saleReturnTab,
+];
+if ($clientId > 0) {
+    $saleCreateQuery['client_id'] = (string) $clientId;
+}
+$saleCreateUrl = url('/sales/create') . '?' . http_build_query($saleCreateQuery);
 
 $detailsTabActive = $activeTab === 'details';
 $financialTabActive = $activeTab === 'financial';
@@ -192,9 +222,11 @@ foreach ($saleDocs as $sale) {
     if ($saleId <= 0) {
         continue;
     }
-    $saleName = trim((string) ($sale['name'] ?? ''));
-    if ($saleName === '') {
-        $saleName = 'Sale #' . (string) $saleId;
+    $saleTitle = trim((string) ($sale['name'] ?? ''));
+    if ($saleTitle === '' || strcasecmp($saleTitle, $title) === 0) {
+        $saleLabel = 'Sale #' . (string) $saleId;
+    } else {
+        $saleLabel = 'Sale — ' . $saleTitle;
     }
     $saleType = trim((string) ($sale['sale_type'] ?? ''));
     if ($saleType === '') {
@@ -205,7 +237,7 @@ foreach ($saleDocs as $sale) {
     $transactions[] = [
         'type' => 'Sale',
         'id' => $saleId,
-        'number' => $saleName,
+        'number' => $saleLabel,
         'status' => $saleType . ' · Net ' . $formatMoney((float) ($sale['net_amount'] ?? 0)),
         'date' => $formatDocDate((string) ($sale['sale_date'] ?? '')),
         'total_label' => 'Gross',
@@ -249,6 +281,9 @@ $hasCloseout = array_key_exists('closeout_truck_loaded', $job);
                 <li><a class="dropdown-item" href="<?= e($invoiceCreateUrl) ?>"><i class="fas fa-file-invoice me-2"></i>Add Invoice</a></li>
                 <li><a class="dropdown-item" href="<?= e($paymentCreateUrl) ?>"><i class="fas fa-money-check-dollar me-2"></i>Add Payment</a></li>
                 <li><a class="dropdown-item" href="<?= e($purchaseCreateUrl) ?>"><i class="fas fa-cart-arrow-down me-2"></i>Add Purchase</a></li>
+                <?php if ($canViewFinancials): ?>
+                <li><a class="dropdown-item" href="<?= e($saleCreateUrl) ?>"><i class="fas fa-sack-dollar me-2"></i>Add Sale</a></li>
+                <?php endif; ?>
                 <li><a class="dropdown-item" href="<?= e($expenseCreateUrl) ?>"><i class="fas fa-receipt me-2"></i>Add Expense</a></li>
                 <li><a class="dropdown-item" href="<?= e($adjustmentCreateUrl) ?>"><i class="fas fa-sliders-h me-2"></i>Add Adjustment</a></li>
                 <li><hr class="dropdown-divider"></li>
@@ -500,10 +535,14 @@ $hasCloseout = array_key_exists('closeout_truck_loaded', $job);
             aria-labelledby="job-financial-tab"
             tabindex="0"
         >
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+                <h2 class="h6 mb-0"><i class="fas fa-chart-line me-2"></i>Financial Snapshot</h2>
+                <a class="btn btn-sm btn-outline-primary" href="<?= e($saleCreateUrl) ?>">Add Sale</a>
+            </div>
             <div class="jt-financial-snapshot">
                 <div class="jt-fin-snapshot-row">
                     <div class="record-field">
-                        <span class="record-label">Job Gross</span>
+                        <span class="record-label">Invoice Gross</span>
                         <span class="record-value">$<?= e(number_format((float) ($financial['job_gross'] ?? ($financial['invoice_gross'] ?? ($financial['raw_gross'] ?? 0))), 2)) ?></span>
                     </div>
                     <div class="record-field">
@@ -511,7 +550,7 @@ $hasCloseout = array_key_exists('closeout_truck_loaded', $job);
                         <span class="record-value">$<?= e(number_format((float) ($financial['sales_gross'] ?? 0), 2)) ?></span>
                     </div>
                     <div class="record-field">
-                        <span class="record-label">Total Gross</span>
+                        <span class="record-label">Job Gross</span>
                         <span class="record-value">$<?= e(number_format((float) ($financial['total_gross'] ?? ($financial['gross'] ?? 0)), 2)) ?></span>
                     </div>
                     <div class="record-field">
@@ -569,7 +608,12 @@ $hasCloseout = array_key_exists('closeout_truck_loaded', $job);
             tabindex="0"
         >
             <div class="mb-4">
-                <h2 class="h6 mb-3"><i class="fas fa-file-invoice-dollar me-2"></i>Billing &amp; Sales</h2>
+                <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+                    <h2 class="h6 mb-0"><i class="fas fa-file-invoice-dollar me-2"></i>Billing &amp; Sales</h2>
+                    <?php if ($canViewFinancials): ?>
+                        <a class="btn btn-sm btn-outline-primary" href="<?= e($saleCreateUrl) ?>">Add Sale</a>
+                    <?php endif; ?>
+                </div>
                 <?php if ($transactions === []): ?>
                     <div class="record-empty">No financial transactions yet.</div>
                 <?php else: ?>
@@ -586,8 +630,17 @@ $hasCloseout = array_key_exists('closeout_truck_loaded', $job);
 
             <hr class="my-4">
 
+            <?php
+            $disposalWeightTotal = (float) ($disposalWeightTotal ?? 0);
+            $disposalWeightTotalDisplay = $disposalWeightTotal > 0 ? Expense::formatWeightDisplay($disposalWeightTotal) : '';
+            ?>
             <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
-                <h2 class="h6 mb-0"><i class="fas fa-receipt me-2"></i>Expenses</h2>
+                <div>
+                    <h2 class="h6 mb-0"><i class="fas fa-receipt me-2"></i>Expenses</h2>
+                    <?php if ($disposalWeightTotalDisplay !== ''): ?>
+                        <div class="small muted">Disposal weight: <?= e($disposalWeightTotalDisplay) ?></div>
+                    <?php endif; ?>
+                </div>
                 <a class="btn btn-sm btn-outline-primary" href="<?= e($expenseCreateUrl) ?>">Add Expense</a>
             </div>
             <?php if ($expenses === []): ?>
@@ -604,11 +657,24 @@ $hasCloseout = array_key_exists('closeout_truck_loaded', $job);
                         $expenseCategory = trim((string) ($expense['category'] ?? ''));
                         $expensePaymentMethod = trim((string) ($expense['payment_method'] ?? ''));
                         $expenseNote = trim((string) ($expense['note'] ?? ''));
-                        $expenseTitle = $expenseCategory !== '' ? $expenseCategory : ($expenseNote !== '' ? $expenseNote : ('Expense #' . (string) $expenseId));
+                        $expenseWeightDisplay = Expense::isDisposalCategory($expenseCategory)
+                            ? Expense::formatWeightDisplay($expense['weight'] ?? null)
+                            : '';
+                        $expenseEmployeeName = trim((string) ($expense['employee_name'] ?? ''));
+                        $expenseIsBonus = Expense::isBonusCategory($expenseCategory);
+                        $expenseTitle = $expenseIsBonus && $expenseEmployeeName !== ''
+                            ? ('Bonus — ' . $expenseEmployeeName)
+                            : ($expenseCategory !== '' ? $expenseCategory : ($expenseNote !== '' ? $expenseNote : ('Expense #' . (string) $expenseId)));
                         ?>
                         <li class="mb-1">
                             <a class="fw-bold text-decoration-none" href="<?= e(url('/jobs/' . (string) $jobId . '/expenses/' . (string) $expenseId)) ?>"><?= e($expenseTitle) ?></a>
                             <span class="small muted">· <?= e($expenseDate) ?> · $<?= e(number_format((float) ($expense['amount'] ?? 0), 2)) ?></span>
+                            <?php if ($expenseIsBonus): ?>
+                                <span class="small muted">· labor</span>
+                            <?php endif; ?>
+                            <?php if ($expenseWeightDisplay !== ''): ?>
+                                <span class="small muted">· <?= e($expenseWeightDisplay) ?></span>
+                            <?php endif; ?>
                             <?php if ($expenseCategory !== '' && $expenseTitle !== $expenseCategory): ?>
                                 <span class="small muted">· <?= e($expenseCategory) ?></span>
                             <?php endif; ?>
@@ -666,66 +732,6 @@ $hasCloseout = array_key_exists('closeout_truck_loaded', $job);
             aria-labelledby="job-labor-tab"
             tabindex="0"
         >
-            <h2 class="h6 mb-3"><i class="fas fa-clock me-2"></i>Time Snapshot</h2>
-            <div class="record-row-fields record-row-fields-4 record-row-fields-mobile-2 mb-4">
-                <div class="record-field">
-                    <span class="record-label">Entries</span>
-                    <span class="record-value"><?= e((string) ((int) ($timeSummary['entries'] ?? 0))) ?></span>
-                </div>
-                <div class="record-field">
-                    <span class="record-label">Open Entries</span>
-                    <span class="record-value"><?= e((string) ((int) ($timeSummary['open_entries'] ?? 0))) ?></span>
-                </div>
-                <div class="record-field">
-                    <span class="record-label">Total Hours</span>
-                    <span class="record-value"><?= e(number_format((float) ($timeSummary['hours'] ?? 0), 2)) ?></span>
-                </div>
-                <?php if ($canViewFinancials): ?>
-                <div class="record-field">
-                    <span class="record-label">Labor Cost</span>
-                    <span class="record-value">$<?= e(number_format((float) ($financial['labor_cost'] ?? ($financial['labor'] ?? 0)), 2)) ?></span>
-                </div>
-                <?php endif; ?>
-            </div>
-
-            <hr class="my-4">
-            <div class="d-flex align-items-center justify-content-between mb-2">
-                <span class="record-label mb-0">Employee Time Logs</span>
-            </div>
-            <?php if ($timeLogs === []): ?>
-                <div class="record-empty mb-4">No time logs for this job yet.</div>
-            <?php else: ?>
-                <ul class="list-unstyled mb-4">
-                    <?php foreach ($timeLogs as $entry): ?>
-                        <?php
-                        if (!is_array($entry)) {
-                            continue;
-                        }
-                        $entryId = (int) ($entry['id'] ?? 0);
-                        $minutes = (int) ($entry['duration_minutes'] ?? 0);
-                        $hourlyRate = (float) ($entry['hourly_rate'] ?? 0);
-                        $laborCost = (float) ($entry['labor_cost'] ?? 0);
-                        $clockOutAt = trim((string) ($entry['clock_out_at'] ?? ''));
-                        $entryUrl = $entryId > 0 ? url('/time-tracking/' . (string) $entryId) . '?from=job&job_id=' . (string) $jobId : '#';
-                        ?>
-                        <li class="mb-2">
-                            <a class="fw-bold text-decoration-none" href="<?= e($entryUrl) ?>"><?= e(trim((string) ($entry['employee_name'] ?? '')) ?: ('Employee #' . (string) ((int) ($entry['employee_id'] ?? 0)))) ?></a>
-                            <ul class="time-log-meta-list small muted">
-                                <li>In <?= e(format_datetime((string) ($entry['clock_in_at'] ?? null))) ?></li>
-                                <li>Out <?= e(format_datetime($clockOutAt !== '' ? $clockOutAt : null)) ?></li>
-                                <li><?= e($formatDuration($minutes)) ?></li>
-                                <?php if ($canViewFinancials): ?>
-                                <li>Rate $<?= e(number_format($hourlyRate, 2)) ?></li>
-                                <li>Cost $<?= e(number_format($laborCost, 2)) ?></li>
-                                <?php endif; ?>
-                                <?php if ($clockOutAt === ''): ?><li><span class="badge text-bg-warning">Open</span></li><?php endif; ?>
-                            </ul>
-                        </li>
-                    <?php endforeach; ?>
-                </ul>
-            <?php endif; ?>
-
-            <hr class="my-4">
             <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
                 <div class="d-flex align-items-center gap-2 min-w-0 flex-grow-1">
                     <?php if ($assignedEmployees !== []): ?>
@@ -733,9 +739,10 @@ $hasCloseout = array_key_exists('closeout_truck_loaded', $job);
                             <input class="form-check-input" type="checkbox" id="jt-bulk-select-all" title="Select all" aria-label="Select all employees for mass punch">
                         </div>
                     <?php endif; ?>
-                    <strong class="mb-0"><i class="fas fa-users me-2"></i>Assigned Employees</strong>
+                    <h2 class="h6 mb-0"><i class="fas fa-user-clock me-2"></i>Punch Clock</h2>
                 </div>
                 <div class="d-flex align-items-center gap-2 flex-wrap justify-content-end">
+                    <a class="btn btn-outline-success btn-sm" href="<?= e($bonusPayoutCreateUrl) ?>"><i class="fas fa-gift me-1"></i>Add Bonus</a>
                     <a class="btn btn-outline-primary btn-sm" href="<?= e($employeeAddUrl) ?>"><i class="fas fa-user-plus me-1"></i>Add Employee</a>
                     <?php if ($assignedEmployees !== []): ?>
                         <div class="btn-group">
@@ -755,13 +762,13 @@ $hasCloseout = array_key_exists('closeout_truck_loaded', $job);
                 </div>
             </div>
             <?php if ($assignedEmployees === []): ?>
-                <div class="record-empty mb-0">No employees assigned to this job yet.</div>
+                <div class="record-empty mb-4">No employees assigned to this job yet.</div>
             <?php else: ?>
                 <form id="jt-bulk-punch-form" method="post" action="<?= e($bulkPunchUrl) ?>" class="d-none" aria-hidden="true">
                     <?= csrf_field() ?>
                     <input type="hidden" name="bulk_action" id="jt-bulk-action" value="">
                 </form>
-                <div class="record-list-simple">
+                <div class="record-list-simple mb-4">
                     <?php foreach ($assignedEmployees as $employee): ?>
                         <?php
                         if (!is_array($employee)) {
@@ -787,6 +794,14 @@ $hasCloseout = array_key_exists('closeout_truck_loaded', $job);
                         $canManageEmployeeTime = is_site_admin() || workspace_role() === 'admin';
                         $addTimeEntryUrl = url('/time-tracking/create?job_id=' . rawurlencode((string) $jobId) . '&employee_id=' . rawurlencode((string) $employeeId) . '&return_to=' . rawurlencode('/jobs/' . (string) $jobId . '?tab=labor'));
                         $canRemoveEmployee = (bool) ($employee['can_remove'] ?? false);
+                        $employeeBonuses = $laborBonusesByEmployeeId[$employeeId] ?? [];
+                        $employeeBonusTotal = 0.0;
+                        foreach ($employeeBonuses as $employeeBonusRow) {
+                            if (!is_array($employeeBonusRow)) {
+                                continue;
+                            }
+                            $employeeBonusTotal += (float) ($employeeBonusRow['amount'] ?? 0);
+                        }
                         ?>
                         <article class="record-row-simple">
                             <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
@@ -808,11 +823,42 @@ $hasCloseout = array_key_exists('closeout_truck_loaded', $job);
                                         <?php else: ?>
                                             <span class="badge text-bg-secondary">Punched Out</span>
                                         <?php endif; ?>
+                                        <?php
+                                        $assignedLaborTotal = $laborTotalsByEmployeeId[$employeeId] ?? null;
+                                        if (is_array($assignedLaborTotal) && (int) ($assignedLaborTotal['total_minutes'] ?? 0) > 0):
+                                            ?>
+                                            <span>· <?= e($formatDuration((int) ($assignedLaborTotal['total_minutes'] ?? 0))) ?> on this job</span>
+                                        <?php endif; ?>
+                                        <?php if ($employeeBonusTotal > 0): ?>
+                                            <span>· $<?= e(number_format($employeeBonusTotal, 2)) ?> bonus</span>
+                                        <?php endif; ?>
                                         <?php if ($linkedUserEmail !== ''): ?><span>· <?= e($linkedUserEmail) ?></span><?php endif; ?>
                                     </div>
+                                    <?php if ($employeeBonuses !== []): ?>
+                                        <ul class="list-unstyled small mb-0 mt-2 ps-1">
+                                            <?php foreach ($employeeBonuses as $employeeBonusRow): ?>
+                                                <?php
+                                                if (!is_array($employeeBonusRow)) {
+                                                    continue;
+                                                }
+                                                $bonusExpenseId = (int) ($employeeBonusRow['id'] ?? 0);
+                                                $bonusDate = $formatDocDate((string) ($employeeBonusRow['expense_date'] ?? ''));
+                                                $bonusNote = trim((string) ($employeeBonusRow['note'] ?? ''));
+                                                ?>
+                                                <li class="mb-1">
+                                                    <a class="text-decoration-none" href="<?= e(url('/jobs/' . (string) $jobId . '/expenses/' . (string) $bonusExpenseId)) ?>">Bonus</a>
+                                                    <span class="muted">· <?= e($bonusDate) ?> · $<?= e(number_format((float) ($employeeBonusRow['amount'] ?? 0), 2)) ?></span>
+                                                    <?php if ($bonusNote !== ''): ?>
+                                                        <span class="muted">· <?= e($bonusNote) ?></span>
+                                                    <?php endif; ?>
+                                                </li>
+                                            <?php endforeach; ?>
+                                        </ul>
+                                    <?php endif; ?>
                                     </div>
                                 </div>
                                 <div class="d-flex gap-2 flex-wrap justify-content-end">
+                                    <a class="btn btn-outline-success btn-sm" href="<?= e($bonusPayoutUrlForEmployee($employeeId)) ?>"><i class="fas fa-gift me-1"></i>Add Bonus</a>
                                     <?php if ($canManageEmployeeTime): ?>
                                         <a class="btn btn-outline-primary btn-sm" href="<?= e($addTimeEntryUrl) ?>"><i class="fas fa-plus me-1"></i>Add Time Entry</a>
                                     <?php endif; ?>
@@ -909,6 +955,114 @@ $hasCloseout = array_key_exists('closeout_truck_loaded', $job);
                         }
                     })();
                 </script>
+            <?php endif; ?>
+
+            <hr class="my-4">
+            <h2 class="h6 mb-3"><i class="fas fa-clock me-2"></i>Time Snapshot</h2>
+            <div class="record-row-fields record-row-fields-4 record-row-fields-mobile-2 mb-4">
+                <div class="record-field">
+                    <span class="record-label">Entries</span>
+                    <span class="record-value"><?= e((string) ((int) ($timeSummary['entries'] ?? 0))) ?></span>
+                </div>
+                <div class="record-field">
+                    <span class="record-label">Open Entries</span>
+                    <span class="record-value"><?= e((string) ((int) ($timeSummary['open_entries'] ?? 0))) ?></span>
+                </div>
+                <div class="record-field">
+                    <span class="record-label">Total Hours</span>
+                    <span class="record-value"><?= e(number_format((float) ($timeSummary['hours'] ?? 0), 2)) ?></span>
+                </div>
+                <?php if ($canViewFinancials): ?>
+                <div class="record-field">
+                    <span class="record-label">Labor Cost</span>
+                    <span class="record-value">$<?= e(number_format((float) ($financial['labor_cost'] ?? ($financial['labor'] ?? 0)), 2)) ?></span>
+                </div>
+                <?php endif; ?>
+            </div>
+
+            <hr class="my-4">
+            <h2 class="h6 mb-3"><i class="fas fa-users me-2"></i>Time by Employee</h2>
+            <?php if ($employeeLaborTotals === []): ?>
+                <div class="record-empty mb-4">No employee time logged on this job yet.</div>
+            <?php else: ?>
+                <div class="record-list-simple mb-4">
+                    <?php foreach ($employeeLaborTotals as $laborTotalRow): ?>
+                        <?php
+                        if (!is_array($laborTotalRow)) {
+                            continue;
+                        }
+                        $laborEmployeeId = (int) ($laborTotalRow['employee_id'] ?? 0);
+                        if ($laborEmployeeId <= 0) {
+                            continue;
+                        }
+                        $laborEmployeeName = trim((string) ($laborTotalRow['employee_name'] ?? '')) ?: ('Employee #' . (string) $laborEmployeeId);
+                        $laborMinutes = (int) ($laborTotalRow['total_minutes'] ?? 0);
+                        $laborOpenEntries = (int) ($laborTotalRow['open_entries'] ?? 0);
+                        ?>
+                        <article class="record-row-simple">
+                            <div class="record-row-main">
+                                <h3 class="record-title-simple"><?= e($laborEmployeeName) ?></h3>
+                            </div>
+                            <div class="record-row-fields record-row-fields-<?= $canViewFinancials ? '4' : '3' ?> record-row-fields-mobile-2">
+                                <div class="record-field">
+                                    <span class="record-label">Total on Job</span>
+                                    <span class="record-value"><?= e($formatDuration($laborMinutes)) ?></span>
+                                </div>
+                                <div class="record-field">
+                                    <span class="record-label">Hours</span>
+                                    <span class="record-value"><?= e(number_format((float) ($laborTotalRow['total_hours'] ?? 0), 2)) ?></span>
+                                </div>
+                                <div class="record-field">
+                                    <span class="record-label">Entries</span>
+                                    <span class="record-value"><?= e((string) ((int) ($laborTotalRow['entry_count'] ?? 0))) ?><?= $laborOpenEntries > 0 ? ' (' . (string) $laborOpenEntries . ' open)' : '' ?></span>
+                                </div>
+                                <?php if ($canViewFinancials): ?>
+                                <div class="record-field">
+                                    <span class="record-label">Labor Cost</span>
+                                    <span class="record-value">$<?= e(number_format((float) ($laborTotalRow['labor_cost'] ?? 0), 2)) ?></span>
+                                </div>
+                                <?php endif; ?>
+                            </div>
+                        </article>
+                    <?php endforeach; ?>
+                </div>
+            <?php endif; ?>
+
+            <hr class="my-4">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+                <span class="record-label mb-0">Employee Time Logs</span>
+            </div>
+            <?php if ($timeLogs === []): ?>
+                <div class="record-empty mb-4">No time logs for this job yet.</div>
+            <?php else: ?>
+                <ul class="list-unstyled mb-4">
+                    <?php foreach ($timeLogs as $entry): ?>
+                        <?php
+                        if (!is_array($entry)) {
+                            continue;
+                        }
+                        $entryId = (int) ($entry['id'] ?? 0);
+                        $minutes = (int) ($entry['duration_minutes'] ?? 0);
+                        $hourlyRate = (float) ($entry['hourly_rate'] ?? 0);
+                        $laborCost = (float) ($entry['labor_cost'] ?? 0);
+                        $clockOutAt = trim((string) ($entry['clock_out_at'] ?? ''));
+                        $entryUrl = $entryId > 0 ? url('/time-tracking/' . (string) $entryId) . '?from=job&job_id=' . (string) $jobId : '#';
+                        ?>
+                        <li class="mb-2">
+                            <a class="fw-bold text-decoration-none" href="<?= e($entryUrl) ?>"><?= e(trim((string) ($entry['employee_name'] ?? '')) ?: ('Employee #' . (string) ((int) ($entry['employee_id'] ?? 0)))) ?></a>
+                            <ul class="time-log-meta-list small muted">
+                                <li>In <?= e(format_datetime((string) ($entry['clock_in_at'] ?? null))) ?></li>
+                                <li>Out <?= e(format_datetime($clockOutAt !== '' ? $clockOutAt : null)) ?></li>
+                                <li><?= e($formatDuration($minutes)) ?></li>
+                                <?php if ($canViewFinancials): ?>
+                                <li>Rate $<?= e(number_format($hourlyRate, 2)) ?></li>
+                                <li>Cost $<?= e(number_format($laborCost, 2)) ?></li>
+                                <?php endif; ?>
+                                <?php if ($clockOutAt === ''): ?><li><span class="badge text-bg-warning">Open</span></li><?php endif; ?>
+                            </ul>
+                        </li>
+                    <?php endforeach; ?>
+                </ul>
             <?php endif; ?>
         </div>
     </div>

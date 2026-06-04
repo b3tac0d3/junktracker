@@ -6,6 +6,7 @@ namespace App\Controllers;
 
 use App\Models\Event;
 use App\Models\EventFeed;
+use App\Services\AppointmentGmailNotify;
 use App\Services\GoogleCalendarSync;
 use Core\Controller;
 
@@ -109,7 +110,9 @@ final class EventsController extends Controller
         }
 
         audit('event_created', 'events', $id, ['title' => trim((string) ($payload['title'] ?? ''))]);
+        $event = Event::findForBusiness($businessId, $id);
         GoogleCalendarSync::syncEvent($actorId, $businessId, $id);
+        AppointmentGmailNotify::notifyEventChange($actorId, $businessId, AppointmentGmailNotify::ACTION_CREATED, $event);
         flash('success', 'Event created.');
         redirect('/events/' . (string) $id);
     }
@@ -201,7 +204,9 @@ final class EventsController extends Controller
 
         Event::update($businessId, $id, $payload, $actorId);
         audit('event_updated', 'events', $id);
+        $event = Event::findForBusiness($businessId, $id);
         GoogleCalendarSync::syncEvent($actorId, $businessId, $id);
+        AppointmentGmailNotify::notifyEventChange($actorId, $businessId, AppointmentGmailNotify::ACTION_UPDATED, $event);
         flash('success', 'Event updated.');
         redirect('/events/' . (string) $id);
     }
@@ -257,6 +262,7 @@ final class EventsController extends Controller
 
         audit('event_created', 'events', $id, ['title' => trim((string) ($payload['title'] ?? ''))]);
         GoogleCalendarSync::syncEvent($actorId, $businessId, $id);
+        AppointmentGmailNotify::notifyEventChange($actorId, $businessId, AppointmentGmailNotify::ACTION_CREATED, $event);
         $this->sendJson(['ok' => true, 'id' => $id, 'url' => url('/events/' . (string) $id)], 201);
     }
 
@@ -287,7 +293,9 @@ final class EventsController extends Controller
 
         Event::update($businessId, $id, $payload, $actorId);
         audit('event_updated', 'events', $id);
+        $event = Event::findForBusiness($businessId, $id);
         GoogleCalendarSync::syncEvent($actorId, $businessId, $id);
+        AppointmentGmailNotify::notifyEventChange($actorId, $businessId, AppointmentGmailNotify::ACTION_UPDATED, $event);
         $this->sendJson(['ok' => true, 'id' => $id, 'url' => url('/events/' . (string) $id)]);
     }
 
@@ -313,7 +321,13 @@ final class EventsController extends Controller
 
         Event::setCancelled($businessId, $id, $cancel, $actorId);
         audit($cancel ? 'event_cancelled' : 'event_restored', 'events', $id);
+        $event = Event::findForBusiness($businessId, $id);
         GoogleCalendarSync::syncEvent($actorId, $businessId, $id);
+        if ($cancel) {
+            AppointmentGmailNotify::notifyEventChange($actorId, $businessId, AppointmentGmailNotify::ACTION_CANCELLED, $event);
+        } else {
+            AppointmentGmailNotify::notifyEventChange($actorId, $businessId, AppointmentGmailNotify::ACTION_UPDATED, $event);
+        }
         $this->sendJson(['ok' => true]);
     }
 
@@ -345,7 +359,9 @@ final class EventsController extends Controller
         }
 
         audit('event_moved', 'events', $id);
+        $event = Event::findForBusiness($businessId, $id);
         GoogleCalendarSync::syncEvent($actorId, $businessId, $id);
+        AppointmentGmailNotify::notifyEventChange($actorId, $businessId, AppointmentGmailNotify::ACTION_UPDATED, $event);
         $this->sendJson(['ok' => true]);
     }
 
@@ -372,7 +388,8 @@ final class EventsController extends Controller
 
         $businessId = current_business_id();
         $actorId = (int) (auth_user_id() ?? 0);
-        if (Event::findForBusiness($businessId, $id) === null) {
+        $event = Event::findForBusiness($businessId, $id);
+        if ($event === null) {
             if ($this->wantsJson()) {
                 $this->sendJson(['ok' => false, 'error' => 'Event not found.'], 404);
             }
@@ -380,6 +397,7 @@ final class EventsController extends Controller
             redirect('/events');
         }
 
+        AppointmentGmailNotify::notifyEventChange($actorId, $businessId, AppointmentGmailNotify::ACTION_DELETED, $event);
         Event::softDelete($businessId, $id, $actorId);
         audit('event_deleted', 'events', $id);
         GoogleCalendarSync::removeEvent($actorId, $id);

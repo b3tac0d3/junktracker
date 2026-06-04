@@ -24,6 +24,7 @@ $stateOptions = [
         <?php if (workspace_role() !== 'punch_only'): ?>
             <a class="btn btn-primary w-100 w-md-auto" href="<?= e(url('/time-tracking/create')) ?>"><i class="fas fa-plus me-2"></i>Add Time Entry</a>
         <?php endif; ?>
+        <a class="btn btn-outline-secondary w-100 w-md-auto" href="<?= e(url('/time-tracking/time-cards')) ?>"><i class="fas fa-id-card me-2"></i>Time Cards</a>
         <a class="btn btn-outline-secondary w-100 w-md-auto" href="<?= e(url('/time-tracking/punch-board')) ?>"><i class="fas fa-user-clock me-2"></i><?= e($canManageEmployees ? 'Punch Board' : 'My Punch Clock') ?></a>
     </div>
 </div>

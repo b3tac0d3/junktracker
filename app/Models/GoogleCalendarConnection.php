@@ -137,6 +137,88 @@ final class GoogleCalendarConnection
         $stmt->execute(['user_id' => $userId]);
     }
 
+    public static function appointmentGmailNotifyEnabled(int $userId): bool
+    {
+        if (!SchemaInspector::hasColumn('user_google_calendar_connections', 'appointment_gmail_notify_enabled')) {
+            return false;
+        }
+
+        $row = self::findByUserId($userId);
+
+        return $row !== null && (int) ($row['appointment_gmail_notify_enabled'] ?? 0) === 1;
+    }
+
+    /**
+     * @return list<string>
+     */
+    public static function appointmentGmailNotifyRecipients(int $userId): array
+    {
+        $row = self::findByUserId($userId);
+        if ($row === null) {
+            return [];
+        }
+
+        $rawList = '';
+        if (SchemaInspector::hasColumn('user_google_calendar_connections', 'appointment_gmail_notify_to')) {
+            $rawList = trim((string) ($row['appointment_gmail_notify_to'] ?? ''));
+        }
+
+        $recipients = [];
+        if ($rawList !== '') {
+            foreach (preg_split('/[\s,;]+/', $rawList) ?: [] as $part) {
+                $email = strtolower(trim((string) $part));
+                if ($email === '' || filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
+                    continue;
+                }
+                if (!in_array($email, $recipients, true)) {
+                    $recipients[] = $email;
+                }
+            }
+        }
+
+        if ($recipients === []) {
+            $fallback = strtolower(trim((string) ($row['google_account_email'] ?? '')));
+            if ($fallback !== '' && filter_var($fallback, FILTER_VALIDATE_EMAIL) !== false) {
+                $recipients[] = $fallback;
+            }
+        }
+
+        return $recipients;
+    }
+
+    public static function updateAppointmentGmailNotify(int $userId, bool $enabled, string $notifyTo): void
+    {
+        self::ensureTable();
+        if ($userId <= 0 || !SchemaInspector::hasTable('user_google_calendar_connections')) {
+            return;
+        }
+
+        if (
+            !SchemaInspector::hasColumn('user_google_calendar_connections', 'appointment_gmail_notify_enabled')
+            || !SchemaInspector::hasColumn('user_google_calendar_connections', 'appointment_gmail_notify_to')
+        ) {
+            return;
+        }
+
+        $notifyTo = trim($notifyTo);
+        if (strlen($notifyTo) > 500) {
+            $notifyTo = substr($notifyTo, 0, 500);
+        }
+
+        $stmt = Database::connection()->prepare(
+            'UPDATE user_google_calendar_connections
+             SET appointment_gmail_notify_enabled = :enabled,
+                 appointment_gmail_notify_to = :notify_to,
+                 updated_at = NOW()
+             WHERE user_id = :user_id'
+        );
+        $stmt->execute([
+            'user_id' => $userId,
+            'enabled' => $enabled ? 1 : 0,
+            'notify_to' => $notifyTo !== '' ? $notifyTo : null,
+        ]);
+    }
+
     /**
      * @return array<string, mixed>|null
      */

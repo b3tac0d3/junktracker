@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Models\Client;
+use App\Models\Employee;
 use App\Models\Expense;
 use App\Models\FormSelectValue;
 use App\Models\Invoice;
@@ -448,7 +449,21 @@ final class JobsController extends Controller
         $financial = Job::financialSummary($businessId, $jobId);
         $timeSummary = Job::timeSummary($businessId, $jobId);
         $timeLogs = Job::timeLogsByJob($businessId, $jobId);
+        $employeeLaborTotals = Job::laborTotalsByEmployee($businessId, $jobId);
+        $laborBonuses = Job::laborBonusesByJob($businessId, $jobId);
+        $laborBonusesByEmployeeId = [];
+        foreach ($laborBonuses as $bonusRow) {
+            if (!is_array($bonusRow)) {
+                continue;
+            }
+            $bonusEmployeeId = (int) ($bonusRow['employee_id'] ?? 0);
+            if ($bonusEmployeeId <= 0) {
+                continue;
+            }
+            $laborBonusesByEmployeeId[$bonusEmployeeId][] = $bonusRow;
+        }
         $expenses = Job::expensesByJob($businessId, $jobId);
+        $disposalWeightTotal = Job::disposalWeightTotalByJob($businessId, $jobId);
         $adjustments = Job::adjustmentsByJob($businessId, $jobId);
         $estimates = Invoice::listByJobAndType($businessId, $jobId, 'estimate');
         $invoices = Invoice::listByJobAndType($businessId, $jobId, 'invoice');
@@ -494,7 +509,10 @@ final class JobsController extends Controller
             'financial' => $financial,
             'timeSummary' => $timeSummary,
             'timeLogs' => $timeLogs,
+            'employeeLaborTotals' => $employeeLaborTotals,
+            'laborBonusesByEmployeeId' => $laborBonusesByEmployeeId,
             'expenses' => $expenses,
+            'disposalWeightTotal' => $disposalWeightTotal,
             'adjustments' => $adjustments,
             'assignedEmployees' => $assignedEmployees,
             'jobStatusOptions' => $jobStatusForSelect,
@@ -1022,15 +1040,28 @@ final class JobsController extends Controller
             return;
         }
 
-        $this->render('jobs/expense_form', [
-            'pageTitle' => 'Add Expense',
+        $form = $this->defaultExpenseForm();
+        $returnTab = request_detail_tab($this->jobAllowedTabs(), 'financial');
+        $pageTitle = 'Add Expense';
+        $preset = strtolower(trim((string) ($_GET['preset'] ?? '')));
+        if ($preset === 'bonus') {
+            $form['category'] = 'Bonus';
+            $returnTab = request_detail_tab($this->jobAllowedTabs(), 'labor');
+            $pageTitle = 'Add Bonus Payout';
+        }
+        $presetEmployeeId = (int) ($_GET['employee_id'] ?? 0);
+        if ($presetEmployeeId > 0) {
+            $form['employee_id'] = (string) $presetEmployeeId;
+        }
+
+        $this->render('jobs/expense_form', $this->expenseFormViewData($businessId, [
+            'pageTitle' => $pageTitle,
             'job' => $job,
             'actionUrl' => url('/jobs/' . (string) $jobId . '/expenses'),
-            'form' => $this->defaultExpenseForm(),
+            'form' => $form,
             'errors' => [],
-            'categoryOptions' => Expense::categoryOptions($businessId),
-            'returnTab' => request_detail_tab($this->jobAllowedTabs(), 'financial'),
-        ]);
+            'returnTab' => $returnTab,
+        ]));
     }
 
     public function storeExpense(array $params): void
@@ -1060,15 +1091,14 @@ final class JobsController extends Controller
         $form = $this->expenseFormFromPost($_POST);
         $errors = $this->validateExpenseForm($form);
         if ($errors !== []) {
-            $this->render('jobs/expense_form', [
-                'pageTitle' => 'Add Expense',
+            $this->render('jobs/expense_form', $this->expenseFormViewData($businessId, [
+                'pageTitle' => Expense::isBonusCategory((string) ($form['category'] ?? '')) ? 'Add Bonus Payout' : 'Add Expense',
                 'job' => $job,
                 'actionUrl' => url('/jobs/' . (string) $jobId . '/expenses'),
                 'form' => $form,
                 'errors' => $errors,
-                'categoryOptions' => Expense::categoryOptions($businessId),
                 'returnTab' => $this->jobReturnTab('financial'),
-            ]);
+            ]));
             return;
         }
 
@@ -1079,8 +1109,8 @@ final class JobsController extends Controller
         }
 
         audit('job_expense_created', 'jobs', $jobId, ['expense_id' => $expenseId, 'amount' => $form['amount'] ?? '']);
-        flash('success', 'Expense added.');
-        $this->redirectToJob($jobId, null, 'financial');
+        flash('success', Expense::isBonusCategory((string) ($form['category'] ?? '')) ? 'Bonus payout added.' : 'Expense added.');
+        $this->redirectToJob($jobId, null, $this->jobReturnTab('financial'));
     }
 
     public function editExpense(array $params): void
@@ -1110,17 +1140,16 @@ final class JobsController extends Controller
             return;
         }
 
-        $this->render('jobs/expense_form', [
-            'pageTitle' => 'Edit Expense',
+        $this->render('jobs/expense_form', $this->expenseFormViewData($businessId, [
+            'pageTitle' => Expense::isBonusCategory((string) ($expense['category'] ?? '')) ? 'Edit Bonus Payout' : 'Edit Expense',
             'mode' => 'edit',
             'job' => $job,
             'expenseId' => $expenseId,
             'actionUrl' => url('/jobs/' . (string) $jobId . '/expenses/' . (string) $expenseId . '/update'),
             'form' => $this->expenseFormFromModel($expense),
             'errors' => [],
-            'categoryOptions' => Expense::categoryOptions($businessId),
-            'returnTab' => request_detail_tab($this->jobAllowedTabs(), 'financial'),
-        ]);
+            'returnTab' => request_detail_tab($this->jobAllowedTabs(), Expense::isBonusCategory((string) ($expense['category'] ?? '')) ? 'labor' : 'financial'),
+        ]));
     }
 
     public function updateExpense(array $params): void
@@ -1158,28 +1187,27 @@ final class JobsController extends Controller
         $form = $this->expenseFormFromPost($_POST);
         $errors = $this->validateExpenseForm($form);
         if ($errors !== []) {
-            $this->render('jobs/expense_form', [
-                'pageTitle' => 'Edit Expense',
+            $this->render('jobs/expense_form', $this->expenseFormViewData($businessId, [
+                'pageTitle' => Expense::isBonusCategory((string) ($form['category'] ?? '')) ? 'Edit Bonus Payout' : 'Edit Expense',
                 'mode' => 'edit',
                 'job' => $job,
                 'expenseId' => $expenseId,
                 'actionUrl' => url('/jobs/' . (string) $jobId . '/expenses/' . (string) $expenseId . '/update'),
                 'form' => $form,
                 'errors' => $errors,
-                'categoryOptions' => Expense::categoryOptions($businessId),
                 'returnTab' => $this->jobReturnTab('financial'),
-            ]);
+            ]));
             return;
         }
 
         $updated = Job::updateExpense($businessId, $jobId, $expenseId, $this->expensePayloadForSave($form), auth_user_id() ?? 0);
         if ($updated) {
             audit('job_expense_updated', 'jobs', $jobId, ['expense_id' => $expenseId]);
-            flash('success', 'Expense updated.');
+            flash('success', Expense::isBonusCategory((string) ($form['category'] ?? '')) ? 'Bonus payout updated.' : 'Expense updated.');
         } else {
             flash('error', 'Unable to update expense.');
         }
-        $this->redirectToJob($jobId, null, 'financial');
+        $this->redirectToJob($jobId, null, $this->jobReturnTab('financial'));
     }
 
     public function showExpense(array $params): void
@@ -1520,6 +1548,8 @@ final class JobsController extends Controller
             'expense_date' => date('Y-m-d'),
             'amount' => '',
             'category' => '',
+            'weight' => '',
+            'employee_id' => '',
             'payment_method' => '',
             'note' => '',
         ];
@@ -1587,9 +1617,25 @@ final class JobsController extends Controller
             'expense_date' => trim((string) ($input['expense_date'] ?? '')),
             'amount' => trim((string) ($input['amount'] ?? '')),
             'category' => trim((string) ($input['category'] ?? '')),
+            'weight' => trim((string) ($input['weight'] ?? '')),
+            'employee_id' => trim((string) ($input['employee_id'] ?? '')),
             'payment_method' => trim((string) ($input['payment_method'] ?? '')),
             'note' => trim((string) ($input['note'] ?? '')),
         ];
+    }
+
+    /**
+     * @param array<string, mixed> $data
+     * @return array<string, mixed>
+     */
+    private function expenseFormViewData(int $businessId, array $data): array
+    {
+        return array_merge($data, [
+            'categoryOptions' => Expense::categoryOptions($businessId),
+            'expenseWeightEnabled' => Expense::supportsDisposalWeight(),
+            'expenseEmployeeEnabled' => Expense::supportsEmployeeLink(),
+            'employeeOptions' => Expense::supportsEmployeeLink() ? TimeEntry::employeeOptions($businessId) : [],
+        ]);
     }
 
     private function adjustmentFormFromPost(array $input): array
@@ -1608,10 +1654,15 @@ final class JobsController extends Controller
         $dateStamp = $dateRaw !== '' ? strtotime($dateRaw) : false;
         $date = $dateStamp === false ? '' : date('Y-m-d', $dateStamp);
 
+        $weight = $expense['weight'] ?? null;
+        $weightDisplay = $weight === null || $weight === '' ? '' : rtrim(rtrim(number_format((float) $weight, 3, '.', ''), '0'), '.');
+
         return [
             'expense_date' => $date,
             'amount' => number_format((float) ($expense['amount'] ?? 0), 2, '.', ''),
             'category' => trim((string) ($expense['category'] ?? '')),
+            'weight' => $weightDisplay,
+            'employee_id' => (int) ($expense['employee_id'] ?? 0) > 0 ? (string) ((int) $expense['employee_id']) : '',
             'payment_method' => trim((string) ($expense['payment_method'] ?? '')),
             'note' => trim((string) ($expense['note'] ?? '')),
         ];
@@ -1724,6 +1775,8 @@ final class JobsController extends Controller
             'expense_date' => $this->toDatabaseDate($form['expense_date']),
             'amount' => (float) $form['amount'],
             'category' => $form['category'],
+            'weight' => $form['weight'] ?? '',
+            'employee_id' => $form['employee_id'] ?? '',
             'payment_method' => $form['payment_method'],
             'note' => $form['note'],
         ];
@@ -1750,6 +1803,18 @@ final class JobsController extends Controller
 
         if (!is_numeric($form['amount']) || (float) $form['amount'] <= 0) {
             $errors['amount'] = 'Enter an amount greater than 0.';
+        }
+
+        Expense::validateDisposalWeight((string) ($form['category'] ?? ''), (string) ($form['weight'] ?? ''), $errors);
+        Expense::validateBonusEmployee((string) ($form['category'] ?? ''), $form['employee_id'] ?? '', $errors);
+
+        $businessId = current_business_id();
+        if (
+            Expense::isBonusCategory((string) ($form['category'] ?? ''))
+            && (int) ($form['employee_id'] ?? 0) > 0
+            && Employee::findForBusiness($businessId, (int) $form['employee_id']) === null
+        ) {
+            $errors['employee_id'] = 'Choose a valid employee.';
         }
 
         return $errors;

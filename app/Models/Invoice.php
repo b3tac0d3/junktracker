@@ -2035,6 +2035,150 @@ final class Invoice
         return $stmt->rowCount() > 0;
     }
 
+    public static function restore(int $businessId, int $invoiceId, int $actorUserId): bool
+    {
+        if (!SchemaInspector::hasTable('invoices') || !SchemaInspector::hasColumn('invoices', 'deleted_at')) {
+            return false;
+        }
+
+        $setParts = ['deleted_at = NULL'];
+        if (SchemaInspector::hasColumn('invoices', 'deleted_by')) {
+            $setParts[] = 'deleted_by = NULL';
+        }
+        if (SchemaInspector::hasColumn('invoices', 'updated_at')) {
+            $setParts[] = 'updated_at = NOW()';
+        }
+        if (SchemaInspector::hasColumn('invoices', 'updated_by')) {
+            $setParts[] = 'updated_by = :updated_by';
+        }
+
+        $whereParts = ['id = :invoice_id', 'deleted_at IS NOT NULL'];
+        if (SchemaInspector::hasColumn('invoices', 'business_id')) {
+            $whereParts[] = 'business_id = :business_id';
+        }
+
+        $sql = 'UPDATE invoices
+                SET ' . implode(', ', $setParts) . '
+                WHERE ' . implode(' AND ', $whereParts);
+        $stmt = Database::connection()->prepare($sql);
+
+        $params = [
+            'invoice_id' => $invoiceId,
+        ];
+        if (SchemaInspector::hasColumn('invoices', 'business_id')) {
+            $params['business_id'] = $businessId;
+        }
+        if (SchemaInspector::hasColumn('invoices', 'updated_by')) {
+            $params['updated_by'] = $actorUserId > 0 ? $actorUserId : null;
+        }
+
+        $stmt->execute($params);
+        return $stmt->rowCount() > 0;
+    }
+
+    public static function softDeleteByJob(int $businessId, int $jobId, int $actorUserId): int
+    {
+        if (
+            $jobId <= 0
+            || !SchemaInspector::hasTable('invoices')
+            || !SchemaInspector::hasColumn('invoices', 'job_id')
+            || !SchemaInspector::hasColumn('invoices', 'deleted_at')
+        ) {
+            return 0;
+        }
+
+        $setParts = ['deleted_at = NOW()'];
+        if (SchemaInspector::hasColumn('invoices', 'deleted_by')) {
+            $setParts[] = 'deleted_by = :deleted_by';
+        }
+        if (SchemaInspector::hasColumn('invoices', 'updated_at')) {
+            $setParts[] = 'updated_at = NOW()';
+        }
+        if (SchemaInspector::hasColumn('invoices', 'updated_by')) {
+            $setParts[] = 'updated_by = :updated_by';
+        }
+
+        $whereParts = ['job_id = :job_id', 'deleted_at IS NULL'];
+        if (SchemaInspector::hasColumn('invoices', 'business_id')) {
+            $whereParts[] = 'business_id = :business_id';
+        }
+        if (SchemaInspector::hasColumn('invoices', 'type')) {
+            $whereParts[] = "LOWER(i.type) IN ('invoice', 'estimate')";
+        }
+
+        $sql = 'UPDATE invoices i
+                SET ' . implode(', ', $setParts) . '
+                WHERE ' . implode(' AND ', $whereParts);
+        $stmt = Database::connection()->prepare($sql);
+
+        $params = [
+            'job_id' => $jobId,
+        ];
+        if (SchemaInspector::hasColumn('invoices', 'business_id')) {
+            $params['business_id'] = $businessId;
+        }
+        if (SchemaInspector::hasColumn('invoices', 'deleted_by')) {
+            $params['deleted_by'] = $actorUserId > 0 ? $actorUserId : null;
+        }
+        if (SchemaInspector::hasColumn('invoices', 'updated_by')) {
+            $params['updated_by'] = $actorUserId > 0 ? $actorUserId : null;
+        }
+
+        $stmt->execute($params);
+
+        return $stmt->rowCount();
+    }
+
+    public static function restoreByJob(int $businessId, int $jobId, int $actorUserId): int
+    {
+        if (
+            $jobId <= 0
+            || !SchemaInspector::hasTable('invoices')
+            || !SchemaInspector::hasColumn('invoices', 'job_id')
+            || !SchemaInspector::hasColumn('invoices', 'deleted_at')
+        ) {
+            return 0;
+        }
+
+        $setParts = ['deleted_at = NULL'];
+        if (SchemaInspector::hasColumn('invoices', 'deleted_by')) {
+            $setParts[] = 'deleted_by = NULL';
+        }
+        if (SchemaInspector::hasColumn('invoices', 'updated_at')) {
+            $setParts[] = 'updated_at = NOW()';
+        }
+        if (SchemaInspector::hasColumn('invoices', 'updated_by')) {
+            $setParts[] = 'updated_by = :updated_by';
+        }
+
+        $whereParts = ['job_id = :job_id', 'deleted_at IS NOT NULL'];
+        if (SchemaInspector::hasColumn('invoices', 'business_id')) {
+            $whereParts[] = 'business_id = :business_id';
+        }
+        if (SchemaInspector::hasColumn('invoices', 'type')) {
+            $whereParts[] = "LOWER(i.type) IN ('invoice', 'estimate')";
+        }
+
+        $sql = 'UPDATE invoices i
+                SET ' . implode(', ', $setParts) . '
+                WHERE ' . implode(' AND ', $whereParts);
+        $stmt = Database::connection()->prepare($sql);
+
+        $params = [
+            'job_id' => $jobId,
+        ];
+        if (SchemaInspector::hasColumn('invoices', 'business_id')) {
+            $params['business_id'] = $businessId;
+        }
+        if (SchemaInspector::hasColumn('invoices', 'updated_by')) {
+            $params['updated_by'] = $actorUserId > 0 ? $actorUserId : null;
+        }
+
+        $stmt->execute($params);
+
+        return $stmt->rowCount();
+    }
+
     public static function softDeletePayment(int $businessId, int $paymentId, int $actorUserId): bool
     {
         if (!SchemaInspector::hasTable('payments') || !SchemaInspector::hasColumn('payments', 'deleted_at')) {

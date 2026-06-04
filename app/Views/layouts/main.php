@@ -179,6 +179,7 @@ $navNotifications = is_array($navNotifications ?? null) ? $navNotifications : ['
                     <?php endif; ?>
                     <?php if (is_site_admin() && !$isPunchOnlyWorkspace): ?>
                         <li><a class="dropdown-item" href="<?= e(url('/site-admin/businesses')) ?>">Site Admin Dashboard</a></li>
+                        <li><a class="dropdown-item" href="<?= e(url('/dev')) ?>">Dev Tracker</a></li>
                     <?php endif; ?>
                     <li><hr class="dropdown-divider" /></li>
                     <li>
@@ -310,6 +311,9 @@ $navNotifications = is_array($navNotifications ?? null) ? $navNotifications : ['
                                 <div class="collapse" id="collapseTimeTracking" data-bs-parent="#sidenavAccordion">
                                     <nav class="sb-sidenav-menu-nested nav">
                                         <a class="nav-link jt-nav-sublink" href="<?= e(url('/time-tracking')) ?>">Time Log</a>
+                                        <?php if (!$isPunchOnlyWorkspace): ?>
+                                        <a class="nav-link jt-nav-sublink" href="<?= e(url('/time-tracking/time-cards')) ?>">Time Cards</a>
+                                        <?php endif; ?>
                                         <a class="nav-link jt-nav-sublink" href="<?= e(url('/time-tracking/punch-board')) ?>">Punch Board</a>
                                     </nav>
                                 </div>
@@ -326,6 +330,14 @@ $navNotifications = is_array($navNotifications ?? null) ? $navNotifications : ['
                             <?php if ($canAccessBusinessAdmin): ?>
                                 <div class="sb-sidenav-menu-heading">Admin</div>
                                 <a class="nav-link" href="<?= e(url('/admin')) ?>"><div class="sb-nav-link-icon"><i class="fas fa-gear"></i></div>Business Admin</a>
+                            <?php endif; ?>
+
+                            <?php if (is_site_admin()): ?>
+                                <div class="sb-sidenav-menu-heading">Dev</div>
+                                <a class="nav-link" href="<?= e(url('/dev')) ?>">
+                                    <div class="sb-nav-link-icon"><i class="fas fa-code-branch"></i></div>
+                                    Dev Tracker
+                                </a>
                             <?php endif; ?>
 
                         </div>

@@ -82,6 +82,30 @@ final class SalesController extends Controller
             }
         }
 
+        $fromJob = strtolower(trim((string) ($_GET['from'] ?? ''))) === 'job';
+        $jobIdPrefill = (int) ($_GET['job_id'] ?? 0);
+        if ($jobIdPrefill > 0) {
+            $job = Job::findForBusiness($businessId, $jobIdPrefill);
+            if ($job !== null) {
+                $jobTitle = trim((string) ($job['title'] ?? '')) ?: ('Job #' . (string) $jobIdPrefill);
+                $form['job_id'] = (string) $jobIdPrefill;
+                $form['job_title'] = $jobTitle;
+                if ($fromJob) {
+                    $form['from'] = 'job';
+                    $form['return_job_id'] = (string) $jobIdPrefill;
+                    $form['return_tab'] = $this->saleReturnTabFromRequest();
+                }
+                $jobClientId = (int) ($job['client_id'] ?? 0);
+                if ($jobClientId > 0 && trim((string) ($form['client_id'] ?? '')) === '') {
+                    $client = Client::findForBusiness($businessId, $jobClientId);
+                    if ($client !== null) {
+                        $form['client_id'] = (string) $jobClientId;
+                        $form['client_name'] = Client::displayName($client);
+                    }
+                }
+            }
+        }
+
         $this->render('sales/form', [
             'pageTitle' => 'Add Sale',
             'mode' => 'create',
@@ -141,10 +165,21 @@ final class SalesController extends Controller
                 continue;
             }
 
+            $jobDateRaw = trim((string) ($item['job_date'] ?? ''));
+            $jobDate = '';
+            if ($jobDateRaw !== '' && $jobDateRaw !== '0000-00-00') {
+                $stamp = strtotime($jobDateRaw . ' 12:00:00');
+                if ($stamp !== false) {
+                    $jobDate = date('m/d/Y', $stamp);
+                }
+            }
+
             $results[] = [
                 'id' => $id,
                 'title' => $title,
                 'city' => trim((string) ($item['city'] ?? '')),
+                'client_name' => trim((string) ($item['client_name'] ?? '')),
+                'job_date' => $jobDate,
             ];
         }
 
@@ -407,6 +442,9 @@ final class SalesController extends Controller
             'estate_sale_title' => '',
             'estate_sale_customer_name' => '',
             'notes' => '',
+            'from' => '',
+            'return_job_id' => '',
+            'return_tab' => '',
         ];
     }
 
@@ -422,6 +460,8 @@ final class SalesController extends Controller
         $estateSaleId = ((int) $estateSaleIdRaw) > 0 ? (string) ((int) $estateSaleIdRaw) : '';
         $estateSaleCustomerIdRaw = trim((string) ($input['estate_sale_customer_id'] ?? ''));
         $estateSaleCustomerId = ((int) $estateSaleCustomerIdRaw) > 0 ? (string) ((int) $estateSaleCustomerIdRaw) : '';
+        $returnJobIdRaw = trim((string) ($input['return_job_id'] ?? ''));
+        $returnJobId = ((int) $returnJobIdRaw) > 0 ? (string) ((int) $returnJobIdRaw) : '';
 
         return [
             'name' => trim((string) ($input['name'] ?? '')),
@@ -440,6 +480,9 @@ final class SalesController extends Controller
             'estate_sale_title' => trim((string) ($input['estate_sale_title'] ?? '')),
             'estate_sale_customer_name' => trim((string) ($input['estate_sale_customer_name'] ?? '')),
             'notes' => trim((string) ($input['notes'] ?? '')),
+            'from' => strtolower(trim((string) ($input['from'] ?? ''))),
+            'return_job_id' => $returnJobId,
+            'return_tab' => strtolower(trim((string) ($input['return_tab'] ?? ''))),
         ];
     }
 
@@ -634,6 +677,11 @@ final class SalesController extends Controller
 
     private function saleFormBackUrl(array $form): string
     {
+        $jobReturnUrl = $this->saleJobReturnUrl($form);
+        if ($jobReturnUrl !== null) {
+            return $jobReturnUrl;
+        }
+
         $estateSaleId = (int) ($form['estate_sale_id'] ?? 0);
         if ($estateSaleId > 0) {
             return url('/estate-sales/' . (string) $estateSaleId . '?tab=customers');
@@ -644,6 +692,10 @@ final class SalesController extends Controller
 
     private function saleFormBackLabel(array $form): string
     {
+        if ($this->saleJobReturnUrl($form) !== null) {
+            return 'Back to Job';
+        }
+
         return (int) ($form['estate_sale_id'] ?? 0) > 0 ? 'Back to Estate Sale' : 'Back to Sales';
     }
 
@@ -656,12 +708,52 @@ final class SalesController extends Controller
         ]);
         flash('success', $message);
 
+        $jobReturnPath = $this->saleJobReturnPath($form);
+        if ($jobReturnPath !== null) {
+            redirect($jobReturnPath);
+        }
+
         $estateSaleId = (int) ($form['estate_sale_id'] ?? 0);
         if ($estateSaleId > 0) {
             redirect('/estate-sales/' . (string) $estateSaleId . '?tab=customers');
         }
 
         redirect('/sales/' . (string) $saleId);
+    }
+
+    private function saleReturnTabFromRequest(): string
+    {
+        return request_detail_tab(['details', 'financial', 'transactions', 'labor'], 'transactions');
+    }
+
+    private function saleJobReturnPath(array $form): ?string
+    {
+        if (strtolower(trim((string) ($form['from'] ?? ''))) !== 'job') {
+            return null;
+        }
+
+        $jobId = (int) ($form['return_job_id'] ?? 0);
+        if ($jobId <= 0) {
+            $jobId = (int) ($form['job_id'] ?? 0);
+        }
+        if ($jobId <= 0) {
+            return null;
+        }
+
+        $tab = strtolower(trim((string) ($form['return_tab'] ?? '')));
+        $allowedTabs = ['details', 'financial', 'transactions', 'labor'];
+        if (!in_array($tab, $allowedTabs, true)) {
+            $tab = 'transactions';
+        }
+
+        return '/jobs/' . (string) $jobId . '?tab=' . $tab;
+    }
+
+    private function saleJobReturnUrl(array $form): ?string
+    {
+        $path = $this->saleJobReturnPath($form);
+
+        return $path !== null ? url($path) : null;
     }
 
     private function json(array $payload, int $status = 200): never

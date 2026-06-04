@@ -61,6 +61,124 @@ final class TimeTrackingController extends Controller
         ]);
     }
 
+    public function timeCards(): void
+    {
+        require_business_role(['general_user', 'admin']);
+
+        $businessId = current_business_id();
+        $canManageEmployees = $this->canManageEmployees();
+        $selfEmployee = $this->currentUserEmployee($businessId);
+        if (!$canManageEmployees && $selfEmployee === null) {
+            flash('error', 'No employee profile is linked to your user yet. Ask an admin to link one.');
+            redirect('/time-tracking');
+        }
+
+        $scopeEmployeeId = (!$canManageEmployees && $selfEmployee !== null) ? (int) ($selfEmployee['id'] ?? 0) : null;
+        $dateRange = $this->resolveTimeCardDateRange();
+        $employees = TimeEntry::timeCardsEmployeeRollup(
+            $businessId,
+            $dateRange['from_date'],
+            $dateRange['to_date'],
+            $scopeEmployeeId
+        );
+
+        $grandTotals = [
+            'employees' => count($employees),
+            'entry_count' => 0,
+            'open_entries' => 0,
+            'total_hours' => 0.0,
+            'payout_total' => 0.0,
+        ];
+        foreach ($employees as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $grandTotals['entry_count'] += (int) ($row['entry_count'] ?? 0);
+            $grandTotals['open_entries'] += (int) ($row['open_entries'] ?? 0);
+            $grandTotals['total_hours'] += (float) ($row['total_hours'] ?? 0);
+            $grandTotals['payout_total'] += (float) ($row['payout_total'] ?? 0);
+        }
+        $grandTotals['total_hours'] = round($grandTotals['total_hours'], 2);
+        $grandTotals['payout_total'] = round($grandTotals['payout_total'], 2);
+
+        $this->render('time_tracking/time_cards/index', [
+            'pageTitle' => 'Time Cards',
+            'employees' => $employees,
+            'grandTotals' => $grandTotals,
+            'fromDate' => $dateRange['from_date'],
+            'toDate' => $dateRange['to_date'],
+            'canManageEmployees' => $canManageEmployees,
+        ]);
+    }
+
+    public function timeCardEmployee(array $params): void
+    {
+        require_business_role(['general_user', 'admin']);
+
+        $employeeId = (int) ($params['employeeId'] ?? 0);
+        if ($employeeId <= 0) {
+            http_response_code(404);
+            $this->render('errors/404', ['pageTitle' => 'Not Found']);
+            return;
+        }
+
+        $businessId = current_business_id();
+        $canManageEmployees = $this->canManageEmployees();
+        $selfEmployee = $this->currentUserEmployee($businessId);
+        if (!$canManageEmployees && $selfEmployee === null) {
+            flash('error', 'No employee profile is linked to your user yet. Ask an admin to link one.');
+            redirect('/time-tracking');
+        }
+
+        $scopeEmployeeId = (!$canManageEmployees && $selfEmployee !== null) ? (int) ($selfEmployee['id'] ?? 0) : null;
+        if ($scopeEmployeeId !== null && $scopeEmployeeId > 0 && $employeeId !== $scopeEmployeeId) {
+            http_response_code(403);
+            flash('error', 'You can only view your own time card.');
+            redirect('/time-tracking/time-cards');
+        }
+
+        $employee = Employee::findForBusiness($businessId, $employeeId);
+        if ($employee === null) {
+            http_response_code(404);
+            $this->render('errors/404', ['pageTitle' => 'Not Found']);
+            return;
+        }
+
+        $dateRange = $this->resolveTimeCardDateRange();
+        $entries = TimeEntry::timeCardEntriesForEmployee(
+            $businessId,
+            $employeeId,
+            $dateRange['from_date'],
+            $dateRange['to_date']
+        );
+        $totals = TimeEntry::timeCardTotalsForEmployee(
+            $businessId,
+            $employeeId,
+            $dateRange['from_date'],
+            $dateRange['to_date']
+        );
+
+        $employeeName = trim((string) ($employee['display_name'] ?? ''));
+        if ($employeeName === '') {
+            $employeeName = trim((string) ($employee['employee_name'] ?? ''));
+        }
+        if ($employeeName === '') {
+            $employeeName = 'Employee #' . (string) $employeeId;
+        }
+
+        $this->render('time_tracking/time_cards/employee', [
+            'pageTitle' => 'Time Card',
+            'employee' => $employee,
+            'employeeName' => $employeeName,
+            'entries' => $entries,
+            'totals' => $totals,
+            'fromDate' => $dateRange['from_date'],
+            'toDate' => $dateRange['to_date'],
+            'hourlyRate' => (float) ($employee['hourly_rate'] ?? 0),
+            'canManageEmployees' => $canManageEmployees,
+        ]);
+    }
+
     public function punchBoard(): void
     {
         require_business_role(['punch_only', 'general_user', 'admin']);
@@ -1017,5 +1135,32 @@ final class TimeTrackingController extends Controller
         }
 
         return $path;
+    }
+
+    /**
+     * @return array{from_date: string, to_date: string}
+     */
+    private function resolveTimeCardDateRange(): array
+    {
+        $from = trim((string) ($_GET['from_date'] ?? date('Y-m-01')));
+        $to = trim((string) ($_GET['to_date'] ?? date('Y-m-d')));
+
+        $fromValid = preg_match('/^\d{4}-\d{2}-\d{2}$/', $from) === 1;
+        $toValid = preg_match('/^\d{4}-\d{2}-\d{2}$/', $to) === 1;
+        if (!$fromValid) {
+            $from = date('Y-m-01');
+        }
+        if (!$toValid) {
+            $to = date('Y-m-d');
+        }
+
+        if (strtotime($from) > strtotime($to)) {
+            [$from, $to] = [$to, $from];
+        }
+
+        return [
+            'from_date' => $from,
+            'to_date' => $to,
+        ];
     }
 }

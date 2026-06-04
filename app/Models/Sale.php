@@ -1135,6 +1135,24 @@ final class Sale
             ? 'j.title'
             : (SchemaInspector::hasColumn('jobs', 'name') ? 'j.name' : "CONCAT('Job #', j.id)");
         $citySql = SchemaInspector::hasColumn('jobs', 'city') ? 'j.city' : "''";
+        $createdDateSql = SchemaInspector::hasColumn('jobs', 'created_at') ? 'DATE(j.created_at)' : 'NULL';
+        $jobDateSql = SchemaInspector::hasColumn('jobs', 'scheduled_start_at')
+            ? 'DATE(j.scheduled_start_at)'
+            : (SchemaInspector::hasColumn('jobs', 'start_date') ? 'DATE(j.start_date)' : $createdDateSql);
+
+        $joins = [];
+        $clientNameSql = "''";
+        if (SchemaInspector::hasTable('clients') && SchemaInspector::hasColumn('jobs', 'client_id')) {
+            $join = 'LEFT JOIN clients c ON c.id = j.client_id';
+            if (SchemaInspector::hasColumn('clients', 'business_id') && SchemaInspector::hasColumn('jobs', 'business_id')) {
+                $join .= ' AND c.business_id = j.business_id';
+            }
+            if (SchemaInspector::hasColumn('clients', 'deleted_at')) {
+                $join .= ' AND c.deleted_at IS NULL';
+            }
+            $joins[] = $join;
+            $clientNameSql = "COALESCE(NULLIF(TRIM(CONCAT_WS(' ', c.first_name, c.last_name)), ''), NULLIF(c.company_name, ''), '')";
+        }
 
         $where = [];
         $where[] = SchemaInspector::hasColumn('jobs', 'business_id') ? 'j.business_id = :business_id' : '1=1';
@@ -1144,16 +1162,22 @@ final class Sale
             OR COALESCE({$titleSql}, '') LIKE :query_like_1
             OR CAST(j.id AS CHAR) LIKE :query_like_2
             OR COALESCE({$citySql}, '') LIKE :query_like_3
+            OR COALESCE({$clientNameSql}, '') LIKE :query_like_4
         )";
 
         $sql = "SELECT
                     j.id,
                     COALESCE(NULLIF({$titleSql}, ''), CONCAT('Job #', j.id)) AS title,
-                    {$citySql} AS city
-                FROM jobs j
-                WHERE " . implode(' AND ', $where) . '
-                ORDER BY j.id DESC
-                LIMIT :row_limit';
+                    {$citySql} AS city,
+                    {$clientNameSql} AS client_name,
+                    {$jobDateSql} AS job_date
+                FROM jobs j\n";
+        if ($joins !== []) {
+            $sql .= implode("\n", $joins) . "\n";
+        }
+        $sql .= 'WHERE ' . implode(' AND ', $where) . "\n";
+        $sql .= 'ORDER BY j.id DESC' . "\n";
+        $sql .= 'LIMIT :row_limit';
 
         $stmt = Database::connection()->prepare($sql);
         $queryLike = '%' . $query . '%';
@@ -1164,6 +1188,7 @@ final class Sale
         $stmt->bindValue(':query_like_1', $queryLike);
         $stmt->bindValue(':query_like_2', $queryLike);
         $stmt->bindValue(':query_like_3', $queryLike);
+        $stmt->bindValue(':query_like_4', $queryLike);
         $stmt->bindValue(':row_limit', max(1, min($limit, 100)), \PDO::PARAM_INT);
         $stmt->execute();
 

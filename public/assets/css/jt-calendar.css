@@ -230,6 +230,19 @@
   cursor: pointer;
 }
 
+/* Mobile day view: ensure time grid has height so events are not clipped at 0px */
+@media (max-width: 767.98px) {
+  .jt-calendar .fc-timeGridDay-view .fc-scrollgrid,
+  .jt-calendar .fc-timeGridWeek-view .fc-scrollgrid {
+    min-height: min(70dvh, 640px);
+  }
+
+  .jt-calendar .fc-timeGridDay-view .fc-timegrid-body,
+  .jt-calendar .fc-timeGridWeek-view .fc-timegrid-body {
+    min-height: min(65dvh, 600px);
+  }
+}
+
 .jt-cal-create-picker {
   position: fixed;
   inset: 0;

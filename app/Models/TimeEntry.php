@@ -1121,4 +1121,297 @@ final class TimeEntry
 
         return (int) $stmt->fetchColumn() > 0;
     }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    public static function timeCardsEmployeeRollup(int $businessId, string $fromDate, string $toDate, ?int $scopeEmployeeId = null): array
+    {
+        if (!SchemaInspector::hasTable('employees') || !SchemaInspector::hasTable('employee_time_entries')) {
+            return [];
+        }
+
+        if (!SchemaInspector::hasColumn('employee_time_entries', 'clock_in_at')) {
+            return [];
+        }
+
+        $durationExpr = self::sqlEffectiveDurationMinutes('t');
+        $clockInSql = 't.clock_in_at';
+        $clockOutSql = SchemaInspector::hasColumn('employee_time_entries', 'clock_out_at') ? 't.clock_out_at' : 'NULL';
+        $hourlyRateSql = SchemaInspector::hasColumn('employees', 'hourly_rate') ? 'COALESCE(e.hourly_rate, 0)' : '0';
+
+        $employeeNameParts = ['e.first_name', 'e.last_name'];
+        if (SchemaInspector::hasColumn('employees', 'suffix')) {
+            $employeeNameParts[] = 'e.suffix';
+        }
+        $employeeBaseNameSql = "COALESCE(NULLIF(TRIM(CONCAT_WS(' ', " . implode(', ', $employeeNameParts) . ")), ''), NULLIF(e.email, ''), CONCAT('Employee #', e.id))";
+        $employeeNameSql = $employeeBaseNameSql;
+        if (SchemaInspector::hasTable('users')) {
+            $linkedUserNameSql = "COALESCE(NULLIF(TRIM(CONCAT_WS(' ', u.first_name, u.last_name)), ''), NULLIF(u.email, ''))";
+            $employeeNameSql = "COALESCE(NULLIF({$linkedUserNameSql}, ''), {$employeeBaseNameSql})";
+        }
+
+        $timeJoin = ['t.employee_id = e.id'];
+        if (SchemaInspector::hasColumn('employee_time_entries', 'business_id') && SchemaInspector::hasColumn('employees', 'business_id')) {
+            $timeJoin[] = 't.business_id = e.business_id';
+        }
+        if (SchemaInspector::hasColumn('employee_time_entries', 'deleted_at')) {
+            $timeJoin[] = 't.deleted_at IS NULL';
+        }
+        $timeJoin[] = "DATE({$clockInSql}) >= :from_date";
+        $timeJoin[] = "DATE({$clockInSql}) <= :to_date";
+
+        $where = [];
+        $where[] = SchemaInspector::hasColumn('employees', 'business_id') ? 'e.business_id = :business_id' : '1=1';
+        $where[] = SchemaInspector::hasColumn('employees', 'deleted_at') ? 'e.deleted_at IS NULL' : '1=1';
+        if (SchemaInspector::hasColumn('employees', 'status')) {
+            $where[] = "COALESCE(e.status, 'active') = 'active'";
+        }
+        if (($scopeEmployeeId ?? 0) > 0) {
+            $where[] = 'e.id = :scope_employee_id';
+        }
+
+        $userJoin = SchemaInspector::hasTable('users') ? ' LEFT JOIN users u ON u.id = e.user_id AND u.deleted_at IS NULL' : '';
+
+        $sql = "SELECT
+                    e.id AS employee_id,
+                    {$employeeNameSql} AS employee_name,
+                    {$hourlyRateSql} AS hourly_rate,
+                    COUNT(t.id) AS entry_count,
+                    COALESCE(SUM({$durationExpr}), 0) AS total_minutes,
+                    ROUND(COALESCE(SUM(({$durationExpr} / 60) * {$hourlyRateSql}), 0), 2) AS payout_total,
+                    SUM(CASE WHEN {$clockOutSql} IS NULL AND t.id IS NOT NULL THEN 1 ELSE 0 END) AS open_entries
+                FROM employees e
+                {$userJoin}
+                LEFT JOIN employee_time_entries t ON " . implode(' AND ', $timeJoin) . '
+                WHERE ' . implode(' AND ', $where) . "
+                GROUP BY e.id, {$employeeNameSql}, {$hourlyRateSql}
+                ORDER BY employee_name ASC, e.id ASC";
+
+        $stmt = Database::connection()->prepare($sql);
+        if (SchemaInspector::hasColumn('employees', 'business_id')) {
+            $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
+        }
+        if (($scopeEmployeeId ?? 0) > 0) {
+            $stmt->bindValue(':scope_employee_id', (int) $scopeEmployeeId, \PDO::PARAM_INT);
+        }
+        $stmt->bindValue(':from_date', $fromDate);
+        $stmt->bindValue(':to_date', $toDate);
+        $stmt->execute();
+
+        $rows = $stmt->fetchAll();
+        if (!is_array($rows)) {
+            return [];
+        }
+
+        $out = [];
+        foreach ($rows as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $minutes = (int) ($row['total_minutes'] ?? 0);
+            $out[] = [
+                'employee_id' => (int) ($row['employee_id'] ?? 0),
+                'employee_name' => (string) ($row['employee_name'] ?? ''),
+                'hourly_rate' => (float) ($row['hourly_rate'] ?? 0),
+                'entry_count' => (int) ($row['entry_count'] ?? 0),
+                'open_entries' => (int) ($row['open_entries'] ?? 0),
+                'total_minutes' => $minutes,
+                'total_hours' => round($minutes / 60, 2),
+                'payout_total' => (float) ($row['payout_total'] ?? 0),
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    public static function timeCardEntriesForEmployee(
+        int $businessId,
+        int $employeeId,
+        string $fromDate,
+        string $toDate,
+        int $limit = 2000
+    ): array {
+        if ($employeeId <= 0 || !SchemaInspector::hasTable('employee_time_entries')) {
+            return [];
+        }
+
+        if (!SchemaInspector::hasColumn('employee_time_entries', 'clock_in_at')) {
+            return [];
+        }
+
+        $clockInSql = 't.clock_in_at';
+        $clockOutSql = SchemaInspector::hasColumn('employee_time_entries', 'clock_out_at') ? 't.clock_out_at' : 'NULL';
+        $durationExpr = self::sqlEffectiveDurationMinutes('t');
+        $isNonJobSql = SchemaInspector::hasColumn('employee_time_entries', 'is_non_job') ? 't.is_non_job' : '0';
+        $notesSql = SchemaInspector::hasColumn('employee_time_entries', 'notes') ? 't.notes' : "''";
+        $hourlyRateSql = SchemaInspector::hasColumn('employees', 'hourly_rate') ? 'COALESCE(e.hourly_rate, 0)' : '0';
+
+        $joinSql = ' LEFT JOIN employees e ON e.id = t.employee_id';
+        if (SchemaInspector::hasColumn('employees', 'business_id') && SchemaInspector::hasColumn('employee_time_entries', 'business_id')) {
+            $joinSql .= ' AND e.business_id = t.business_id';
+        }
+        if (SchemaInspector::hasColumn('employees', 'deleted_at')) {
+            $joinSql .= ' AND e.deleted_at IS NULL';
+        }
+
+        $jobTitleSql = "'Non-Job Time'";
+        if (SchemaInspector::hasTable('jobs') && SchemaInspector::hasColumn('employee_time_entries', 'job_id')) {
+            $jobTitleField = SchemaInspector::hasColumn('jobs', 'title')
+                ? 'j.title'
+                : (SchemaInspector::hasColumn('jobs', 'name') ? 'j.name' : "CONCAT('Job #', j.id)");
+            $joinDeleted = SchemaInspector::hasColumn('jobs', 'deleted_at') ? 'AND j.deleted_at IS NULL' : '';
+            $joinSql .= " LEFT JOIN jobs j ON j.id = t.job_id {$joinDeleted}";
+            $jobTitleSql = "CASE WHEN COALESCE({$isNonJobSql}, 0) = 1 THEN 'Non-Job Time' WHEN t.job_id IS NOT NULL THEN COALESCE(NULLIF({$jobTitleField}, ''), CONCAT('Job #', j.id)) ELSE 'Non-Job Time' END";
+        }
+        if (
+            SchemaInspector::hasColumn('employee_time_entries', 'estate_sale_id')
+            && SchemaInspector::hasTable('estate_sales')
+        ) {
+            $estateSaleTitleField = SchemaInspector::hasColumn('estate_sales', 'title') ? 'es.title' : "CONCAT('Estate Sale #', es.id)";
+            $estateJoinDeleted = SchemaInspector::hasColumn('estate_sales', 'deleted_at') ? 'AND es.deleted_at IS NULL' : '';
+            $joinSql .= " LEFT JOIN estate_sales es ON es.id = t.estate_sale_id {$estateJoinDeleted}";
+            $estateTitleSql = "COALESCE(NULLIF({$estateSaleTitleField}, ''), CONCAT('Estate Sale #', t.estate_sale_id))";
+            $jobTitleSql = "CASE
+                WHEN COALESCE({$isNonJobSql}, 0) = 1 THEN 'Non-Job Time'
+                WHEN t.estate_sale_id IS NOT NULL THEN {$estateTitleSql}
+                WHEN t.job_id IS NOT NULL THEN {$jobTitleSql}
+                ELSE 'Non-Job Time'
+            END";
+        }
+
+        $where = [];
+        $where[] = SchemaInspector::hasColumn('employee_time_entries', 'business_id') ? 't.business_id = :business_id' : '1=1';
+        $where[] = SchemaInspector::hasColumn('employee_time_entries', 'employee_id') ? 't.employee_id = :employee_id' : '1=1';
+        $where[] = SchemaInspector::hasColumn('employee_time_entries', 'deleted_at') ? 't.deleted_at IS NULL' : '1=1';
+        $where[] = "DATE({$clockInSql}) >= :from_date";
+        $where[] = "DATE({$clockInSql}) <= :to_date";
+
+        $sql = "SELECT
+                    t.id,
+                    t.employee_id,
+                    t.job_id,
+                    {$clockInSql} AS clock_in_at,
+                    {$clockOutSql} AS clock_out_at,
+                    {$durationExpr} AS duration_minutes,
+                    {$isNonJobSql} AS is_non_job,
+                    {$notesSql} AS notes,
+                    {$jobTitleSql} AS job_title,
+                    {$hourlyRateSql} AS hourly_rate,
+                    ROUND(({$durationExpr} / 60) * {$hourlyRateSql}, 2) AS payout_total
+                FROM employee_time_entries t
+                {$joinSql}
+                WHERE " . implode(' AND ', $where) . "
+                ORDER BY {$clockInSql} DESC, t.id DESC
+                LIMIT :row_limit";
+
+        $stmt = Database::connection()->prepare($sql);
+        if (SchemaInspector::hasColumn('employee_time_entries', 'business_id')) {
+            $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
+        }
+        $stmt->bindValue(':employee_id', $employeeId, \PDO::PARAM_INT);
+        $stmt->bindValue(':from_date', $fromDate);
+        $stmt->bindValue(':to_date', $toDate);
+        $stmt->bindValue(':row_limit', max(1, min($limit, 5000)), \PDO::PARAM_INT);
+        $stmt->execute();
+
+        $rows = $stmt->fetchAll();
+        return is_array($rows) ? $rows : [];
+    }
+
+    /**
+     * @return array{entry_count: int, open_entries: int, total_minutes: int, total_hours: float, payout_total: float}
+     */
+    public static function timeCardTotalsForEmployee(int $businessId, int $employeeId, string $fromDate, string $toDate): array
+    {
+        $empty = [
+            'entry_count' => 0,
+            'open_entries' => 0,
+            'total_minutes' => 0,
+            'total_hours' => 0.0,
+            'payout_total' => 0.0,
+        ];
+
+        if ($employeeId <= 0 || !SchemaInspector::hasTable('employee_time_entries')) {
+            return $empty;
+        }
+
+        if (!SchemaInspector::hasColumn('employee_time_entries', 'clock_in_at')) {
+            return $empty;
+        }
+
+        $durationExpr = self::sqlEffectiveDurationMinutes('t');
+        $clockInSql = 't.clock_in_at';
+        $clockOutSql = SchemaInspector::hasColumn('employee_time_entries', 'clock_out_at') ? 't.clock_out_at' : 'NULL';
+        $hourlyRateSql = SchemaInspector::hasColumn('employees', 'hourly_rate') ? 'COALESCE(e.hourly_rate, 0)' : '0';
+
+        $joinSql = ' LEFT JOIN employees e ON e.id = t.employee_id';
+        if (SchemaInspector::hasColumn('employees', 'business_id') && SchemaInspector::hasColumn('employee_time_entries', 'business_id')) {
+            $joinSql .= ' AND e.business_id = t.business_id';
+        }
+
+        $where = [];
+        $where[] = SchemaInspector::hasColumn('employee_time_entries', 'business_id') ? 't.business_id = :business_id' : '1=1';
+        $where[] = SchemaInspector::hasColumn('employee_time_entries', 'employee_id') ? 't.employee_id = :employee_id' : '1=1';
+        $where[] = SchemaInspector::hasColumn('employee_time_entries', 'deleted_at') ? 't.deleted_at IS NULL' : '1=1';
+        $where[] = "DATE({$clockInSql}) >= :from_date";
+        $where[] = "DATE({$clockInSql}) <= :to_date";
+
+        $sql = "SELECT
+                    COUNT(*) AS entry_count,
+                    SUM(CASE WHEN {$clockOutSql} IS NULL THEN 1 ELSE 0 END) AS open_entries,
+                    COALESCE(SUM({$durationExpr}), 0) AS total_minutes,
+                    ROUND(COALESCE(SUM(({$durationExpr} / 60) * {$hourlyRateSql}), 0), 2) AS payout_total
+                FROM employee_time_entries t
+                {$joinSql}
+                WHERE " . implode(' AND ', $where);
+
+        $stmt = Database::connection()->prepare($sql);
+        if (SchemaInspector::hasColumn('employee_time_entries', 'business_id')) {
+            $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
+        }
+        $stmt->bindValue(':employee_id', $employeeId, \PDO::PARAM_INT);
+        $stmt->bindValue(':from_date', $fromDate);
+        $stmt->bindValue(':to_date', $toDate);
+        $stmt->execute();
+
+        $row = $stmt->fetch();
+        if (!is_array($row)) {
+            return $empty;
+        }
+
+        $minutes = (int) ($row['total_minutes'] ?? 0);
+
+        return [
+            'entry_count' => (int) ($row['entry_count'] ?? 0),
+            'open_entries' => (int) ($row['open_entries'] ?? 0),
+            'total_minutes' => $minutes,
+            'total_hours' => round($minutes / 60, 2),
+            'payout_total' => (float) ($row['payout_total'] ?? 0),
+        ];
+    }
+
+    private static function sqlEffectiveDurationMinutes(string $alias = 't'): string
+    {
+        $clockIn = "{$alias}.clock_in_at";
+        $clockOut = SchemaInspector::hasColumn('employee_time_entries', 'clock_out_at')
+            ? "{$alias}.clock_out_at"
+            : 'NULL';
+
+        if (!SchemaInspector::hasColumn('employee_time_entries', 'duration_minutes')) {
+            return "CASE
+                WHEN {$clockOut} IS NOT NULL THEN GREATEST(TIMESTAMPDIFF(MINUTE, {$clockIn}, {$clockOut}), 0)
+                ELSE GREATEST(TIMESTAMPDIFF(MINUTE, {$clockIn}, NOW()), 0)
+            END";
+        }
+
+        return "CASE
+            WHEN {$alias}.duration_minutes IS NOT NULL AND {$alias}.duration_minutes > 0 THEN {$alias}.duration_minutes
+            WHEN {$clockOut} IS NOT NULL THEN GREATEST(TIMESTAMPDIFF(MINUTE, {$clockIn}, {$clockOut}), 0)
+            ELSE GREATEST(TIMESTAMPDIFF(MINUTE, {$clockIn}, NOW()), 0)
+        END";
+    }
 }

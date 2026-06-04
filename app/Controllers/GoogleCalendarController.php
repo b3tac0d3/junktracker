@@ -64,7 +64,11 @@ final class GoogleCalendarController extends Controller
         }
 
         $email = trim((string) ($result['email'] ?? ''));
-        flash('success', $email !== '' ? 'Google Calendar connected as ' . $email . '.' : 'Google Calendar connected.');
+        $gmailWarning = trim((string) ($result['gmail_warning'] ?? ''));
+        if ($gmailWarning !== '') {
+            flash('info', $gmailWarning);
+        }
+        flash('success', $email !== '' ? 'Google connected as ' . $email . ' (Calendar + Gmail).' : 'Google connected.');
         redirect('/settings');
     }
 
@@ -96,6 +100,31 @@ final class GoogleCalendarController extends Controller
         $businessId = current_business_id();
         $result = GoogleCalendarSync::backfillUpcoming($userId, $businessId, 90);
 
+        $this->finishBackfillResponse($result, 'upcoming');
+    }
+
+    public function backfillPast(): void
+    {
+        require_auth();
+
+        if (!verify_csrf($_POST['csrf_token'] ?? null)) {
+            flash('error', 'Session expired. Please try again.');
+            redirect('/settings');
+        }
+
+        $userId = (int) (auth_user_id() ?? 0);
+        $businessId = current_business_id();
+        $pastDays = (int) ($_POST['past_days'] ?? 365);
+        $result = GoogleCalendarSync::backfillPast($userId, $businessId, $pastDays);
+
+        $this->finishBackfillResponse($result, 'past', $pastDays);
+    }
+
+    /**
+     * @param array{ok: bool, synced?: int, skipped?: int, errors?: list<string>, error?: string} $result
+     */
+    private function finishBackfillResponse(array $result, string $range, int $pastDays = 365): void
+    {
         if (!$result['ok']) {
             $errors = is_array($result['errors'] ?? null) ? $result['errors'] : [];
             $combined = strtolower(implode(' ', $errors));
@@ -107,14 +136,25 @@ final class GoogleCalendarController extends Controller
             } elseif ($errors !== []) {
                 flash('error', 'Sync finished with errors: ' . implode(' ', array_slice($errors, 0, 3)));
             } else {
-                flash('error', (string) ($result['error'] ?? 'Unable to sync upcoming events.'));
+                $fallback = $range === 'past' ? 'Unable to sync past events.' : 'Unable to sync upcoming events.';
+                flash('error', (string) ($result['error'] ?? $fallback));
             }
             redirect('/settings');
         }
 
         $synced = (int) ($result['synced'] ?? 0);
         $skipped = (int) ($result['skipped'] ?? 0);
-        flash('success', 'Synced ' . (string) $synced . ' upcoming event(s)' . ($skipped > 0 ? ' (' . (string) $skipped . ' skipped).' : '.'));
+        if ($range === 'past') {
+            $pastDays = max(1, min($pastDays, 3650));
+            flash(
+                'success',
+                'Synced ' . (string) $synced . ' past event(s) from the last ' . (string) $pastDays . ' day(s)'
+                    . ($skipped > 0 ? ' (' . (string) $skipped . ' skipped).' : '.')
+            );
+        } else {
+            flash('success', 'Synced ' . (string) $synced . ' upcoming event(s)' . ($skipped > 0 ? ' (' . (string) $skipped . ' skipped).' : '.'));
+        }
+
         redirect('/settings');
     }
 }

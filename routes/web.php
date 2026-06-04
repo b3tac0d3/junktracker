@@ -14,6 +14,7 @@ use App\Controllers\AdminExportController;
 use App\Controllers\BillingController;
 use App\Controllers\ClientPortalController;
 use App\Controllers\CronController;
+use App\Controllers\DevTrackerController;
 use App\Controllers\DeliveriesController;
 use App\Controllers\EstateSalesController;
 use App\Controllers\EstateSaleCustomersController;
@@ -53,6 +54,8 @@ $router->get('/settings/google-calendar/connect', [GoogleCalendarController::cla
 $router->get('/settings/google-calendar/callback', [GoogleCalendarController::class, 'callback']);
 $router->post('/settings/google-calendar/disconnect', [GoogleCalendarController::class, 'disconnect']);
 $router->post('/settings/google-calendar/backfill', [GoogleCalendarController::class, 'backfill']);
+$router->post('/settings/google-calendar/backfill-past', [GoogleCalendarController::class, 'backfillPast']);
+$router->post('/settings/google-appointment-gmail', [SettingsController::class, 'updateGoogleAppointmentGmail']);
 $router->get('/search', [SearchController::class, 'index']);
 $router->get('/events', [EventsController::class, 'index']);
 $router->get('/events/feed', [EventsController::class, 'feed']);
@@ -77,6 +80,15 @@ $router->post('/site-admin/businesses/{id}/update', [SiteAdminController::class,
 $router->post('/site-admin/businesses/{id}/toggle-active', [SiteAdminController::class, 'toggleBusinessActive']);
 $router->post('/site-admin/switch-business', [SiteAdminController::class, 'switchBusiness']);
 $router->post('/site-admin/exit-workspace', [SiteAdminController::class, 'exitWorkspace']);
+
+$router->get('/dev', [DevTrackerController::class, 'index']);
+$router->get('/dev/create', [DevTrackerController::class, 'create']);
+$router->post('/dev', [DevTrackerController::class, 'store']);
+$router->get('/dev/{id}/edit', [DevTrackerController::class, 'edit']);
+$router->post('/dev/{id}/update', [DevTrackerController::class, 'update']);
+$router->post('/dev/{id}/quick-status', [DevTrackerController::class, 'quickStatus']);
+$router->post('/dev/{id}/delete', [DevTrackerController::class, 'delete']);
+$router->get('/dev/{id}', [DevTrackerController::class, 'show']);
 
 $router->get('/bolo', [BoloController::class, 'index']);
 
@@ -183,6 +195,8 @@ $router->get('/time-tracking', [TimeTrackingController::class, 'index']);
 $router->get('/time-tracking/punch-board', [TimeTrackingController::class, 'punchBoard']);
 $router->get('/punch-board', [TimeTrackingController::class, 'punchBoard']);
 $router->get('/time-tracking/create', [TimeTrackingController::class, 'create']);
+$router->get('/time-tracking/time-cards', [TimeTrackingController::class, 'timeCards']);
+$router->get('/time-tracking/time-cards/{employeeId}', [TimeTrackingController::class, 'timeCardEmployee']);
 $router->get('/time-tracking/job-search', [TimeTrackingController::class, 'jobSearch']);
 $router->post('/time-tracking', [TimeTrackingController::class, 'store']);
 $router->post('/time-tracking/punch-in', [TimeTrackingController::class, 'punchIn']);

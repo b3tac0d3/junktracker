@@ -136,6 +136,29 @@ window.addEventListener('DOMContentLoaded', () => {
     };
   };
 
+  let calendar;
+  let layoutRefreshTimer = null;
+  /** Mobile day/week grids can render before layout settles; reflow fixes missing events. */
+  const scheduleCalendarLayoutRefresh = (refetch = false) => {
+    if (!calendar) {
+      return;
+    }
+    if (layoutRefreshTimer) {
+      window.clearTimeout(layoutRefreshTimer);
+    }
+    layoutRefreshTimer = window.setTimeout(() => {
+      layoutRefreshTimer = null;
+      try {
+        calendar.updateSize();
+        if (refetch) {
+          calendar.refetchEvents();
+        }
+      } catch (err) {
+        /* ignore */
+      }
+    }, 60);
+  };
+
   const calendarCreateTypes = <?= json_encode($calendarCreateTypes, JSON_UNESCAPED_SLASHES) ?>;
 
   const formatAtParam = (date) => {
@@ -291,7 +314,6 @@ window.addEventListener('DOMContentLoaded', () => {
     eventsScreen.classList.toggle('jt-events-mobile-month-fullscreen', mobileMedia.matches && isMonthView);
   };
 
-  let calendar;
   calendar = new FullCalendar.Calendar(el, {
     // Mobile: segmented Day / Week / Month / List; default Day on phones.
     initialView: isMobile ? 'timeGridDay' : 'dayGridMonth',
@@ -314,11 +336,13 @@ window.addEventListener('DOMContentLoaded', () => {
     navLinks: true,
     navLinkDayClick: (date) => {
       calendar.changeView('timeGridDay', date);
+      scheduleCalendarLayoutRefresh();
     },
     dateClick: (info) => {
       const viewType = info.view.type;
       if (viewType === 'dayGridMonth' || viewType === 'dayGridWeek') {
         calendar.changeView('timeGridDay', info.date);
+        scheduleCalendarLayoutRefresh();
         return;
       }
       if (viewType === 'timeGridDay' || viewType === 'timeGridWeek') {
@@ -344,6 +368,12 @@ window.addEventListener('DOMContentLoaded', () => {
     datesSet: () => {
       syncMobileViewButtons();
       syncMobileMonthFullscreen();
+      scheduleCalendarLayoutRefresh();
+    },
+    loading: (isLoading) => {
+      if (!isLoading) {
+        scheduleCalendarLayoutRefresh();
+      }
     },
     events: (info, success, failure) => {
       const params = new URLSearchParams();
@@ -463,12 +493,15 @@ window.addEventListener('DOMContentLoaded', () => {
   });
 
   calendar.render();
+  scheduleCalendarLayoutRefresh();
+  window.requestAnimationFrame(() => scheduleCalendarLayoutRefresh());
 
   document.querySelectorAll('.jt-cal-view-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
       const view = btn.getAttribute('data-jt-cal-view');
       if (view) {
         calendar.changeView(view);
+        scheduleCalendarLayoutRefresh();
       }
     });
   });
@@ -477,7 +510,15 @@ window.addEventListener('DOMContentLoaded', () => {
   mobileMedia.addEventListener('change', () => {
     syncMobileViewButtons();
     syncMobileMonthFullscreen();
+    scheduleCalendarLayoutRefresh();
   });
+  window.addEventListener('resize', debounce(() => scheduleCalendarLayoutRefresh(), 150));
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      scheduleCalendarLayoutRefresh(true);
+    }
+  });
+  window.addEventListener('pageshow', () => scheduleCalendarLayoutRefresh(true));
 
   const refetch = () => calendar.refetchEvents();
   document.getElementById('jt-src-events')?.addEventListener('change', refetch);
@@ -501,6 +542,7 @@ window.addEventListener('DOMContentLoaded', () => {
         caret.classList.toggle('fa-chevron-up', !filterPanel.classList.contains('d-none'));
         caret.classList.toggle('fa-chevron-down', filterPanel.classList.contains('d-none'));
       }
+      scheduleCalendarLayoutRefresh();
     };
     if (filterToggle) {
       filterToggle.addEventListener('click', togglePanel);

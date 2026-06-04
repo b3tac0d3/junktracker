@@ -90,7 +90,21 @@ final class GoogleCalendarSync
             'token_expires_at' => self::expiresAtFromSeconds((int) ($token['expires_in'] ?? 0)),
         ]);
 
+        $gmailCheck = \Core\GmailApi::verifySendAccess($accessToken);
+        if (!$gmailCheck['ok']) {
+            return [
+                'ok' => true,
+                'email' => $email,
+                'gmail_warning' => 'Calendar connected, but Gmail send was not granted. Re-connect after adding the Gmail scope in Google Cloud, or appointment emails will not send.',
+            ];
+        }
+
         return ['ok' => true, 'email' => $email];
+    }
+
+    public static function accessTokenForUser(int $userId): string
+    {
+        return self::resolveAccessTokenForUser($userId);
     }
 
     public static function disconnect(int $userId): void
@@ -104,6 +118,31 @@ final class GoogleCalendarSync
      */
     public static function backfillUpcoming(int $userId, int $businessId, int $days = 90): array
     {
+        $start = date('Y-m-d 00:00:00');
+        $end = date('Y-m-d 23:59:59', strtotime('+' . max(1, $days) . ' days'));
+
+        return self::backfillInRange($userId, $businessId, $start, $end);
+    }
+
+    /**
+     * Push events and scheduled jobs with start times before today (default: last 365 days).
+     *
+     * @return array{ok: bool, synced?: int, skipped?: int, errors?: list<string>, error?: string}
+     */
+    public static function backfillPast(int $userId, int $businessId, int $pastDays = 365): array
+    {
+        $pastDays = max(1, min($pastDays, 3650));
+        $start = date('Y-m-d 00:00:00', strtotime('-' . (string) $pastDays . ' days'));
+        $end = date('Y-m-d 00:00:00');
+
+        return self::backfillInRange($userId, $businessId, $start, $end);
+    }
+
+    /**
+     * @return array{ok: bool, synced?: int, skipped?: int, errors?: list<string>, error?: string}
+     */
+    public static function backfillInRange(int $userId, int $businessId, string $start, string $end): array
+    {
         if ($userId <= 0 || $businessId <= 0) {
             return ['ok' => false, 'error' => 'Invalid user or business.'];
         }
@@ -112,8 +151,6 @@ final class GoogleCalendarSync
             return ['ok' => false, 'error' => 'Connect Google Calendar first.'];
         }
 
-        $start = date('Y-m-d 00:00:00');
-        $end = date('Y-m-d 23:59:59', strtotime('+' . max(1, $days) . ' days'));
         $rows = Event::range($businessId, $start, $end, []);
 
         $synced = 0;
@@ -518,7 +555,7 @@ final class GoogleCalendarSync
         return $payload;
     }
 
-    private static function accessTokenForUser(int $userId): string
+    private static function resolveAccessTokenForUser(int $userId): string
     {
         $connection = GoogleCalendarConnection::findByUserId($userId);
         if ($connection === null) {

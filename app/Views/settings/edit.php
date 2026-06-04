@@ -96,7 +96,7 @@ $googleCalendarCalendarId = trim((string) ($googleCalendarCalendarId ?? 'primary
     </div>
     <div class="card-body">
         <p class="small muted mb-3">
-            Push JunkTracker appointments and scheduled jobs to your Google Calendar. Changes in JunkTracker update Google automatically.
+            Connect Google to sync appointments to Calendar and optionally send Gmail updates when appointments are added, changed, or removed.
         </p>
 
         <?php if (!$googleCalendarConfigured): ?>
@@ -109,8 +109,12 @@ $googleCalendarCalendarId = trim((string) ($googleCalendarCalendarId ?? 'primary
                 <code><?= e(absolute_url('/settings/google-calendar/callback')) ?></code>
             </p>
         <?php endif; ?>
+        <?php
+        $appointmentGmailNotifyEnabled = (bool) ($appointmentGmailNotifyEnabled ?? false);
+        $appointmentGmailNotifyTo = trim((string) ($appointmentGmailNotifyTo ?? ''));
+        ?>
         <?php if ($googleCalendarConfigured && $googleCalendarConnected): ?>
-            <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
                 <div>
                     <div class="fw-semibold">Connected</div>
                     <div class="small text-muted">
@@ -118,17 +122,69 @@ $googleCalendarCalendarId = trim((string) ($googleCalendarCalendarId ?? 'primary
                         · Calendar: <code><?= e($googleCalendarCalendarId) ?></code>
                     </div>
                 </div>
-                <div class="d-flex flex-wrap gap-2">
+                <div class="d-flex flex-wrap gap-2 align-items-center">
                     <form method="post" action="<?= e(url('/settings/google-calendar/backfill')) ?>">
                         <?= csrf_field() ?>
-                        <button type="submit" class="btn btn-outline-primary btn-sm">Sync upcoming events</button>
+                        <button type="submit" class="btn btn-outline-primary btn-sm">Sync upcoming (90 days)</button>
                     </form>
-                    <form method="post" action="<?= e(url('/settings/google-calendar/disconnect')) ?>" onsubmit="return confirm('Disconnect Google Calendar? Existing Google events will not be removed automatically.');">
+                    <form
+                        method="post"
+                        action="<?= e(url('/settings/google-calendar/backfill-past')) ?>"
+                        class="d-flex flex-wrap gap-2 align-items-center"
+                        onsubmit="return confirm('Send past JunkTracker events and scheduled jobs to Google Calendar? This may take a while for large histories.');"
+                    >
+                        <?= csrf_field() ?>
+                        <input type="hidden" name="past_days" value="365">
+                        <button type="submit" class="btn btn-outline-primary btn-sm">Sync past (365 days)</button>
+                    </form>
+                    <form method="post" action="<?= e(url('/settings/google-calendar/disconnect')) ?>" onsubmit="return confirm('Disconnect Google? Calendar links and Gmail notifications will stop.');">
                         <?= csrf_field() ?>
                         <button type="submit" class="btn btn-outline-secondary btn-sm">Disconnect</button>
                     </form>
                 </div>
             </div>
+
+            <hr class="my-4">
+
+            <h3 class="h6 mb-2"><i class="fas fa-envelope me-2"></i>Appointment Gmail notifications</h3>
+            <p class="small text-muted mb-3">
+                When enabled, JunkTracker sends email through your connected Gmail when <strong>appointments</strong> are created, updated, cancelled, or deleted.
+                Leave recipients blank to notify your connected Google address, or enter comma-separated emails.
+            </p>
+            <form method="post" action="<?= e(url('/settings/google-appointment-gmail')) ?>" class="row g-3">
+                <?= csrf_field() ?>
+                <div class="col-12">
+                    <div class="form-check">
+                        <input
+                            class="form-check-input"
+                            type="checkbox"
+                            name="appointment_gmail_notify_enabled"
+                            id="appointment-gmail-notify-enabled"
+                            value="1"
+                            <?= $appointmentGmailNotifyEnabled ? 'checked' : '' ?>
+                        />
+                        <label class="form-check-label" for="appointment-gmail-notify-enabled">Send Gmail updates for appointments</label>
+                    </div>
+                </div>
+                <div class="col-12 col-lg-8">
+                    <label class="form-label fw-semibold" for="appointment-gmail-notify-to">Notify these addresses</label>
+                    <input
+                        id="appointment-gmail-notify-to"
+                        type="text"
+                        name="appointment_gmail_notify_to"
+                        class="form-control"
+                        value="<?= e($appointmentGmailNotifyTo) ?>"
+                        placeholder="office@example.com, team@example.com (optional)"
+                        maxlength="500"
+                    />
+                </div>
+                <div class="col-12">
+                    <button type="submit" class="btn btn-primary btn-sm">Save Gmail notification settings</button>
+                </div>
+            </form>
+            <p class="small text-muted mt-2 mb-0">
+                If you connected Google before this feature, use <strong>Disconnect</strong> then connect again so Gmail send permission is granted.
+            </p>
         <?php elseif ($googleCalendarConfigured): ?>
             <a class="btn btn-primary" href="<?= e(url('/settings/google-calendar/connect')) ?>">Connect Google Calendar</a>
         <?php endif; ?>

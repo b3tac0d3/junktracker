@@ -3,6 +3,9 @@ $job = is_array($job ?? null) ? $job : [];
 $form = is_array($form ?? null) ? $form : [];
 $errors = is_array($errors ?? null) ? $errors : [];
 $categoryOptions = is_array($categoryOptions ?? null) ? $categoryOptions : [];
+$expenseWeightEnabled = (bool) ($expenseWeightEnabled ?? false);
+$expenseEmployeeEnabled = (bool) ($expenseEmployeeEnabled ?? false);
+$employeeOptions = is_array($employeeOptions ?? null) ? $employeeOptions : [];
 $actionUrl = (string) ($actionUrl ?? url('/jobs'));
 $mode = (string) ($mode ?? 'create');
 $expenseId = (int) ($expenseId ?? 0);
@@ -26,6 +29,9 @@ $hasError = static function (string $field) use ($errors): bool {
 };
 
 $currentCategory = trim((string) ($form['category'] ?? ''));
+$showDisposalWeight = $expenseWeightEnabled && strcasecmp($currentCategory, 'Disposal') === 0;
+$showBonusEmployee = $expenseEmployeeEnabled && strcasecmp($currentCategory, 'Bonus') === 0;
+$currentEmployeeId = (int) ($form['employee_id'] ?? 0);
 if ($currentCategory !== '' && !in_array($currentCategory, $categoryOptions, true)) {
     $categoryOptions[] = $currentCategory;
 }
@@ -93,6 +99,57 @@ $categoryOptions = array_values($categoryOptions);
                 </select>
             </div>
 
+            <?php if ($expenseWeightEnabled): ?>
+            <div class="col-12 col-lg-6<?= $showDisposalWeight ? '' : ' d-none' ?>" id="expense-weight-wrap">
+                <label class="form-label fw-semibold" for="expense-weight">Weight (lbs)</label>
+                <input
+                    id="expense-weight"
+                    type="number"
+                    min="0"
+                    step="0.001"
+                    name="weight"
+                    class="form-control <?= $hasError('weight') ? 'is-invalid' : '' ?>"
+                    value="<?= e((string) ($form['weight'] ?? '')) ?>"
+                    placeholder="0"
+                    <?= $showDisposalWeight ? 'required' : '' ?>
+                />
+                <div class="form-text">Required for disposal expenses — total weight hauled from this job.</div>
+                <?php if ($hasError('weight')): ?><div class="invalid-feedback d-block"><?= e($fieldError('weight')) ?></div><?php endif; ?>
+            </div>
+            <?php endif; ?>
+
+            <?php if ($expenseEmployeeEnabled): ?>
+            <div class="col-12 col-lg-6<?= $showBonusEmployee ? '' : ' d-none' ?>" id="expense-employee-wrap">
+                <label class="form-label fw-semibold" for="expense-employee">Employee</label>
+                <select
+                    id="expense-employee"
+                    name="employee_id"
+                    class="form-select <?= $hasError('employee_id') ? 'is-invalid' : '' ?>"
+                    <?= $showBonusEmployee ? 'required' : '' ?>
+                >
+                    <option value="">Select employee...</option>
+                    <?php foreach ($employeeOptions as $employeeOption): ?>
+                        <?php
+                        if (!is_array($employeeOption)) {
+                            continue;
+                        }
+                        $optionId = (int) ($employeeOption['id'] ?? 0);
+                        if ($optionId <= 0) {
+                            continue;
+                        }
+                        $optionName = trim((string) ($employeeOption['name'] ?? ''));
+                        if ($optionName === '') {
+                            $optionName = 'Employee #' . (string) $optionId;
+                        }
+                        ?>
+                        <option value="<?= (string) $optionId ?>" <?= $currentEmployeeId === $optionId ? 'selected' : '' ?>><?= e($optionName) ?></option>
+                    <?php endforeach; ?>
+                </select>
+                <div class="form-text">Required for bonus payouts — counted in job labor cost.</div>
+                <?php if ($hasError('employee_id')): ?><div class="invalid-feedback d-block"><?= e($fieldError('employee_id')) ?></div><?php endif; ?>
+            </div>
+            <?php endif; ?>
+
             <div class="col-12 col-lg-6">
                 <label class="form-label fw-semibold" for="expense-payment-method">Payment Method</label>
                 <input
@@ -118,3 +175,49 @@ $categoryOptions = array_values($categoryOptions);
         </form>
     </div>
 </section>
+
+<?php if ($expenseWeightEnabled || $expenseEmployeeEnabled): ?>
+<script>
+(function () {
+    var categorySelect = document.getElementById('expense-category');
+    var weightWrap = document.getElementById('expense-weight-wrap');
+    var weightInput = document.getElementById('expense-weight');
+    var employeeWrap = document.getElementById('expense-employee-wrap');
+    var employeeSelect = document.getElementById('expense-employee');
+    if (!categorySelect) {
+        return;
+    }
+
+    function isDisposalCategory(value) {
+        return String(value || '').trim().toLowerCase() === 'disposal';
+    }
+
+    function isBonusCategory(value) {
+        return String(value || '').trim().toLowerCase() === 'bonus';
+    }
+
+    function syncCategoryFields() {
+        var category = categorySelect.value;
+        if (weightWrap && weightInput) {
+            var showWeight = isDisposalCategory(category);
+            weightWrap.classList.toggle('d-none', !showWeight);
+            weightInput.required = showWeight;
+            if (!showWeight) {
+                weightInput.value = '';
+            }
+        }
+        if (employeeWrap && employeeSelect) {
+            var showEmployee = isBonusCategory(category);
+            employeeWrap.classList.toggle('d-none', !showEmployee);
+            employeeSelect.required = showEmployee;
+            if (!showEmployee) {
+                employeeSelect.value = '';
+            }
+        }
+    }
+
+    categorySelect.addEventListener('change', syncCategoryFields);
+    syncCategoryFields();
+})();
+</script>
+<?php endif; ?>

@@ -684,7 +684,31 @@ final class Job
             $where[] = 't.deleted_at IS NULL';
         }
 
-        return '(SELECT COALESCE(SUM((' . $durationExpr . ' / 60) * ' . $hourlyRateSql . '), 0) FROM employee_time_entries t' . $joinSql . ' WHERE ' . implode(' AND ', $where) . ')';
+        $timeLaborSql = '(SELECT COALESCE(SUM((' . $durationExpr . ' / 60) * ' . $hourlyRateSql . '), 0) FROM employee_time_entries t' . $joinSql . ' WHERE ' . implode(' AND ', $where) . ')';
+
+        return '(' . $timeLaborSql . ' + ' . self::sqlScalarLaborBonusForJobJ() . ')';
+    }
+
+    private static function sqlScalarLaborBonusForJobJ(): string
+    {
+        if (!SchemaInspector::hasTable('expenses') || !SchemaInspector::hasColumn('expenses', 'job_id') || !SchemaInspector::hasColumn('expenses', 'amount')) {
+            return '0';
+        }
+
+        $categoryColumnSql = Expense::categoryColumnSql('ex');
+        if ($categoryColumnSql === '') {
+            return '0';
+        }
+
+        $where = ['ex.job_id = j.id', Expense::sqlCategoryIsLaborExpense($categoryColumnSql)];
+        if (SchemaInspector::hasColumn('expenses', 'business_id')) {
+            $where[] = 'ex.business_id = j.business_id';
+        }
+        if (SchemaInspector::hasColumn('expenses', 'deleted_at')) {
+            $where[] = 'ex.deleted_at IS NULL';
+        }
+
+        return '(SELECT COALESCE(SUM(ex.amount), 0) FROM expenses ex WHERE ' . implode(' AND ', $where) . ')';
     }
 
     private static function sqlScalarExpensesForJobJ(): string
@@ -692,7 +716,7 @@ final class Job
         if (!SchemaInspector::hasTable('expenses') || !SchemaInspector::hasColumn('expenses', 'job_id') || !SchemaInspector::hasColumn('expenses', 'amount')) {
             return '0';
         }
-        $where = ['e.job_id = j.id'];
+        $where = ['e.job_id = j.id', Expense::sqlWhereNotLaborExpense('e')];
         if (SchemaInspector::hasColumn('expenses', 'business_id')) {
             $where[] = 'e.business_id = j.business_id';
         }
@@ -1076,7 +1100,8 @@ final class Job
                     FROM expenses e
                     WHERE ' . $businessWhere . '
                       AND e.job_id = :job_id
-                      AND ' . $deletedWhere;
+                      AND ' . $deletedWhere . '
+                      AND ' . Expense::sqlWhereNotLaborExpense('e');
             $stmt = Database::connection()->prepare($sql);
             $params = ['job_id' => $jobId];
             if (SchemaInspector::hasColumn('expenses', 'business_id')) {
@@ -1245,6 +1270,286 @@ final class Job
         $stmt->execute();
 
         $rows = $stmt->fetchAll();
+        return is_array($rows) ? $rows : [];
+    }
+
+    /**
+     * Per-employee totals for all time logged on a job (includes open punches).
+     *
+     * @return list<array{employee_id: int, employee_name: string, entry_count: int, open_entries: int, total_minutes: int, total_hours: float, labor_cost: float}>
+     */
+    public static function laborTotalsByEmployee(int $businessId, int $jobId): array
+    {
+        if (
+            $jobId <= 0
+            || !SchemaInspector::hasTable('employee_time_entries')
+            || !SchemaInspector::hasColumn('employee_time_entries', 'job_id')
+            || !SchemaInspector::hasColumn('employee_time_entries', 'clock_in_at')
+        ) {
+            return [];
+        }
+
+        $clockInSql = 't.clock_in_at';
+        $clockOutSql = SchemaInspector::hasColumn('employee_time_entries', 'clock_out_at') ? 't.clock_out_at' : 'NULL';
+        $durationExpr = SchemaInspector::hasColumn('employee_time_entries', 'duration_minutes')
+            ? "CASE
+                    WHEN t.duration_minutes IS NOT NULL AND t.duration_minutes > 0 THEN t.duration_minutes
+                    WHEN {$clockOutSql} IS NOT NULL THEN GREATEST(TIMESTAMPDIFF(MINUTE, {$clockInSql}, {$clockOutSql}), 0)
+                    ELSE GREATEST(TIMESTAMPDIFF(MINUTE, {$clockInSql}, NOW()), 0)
+                END"
+            : "CASE
+                    WHEN {$clockOutSql} IS NOT NULL THEN GREATEST(TIMESTAMPDIFF(MINUTE, {$clockInSql}, {$clockOutSql}), 0)
+                    ELSE GREATEST(TIMESTAMPDIFF(MINUTE, {$clockInSql}, NOW()), 0)
+                END";
+
+        $joinSql = '';
+        $employeeNameSql = "CONCAT('Employee #', t.employee_id)";
+        $hourlyRateSql = '0';
+        if (SchemaInspector::hasTable('employees') && SchemaInspector::hasColumn('employee_time_entries', 'employee_id')) {
+            $joinSql .= ' LEFT JOIN employees e ON e.id = t.employee_id';
+            if (SchemaInspector::hasColumn('employees', 'business_id') && SchemaInspector::hasColumn('employee_time_entries', 'business_id')) {
+                $joinSql .= ' AND e.business_id = t.business_id';
+            }
+            if (SchemaInspector::hasColumn('employees', 'deleted_at')) {
+                $joinSql .= ' AND e.deleted_at IS NULL';
+            }
+
+            $employeeNameParts = ['e.first_name', 'e.last_name'];
+            if (SchemaInspector::hasColumn('employees', 'suffix')) {
+                $employeeNameParts[] = 'e.suffix';
+            }
+            $employeeBaseNameSql = "COALESCE(NULLIF(TRIM(CONCAT_WS(' ', " . implode(', ', $employeeNameParts) . ")), ''), NULLIF(e.email, ''), CONCAT('Employee #', t.employee_id))";
+            $employeeNameSql = $employeeBaseNameSql;
+            $hourlyRateSql = SchemaInspector::hasColumn('employees', 'hourly_rate') ? 'COALESCE(e.hourly_rate, 0)' : '0';
+
+            if (SchemaInspector::hasTable('users')) {
+                $joinSql .= ' LEFT JOIN users u ON u.id = e.user_id AND u.deleted_at IS NULL';
+                $linkedUserNameSql = "COALESCE(NULLIF(TRIM(CONCAT_WS(' ', u.first_name, u.last_name)), ''), NULLIF(u.email, ''))";
+                $employeeNameSql = "COALESCE(NULLIF({$linkedUserNameSql}, ''), {$employeeBaseNameSql})";
+            }
+        }
+
+        $where = [];
+        $where[] = SchemaInspector::hasColumn('employee_time_entries', 'business_id') ? 't.business_id = :business_id' : '1=1';
+        $where[] = 't.job_id = :job_id';
+        $where[] = SchemaInspector::hasColumn('employee_time_entries', 'employee_id') ? 't.employee_id IS NOT NULL' : '1=1';
+        $where[] = SchemaInspector::hasColumn('employee_time_entries', 'deleted_at') ? 't.deleted_at IS NULL' : '1=1';
+
+        $sql = "SELECT
+                    t.employee_id,
+                    {$employeeNameSql} AS employee_name,
+                    COUNT(*) AS entry_count,
+                    SUM(CASE WHEN {$clockOutSql} IS NULL THEN 1 ELSE 0 END) AS open_entries,
+                    COALESCE(SUM({$durationExpr}), 0) AS total_minutes,
+                    ROUND(COALESCE(SUM(({$durationExpr} / 60) * {$hourlyRateSql}), 0), 2) AS labor_cost
+                FROM employee_time_entries t
+                {$joinSql}
+                WHERE " . implode(' AND ', $where) . "
+                GROUP BY t.employee_id, {$employeeNameSql}
+                ORDER BY employee_name ASC, t.employee_id ASC";
+
+        $stmt = Database::connection()->prepare($sql);
+        if (SchemaInspector::hasColumn('employee_time_entries', 'business_id')) {
+            $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
+        }
+        $stmt->bindValue(':job_id', $jobId, \PDO::PARAM_INT);
+        $stmt->execute();
+
+        $rows = $stmt->fetchAll();
+        if (!is_array($rows)) {
+            return [];
+        }
+
+        $out = [];
+        foreach ($rows as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $employeeId = (int) ($row['employee_id'] ?? 0);
+            if ($employeeId <= 0) {
+                continue;
+            }
+            $minutes = (int) ($row['total_minutes'] ?? 0);
+            $out[] = [
+                'employee_id' => $employeeId,
+                'employee_name' => trim((string) ($row['employee_name'] ?? '')) ?: ('Employee #' . (string) $employeeId),
+                'entry_count' => (int) ($row['entry_count'] ?? 0),
+                'open_entries' => (int) ($row['open_entries'] ?? 0),
+                'total_minutes' => $minutes,
+                'total_hours' => round($minutes / 60, 2),
+                'labor_cost' => (float) ($row['labor_cost'] ?? 0),
+            ];
+        }
+
+        foreach (self::laborBonusTotalsByEmployee($businessId, $jobId) as $bonusRow) {
+            if (!is_array($bonusRow)) {
+                continue;
+            }
+            $employeeId = (int) ($bonusRow['employee_id'] ?? 0);
+            if ($employeeId <= 0) {
+                continue;
+            }
+            $bonusTotal = (float) ($bonusRow['bonus_total'] ?? 0);
+            if ($bonusTotal <= 0) {
+                continue;
+            }
+            $found = false;
+            foreach ($out as $index => $row) {
+                if ((int) ($row['employee_id'] ?? 0) !== $employeeId) {
+                    continue;
+                }
+                $out[$index]['labor_cost'] = round((float) ($row['labor_cost'] ?? 0) + $bonusTotal, 2);
+                $out[$index]['bonus_total'] = round($bonusTotal, 2);
+                $found = true;
+                break;
+            }
+            if (!$found) {
+                $out[] = [
+                    'employee_id' => $employeeId,
+                    'employee_name' => trim((string) ($bonusRow['employee_name'] ?? '')) ?: ('Employee #' . (string) $employeeId),
+                    'entry_count' => 0,
+                    'open_entries' => 0,
+                    'total_minutes' => 0,
+                    'total_hours' => 0.0,
+                    'labor_cost' => round($bonusTotal, 2),
+                    'bonus_total' => round($bonusTotal, 2),
+                ];
+            }
+        }
+
+        usort($out, static function (array $a, array $b): int {
+            return strcasecmp((string) ($a['employee_name'] ?? ''), (string) ($b['employee_name'] ?? ''));
+        });
+
+        return $out;
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    public static function laborBonusesByJob(int $businessId, int $jobId, int $limit = 200): array
+    {
+        if ($jobId <= 0 || !SchemaInspector::hasTable('expenses') || !SchemaInspector::hasColumn('expenses', 'job_id')) {
+            return [];
+        }
+
+        $categoryColumnSql = Expense::categoryColumnSql('e');
+        if ($categoryColumnSql === '') {
+            return [];
+        }
+
+        $dateSql = SchemaInspector::hasColumn('expenses', 'expense_date')
+            ? 'e.expense_date'
+            : (SchemaInspector::hasColumn('expenses', 'date') ? 'e.date' : 'NULL');
+        $amountSql = SchemaInspector::hasColumn('expenses', 'amount') ? 'e.amount' : '0';
+        $noteSql = SchemaInspector::hasColumn('expenses', 'note')
+            ? 'e.note'
+            : (SchemaInspector::hasColumn('expenses', 'notes') ? 'e.notes' : 'NULL');
+        $employeeIdSql = Expense::supportsEmployeeLink() ? 'e.employee_id' : 'NULL';
+
+        $joinSql = '';
+        $employeeNameSql = 'NULL';
+        if (Expense::supportsEmployeeLink() && SchemaInspector::hasTable('employees')) {
+            $joinSql .= ' LEFT JOIN employees emp ON emp.id = e.employee_id';
+            if (SchemaInspector::hasColumn('employees', 'business_id') && SchemaInspector::hasColumn('expenses', 'business_id')) {
+                $joinSql .= ' AND emp.business_id = e.business_id';
+            }
+            if (SchemaInspector::hasColumn('employees', 'deleted_at')) {
+                $joinSql .= ' AND emp.deleted_at IS NULL';
+            }
+            $employeeNameSql = "COALESCE(NULLIF(TRIM(CONCAT_WS(' ', emp.first_name, emp.last_name)), ''), NULLIF(emp.email, ''), CONCAT('Employee #', e.employee_id))";
+        }
+
+        $where = [];
+        $where[] = SchemaInspector::hasColumn('expenses', 'business_id') ? 'e.business_id = :business_id' : '1=1';
+        $where[] = 'e.job_id = :job_id';
+        $where[] = SchemaInspector::hasColumn('expenses', 'deleted_at') ? 'e.deleted_at IS NULL' : '1=1';
+        $where[] = Expense::sqlCategoryIsLaborExpense($categoryColumnSql);
+
+        $sql = "SELECT
+                    e.id,
+                    {$employeeIdSql} AS employee_id,
+                    {$employeeNameSql} AS employee_name,
+                    {$dateSql} AS expense_date,
+                    {$amountSql} AS amount,
+                    {$noteSql} AS note
+                FROM expenses e
+                {$joinSql}
+                WHERE " . implode(' AND ', $where) . "
+                ORDER BY {$dateSql} DESC, e.id DESC
+                LIMIT :row_limit";
+
+        $stmt = Database::connection()->prepare($sql);
+        if (SchemaInspector::hasColumn('expenses', 'business_id')) {
+            $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
+        }
+        $stmt->bindValue(':job_id', $jobId, \PDO::PARAM_INT);
+        $stmt->bindValue(':row_limit', max(1, min($limit, 2000)), \PDO::PARAM_INT);
+        $stmt->execute();
+
+        $rows = $stmt->fetchAll();
+
+        return is_array($rows) ? $rows : [];
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    public static function laborBonusTotalsByEmployee(int $businessId, int $jobId): array
+    {
+        if ($jobId <= 0 || !SchemaInspector::hasTable('expenses') || !SchemaInspector::hasColumn('expenses', 'job_id')) {
+            return [];
+        }
+        if (!Expense::supportsEmployeeLink()) {
+            return [];
+        }
+
+        $categoryColumnSql = Expense::categoryColumnSql('e');
+        if ($categoryColumnSql === '') {
+            return [];
+        }
+
+        $amountSql = SchemaInspector::hasColumn('expenses', 'amount') ? 'e.amount' : '0';
+        $joinSql = '';
+        $employeeNameSql = "CONCAT('Employee #', e.employee_id)";
+        if (SchemaInspector::hasTable('employees')) {
+            $joinSql .= ' LEFT JOIN employees emp ON emp.id = e.employee_id';
+            if (SchemaInspector::hasColumn('employees', 'business_id') && SchemaInspector::hasColumn('expenses', 'business_id')) {
+                $joinSql .= ' AND emp.business_id = e.business_id';
+            }
+            if (SchemaInspector::hasColumn('employees', 'deleted_at')) {
+                $joinSql .= ' AND emp.deleted_at IS NULL';
+            }
+            $employeeNameSql = "COALESCE(NULLIF(TRIM(CONCAT_WS(' ', emp.first_name, emp.last_name)), ''), NULLIF(emp.email, ''), CONCAT('Employee #', e.employee_id))";
+        }
+
+        $where = [];
+        $where[] = SchemaInspector::hasColumn('expenses', 'business_id') ? 'e.business_id = :business_id' : '1=1';
+        $where[] = 'e.job_id = :job_id';
+        $where[] = 'e.employee_id IS NOT NULL';
+        $where[] = SchemaInspector::hasColumn('expenses', 'deleted_at') ? 'e.deleted_at IS NULL' : '1=1';
+        $where[] = Expense::sqlCategoryIsLaborExpense($categoryColumnSql);
+
+        $sql = "SELECT
+                    e.employee_id,
+                    {$employeeNameSql} AS employee_name,
+                    COALESCE(SUM({$amountSql}), 0) AS bonus_total
+                FROM expenses e
+                {$joinSql}
+                WHERE " . implode(' AND ', $where) . "
+                GROUP BY e.employee_id, {$employeeNameSql}
+                HAVING bonus_total > 0
+                ORDER BY employee_name ASC, e.employee_id ASC";
+
+        $stmt = Database::connection()->prepare($sql);
+        if (SchemaInspector::hasColumn('expenses', 'business_id')) {
+            $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
+        }
+        $stmt->bindValue(':job_id', $jobId, \PDO::PARAM_INT);
+        $stmt->execute();
+
+        $rows = $stmt->fetchAll();
+
         return is_array($rows) ? $rows : [];
     }
 
@@ -1474,6 +1779,7 @@ final class Job
             ? 'e.expense_date'
             : (SchemaInspector::hasColumn('expenses', 'date') ? 'e.date' : 'NULL');
         $amountSql = SchemaInspector::hasColumn('expenses', 'amount') ? 'e.amount' : '0';
+        $weightSql = SchemaInspector::hasColumn('expenses', 'weight') ? 'e.weight' : 'NULL';
         $nameSql = SchemaInspector::hasColumn('expenses', 'name') ? 'e.name' : "CONCAT('Expense #', e.id)";
         $categorySql = SchemaInspector::hasColumn('expenses', 'category')
             ? 'e.category'
@@ -1485,6 +1791,20 @@ final class Job
             ? 'e.note'
             : (SchemaInspector::hasColumn('expenses', 'notes') ? 'e.notes' : 'NULL');
         $createdSql = SchemaInspector::hasColumn('expenses', 'created_at') ? 'e.created_at' : 'NULL';
+        $employeeIdSql = Expense::supportsEmployeeLink() ? 'e.employee_id' : 'NULL';
+
+        $joinSql = '';
+        $employeeNameSql = 'NULL';
+        if (Expense::supportsEmployeeLink() && SchemaInspector::hasTable('employees')) {
+            $joinSql .= ' LEFT JOIN employees emp ON emp.id = e.employee_id';
+            if (SchemaInspector::hasColumn('employees', 'business_id') && SchemaInspector::hasColumn('expenses', 'business_id')) {
+                $joinSql .= ' AND emp.business_id = e.business_id';
+            }
+            if (SchemaInspector::hasColumn('employees', 'deleted_at')) {
+                $joinSql .= ' AND emp.deleted_at IS NULL';
+            }
+            $employeeNameSql = "COALESCE(NULLIF(TRIM(CONCAT_WS(' ', emp.first_name, emp.last_name)), ''), NULLIF(emp.email, ''), CONCAT('Employee #', e.employee_id))";
+        }
 
         $where = [];
         $where[] = SchemaInspector::hasColumn('expenses', 'business_id') ? 'e.business_id = :business_id' : '1=1';
@@ -1495,12 +1815,16 @@ final class Job
                     e.id,
                     {$dateSql} AS expense_date,
                     {$amountSql} AS amount,
+                    {$weightSql} AS weight,
                     {$nameSql} AS name,
                     {$categorySql} AS category,
+                    {$employeeIdSql} AS employee_id,
+                    {$employeeNameSql} AS employee_name,
                     {$paymentMethodSql} AS payment_method,
                     {$noteSql} AS note,
                     {$createdSql} AS created_at
                 FROM expenses e
+                {$joinSql}
                 WHERE " . implode(' AND ', $where) . "
                 ORDER BY e.id ASC
                 LIMIT :row_limit";
@@ -1515,6 +1839,46 @@ final class Job
 
         $rows = $stmt->fetchAll();
         return is_array($rows) ? $rows : [];
+    }
+
+    public static function disposalWeightTotalByJob(int $businessId, int $jobId): float
+    {
+        if ($jobId <= 0 || !SchemaInspector::hasTable('expenses') || !SchemaInspector::hasColumn('expenses', 'job_id')) {
+            return 0.0;
+        }
+        if (!SchemaInspector::hasColumn('expenses', 'weight')) {
+            return 0.0;
+        }
+
+        $categorySql = SchemaInspector::hasColumn('expenses', 'category')
+            ? 'category'
+            : (SchemaInspector::hasColumn('expenses', 'expense_type')
+                ? 'expense_type'
+                : (SchemaInspector::hasColumn('expenses', 'type') ? 'type' : ''));
+        if ($categorySql === '') {
+            return 0.0;
+        }
+
+        $where = [];
+        $where[] = SchemaInspector::hasColumn('expenses', 'business_id') ? 'business_id = :business_id' : '1=1';
+        $where[] = 'job_id = :job_id';
+        $where[] = SchemaInspector::hasColumn('expenses', 'deleted_at') ? 'deleted_at IS NULL' : '1=1';
+        $where[] = "LOWER(TRIM({$categorySql})) = 'disposal'";
+        $where[] = 'weight IS NOT NULL';
+        $where[] = 'weight > 0';
+
+        $sql = 'SELECT COALESCE(SUM(weight), 0)
+                FROM expenses
+                WHERE ' . implode(' AND ', $where);
+
+        $stmt = Database::connection()->prepare($sql);
+        if (SchemaInspector::hasColumn('expenses', 'business_id')) {
+            $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
+        }
+        $stmt->bindValue(':job_id', $jobId, \PDO::PARAM_INT);
+        $stmt->execute();
+
+        return (float) $stmt->fetchColumn();
     }
 
     public static function createExpense(int $businessId, int $jobId, array $data, int $actorUserId): int
@@ -1546,12 +1910,21 @@ final class Job
         }
         $append('amount', ':amount', (float) ($data['amount'] ?? 0));
 
+        $category = trim((string) ($data['category'] ?? ''));
+        if (SchemaInspector::hasColumn('expenses', 'weight')) {
+            $append('weight', ':weight', Expense::weightForSave($category, (string) ($data['weight'] ?? '')));
+        }
+
+        if (SchemaInspector::hasColumn('expenses', 'employee_id')) {
+            $append('employee_id', ':employee_id', Expense::employeeIdForSave($category, $data['employee_id'] ?? 0));
+        }
+
         if (SchemaInspector::hasColumn('expenses', 'category')) {
-            $append('category', ':category', trim((string) ($data['category'] ?? '')));
+            $append('category', ':category', $category);
         } elseif (SchemaInspector::hasColumn('expenses', 'expense_type')) {
-            $append('expense_type', ':category', trim((string) ($data['category'] ?? '')));
+            $append('expense_type', ':category', $category);
         } elseif (SchemaInspector::hasColumn('expenses', 'type')) {
-            $append('type', ':category', trim((string) ($data['category'] ?? '')));
+            $append('type', ':category', $category);
         }
         if (SchemaInspector::hasColumn('expenses', 'name')) {
             $append('name', ':name', trim((string) ($data['name'] ?? '')));
@@ -1604,6 +1977,7 @@ final class Job
             ? 'e.expense_date'
             : (SchemaInspector::hasColumn('expenses', 'date') ? 'e.date' : 'NULL');
         $amountSql = SchemaInspector::hasColumn('expenses', 'amount') ? 'e.amount' : '0';
+        $weightSql = SchemaInspector::hasColumn('expenses', 'weight') ? 'e.weight' : 'NULL';
         $nameSql = SchemaInspector::hasColumn('expenses', 'name') ? 'e.name' : "CONCAT('Expense #', e.id)";
         $categorySql = SchemaInspector::hasColumn('expenses', 'category')
             ? 'e.category'
@@ -1616,6 +1990,20 @@ final class Job
             : (SchemaInspector::hasColumn('expenses', 'notes') ? 'e.notes' : 'NULL');
         $referenceSql = SchemaInspector::hasColumn('expenses', 'reference_number') ? 'e.reference_number' : 'NULL';
         $createdSql = SchemaInspector::hasColumn('expenses', 'created_at') ? 'e.created_at' : 'NULL';
+        $employeeIdSql = Expense::supportsEmployeeLink() ? 'e.employee_id' : 'NULL';
+
+        $joinSql = '';
+        $employeeNameSql = 'NULL';
+        if (Expense::supportsEmployeeLink() && SchemaInspector::hasTable('employees')) {
+            $joinSql .= ' LEFT JOIN employees emp ON emp.id = e.employee_id';
+            if (SchemaInspector::hasColumn('employees', 'business_id') && SchemaInspector::hasColumn('expenses', 'business_id')) {
+                $joinSql .= ' AND emp.business_id = e.business_id';
+            }
+            if (SchemaInspector::hasColumn('employees', 'deleted_at')) {
+                $joinSql .= ' AND emp.deleted_at IS NULL';
+            }
+            $employeeNameSql = "COALESCE(NULLIF(TRIM(CONCAT_WS(' ', emp.first_name, emp.last_name)), ''), NULLIF(emp.email, ''), CONCAT('Employee #', e.employee_id))";
+        }
 
         $where = [];
         $where[] = 'e.id = :expense_id';
@@ -1628,13 +2016,17 @@ final class Job
                     e.job_id,
                     {$dateSql} AS expense_date,
                     {$amountSql} AS amount,
+                    {$weightSql} AS weight,
                     {$nameSql} AS name,
                     {$categorySql} AS category,
+                    {$employeeIdSql} AS employee_id,
+                    {$employeeNameSql} AS employee_name,
                     {$paymentMethodSql} AS payment_method,
                     {$referenceSql} AS reference_number,
                     {$noteSql} AS note,
                     {$createdSql} AS created_at
                 FROM expenses e
+                {$joinSql}
                 WHERE " . implode(' AND ', $where) . '
                 LIMIT 1';
 
@@ -1722,16 +2114,29 @@ final class Job
             $params['amount'] = (float) ($data['amount'] ?? 0);
         }
 
+        $category = trim((string) ($data['category'] ?? ''));
+
         if (SchemaInspector::hasColumn('expenses', 'category')) {
             $setParts[] = 'category = :category';
-            $params['category'] = trim((string) ($data['category'] ?? ''));
+            $params['category'] = $category;
         } elseif (SchemaInspector::hasColumn('expenses', 'expense_type')) {
             $setParts[] = 'expense_type = :category';
-            $params['category'] = trim((string) ($data['category'] ?? ''));
+            $params['category'] = $category;
         } elseif (SchemaInspector::hasColumn('expenses', 'type')) {
             $setParts[] = '`type` = :category';
-            $params['category'] = trim((string) ($data['category'] ?? ''));
+            $params['category'] = $category;
         }
+
+        if (SchemaInspector::hasColumn('expenses', 'weight')) {
+            $setParts[] = 'weight = :weight';
+            $params['weight'] = Expense::weightForSave($category, (string) ($data['weight'] ?? ''));
+        }
+
+        if (SchemaInspector::hasColumn('expenses', 'employee_id')) {
+            $setParts[] = 'employee_id = :employee_id';
+            $params['employee_id'] = Expense::employeeIdForSave($category, $data['employee_id'] ?? 0);
+        }
+
         if (SchemaInspector::hasColumn('expenses', 'name')) {
             $setParts[] = 'name = :name';
             $params['name'] = trim((string) ($data['name'] ?? ''));
@@ -2076,6 +2481,37 @@ final class Job
             $params['business_id'] = $businessId;
         }
         $stmt->execute($params);
+
+        return (float) $stmt->fetchColumn() + self::laborBonusCostByJob($businessId, $jobId);
+    }
+
+    public static function laborBonusCostByJob(int $businessId, int $jobId): float
+    {
+        if ($jobId <= 0 || !SchemaInspector::hasTable('expenses') || !SchemaInspector::hasColumn('expenses', 'job_id')) {
+            return 0.0;
+        }
+
+        $categoryColumn = Expense::categoryColumnName();
+        if ($categoryColumn === '') {
+            return 0.0;
+        }
+
+        $where = [];
+        $where[] = SchemaInspector::hasColumn('expenses', 'business_id') ? 'business_id = :business_id' : '1=1';
+        $where[] = 'job_id = :job_id';
+        $where[] = SchemaInspector::hasColumn('expenses', 'deleted_at') ? 'deleted_at IS NULL' : '1=1';
+        $where[] = Expense::sqlCategoryIsLaborExpense($categoryColumn);
+
+        $sql = 'SELECT COALESCE(SUM(amount), 0)
+                FROM expenses
+                WHERE ' . implode(' AND ', $where);
+
+        $stmt = Database::connection()->prepare($sql);
+        if (SchemaInspector::hasColumn('expenses', 'business_id')) {
+            $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
+        }
+        $stmt->bindValue(':job_id', $jobId, \PDO::PARAM_INT);
+        $stmt->execute();
 
         return (float) $stmt->fetchColumn();
     }

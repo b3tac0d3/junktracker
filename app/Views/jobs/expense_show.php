@@ -1,4 +1,7 @@
 <?php
+
+use App\Models\Expense;
+
 $job = is_array($job ?? null) ? $job : [];
 $expense = is_array($expense ?? null) ? $expense : [];
 
@@ -11,6 +14,16 @@ if ($jobTitle === '') {
 $expenseDateRaw = trim((string) ($expense['expense_date'] ?? ''));
 $expenseDateStamp = $expenseDateRaw !== '' ? strtotime($expenseDateRaw) : false;
 $expenseDateDisplay = $expenseDateStamp === false ? '—' : date('m/d/Y', $expenseDateStamp);
+$expenseCategory = trim((string) ($expense['category'] ?? ''));
+$showDisposalWeight = Expense::isDisposalCategory($expenseCategory);
+$disposalWeightDisplay = $showDisposalWeight
+    ? (Expense::formatWeightDisplay($expense['weight'] ?? null) ?: '—')
+    : '';
+$showBonusEmployee = Expense::isBonusCategory($expenseCategory);
+$bonusEmployeeName = trim((string) ($expense['employee_name'] ?? ''));
+if ($bonusEmployeeName === '' && (int) ($expense['employee_id'] ?? 0) > 0) {
+    $bonusEmployeeName = 'Employee #' . (string) ((int) $expense['employee_id']);
+}
 ?>
 
 <div class="page-header d-flex flex-wrap align-items-end justify-content-between gap-2">
@@ -53,8 +66,24 @@ $expenseDateDisplay = $expenseDateStamp === false ? '—' : date('m/d/Y', $expen
             </div>
             <div class="record-field">
                 <span class="record-label">Category</span>
-                <span class="record-value"><?= e(trim((string) ($expense['category'] ?? '')) ?: '—') ?></span>
+                <span class="record-value"><?= e($expenseCategory !== '' ? $expenseCategory : '—') ?></span>
             </div>
+            <?php if ($showDisposalWeight): ?>
+            <div class="record-field">
+                <span class="record-label">Weight</span>
+                <span class="record-value fw-bold"><?= e($disposalWeightDisplay) ?></span>
+            </div>
+            <?php endif; ?>
+            <?php if ($showBonusEmployee): ?>
+            <div class="record-field">
+                <span class="record-label">Employee</span>
+                <span class="record-value fw-bold"><?= e($bonusEmployeeName !== '' ? $bonusEmployeeName : '—') ?></span>
+            </div>
+            <div class="record-field">
+                <span class="record-label">Labor</span>
+                <span class="record-value">Included in job labor cost</span>
+            </div>
+            <?php endif; ?>
             <div class="record-field">
                 <span class="record-label">Reference</span>
                 <span class="record-value"><?= e(trim((string) ($expense['reference_number'] ?? '')) ?: '—') ?></span>
