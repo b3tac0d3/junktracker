@@ -38,6 +38,7 @@ final class SettingsController extends Controller
             'googleCalendarCalendarId' => trim((string) ($googleConnection['calendar_id'] ?? 'primary')) ?: 'primary',
             'appointmentGmailNotifyEnabled' => GoogleCalendarConnection::appointmentGmailNotifyEnabled($userId),
             'appointmentGmailNotifyTo' => trim((string) ($googleConnection['appointment_gmail_notify_to'] ?? '')),
+            'appointmentGmailNotifyAvailable' => GoogleCalendarConnection::appointmentGmailNotifyAvailable(),
         ]);
     }
 
@@ -56,11 +57,16 @@ final class SettingsController extends Controller
             redirect('/settings');
         }
 
+        if (!GoogleCalendarConnection::appointmentGmailNotifyAvailable()) {
+            flash('error', 'Gmail notification settings are not available yet. Run database/migrations/2026-06-06_gmail_appointment_notify.sql on this server.');
+            redirect('/settings');
+        }
+
         $enabled = isset($_POST['appointment_gmail_notify_enabled']);
         $notifyTo = trim((string) ($_POST['appointment_gmail_notify_to'] ?? ''));
         GoogleCalendarConnection::updateAppointmentGmailNotify($userId, $enabled, $notifyTo);
 
-        flash('success', $enabled ? 'Appointment Gmail notifications enabled.' : 'Appointment Gmail notifications disabled.');
+        flash('success', $enabled ? 'Appointment Gmail notifications turned on.' : 'Appointment Gmail notifications turned off.');
         redirect('/settings');
     }
 
@@ -98,6 +104,7 @@ final class SettingsController extends Controller
                 'googleCalendarCalendarId' => trim((string) ($googleConnection['calendar_id'] ?? 'primary')) ?: 'primary',
                 'appointmentGmailNotifyEnabled' => GoogleCalendarConnection::appointmentGmailNotifyEnabled($userId),
                 'appointmentGmailNotifyTo' => trim((string) ($googleConnection['appointment_gmail_notify_to'] ?? '')),
+                'appointmentGmailNotifyAvailable' => GoogleCalendarConnection::appointmentGmailNotifyAvailable(),
             ]);
             return;
         }

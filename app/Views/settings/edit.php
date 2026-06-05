@@ -112,6 +112,7 @@ $googleCalendarCalendarId = trim((string) ($googleCalendarCalendarId ?? 'primary
         <?php
         $appointmentGmailNotifyEnabled = (bool) ($appointmentGmailNotifyEnabled ?? false);
         $appointmentGmailNotifyTo = trim((string) ($appointmentGmailNotifyTo ?? ''));
+        $appointmentGmailNotifyAvailable = (bool) ($appointmentGmailNotifyAvailable ?? false);
         ?>
         <?php if ($googleCalendarConfigured && $googleCalendarConnected): ?>
             <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
@@ -146,45 +147,88 @@ $googleCalendarCalendarId = trim((string) ($googleCalendarCalendarId ?? 'primary
 
             <hr class="my-4">
 
-            <h3 class="h6 mb-2"><i class="fas fa-envelope me-2"></i>Appointment Gmail notifications</h3>
-            <p class="small text-muted mb-3">
-                When enabled, JunkTracker sends email through your connected Gmail when <strong>appointments</strong> are created, updated, cancelled, or deleted.
-                Leave recipients blank to notify your connected Google address, or enter comma-separated emails.
-            </p>
-            <form method="post" action="<?= e(url('/settings/google-appointment-gmail')) ?>" class="row g-3">
-                <?= csrf_field() ?>
-                <div class="col-12">
-                    <div class="form-check">
-                        <input
-                            class="form-check-input"
-                            type="checkbox"
-                            name="appointment_gmail_notify_enabled"
-                            id="appointment-gmail-notify-enabled"
-                            value="1"
-                            <?= $appointmentGmailNotifyEnabled ? 'checked' : '' ?>
-                        />
-                        <label class="form-check-label" for="appointment-gmail-notify-enabled">Send Gmail updates for appointments</label>
+            <div class="jt-gmail-notify-panel border rounded-3 p-3 p-md-4">
+                <div class="d-flex flex-wrap align-items-start justify-content-between gap-2 mb-3">
+                    <div>
+                        <h3 class="h6 mb-1"><i class="fas fa-envelope me-2 text-primary"></i>Appointment Gmail notifications</h3>
+                        <p class="small text-muted mb-0">
+                            Email through your connected Gmail when <strong>appointments</strong> are created, updated, cancelled, or deleted.
+                        </p>
                     </div>
+                    <?php if ($appointmentGmailNotifyAvailable): ?>
+                        <span class="badge rounded-pill <?= $appointmentGmailNotifyEnabled ? 'text-bg-success' : 'text-bg-secondary' ?>">
+                            <?= $appointmentGmailNotifyEnabled ? 'On' : 'Off' ?>
+                        </span>
+                    <?php endif; ?>
                 </div>
-                <div class="col-12 col-lg-8">
-                    <label class="form-label fw-semibold" for="appointment-gmail-notify-to">Notify these addresses</label>
-                    <input
-                        id="appointment-gmail-notify-to"
-                        type="text"
-                        name="appointment_gmail_notify_to"
-                        class="form-control"
-                        value="<?= e($appointmentGmailNotifyTo) ?>"
-                        placeholder="office@example.com, team@example.com (optional)"
-                        maxlength="500"
-                    />
-                </div>
-                <div class="col-12">
-                    <button type="submit" class="btn btn-primary btn-sm">Save Gmail notification settings</button>
-                </div>
-            </form>
-            <p class="small text-muted mt-2 mb-0">
-                If you connected Google before this feature, use <strong>Disconnect</strong> then connect again so Gmail send permission is granted.
-            </p>
+
+                <?php if (!$appointmentGmailNotifyAvailable): ?>
+                    <div class="alert alert-warning mb-0">
+                        Gmail notification settings need a database update. Run
+                        <code>database/migrations/2026-06-06_gmail_appointment_notify.sql</code> on this server, then reload this page.
+                    </div>
+                <?php else: ?>
+                    <form method="post" action="<?= e(url('/settings/google-appointment-gmail')) ?>" class="row g-3" id="jt-gmail-notify-form">
+                        <?= csrf_field() ?>
+                        <div class="col-12">
+                            <div class="form-check form-switch ps-0 d-flex align-items-center gap-3">
+                                <input
+                                    class="form-check-input ms-0 flex-shrink-0"
+                                    type="checkbox"
+                                    role="switch"
+                                    name="appointment_gmail_notify_enabled"
+                                    id="appointment-gmail-notify-enabled"
+                                    value="1"
+                                    <?= $appointmentGmailNotifyEnabled ? 'checked' : '' ?>
+                                />
+                                <label class="form-check-label fw-semibold mb-0" for="appointment-gmail-notify-enabled">
+                                    Send Gmail updates for appointments
+                                </label>
+                            </div>
+                            <p class="small text-muted mt-2 mb-0" id="jt-gmail-notify-hint">
+                                <?= $appointmentGmailNotifyEnabled
+                                    ? 'Appointment changes will email your recipients below.'
+                                    : 'Turn on to receive email when appointments change. Calendar sync is unaffected.' ?>
+                            </p>
+                        </div>
+                        <div class="col-12 col-lg-8 <?= $appointmentGmailNotifyEnabled ? '' : 'd-none' ?>" id="jt-gmail-notify-recipients-wrap">
+                            <label class="form-label fw-semibold" for="appointment-gmail-notify-to">Notify these addresses</label>
+                            <input
+                                id="appointment-gmail-notify-to"
+                                type="text"
+                                name="appointment_gmail_notify_to"
+                                class="form-control"
+                                value="<?= e($appointmentGmailNotifyTo) ?>"
+                                placeholder="office@example.com, team@example.com (optional)"
+                                maxlength="500"
+                            />
+                            <div class="form-text">Leave blank to use your connected Google address (<?= e($googleCalendarEmail !== '' ? $googleCalendarEmail : 'connected account') ?>).</div>
+                        </div>
+                        <div class="col-12">
+                            <button type="submit" class="btn btn-primary btn-sm">Save notification settings</button>
+                        </div>
+                    </form>
+                    <p class="small text-muted mt-3 mb-0">
+                        If you connected Google before this feature, use <strong>Disconnect</strong> then connect again so Gmail send permission is granted.
+                    </p>
+                <?php endif; ?>
+            </div>
+            <script>
+            (() => {
+              const toggle = document.getElementById('appointment-gmail-notify-enabled');
+              const wrap = document.getElementById('jt-gmail-notify-recipients-wrap');
+              const hint = document.getElementById('jt-gmail-notify-hint');
+              if (!toggle || !wrap || !hint) return;
+              const sync = () => {
+                const on = toggle.checked;
+                wrap.classList.toggle('d-none', !on);
+                hint.textContent = on
+                  ? 'Appointment changes will email your recipients below.'
+                  : 'Turn on to receive email when appointments change. Calendar sync is unaffected.';
+              };
+              toggle.addEventListener('change', sync);
+            })();
+            </script>
         <?php elseif ($googleCalendarConfigured): ?>
             <a class="btn btn-primary" href="<?= e(url('/settings/google-calendar/connect')) ?>">Connect Google Calendar</a>
         <?php endif; ?>

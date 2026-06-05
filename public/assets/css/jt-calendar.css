@@ -310,3 +310,24 @@
   font-weight: 600;
   color: #0f172a;
 }
+
+.jt-cal-create-type-btn--disabled,
+.jt-cal-create-type-btn--disabled:hover,
+.jt-cal-create-type-btn--disabled:focus-visible {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+  border-color: rgba(15, 23, 42, 0.12);
+}
+
+.jt-cal-event-personal,
+.jt-cal-event-personal .fc-event-main {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    transparent,
+    transparent 4px,
+    rgba(255, 255, 255, 0.22) 4px,
+    rgba(255, 255, 255, 0.22) 8px
+  ) !important;
+}

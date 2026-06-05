@@ -841,6 +841,7 @@ final class EventFeed
             $baseColor = match ($type) {
                 'appointment' => '#b91c1c', // red
                 'cancellation' => '#2563eb', // blue
+                'personal' => '#475569', // slate — blocks booking
                 'reminder' => '#16a34a', // green
                 'note' => '#7c3aed',
                 default => '#334155',
@@ -878,6 +879,7 @@ final class EventFeed
                     'eventType' => match ($type) {
                         'appointment' => 'Appointment',
                         'cancellation' => 'Cancellation',
+                        'personal' => 'Personal time',
                         'reminder' => 'Reminder',
                         'note' => 'Note',
                         default => 'Event',

@@ -137,9 +137,16 @@ final class GoogleCalendarConnection
         $stmt->execute(['user_id' => $userId]);
     }
 
+    public static function appointmentGmailNotifyAvailable(): bool
+    {
+        return SchemaInspector::hasTable('user_google_calendar_connections')
+            && SchemaInspector::hasColumn('user_google_calendar_connections', 'appointment_gmail_notify_enabled')
+            && SchemaInspector::hasColumn('user_google_calendar_connections', 'appointment_gmail_notify_to');
+    }
+
     public static function appointmentGmailNotifyEnabled(int $userId): bool
     {
-        if (!SchemaInspector::hasColumn('user_google_calendar_connections', 'appointment_gmail_notify_enabled')) {
+        if (!self::appointmentGmailNotifyAvailable()) {
             return false;
         }
 
@@ -193,10 +200,7 @@ final class GoogleCalendarConnection
             return;
         }
 
-        if (
-            !SchemaInspector::hasColumn('user_google_calendar_connections', 'appointment_gmail_notify_enabled')
-            || !SchemaInspector::hasColumn('user_google_calendar_connections', 'appointment_gmail_notify_to')
-        ) {
+        if (!self::appointmentGmailNotifyAvailable()) {
             return;
         }
 

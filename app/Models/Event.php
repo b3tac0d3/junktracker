@@ -314,15 +314,77 @@ final class Event
         return $stmt->rowCount() > 0;
     }
 
+    /**
+     * True when a scheduled personal-time block overlaps the given window.
+     */
+    public static function hasPersonalTimeOverlap(
+        int $businessId,
+        string $startAt,
+        string $endAt,
+        int $excludeEventId = 0
+    ): bool {
+        self::ensureTable();
+        if ($businessId <= 0 || !SchemaInspector::hasTable('events')) {
+            return false;
+        }
+
+        $probeStart = self::normalizeIsoDateTime($startAt);
+        if ($probeStart === null) {
+            return false;
+        }
+
+        $probeEnd = self::normalizeIsoDateTime($endAt);
+        if ($probeEnd === null || $probeEnd <= $probeStart) {
+            $probeEnd = date('Y-m-d H:i:s', strtotime($probeStart . ' +1 hour'));
+        }
+
+        $sql = 'SELECT id
+                FROM events
+                WHERE business_id = :business_id
+                  AND deleted_at IS NULL
+                  AND LOWER(type) = \'personal\'
+                  AND LOWER(status) = \'scheduled\'
+                  AND (
+                    (all_day = 1 AND DATE(start_at) <= DATE(:probe_end) AND DATE(COALESCE(end_at, start_at)) >= DATE(:probe_start))
+                    OR (
+                        all_day = 0
+                        AND start_at < :probe_end_timed
+                        AND COALESCE(end_at, DATE_ADD(start_at, INTERVAL 1 HOUR)) > :probe_start_timed
+                    )
+                  )';
+
+        $params = [
+            'business_id' => $businessId,
+            'probe_start' => $probeStart,
+            'probe_end' => $probeEnd,
+            'probe_start_timed' => $probeStart,
+            'probe_end_timed' => $probeEnd,
+        ];
+
+        if ($excludeEventId > 0) {
+            $sql .= ' AND id <> :exclude_id';
+            $params['exclude_id'] = $excludeEventId;
+        }
+
+        $sql .= ' LIMIT 1';
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute($params);
+        $row = $stmt->fetch();
+
+        return is_array($row);
+    }
+
     private static function sanitizePayload(array $data): array
     {
         $title = trim((string) ($data['title'] ?? ''));
+        $typeRaw = strtolower(trim((string) ($data['type'] ?? 'appointment')));
         if ($title === '') {
-            $title = 'Untitled';
+            $title = $typeRaw === 'personal' ? 'Personal time' : 'Untitled';
         }
 
-        $type = strtolower(trim((string) ($data['type'] ?? 'appointment')));
-        if (!in_array($type, ['appointment', 'cancellation', 'task', 'note', 'reminder', 'other'], true)) {
+        $type = $typeRaw;
+        if (!in_array($type, ['appointment', 'cancellation', 'personal', 'task', 'note', 'reminder', 'other'], true)) {
             $type = 'appointment';
         }
 

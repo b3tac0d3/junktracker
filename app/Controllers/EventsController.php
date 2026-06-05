@@ -50,16 +50,16 @@ final class EventsController extends Controller
 
         $at = calendar_slot_prefill_at();
         $type = strtolower(trim((string) ($_GET['type'] ?? 'appointment')));
-        if (!in_array($type, ['appointment', 'cancellation', 'reminder', 'note', 'other'], true)) {
+        if (!in_array($type, ['appointment', 'cancellation', 'personal', 'reminder', 'note', 'other'], true)) {
             $type = 'appointment';
         }
 
         $this->render('events/form', [
-            'pageTitle' => 'Add Event',
+            'pageTitle' => $type === 'personal' ? 'Block Personal Time' : 'Add Event',
             'mode' => 'create',
             'actionUrl' => url('/events/create'),
             'form' => [
-                'title' => '',
+                'title' => $type === 'personal' ? 'Personal time' : '',
                 'type' => $type,
                 'status' => 'scheduled',
                 'start_at' => $at,
@@ -83,7 +83,7 @@ final class EventsController extends Controller
         $businessId = current_business_id();
         $actorId = (int) (auth_user_id() ?? 0);
         $payload = $this->payloadFromPost($_POST);
-        $errors = $this->validatePayload($payload);
+        $errors = $this->validatePayload($payload, $businessId);
         if ($errors !== []) {
             $this->render('events/form', [
                 'pageTitle' => 'Add Event',
@@ -180,7 +180,7 @@ final class EventsController extends Controller
 
         $actorId = (int) (auth_user_id() ?? 0);
         $payload = $this->payloadFromPost($_POST);
-        $errors = $this->validatePayload($payload);
+        $errors = $this->validatePayload($payload, $businessId, $id);
         if ($errors !== []) {
             $this->render('events/form', [
                 'pageTitle' => 'Edit Event',
@@ -249,7 +249,7 @@ final class EventsController extends Controller
         $businessId = current_business_id();
         $actorId = (int) (auth_user_id() ?? 0);
         $payload = $this->payloadFromPost($_POST);
-        $errors = $this->validatePayload($payload);
+        $errors = $this->validatePayload($payload, $businessId);
         if ($errors !== []) {
             $this->sendJson(['ok' => false, 'errors' => $errors], 422);
         }
@@ -286,7 +286,7 @@ final class EventsController extends Controller
 
         $actorId = (int) (auth_user_id() ?? 0);
         $payload = $this->payloadFromPost($_POST);
-        $errors = $this->validatePayload($payload);
+        $errors = $this->validatePayload($payload, $businessId, $id);
         if ($errors !== []) {
             $this->sendJson(['ok' => false, 'errors' => $errors], 422);
         }
@@ -466,7 +466,7 @@ final class EventsController extends Controller
         ];
     }
 
-    private function validatePayload(array $payload): array
+    private function validatePayload(array $payload, int $businessId, int $excludeEventId = 0): array
     {
         $errors = [];
         if (trim((string) ($payload['title'] ?? '')) === '') {
@@ -475,6 +475,16 @@ final class EventsController extends Controller
         if (trim((string) ($payload['start_at'] ?? '')) === '') {
             $errors['start_at'] = 'Start date/time is required.';
         }
+
+        $type = strtolower(trim((string) ($payload['type'] ?? 'appointment')));
+        if ($type === 'appointment' && $businessId > 0) {
+            $startAt = trim((string) ($payload['start_at'] ?? ''));
+            $endAt = trim((string) ($payload['end_at'] ?? ''));
+            if ($startAt !== '' && Event::hasPersonalTimeOverlap($businessId, $startAt, $endAt, $excludeEventId)) {
+                $errors['start_at'] = 'This time is blocked for personal time. Choose another slot or remove the personal block first.';
+            }
+        }
+
         return $errors;
     }
 }

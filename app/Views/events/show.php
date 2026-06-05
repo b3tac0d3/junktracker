@@ -14,7 +14,7 @@ $canManageEvent = (bool) ($canManageEvent ?? false);
 <div class="page-header d-flex flex-wrap align-items-end justify-content-between gap-2">
     <div>
         <h1><?= e($title !== '' ? $title : ('Event #' . (string) $id)) ?></h1>
-        <p class="muted"><?= e(ucfirst($type)) ?> · <?= e($status === 'cancelled' ? 'Cancelled' : 'Scheduled') ?></p>
+        <p class="muted"><?= e($type === 'personal' ? 'Personal time' : ucfirst($type)) ?> · <?= e($status === 'cancelled' ? 'Cancelled' : 'Scheduled') ?></p>
     </div>
     <div class="d-flex flex-wrap gap-2">
         <?php if ($canManageEvent): ?>
@@ -36,7 +36,7 @@ $canManageEvent = (bool) ($canManageEvent ?? false);
         <div class="record-row-fields record-row-fields-3">
             <div class="record-field">
                 <span class="record-label">Type</span>
-                <span class="record-value"><?= e(ucfirst($type)) ?></span>
+                <span class="record-value"><?= e($type === 'personal' ? 'Personal time (blocks appointments)' : ucfirst($type)) ?></span>
             </div>
             <div class="record-field">
                 <span class="record-label">Start</span>

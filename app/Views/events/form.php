@@ -6,6 +6,7 @@ $actionUrl = (string) ($actionUrl ?? url('/events/create'));
 $cancelUrl = (string) ($cancelUrl ?? url('/events'));
 $typeOptions = [
     'appointment' => 'Appointment',
+    'personal' => 'Personal time (blocks appointments)',
     'reminder' => 'Reminder',
     'note' => 'Note',
     'other' => 'Other',
@@ -35,7 +36,7 @@ $toInputDatetime = static function (string $value): string {
 <div class="page-header d-flex flex-wrap align-items-end justify-content-between gap-2">
     <div>
         <h1><?= e($mode === 'edit' ? 'Edit Event' : 'Add Event') ?></h1>
-        <p class="muted">Calendar appointment or reminder</p>
+        <p class="muted"><?= $selectedType === 'personal' ? 'Block time on your calendar so appointments cannot be booked' : 'Calendar appointment or reminder' ?></p>
     </div>
     <div>
         <a class="btn btn-outline-secondary" href="<?= e(url('/events')) ?>">Back to Calendar</a>

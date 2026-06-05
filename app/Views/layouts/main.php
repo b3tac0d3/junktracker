@@ -144,48 +144,115 @@ $navNotifications = is_array($navNotifications ?? null) ? $navNotifications : ['
                 </li>
             <?php endif; ?>
             <?php if (!$isGlobalSiteAdminContext && !$isPunchOnlyWorkspace): ?>
+                <?php
+                $quickAddMenuItems = [
+                    ['label' => 'Add Job', 'url' => url('/jobs/create'), 'icon' => 'fa-briefcase', 'color' => '#ea580c'],
+                    ['label' => 'Add Client', 'url' => url('/clients/create'), 'icon' => 'fa-users', 'color' => '#2563eb'],
+                    ['label' => 'Add Quote', 'url' => url('/quotes/create'), 'icon' => 'fa-file-signature', 'color' => '#db2777'],
+                    ['label' => 'Add Delivery', 'url' => url('/deliveries/create'), 'icon' => 'fa-truck', 'color' => '#0d9488'],
+                    ['label' => 'Add Task', 'url' => url('/tasks'), 'icon' => 'fa-list-check', 'color' => '#16a34a'],
+                ];
+                if ($canViewFinancials) {
+                    $quickAddMenuItems[] = ['label' => 'Add Sale', 'url' => url('/sales/create'), 'icon' => 'fa-sack-dollar', 'color' => '#ca8a04'];
+                }
+                $quickAddMenuItems[] = ['label' => 'Add Estate Sale', 'url' => url('/estate-sales/create'), 'icon' => 'fa-store', 'color' => '#9333ea'];
+                if ($canViewFinancials) {
+                    $quickAddMenuItems[] = ['label' => 'Add Purchase Quote', 'url' => url('/purchase-quotes/create'), 'icon' => 'fa-tags', 'color' => '#c2410c'];
+                    $quickAddMenuItems[] = ['label' => 'Add Purchase', 'url' => url('/purchases/create'), 'icon' => 'fa-cart-arrow-down', 'color' => '#0891b2'];
+                    $quickAddMenuItems[] = ['label' => 'Add Expense', 'url' => url('/expenses/create'), 'icon' => 'fa-receipt', 'color' => '#64748b'];
+                }
+                ?>
                 <li class="nav-item dropdown">
                     <a class="nav-link dropdown-toggle nav-quick-add-link" id="quickAddDropdown" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false" title="Add">
                         <i class="fas fa-circle-plus fa-fw"></i>
                     </a>
-                    <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="quickAddDropdown">
-                        <li><a class="dropdown-item" href="<?= e(url('/jobs/create')) ?>"><i class="fas fa-briefcase me-2"></i>Add Job</a></li>
-                        <li><a class="dropdown-item" href="<?= e(url('/clients/create')) ?>"><i class="fas fa-users me-2"></i>Add Client</a></li>
-                        <li><a class="dropdown-item" href="<?= e(url('/quotes/create')) ?>"><i class="fas fa-file-signature me-2"></i>Add Quote</a></li>
-                        <li><a class="dropdown-item" href="<?= e(url('/deliveries/create')) ?>"><i class="fas fa-truck me-2"></i>Add Delivery</a></li>
-                        <li><a class="dropdown-item" href="<?= e(url('/tasks')) ?>"><i class="fas fa-list-check me-2"></i>Add Task</a></li>
-                        <?php if ($canViewFinancials): ?>
-                        <li><a class="dropdown-item" href="<?= e(url('/sales/create')) ?>"><i class="fas fa-sack-dollar me-2"></i>Add Sale</a></li>
-                        <?php endif; ?>
-                        <li><a class="dropdown-item" href="<?= e(url('/estate-sales/create')) ?>"><i class="fas fa-store me-2"></i>Add Estate Sale</a></li>
-                        <?php if ($canViewFinancials): ?>
-                        <li><a class="dropdown-item" href="<?= e(url('/purchase-quotes/create')) ?>"><i class="fas fa-tags me-2"></i>Add Purchase Quote</a></li>
-                        <li><a class="dropdown-item" href="<?= e(url('/purchases/create')) ?>"><i class="fas fa-cart-arrow-down me-2"></i>Add Purchase</a></li>
-                        <li><a class="dropdown-item" href="<?= e(url('/expenses/create')) ?>"><i class="fas fa-receipt me-2"></i>Add Expense</a></li>
-                        <?php endif; ?>
+                    <ul class="dropdown-menu dropdown-menu-end jt-quick-add-menu" aria-labelledby="quickAddDropdown">
+                        <li class="jt-quick-add-menu-heading" aria-hidden="true">Quick add</li>
+                        <?php foreach ($quickAddMenuItems as $quickAddItem): ?>
+                            <li>
+                                <a
+                                    class="dropdown-item jt-quick-add-item"
+                                    href="<?= e((string) ($quickAddItem['url'] ?? '/')) ?>"
+                                    style="--jt-quick-color: <?= e((string) ($quickAddItem['color'] ?? '#2563eb')) ?>"
+                                >
+                                    <span class="jt-quick-add-icon" aria-hidden="true">
+                                        <i class="fas <?= e((string) ($quickAddItem['icon'] ?? 'fa-circle')) ?>"></i>
+                                    </span>
+                                    <span class="jt-quick-add-label"><?= e((string) ($quickAddItem['label'] ?? '')) ?></span>
+                                </a>
+                            </li>
+                        <?php endforeach; ?>
                     </ul>
                 </li>
             <?php endif; ?>
+            <?php
+            $userEmail = trim((string) ($user['email'] ?? ''));
+            $userInitial = strtoupper(substr($userEmail !== '' ? $userEmail : 'U', 0, 1));
+            $userRoleLabel = ucwords(str_replace('_', ' ', $workspaceRole));
+            $userRoleBadgeColor = match ($workspaceRole) {
+                'site_admin' => '#7c3aed',
+                'admin' => '#2563eb',
+                'general_user' => '#0d9488',
+                'punch_only' => '#64748b',
+                default => '#475569',
+            };
+            $userMenuItems = [
+                ['label' => 'Settings', 'url' => url('/settings'), 'icon' => 'fa-gear', 'color' => '#64748b'],
+            ];
+            if ($canManageUsers && !$isGlobalSiteAdminContext && !$isPunchOnlyWorkspace) {
+                $userMenuItems[] = ['label' => 'Manage Users', 'url' => url('/admin/users'), 'icon' => 'fa-users-gear', 'color' => '#2563eb'];
+            }
+            if (is_site_admin() && !$isPunchOnlyWorkspace) {
+                $userMenuItems[] = ['label' => 'Site Admin Dashboard', 'url' => url('/site-admin/businesses'), 'icon' => 'fa-shield-halved', 'color' => '#7c3aed'];
+                $userMenuItems[] = ['label' => 'Dev Tracker', 'url' => url('/dev'), 'icon' => 'fa-code-branch', 'color' => '#ea580c'];
+            }
+            ?>
             <li class="nav-item dropdown">
                 <a class="nav-link dropdown-toggle" id="navbarDropdown" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false"><i class="fas fa-user fa-fw"></i></a>
-                <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="navbarDropdown">
-                    <li><span class="dropdown-item-text small text-muted"><?= e((string) ($user['email'] ?? '')) ?></span></li>
-                    <li><span class="dropdown-item-text small text-muted">Role: <?= e($workspaceRole) ?></span></li>
-                    <?php if ($businessId > 0): ?><li><span class="dropdown-item-text small text-muted">Business #<?= e((string) $businessId) ?></span></li><?php endif; ?>
-                    <li><hr class="dropdown-divider" /></li>
-                    <li><a class="dropdown-item" href="<?= e(url('/settings')) ?>">Settings</a></li>
-                    <?php if ($canManageUsers && !$isGlobalSiteAdminContext && !$isPunchOnlyWorkspace): ?>
-                        <li><a class="dropdown-item" href="<?= e(url('/admin/users')) ?>">Manage Users</a></li>
-                    <?php endif; ?>
-                    <?php if (is_site_admin() && !$isPunchOnlyWorkspace): ?>
-                        <li><a class="dropdown-item" href="<?= e(url('/site-admin/businesses')) ?>">Site Admin Dashboard</a></li>
-                        <li><a class="dropdown-item" href="<?= e(url('/dev')) ?>">Dev Tracker</a></li>
-                    <?php endif; ?>
-                    <li><hr class="dropdown-divider" /></li>
+                <ul class="dropdown-menu dropdown-menu-end jt-user-menu" aria-labelledby="navbarDropdown">
+                    <li class="jt-user-menu-profile">
+                        <div class="jt-user-menu-profile-inner">
+                            <span class="jt-user-menu-avatar" aria-hidden="true"><?= e($userInitial) ?></span>
+                            <div class="jt-user-menu-profile-text">
+                                <div class="jt-user-menu-email"><?= e($userEmail !== '' ? $userEmail : 'Signed in') ?></div>
+                                <div class="jt-user-menu-meta">
+                                    <span class="jt-user-menu-role-badge" style="--jt-user-role-color: <?= e($userRoleBadgeColor) ?>"><?= e($userRoleLabel) ?></span>
+                                    <?php if ($businessId > 0): ?>
+                                        <span class="jt-user-menu-business">Business #<?= e((string) $businessId) ?></span>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
+                        </div>
+                    </li>
+                    <li><hr class="dropdown-divider jt-user-menu-divider" /></li>
+                    <?php foreach ($userMenuItems as $userMenuItem): ?>
+                        <li>
+                            <a
+                                class="dropdown-item jt-user-menu-item"
+                                href="<?= e((string) ($userMenuItem['url'] ?? '/')) ?>"
+                                style="--jt-user-menu-color: <?= e((string) ($userMenuItem['color'] ?? '#64748b')) ?>"
+                            >
+                                <span class="jt-user-menu-icon" aria-hidden="true">
+                                    <i class="fas <?= e((string) ($userMenuItem['icon'] ?? 'fa-circle')) ?>"></i>
+                                </span>
+                                <span class="jt-user-menu-label"><?= e((string) ($userMenuItem['label'] ?? '')) ?></span>
+                            </a>
+                        </li>
+                    <?php endforeach; ?>
+                    <li><hr class="dropdown-divider jt-user-menu-divider" /></li>
                     <li>
                         <form method="post" action="<?= e(url('/logout')) ?>">
                             <?= csrf_field() ?>
-                            <button class="dropdown-item" type="submit">Logout</button>
+                            <button
+                                class="dropdown-item jt-user-menu-item jt-user-menu-item--logout"
+                                type="submit"
+                                style="--jt-user-menu-color: #b91c1c"
+                            >
+                                <span class="jt-user-menu-icon" aria-hidden="true">
+                                    <i class="fas fa-right-from-bracket"></i>
+                                </span>
+                                <span class="jt-user-menu-label">Logout</span>
+                            </button>
                         </form>
                     </li>
                 </ul>
@@ -240,8 +307,8 @@ $navNotifications = is_array($navNotifications ?? null) ? $navNotifications : ['
                                 </a>
                                 <div class="collapse" id="collapseNavWork" data-bs-parent="#sidenavAccordion">
                                     <nav class="sb-sidenav-menu-nested nav">
-                                        <a class="nav-link jt-nav-sublink" href="<?= e(url('/quotes')) ?>">Quotes</a>
                                         <a class="nav-link jt-nav-sublink" href="<?= e(url('/jobs')) ?>">Jobs</a>
+                                        <a class="nav-link jt-nav-sublink" href="<?= e(url('/quotes')) ?>">Quotes</a>
                                     </nav>
                                 </div>
 
@@ -284,8 +351,8 @@ $navNotifications = is_array($navNotifications ?? null) ? $navNotifications : ['
                                 </a>
                                 <div class="collapse" id="collapseNavOperations" data-bs-parent="#sidenavAccordion">
                                     <nav class="sb-sidenav-menu-nested nav">
-                                        <a class="nav-link jt-nav-sublink" href="<?= e(url('/deliveries')) ?>">Deliveries</a>
                                         <a class="nav-link jt-nav-sublink" href="<?= e(url('/tasks')) ?>">Tasks</a>
+                                        <a class="nav-link jt-nav-sublink" href="<?= e(url('/deliveries')) ?>">Deliveries</a>
                                     </nav>
                                 </div>
 

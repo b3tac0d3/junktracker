@@ -2,12 +2,13 @@
 $pageTitle = 'Events';
 $canViewFinancials = (bool) ($canViewFinancials ?? can_view_financials());
 $calendarCreateTypes = [
-    ['id' => 'event', 'label' => 'Appointment', 'icon' => 'fa-calendar-check', 'color' => '#b91c1c', 'url' => url('/events/create')],
-    ['id' => 'task', 'label' => 'Task', 'icon' => 'fa-list-check', 'color' => '#16a34a', 'url' => url('/tasks/create')],
-    ['id' => 'job', 'label' => 'Job', 'icon' => 'fa-briefcase', 'color' => '#ea580c', 'url' => url('/jobs/create')],
-    ['id' => 'delivery', 'label' => 'Delivery', 'icon' => 'fa-truck', 'color' => '#0d9488', 'url' => url('/deliveries/create')],
-    ['id' => 'quote', 'label' => 'Quote', 'icon' => 'fa-file-signature', 'color' => '#db2777', 'url' => url('/quotes/create')],
-    ['id' => 'estate_sale', 'label' => 'Estate Sale', 'icon' => 'fa-store', 'color' => '#9333ea', 'url' => url('/estate-sales/create')],
+    ['id' => 'personal', 'label' => 'Personal time', 'icon' => 'fa-user-clock', 'color' => '#475569', 'url' => url('/events/create?type=personal'), 'blocksOnly' => false],
+    ['id' => 'event', 'label' => 'Appointment', 'icon' => 'fa-calendar-check', 'color' => '#b91c1c', 'url' => url('/events/create'), 'blocksOnly' => true],
+    ['id' => 'task', 'label' => 'Task', 'icon' => 'fa-list-check', 'color' => '#16a34a', 'url' => url('/tasks/create'), 'blocksOnly' => true],
+    ['id' => 'job', 'label' => 'Job', 'icon' => 'fa-briefcase', 'color' => '#ea580c', 'url' => url('/jobs/create'), 'blocksOnly' => true],
+    ['id' => 'delivery', 'label' => 'Delivery', 'icon' => 'fa-truck', 'color' => '#0d9488', 'url' => url('/deliveries/create'), 'blocksOnly' => true],
+    ['id' => 'quote', 'label' => 'Quote', 'icon' => 'fa-file-signature', 'color' => '#db2777', 'url' => url('/quotes/create'), 'blocksOnly' => true],
+    ['id' => 'estate_sale', 'label' => 'Estate Sale', 'icon' => 'fa-store', 'color' => '#9333ea', 'url' => url('/estate-sales/create'), 'blocksOnly' => true],
 ];
 if ($canViewFinancials) {
     $calendarCreateTypes[] = [
@@ -16,6 +17,7 @@ if ($canViewFinancials) {
         'icon' => 'fa-tags',
         'color' => '#c2410c',
         'url' => url('/purchase-quotes/create'),
+        'blocksOnly' => true,
     ];
 }
 ?>
@@ -23,7 +25,7 @@ if ($canViewFinancials) {
 <div class="jt-events-screen">
 <div class="page-header">
     <h1>Events</h1>
-    <p class="muted">Calendar for appointments, cancellations, tasks, jobs, deliveries, quotes, purchase quotes, and estate sales.</p>
+    <p class="muted">Calendar for appointments, personal time blocks, tasks, jobs, deliveries, quotes, purchase quotes, and estate sales.</p>
 </div>
 
 <div class="card index-card">
@@ -32,6 +34,7 @@ if ($canViewFinancials) {
             <div class="d-flex flex-wrap align-items-center gap-2">
                 <div class="d-flex flex-wrap gap-2 align-items-center">
                     <span class="badge" style="background:#b91c1c;">Appts</span>
+                    <span class="badge" style="background:#475569;">Personal</span>
                     <span class="badge" style="background:#2563eb;">Cancels</span>
                     <span class="badge" style="background:#16a34a;">Tasks</span>
                     <span class="badge" style="background:#ea580c;">Jobs</span>
@@ -64,6 +67,10 @@ if ($canViewFinancials) {
                                 <label class="form-check d-flex align-items-center gap-2 m-0">
                                     <input class="form-check-input" type="checkbox" id="jt-type-appt" checked />
                                     <span class="small">Appointments</span>
+                                </label>
+                                <label class="form-check d-flex align-items-center gap-2 m-0">
+                                    <input class="form-check-input" type="checkbox" id="jt-type-personal" checked />
+                                    <span class="small">Personal time</span>
                                 </label>
                                 <label class="form-check d-flex align-items-center gap-2 m-0">
                                     <input class="form-check-input" type="checkbox" id="jt-type-cancel" />
@@ -194,7 +201,28 @@ window.addEventListener('DOMContentLoaded', () => {
   const createPickerClose = document.getElementById('jt-cal-create-picker-close');
   const createPickerWhen = document.getElementById('jt-cal-create-picker-when');
   const createPickerTypes = document.getElementById('jt-cal-create-picker-types');
+  const createPickerBlocked = document.getElementById('jt-cal-create-picker-blocked');
+  const createPickerHeading = document.getElementById('jt-cal-create-picker-heading');
   let createPickerAt = '';
+
+  const slotOverlapsPersonal = (date) => {
+    if (!(date instanceof Date) || Number.isNaN(date.getTime()) || !calendar) {
+      return false;
+    }
+    const probeStart = date;
+    const probeEnd = new Date(date.getTime() + (60 * 60 * 1000));
+    return calendar.getEvents().some((ev) => {
+      if (String(ev.extendedProps?.jtType || '') !== 'personal') {
+        return false;
+      }
+      const evStart = ev.start;
+      if (!(evStart instanceof Date)) {
+        return false;
+      }
+      const evEnd = ev.end instanceof Date ? ev.end : new Date(evStart.getTime() + (60 * 60 * 1000));
+      return probeStart < evEnd && evStart < probeEnd;
+    });
+  };
 
   const closeCreatePicker = () => {
     if (!createPicker) {
@@ -214,23 +242,36 @@ window.addEventListener('DOMContentLoaded', () => {
       return;
     }
     createPickerWhen.textContent = formatWhenLabel(date);
+    const blocked = slotOverlapsPersonal(date);
+    if (createPickerBlocked) {
+      createPickerBlocked.classList.toggle('d-none', !blocked);
+    }
+    if (createPickerHeading) {
+      createPickerHeading.textContent = blocked
+        ? 'Personal time — appointments unavailable'
+        : 'What are you scheduling?';
+    }
     createPickerTypes.innerHTML = '';
     calendarCreateTypes.forEach((item) => {
+      const isBlockedType = blocked && item.blocksOnly !== false;
       const btn = document.createElement('button');
       btn.type = 'button';
-      btn.className = 'jt-cal-create-type-btn';
+      btn.className = 'jt-cal-create-type-btn' + (isBlockedType ? ' jt-cal-create-type-btn--disabled' : '');
       btn.style.setProperty('--jt-cal-type-color', item.color || '#2563eb');
+      btn.disabled = isBlockedType;
       btn.innerHTML =
         '<span class="jt-cal-create-type-icon"><i class="fas ' + String(item.icon || 'fa-circle') + '"></i></span>' +
         '<span class="jt-cal-create-type-label">' + String(item.label || 'Create') + '</span>';
-      btn.addEventListener('click', () => {
-        const base = String(item.url || '');
-        if (base === '') {
-          return;
-        }
-        const join = base.includes('?') ? '&' : '?';
-        window.location.href = base + join + 'at=' + encodeURIComponent(createPickerAt);
-      });
+      if (!isBlockedType) {
+        btn.addEventListener('click', () => {
+          const base = String(item.url || '');
+          if (base === '') {
+            return;
+          }
+          const join = base.includes('?') ? '&' : '?';
+          window.location.href = base + join + 'at=' + encodeURIComponent(createPickerAt);
+        });
+      }
       createPickerTypes.appendChild(btn);
     });
     createPicker.classList.remove('d-none');
@@ -259,6 +300,7 @@ window.addEventListener('DOMContentLoaded', () => {
   const getTypes = () => {
     const types = [];
     if (document.getElementById('jt-type-appt')?.checked) types.push('appointment');
+    if (document.getElementById('jt-type-personal')?.checked) types.push('personal');
     if (document.getElementById('jt-type-cancel')?.checked) types.push('cancellation');
     return types.join(',');
   };
@@ -364,6 +406,9 @@ window.addEventListener('DOMContentLoaded', () => {
     editable: false,
     eventStartEditable: false,
     eventDurationEditable: false,
+    eventClassNames: (arg) => (
+      String(arg.event.extendedProps?.jtType || '') === 'personal' ? ['jt-cal-event-personal'] : []
+    ),
     eventDidMount: appendCustomerToEventTitle,
     datesSet: () => {
       syncMobileViewButtons();
@@ -523,6 +568,7 @@ window.addEventListener('DOMContentLoaded', () => {
   const refetch = () => calendar.refetchEvents();
   document.getElementById('jt-src-events')?.addEventListener('change', refetch);
   document.getElementById('jt-type-appt')?.addEventListener('change', refetch);
+  document.getElementById('jt-type-personal')?.addEventListener('change', refetch);
   document.getElementById('jt-type-cancel')?.addEventListener('change', refetch);
   document.getElementById('jt-src-tasks')?.addEventListener('change', refetch);
   document.getElementById('jt-src-jobs')?.addEventListener('change', refetch);
@@ -585,10 +631,13 @@ window.addEventListener('DOMContentLoaded', () => {
         <div class="card-body">
             <div class="d-flex justify-content-between align-items-start mb-2">
                 <div>
-                    <div class="small text-uppercase text-muted fw-bold mb-1">New appointment</div>
-                    <h2 class="h5 m-0">What are you scheduling?</h2>
+                    <div class="small text-uppercase text-muted fw-bold mb-1">Schedule</div>
+                    <h2 class="h5 m-0" id="jt-cal-create-picker-heading">What are you scheduling?</h2>
                 </div>
                 <button type="button" class="btn btn-outline-secondary btn-sm" id="jt-cal-create-picker-close">Close</button>
+            </div>
+            <div id="jt-cal-create-picker-blocked" class="alert alert-secondary py-2 px-3 small mb-3 d-none" role="status">
+                This time slot is blocked for personal time. You can still add or extend personal time, but appointments cannot be booked here.
             </div>
             <div class="mb-3">
                 <div class="small text-uppercase text-muted fw-bold mb-1">When</div>
