@@ -15,6 +15,8 @@ $selectedType = strtolower(trim((string) ($form['type'] ?? 'appointment')));
 if (!array_key_exists($selectedType, $typeOptions)) {
     $typeOptions[$selectedType] = ucwords(str_replace('_', ' ', $selectedType));
 }
+$clientOptions = is_array($clientOptions ?? null) ? $clientOptions : [];
+$selectedClientId = (int) ($form['client_id'] ?? 0);
 
 $fieldError = static function (string $field) use ($errors): string {
     return isset($errors[$field]) ? (string) $errors[$field] : '';
@@ -66,6 +68,21 @@ $toInputDatetime = static function (string $value): string {
                 </select>
             </div>
 
+            <div class="col-12 col-lg-3 jt-event-client-field <?= $selectedType === 'appointment' ? '' : 'd-none' ?>">
+                <label class="form-label fw-semibold" for="event-client-id">Client</label>
+                <select id="event-client-id" name="client_id" class="form-select">
+                    <option value="">— No client —</option>
+                    <?php foreach ($clientOptions as $clientOption): ?>
+                        <?php if (!is_array($clientOption)) { continue; } ?>
+                        <?php $clientId = (int) ($clientOption['id'] ?? 0); ?>
+                        <option value="<?= e((string) $clientId) ?>" <?= $selectedClientId === $clientId ? 'selected' : '' ?>>
+                            <?= e((string) ($clientOption['name'] ?? ('Client #' . (string) $clientId))) ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+                <div class="form-text">Primary phone syncs to Google Calendar and Gmail.</div>
+            </div>
+
             <div class="col-12 col-lg-3">
                 <label class="form-label fw-semibold d-block" for="event-all-day">All day</label>
                 <div class="form-check mt-2">
@@ -97,3 +114,14 @@ $toInputDatetime = static function (string $value): string {
         </form>
     </div>
 </section>
+<script>
+(() => {
+  const typeSelect = document.getElementById('event-type');
+  const clientWrap = document.querySelector('.jt-event-client-field');
+  if (!typeSelect || !clientWrap) return;
+  const sync = () => {
+    clientWrap.classList.toggle('d-none', typeSelect.value !== 'appointment');
+  };
+  typeSelect.addEventListener('change', sync);
+})();
+</script>

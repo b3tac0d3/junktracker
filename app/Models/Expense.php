@@ -67,6 +67,18 @@ final class Expense
         return SchemaInspector::hasColumn('expenses', 'weight');
     }
 
+    public static function referralFeeCategoryLabel(int $businessId): string
+    {
+        foreach (self::categoryOptions($businessId) as $option) {
+            $normalized = strtolower(trim((string) $option));
+            if ($normalized === 'referral fee' || $normalized === 'referral' || str_contains($normalized, 'referral')) {
+                return trim((string) $option);
+            }
+        }
+
+        return 'Referral Fee';
+    }
+
     public static function supportsEmployeeLink(): bool
     {
         return SchemaInspector::hasColumn('expenses', 'employee_id');
@@ -219,8 +231,6 @@ final class Expense
 
         $raw = trim($weightInput);
         if ($raw === '') {
-            $errors[$field] = 'Enter disposal weight in pounds.';
-
             return;
         }
 

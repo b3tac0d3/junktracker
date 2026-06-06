@@ -25,6 +25,7 @@ use App\Controllers\ExpensesController;
 use App\Controllers\HomeController;
 use App\Controllers\JobsController;
 use App\Controllers\NetworkingController;
+use App\Controllers\SubcontractorsController;
 use App\Controllers\PurchaseQuotesController;
 use App\Controllers\PurchasesController;
 use App\Controllers\QuotesController;
@@ -156,6 +157,11 @@ $router->post('/jobs/{id}/employees/bulk-punch', [JobsController::class, 'bulkPu
 $router->post('/jobs/{id}/employees/{employeeId}/punch-in', [JobsController::class, 'punchInEmployee']);
 $router->post('/jobs/{id}/employees/{employeeId}/punch-out', [JobsController::class, 'punchOutEmployee']);
 $router->post('/jobs/{id}/employees/{employeeId}/remove', [JobsController::class, 'removeEmployee']);
+$router->get('/jobs/{id}/sub-out', [JobsController::class, 'subOutForm']);
+$router->post('/jobs/{id}/sub-out', [JobsController::class, 'storeSubOut']);
+$router->get('/jobs/{id}/sub-out/edit', [JobsController::class, 'editSubOut']);
+$router->post('/jobs/{id}/sub-out/update', [JobsController::class, 'updateSubOut']);
+$router->post('/jobs/{id}/sub-out/remove', [JobsController::class, 'removeSubOut']);
 $router->post('/jobs/{id}/closeout', [JobsController::class, 'saveCloseout']);
 $router->post('/jobs/{id}/quick-status', [JobsController::class, 'quickStatus']);
 $router->get('/jobs/{id}', [JobsController::class, 'show']);
@@ -178,6 +184,16 @@ $router->get('/networking/{id}/edit', [NetworkingController::class, 'edit']);
 $router->post('/networking/{id}/update', [NetworkingController::class, 'update']);
 $router->post('/networking/{id}/delete', [NetworkingController::class, 'delete']);
 $router->get('/networking/{id}', [NetworkingController::class, 'show']);
+
+$router->get('/subs', [SubcontractorsController::class, 'index']);
+$router->get('/subs/create', [SubcontractorsController::class, 'create']);
+$router->post('/subs', [SubcontractorsController::class, 'store']);
+$router->get('/subs/{id}/edit', [SubcontractorsController::class, 'edit']);
+$router->post('/subs/{id}/update', [SubcontractorsController::class, 'update']);
+$router->post('/subs/{id}/delete', [SubcontractorsController::class, 'delete']);
+$router->get('/subs/{id}/jobs/assign', [SubcontractorsController::class, 'assignJob']);
+$router->post('/subs/{id}/jobs', [SubcontractorsController::class, 'storeJob']);
+$router->get('/subs/{id}', [SubcontractorsController::class, 'show']);
 
 $router->get('/tasks', [TasksController::class, 'index']);
 $router->get('/tasks/create', [TasksController::class, 'create']);

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Models\Business;
+use App\Models\Event;
 use App\Models\GoogleCalendarConnection;
 use Core\GmailApi;
 
@@ -69,7 +70,7 @@ final class AppointmentGmailNotify
         }
 
         $subject = self::subjectForAction($action, $event, $businessName);
-        $body = self::bodyForAction($action, $event, $businessName);
+        $body = self::bodyForAction($action, $event, $businessName, $businessId);
 
         $result = GmailApi::sendPlainText($accessToken, $recipients, $subject, $body, $fromEmail);
         if (!$result['ok']) {
@@ -99,7 +100,7 @@ final class AppointmentGmailNotify
     /**
      * @param array<string, mixed> $event
      */
-    private static function bodyForAction(string $action, array $event, string $businessName): string
+    private static function bodyForAction(string $action, array $event, string $businessName, int $businessId): string
     {
         $eventId = (int) ($event['id'] ?? 0);
         $title = trim((string) ($event['title'] ?? ''));
@@ -116,6 +117,8 @@ final class AppointmentGmailNotify
             default => 'Appointment update from JunkTracker.',
         };
 
+        $contact = Event::linkedClientContact($businessId, $event);
+
         $lines = [
             $intro,
             '',
@@ -124,6 +127,16 @@ final class AppointmentGmailNotify
             'When: ' . $when,
             'Status: ' . $status,
         ];
+
+        $clientName = trim((string) ($contact['name'] ?? ''));
+        $clientPhone = trim((string) ($contact['phone'] ?? ''));
+        if ($clientName !== '') {
+            $lines[] = 'Client: ' . $clientName;
+        }
+        if ($clientPhone !== '') {
+            $formatted = format_phone($clientPhone);
+            $lines[] = 'Phone: ' . ($formatted !== '—' ? $formatted : $clientPhone);
+        }
 
         if ($notes !== '') {
             $lines[] = '';

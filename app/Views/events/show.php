@@ -9,6 +9,9 @@ $endAt = (string) ($event['end_at'] ?? '');
 $notes = (string) ($event['notes'] ?? '');
 $allDay = (int) ($event['all_day'] ?? 0) === 1;
 $canManageEvent = (bool) ($canManageEvent ?? false);
+$linkedClientName = trim((string) ($linkedClientName ?? ''));
+$linkedClientPhone = trim((string) ($linkedClientPhone ?? ''));
+$linkedClientPhoneHref = phone_tel_href($linkedClientPhone);
 ?>
 
 <div class="page-header d-flex flex-wrap align-items-end justify-content-between gap-2">
@@ -54,6 +57,24 @@ $canManageEvent = (bool) ($canManageEvent ?? false);
                 <span class="record-label">Status</span>
                 <span class="record-value"><?= e($status === 'cancelled' ? 'Cancelled' : 'Scheduled') ?></span>
             </div>
+            <?php if ($linkedClientName !== ''): ?>
+            <div class="record-field">
+                <span class="record-label">Client</span>
+                <span class="record-value"><?= e($linkedClientName) ?></span>
+            </div>
+            <?php endif; ?>
+            <?php if ($linkedClientPhone !== ''): ?>
+            <div class="record-field">
+                <span class="record-label">Phone</span>
+                <span class="record-value">
+                    <?php if ($linkedClientPhoneHref !== ''): ?>
+                        <a href="<?= e($linkedClientPhoneHref) ?>"><?= e(format_phone($linkedClientPhone)) ?></a>
+                    <?php else: ?>
+                        <?= e(format_phone($linkedClientPhone)) ?>
+                    <?php endif; ?>
+                </span>
+            </div>
+            <?php endif; ?>
             <div class="record-field record-field-full">
                 <span class="record-label">Notes</span>
                 <span class="record-value"><?= e($notes !== '' ? $notes : '—') ?></span>

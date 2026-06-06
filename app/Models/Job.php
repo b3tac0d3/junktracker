@@ -870,9 +870,11 @@ final class Job
 
         $joinClient = SchemaInspector::hasTable('clients') && SchemaInspector::hasColumn('jobs', 'client_id');
         $clientNameSql = "'—'";
+        $clientPhoneSql = "''";
         $joinSql = '';
         if ($joinClient) {
             $clientNameSql = "COALESCE(NULLIF(TRIM(CONCAT_WS(' ', c.first_name, c.last_name)), ''), NULLIF(c.company_name, ''), CONCAT('Client #', c.id))";
+            $clientPhoneSql = SchemaInspector::hasColumn('clients', 'phone') ? "COALESCE(c.phone, '')" : "''";
             $joinDeleted = SchemaInspector::hasColumn('clients', 'deleted_at') ? 'AND c.deleted_at IS NULL' : '';
             $joinSql = " LEFT JOIN clients c ON c.id = j.client_id {$joinDeleted}";
         }
@@ -912,7 +914,8 @@ final class Job
                     {$actualEndSql} AS actual_end_at,
                     {$notesSql} AS notes,
                     {$clientIdSql} AS client_id,
-                    {$clientNameSql} AS client_name
+                    {$clientNameSql} AS client_name,
+                    {$clientPhoneSql} AS client_phone
                     {$closeoutExtra}
                 FROM jobs j
                 {$joinSql}
@@ -968,9 +971,11 @@ final class Job
 
         $joinClient = SchemaInspector::hasTable('clients') && SchemaInspector::hasColumn('jobs', 'client_id');
         $clientNameSql = "''";
+        $clientPhoneSql = "''";
         $joinSql = '';
         if ($joinClient) {
             $clientNameSql = "COALESCE(NULLIF(TRIM(CONCAT_WS(' ', c.first_name, c.last_name)), ''), NULLIF(c.company_name, ''), '')";
+            $clientPhoneSql = SchemaInspector::hasColumn('clients', 'phone') ? "COALESCE(c.phone, '')" : "''";
             $joinDeleted = SchemaInspector::hasColumn('clients', 'deleted_at') ? 'AND c.deleted_at IS NULL' : '';
             $joinSql = " LEFT JOIN clients c ON c.id = j.client_id {$joinDeleted}";
         }
@@ -989,7 +994,8 @@ final class Job
                     {$citySql} AS city,
                     {$stateSql} AS state,
                     {$postalSql} AS postal_code,
-                    {$clientNameSql} AS client_name
+                    {$clientNameSql} AS client_name,
+                    {$clientPhoneSql} AS client_phone
                 FROM jobs j
                 {$joinSql}
                 WHERE {$businessWhere}
@@ -1127,6 +1133,18 @@ final class Job
         $tips = max(0.0, $payments - $invoiceGross);
         $balanceDue = max(0.0, $invoiceGross - $payments);
 
+        $subAssignment = JobSubcontractorAssignment::isAvailable()
+            ? JobSubcontractorAssignment::findForJob($businessId, $jobId)
+            : null;
+        $subOurCut = null;
+        $metricsRevenue = $totalNet;
+        if (is_array($subAssignment) && strtolower(trim((string) ($subAssignment['status'] ?? ''))) === 'completed') {
+            $subOurCut = $subAssignment['our_cut'] ?? null;
+            if ($subOurCut !== null && is_numeric($subOurCut)) {
+                $metricsRevenue = (float) $subOurCut + $salesNet;
+            }
+        }
+
         return [
             'raw_gross' => $invoiceGross,
             'invoice_gross' => $invoiceGross,
@@ -1146,6 +1164,9 @@ final class Job
             'adjustments' => $adjustments,
             'net' => $totalNet,
             'balance' => $balanceDue,
+            'sub_assignment' => $subAssignment,
+            'sub_our_cut' => $subOurCut !== null ? round((float) $subOurCut, 2) : null,
+            'metrics_revenue' => round($metricsRevenue, 2),
         ];
     }
 

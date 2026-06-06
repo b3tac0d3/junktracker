@@ -315,6 +315,62 @@ final class Event
     }
 
     /**
+     * Primary client name and phone linked to an event (client or job link).
+     *
+     * @param array<string, mixed> $event
+     * @return array{name: string, phone: string}
+     */
+    public static function linkedClientContact(int $businessId, array $event): array
+    {
+        $empty = ['name' => '', 'phone' => ''];
+        if ($businessId <= 0) {
+            return $empty;
+        }
+
+        $linkType = strtolower(trim((string) ($event['link_type'] ?? '')));
+        $linkId = (int) ($event['link_id'] ?? 0);
+        if ($linkId <= 0) {
+            return $empty;
+        }
+
+        if ($linkType === 'client') {
+            $client = Client::findForBusiness($businessId, $linkId);
+            if ($client === null) {
+                return $empty;
+            }
+
+            return [
+                'name' => Client::displayName($client),
+                'phone' => trim((string) ($client['phone'] ?? '')),
+            ];
+        }
+
+        if ($linkType === 'job') {
+            $job = Job::findForBusiness($businessId, $linkId);
+            if ($job === null) {
+                return $empty;
+            }
+
+            $name = trim((string) ($job['client_name'] ?? ''));
+            $phone = trim((string) ($job['client_phone'] ?? ''));
+            $clientId = (int) ($job['client_id'] ?? 0);
+            if ($phone === '' && $clientId > 0) {
+                $client = Client::findForBusiness($businessId, $clientId);
+                if ($client !== null) {
+                    $phone = trim((string) ($client['phone'] ?? ''));
+                    if ($name === '') {
+                        $name = Client::displayName($client);
+                    }
+                }
+            }
+
+            return ['name' => $name, 'phone' => $phone];
+        }
+
+        return $empty;
+    }
+
+    /**
      * True when a scheduled personal-time block overlaps the given window.
      */
     public static function hasPersonalTimeOverlap(

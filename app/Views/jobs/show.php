@@ -21,6 +21,7 @@ $expenses = is_array($expenses ?? null) ? $expenses : [];
 $adjustments = is_array($adjustments ?? null) ? $adjustments : [];
 $documents = is_array($documents ?? null) ? $documents : [];
 $assignedEmployees = is_array($assignedEmployees ?? null) ? $assignedEmployees : [];
+$subAssignment = is_array($subAssignment ?? null) ? $subAssignment : null;
 
 $addressStreet = implode(', ', array_filter([
     trim((string) ($job['address_line1'] ?? '')),
@@ -44,6 +45,8 @@ if ($addressStreet === '' && $addressRegion === '') {
 
 $title = trim((string) ($job['title'] ?? '')) !== '' ? (string) $job['title'] : ('Job #' . (string) ((int) ($job['id'] ?? 0)));
 $jobId = (int) ($job['id'] ?? 0);
+$subOutUrl = url('/jobs/' . (string) $jobId . '/sub-out');
+$subOutEditUrl = url('/jobs/' . (string) $jobId . '/sub-out/edit');
 $clientId = (int) ($job['client_id'] ?? 0);
 $estimateCreateUrl = url('/billing/create') . '?type=estimate&from=job&job_id=' . (string) $jobId . '&client_id=' . (string) $clientId;
 $invoiceCreateUrl = url('/billing/create') . '?type=invoice&from=job&job_id=' . (string) $jobId . '&client_id=' . (string) $clientId;
@@ -273,8 +276,15 @@ $hasCloseout = array_key_exists('closeout_truck_loaded', $job);
             <button class="btn btn-primary dropdown-toggle w-100" type="button" data-bs-toggle="dropdown" aria-expanded="false">
                 <i class="fas fa-ellipsis-h me-2"></i>Actions
             </button>
-            <ul class="dropdown-menu dropdown-menu-end">
+            <ul class="dropdown-menu dropdown-menu-end jt-actions-menu">
                 <li><a class="dropdown-item" href="<?= e(url('/jobs/' . (string) $jobId . '/edit' . detail_return_tab_query($activeTab))) ?>"><i class="fas fa-pen me-2"></i>Edit Job</a></li>
+                <?php if (\App\Models\Subcontractor::isAvailable()): ?>
+                <li>
+                    <a class="dropdown-item" href="<?= e($subAssignment !== null ? $subOutEditUrl : $subOutUrl) ?>">
+                        <i class="fas fa-share-square me-2"></i><?= $subAssignment !== null ? 'Manage Sub Out' : 'Sub Out' ?>
+                    </a>
+                </li>
+                <?php endif; ?>
                 <li><a class="dropdown-item" href="<?= e($timeEntryCreateUrl) ?>"><i class="fas fa-clock me-2"></i>Add Time Entry</a></li>
                 <li><a class="dropdown-item" href="<?= e($employeeAddUrl) ?>"><i class="fas fa-user-plus me-2"></i>Add Employee</a></li>
                 <li><a class="dropdown-item" href="<?= e($estimateCreateUrl) ?>"><i class="fas fa-file-signature me-2"></i>Add Estimate</a></li>
@@ -489,6 +499,57 @@ $hasCloseout = array_key_exists('closeout_truck_loaded', $job);
                     <span class="record-value"><?= e(trim((string) ($job['notes'] ?? '')) ?: '—') ?></span>
                 </div>
             </div>
+
+            <?php if ($subAssignment !== null): ?>
+                <?php
+                $subStatus = strtolower(trim((string) ($subAssignment['status'] ?? 'assigned')));
+                $subName = trim((string) ($subAssignment['subcontractor_name'] ?? ''));
+                $subId = (int) ($subAssignment['subcontractor_id'] ?? 0);
+                $subStatusLabel = ucwords(str_replace('_', ' ', $subStatus));
+                ?>
+                <hr class="my-4">
+                <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+                    <h2 class="h6 mb-0"><i class="fas fa-hard-hat me-2"></i>Subbed out</h2>
+                    <a class="btn btn-outline-primary btn-sm" href="<?= e($subOutEditUrl) ?>">Manage</a>
+                </div>
+                <div class="record-row-fields">
+                    <div class="record-field">
+                        <span class="record-label">Sub-Contractor</span>
+                        <span class="record-value">
+                            <?php if ($subId > 0 && $subName !== ''): ?>
+                                <a class="link-gray-dark text-decoration-none fw-bold" href="<?= e(url('/subs/' . (string) $subId)) ?>"><?= e($subName) ?></a>
+                            <?php else: ?>
+                                <?= e($subName !== '' ? $subName : '—') ?>
+                            <?php endif; ?>
+                        </span>
+                    </div>
+                    <div class="record-field">
+                        <span class="record-label">Status</span>
+                        <span class="record-value"><?= e($subStatusLabel) ?></span>
+                    </div>
+                </div>
+                <?php if ($canViewFinancials && $subStatus === 'completed'): ?>
+                    <div class="record-row-fields mt-3">
+                        <div class="record-field">
+                            <span class="record-label">Sub-contractor charged</span>
+                            <span class="record-value"><?= ($subAssignment['sub_amount'] ?? null) !== null ? e($formatMoney((float) $subAssignment['sub_amount'])) : '—' ?></span>
+                        </div>
+                        <div class="record-field">
+                            <span class="record-label">Our cut</span>
+                            <span class="record-value"><?= ($subAssignment['our_cut'] ?? null) !== null ? e($formatMoney((float) $subAssignment['our_cut'])) : '—' ?></span>
+                        </div>
+                    </div>
+                <?php endif; ?>
+                <?php $subNotes = trim((string) ($subAssignment['notes'] ?? '')); ?>
+                <?php if ($subNotes !== ''): ?>
+                    <div class="record-row-fields mt-3 mb-0">
+                        <div class="record-field record-field-full">
+                            <span class="record-label">Sub-contractor notes</span>
+                            <span class="record-value"><?= nl2br(e($subNotes)) ?></span>
+                        </div>
+                    </div>
+                <?php endif; ?>
+            <?php endif; ?>
 
             <?php if ($hasCloseout): ?>
                 <hr class="my-4">

@@ -10,7 +10,9 @@ use App\Models\Expense;
 use App\Models\FormSelectValue;
 use App\Models\Invoice;
 use App\Models\Job;
+use App\Models\JobSubcontractorAssignment;
 use App\Models\Sale;
+use App\Models\Subcontractor;
 use App\Models\Task;
 use App\Models\TimeEntry;
 use App\Services\GoogleCalendarSync;
@@ -470,6 +472,9 @@ final class JobsController extends Controller
         $payments = Invoice::paymentsByJob($businessId, $jobId);
         $sales = Sale::salesByJob($businessId, $jobId, 200);
         $assignedEmployees = Job::assignedEmployees($businessId, $jobId);
+        $subAssignment = JobSubcontractorAssignment::isAvailable()
+            ? JobSubcontractorAssignment::findForJob($businessId, $jobId)
+            : null;
 
         foreach ($assignedEmployees as $index => $employee) {
             if (!is_array($employee)) {
@@ -515,6 +520,7 @@ final class JobsController extends Controller
             'disposalWeightTotal' => $disposalWeightTotal,
             'adjustments' => $adjustments,
             'assignedEmployees' => $assignedEmployees,
+            'subAssignment' => $subAssignment,
             'jobStatusOptions' => $jobStatusForSelect,
             'activeTab' => $activeTab,
             'canViewFinancials' => $canViewFinancials,
@@ -1978,6 +1984,276 @@ final class JobsController extends Controller
     /**
      * @return list<string>
      */
+    public function subOutForm(array $params): void
+    {
+        require_business_role(['general_user', 'admin']);
+
+        $jobId = (int) ($params['id'] ?? 0);
+        if ($jobId <= 0 || !Subcontractor::isAvailable() || !JobSubcontractorAssignment::isAvailable()) {
+            http_response_code(404);
+            $this->render('errors/404', ['pageTitle' => 'Not Found']);
+            return;
+        }
+
+        $businessId = current_business_id();
+        $job = Job::findForBusiness($businessId, $jobId);
+        if ($job === null) {
+            http_response_code(404);
+            $this->render('errors/404', ['pageTitle' => 'Not Found']);
+            return;
+        }
+
+        $existing = JobSubcontractorAssignment::findForJob($businessId, $jobId);
+        if ($existing !== null) {
+            redirect('/jobs/' . (string) $jobId . '/sub-out/edit');
+        }
+
+        $subs = Subcontractor::activeOptions($businessId, '', 200);
+        $this->render('jobs/sub_out_form', [
+            'pageTitle' => 'Sub Out Job',
+            'job' => $job,
+            'actionUrl' => url('/jobs/' . (string) $jobId . '/sub-out'),
+            'subs' => $subs,
+            'errors' => [],
+            'form' => [
+                'subcontractor_id' => '',
+                'status' => 'assigned',
+                'notes' => '',
+            ],
+        ]);
+    }
+
+    public function storeSubOut(array $params): void
+    {
+        require_business_role(['general_user', 'admin']);
+
+        $jobId = (int) ($params['id'] ?? 0);
+        if ($jobId <= 0) {
+            flash('error', 'Job not found.');
+            redirect('/jobs');
+        }
+
+        if (!verify_csrf($_POST['csrf_token'] ?? null)) {
+            flash('error', 'Session expired. Please try again.');
+            $this->redirectToJob($jobId);
+        }
+
+        if (!Subcontractor::isAvailable() || !JobSubcontractorAssignment::isAvailable()) {
+            flash('error', 'Sub-contractors are not available yet. Run the latest migrations.');
+            $this->redirectToJob($jobId);
+        }
+
+        $businessId = current_business_id();
+        $job = Job::findForBusiness($businessId, $jobId);
+        if ($job === null) {
+            http_response_code(404);
+            $this->render('errors/404', ['pageTitle' => 'Not Found']);
+            return;
+        }
+
+        if (JobSubcontractorAssignment::findForJob($businessId, $jobId) !== null) {
+            flash('error', 'This job is already subbed out.');
+            redirect('/jobs/' . (string) $jobId . '/sub-out/edit');
+        }
+
+        $form = $this->subOutFormFromPost($_POST);
+        $errors = JobSubcontractorAssignment::validate($form, true);
+        $subcontractor = Subcontractor::findForBusiness($businessId, (int) ($form['subcontractor_id'] ?? 0));
+        if ($subcontractor === null) {
+            $errors['subcontractor_id'] = 'Choose a valid sub-contractor.';
+        }
+
+        if ($errors !== []) {
+            $this->render('jobs/sub_out_form', [
+                'pageTitle' => 'Sub Out Job',
+                'job' => $job,
+                'actionUrl' => url('/jobs/' . (string) $jobId . '/sub-out'),
+                'subs' => Subcontractor::activeOptions($businessId, '', 200),
+                'errors' => $errors,
+                'form' => $form,
+            ]);
+            return;
+        }
+
+        $assignmentId = JobSubcontractorAssignment::create($businessId, $jobId, $form, (int) (auth_user_id() ?? 0));
+        if ($assignmentId <= 0) {
+            flash('error', 'Unable to sub out this job.');
+            redirect('/jobs/' . (string) $jobId . '/sub-out');
+        }
+
+        audit('job_subbed_out', 'job_subcontractor_assignments', $assignmentId, ['job_id' => $jobId]);
+        flash('success', 'Job subbed out to ' . trim((string) ($subcontractor['display_name'] ?? 'sub')) . '.');
+        $this->redirectToJob($jobId);
+    }
+
+    public function editSubOut(array $params): void
+    {
+        require_business_role(['general_user', 'admin']);
+
+        $jobId = (int) ($params['id'] ?? 0);
+        if ($jobId <= 0 || !JobSubcontractorAssignment::isAvailable()) {
+            http_response_code(404);
+            $this->render('errors/404', ['pageTitle' => 'Not Found']);
+            return;
+        }
+
+        $businessId = current_business_id();
+        $job = Job::findForBusiness($businessId, $jobId);
+        if ($job === null) {
+            http_response_code(404);
+            $this->render('errors/404', ['pageTitle' => 'Not Found']);
+            return;
+        }
+
+        $assignment = JobSubcontractorAssignment::findForJob($businessId, $jobId);
+        if ($assignment === null) {
+            redirect('/jobs/' . (string) $jobId . '/sub-out');
+        }
+
+        $financial = can_view_financials() ? Job::financialSummary($businessId, $jobId) : [];
+        $defaultClientAmount = (float) ($financial['invoice_gross'] ?? $financial['raw_gross'] ?? 0);
+
+        $this->render('jobs/sub_out_edit', [
+            'pageTitle' => 'Manage Sub Assignment',
+            'job' => $job,
+            'assignment' => $assignment,
+            'actionUrl' => url('/jobs/' . (string) $jobId . '/sub-out/update'),
+            'removeUrl' => url('/jobs/' . (string) $jobId . '/sub-out/remove'),
+            'subs' => Subcontractor::activeOptions($businessId, '', 200),
+            'statusOptions' => JobSubcontractorAssignment::statusOptions(),
+            'defaultClientAmount' => $defaultClientAmount > 0 ? $defaultClientAmount : null,
+            'canViewFinancials' => can_view_financials(),
+            'errors' => [],
+            'form' => $this->subOutFormFromAssignment($assignment),
+        ]);
+    }
+
+    public function updateSubOut(array $params): void
+    {
+        require_business_role(['general_user', 'admin']);
+
+        $jobId = (int) ($params['id'] ?? 0);
+        if ($jobId <= 0) {
+            flash('error', 'Job not found.');
+            redirect('/jobs');
+        }
+
+        if (!verify_csrf($_POST['csrf_token'] ?? null)) {
+            flash('error', 'Session expired. Please try again.');
+            $this->redirectToJob($jobId);
+        }
+
+        if (!JobSubcontractorAssignment::isAvailable()) {
+            flash('error', 'Sub-contractors are not available yet. Run the latest migrations.');
+            $this->redirectToJob($jobId);
+        }
+
+        $businessId = current_business_id();
+        $job = Job::findForBusiness($businessId, $jobId);
+        if ($job === null) {
+            http_response_code(404);
+            $this->render('errors/404', ['pageTitle' => 'Not Found']);
+            return;
+        }
+
+        $assignment = JobSubcontractorAssignment::findForJob($businessId, $jobId);
+        if ($assignment === null) {
+            redirect('/jobs/' . (string) $jobId . '/sub-out');
+        }
+
+        $assignmentId = (int) ($assignment['id'] ?? 0);
+        $form = $this->subOutFormFromPost($_POST);
+        $form['assigned_at'] = (string) ($assignment['assigned_at'] ?? '');
+        $errors = JobSubcontractorAssignment::validate($form, true);
+        $subcontractor = Subcontractor::findForBusiness($businessId, (int) ($form['subcontractor_id'] ?? 0));
+        if ($subcontractor === null) {
+            $errors['subcontractor_id'] = 'Choose a valid sub-contractor.';
+        }
+
+        if ($errors !== []) {
+            $financial = can_view_financials() ? Job::financialSummary($businessId, $jobId) : [];
+            $defaultClientAmount = (float) ($financial['invoice_gross'] ?? $financial['raw_gross'] ?? 0);
+            $this->render('jobs/sub_out_edit', [
+                'pageTitle' => 'Manage Sub Assignment',
+                'job' => $job,
+                'assignment' => $assignment,
+                'actionUrl' => url('/jobs/' . (string) $jobId . '/sub-out/update'),
+                'removeUrl' => url('/jobs/' . (string) $jobId . '/sub-out/remove'),
+                'subs' => Subcontractor::activeOptions($businessId, '', 200),
+                'statusOptions' => JobSubcontractorAssignment::statusOptions(),
+                'defaultClientAmount' => $defaultClientAmount > 0 ? $defaultClientAmount : null,
+                'canViewFinancials' => can_view_financials(),
+                'errors' => $errors,
+                'form' => $form,
+            ]);
+            return;
+        }
+
+        JobSubcontractorAssignment::update($businessId, $assignmentId, $form, (int) (auth_user_id() ?? 0));
+        audit('job_sub_assignment_updated', 'job_subcontractor_assignments', $assignmentId, ['job_id' => $jobId]);
+        flash('success', 'Sub assignment updated.');
+        $this->redirectToJob($jobId);
+    }
+
+    public function removeSubOut(array $params): void
+    {
+        require_business_role(['general_user', 'admin']);
+
+        $jobId = (int) ($params['id'] ?? 0);
+        if ($jobId <= 0) {
+            flash('error', 'Job not found.');
+            redirect('/jobs');
+        }
+
+        if (!verify_csrf($_POST['csrf_token'] ?? null)) {
+            flash('error', 'Session expired. Please try again.');
+            $this->redirectToJob($jobId);
+        }
+
+        $businessId = current_business_id();
+        $assignment = JobSubcontractorAssignment::findForJob($businessId, $jobId);
+        if ($assignment === null) {
+            $this->redirectToJob($jobId);
+        }
+
+        $assignmentId = (int) ($assignment['id'] ?? 0);
+        JobSubcontractorAssignment::softDelete($businessId, $assignmentId, (int) (auth_user_id() ?? 0));
+        audit('job_sub_assignment_removed', 'job_subcontractor_assignments', $assignmentId, ['job_id' => $jobId]);
+        flash('success', 'Sub assignment removed.');
+        $this->redirectToJob($jobId);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function subOutFormFromPost(array $input): array
+    {
+        return [
+            'subcontractor_id' => (int) ($input['subcontractor_id'] ?? 0),
+            'status' => strtolower(trim((string) ($input['status'] ?? 'assigned'))) ?: 'assigned',
+            'client_amount' => trim((string) ($input['client_amount'] ?? '')),
+            'sub_amount' => trim((string) ($input['sub_amount'] ?? '')),
+            'our_cut' => trim((string) ($input['our_cut'] ?? '')),
+            'notes' => trim((string) ($input['notes'] ?? '')),
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $assignment
+     * @return array<string, mixed>
+     */
+    private function subOutFormFromAssignment(array $assignment): array
+    {
+        return [
+            'subcontractor_id' => (int) ($assignment['subcontractor_id'] ?? 0),
+            'status' => strtolower(trim((string) ($assignment['status'] ?? 'assigned'))) ?: 'assigned',
+            'client_amount' => $assignment['client_amount'] ?? '',
+            'sub_amount' => $assignment['sub_amount'] ?? '',
+            'our_cut' => $assignment['our_cut'] ?? '',
+            'notes' => trim((string) ($assignment['notes'] ?? '')),
+        ];
+    }
+
     private function jobAllowedTabs(): array
     {
         $tabs = ['details', 'labor'];

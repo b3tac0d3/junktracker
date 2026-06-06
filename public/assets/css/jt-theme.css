@@ -1740,6 +1740,63 @@ a.admin-nav-tile:focus {
   box-sizing: content-box;
 }
 
+/* Page header Actions menus — match quick-add / user menu depth */
+.jt-actions-menu {
+  --jt-actions-color: #2563eb;
+  min-width: 14.75rem;
+  padding: 0.4rem;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 0.85rem;
+  box-shadow: 0 14px 36px rgba(15, 23, 42, 0.14);
+}
+
+.jt-actions-menu .dropdown-item {
+  gap: 0.75rem;
+  border-radius: 0.6rem;
+  padding: 0.55rem 0.65rem !important;
+  margin: 0.1rem 0;
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: #0f172a;
+  transition: background-color 0.15s ease, transform 0.12s ease;
+}
+
+.jt-actions-menu .dropdown-item:hover,
+.jt-actions-menu .dropdown-item:focus,
+.jt-actions-menu .dropdown-item:active {
+  background-color: color-mix(in srgb, var(--jt-actions-color, #2563eb) 11%, #ffffff) !important;
+  color: #0f172a;
+  transform: translateX(2px);
+}
+
+.jt-actions-menu .dropdown-item.text-danger:hover,
+.jt-actions-menu .dropdown-item.text-danger:focus,
+.jt-actions-menu .dropdown-item.text-danger:active {
+  background-color: color-mix(in srgb, #dc2626 11%, #ffffff) !important;
+  color: #b91c1c !important;
+}
+
+.jt-actions-menu .dropdown-item > :first-child:is(i, svg) {
+  width: 2rem !important;
+  min-width: 2rem !important;
+  max-width: 2rem;
+  height: 2rem;
+  border-radius: 0.55rem;
+  background: color-mix(in srgb, var(--jt-actions-color, #2563eb) 15%, #ffffff);
+  color: var(--jt-actions-color, #2563eb);
+  font-size: 0.9rem;
+}
+
+.jt-actions-menu .dropdown-item.text-danger > :first-child:is(i, svg) {
+  background: color-mix(in srgb, #dc2626 15%, #ffffff);
+  color: #dc2626;
+}
+
+.jt-actions-menu .dropdown-divider {
+  margin: 0.25rem 0.5rem;
+  opacity: 0.35;
+}
+
 .record-empty {
   border: 1px dashed var(--jt-border);
   border-radius: 12px;

@@ -448,12 +448,18 @@ final class ReportSummary
 
         $gross = (float) ($row['gross_total'] ?? 0);
         $jobExpenses = self::expensesTotal($businessId, $fromDate, $toDate, true);
+        $subMetrics = JobSubcontractorAssignment::completedMetricsForRange($businessId, $fromDate, $toDate);
+        if (($subMetrics['count'] ?? 0) > 0) {
+            $gross = $gross - (float) ($subMetrics['invoice_gross_total'] ?? 0) + (float) ($subMetrics['our_cut_total'] ?? 0);
+        }
 
         return [
             'count' => (int) ($row['item_count'] ?? 0),
-            'gross' => $gross,
+            'gross' => round($gross, 2),
             'job_expenses' => $jobExpenses,
             'net' => round($gross - $jobExpenses, 2),
+            'sub_completed_count' => (int) ($subMetrics['count'] ?? 0),
+            'sub_our_cut_total' => (float) ($subMetrics['our_cut_total'] ?? 0),
         ];
     }
 

@@ -349,6 +349,7 @@ final class GoogleCalendarSync
         $status = ucfirst(str_replace('_', ' ', strtolower(trim((string) ($job['status'] ?? 'pending')))));
         $jobType = trim((string) ($job['job_type'] ?? ''));
         $clientName = trim((string) ($job['client_name'] ?? ''));
+        $clientPhone = trim((string) ($job['client_phone'] ?? ''));
         $notes = trim((string) ($job['notes'] ?? ''));
         $location = self::formatAddress(
             trim((string) ($job['address_line1'] ?? '')),
@@ -364,6 +365,10 @@ final class GoogleCalendarSync
         }
         if ($clientName !== '') {
             $descriptionParts[] = 'Client: ' . $clientName;
+        }
+        if ($clientPhone !== '') {
+            $formatted = format_phone($clientPhone);
+            $descriptionParts[] = 'Phone: ' . ($formatted !== '—' ? $formatted : $clientPhone);
         }
         if ($location !== '') {
             $descriptionParts[] = 'Address: ' . $location;
@@ -514,6 +519,20 @@ final class GoogleCalendarSync
         if ($type !== '' && $type !== 'appointment') {
             $descriptionParts[] = 'Type: ' . ucfirst(str_replace('_', ' ', $type));
         }
+
+        if (strtolower($type) === 'appointment') {
+            $contact = Event::linkedClientContact($businessId, $event);
+            $clientName = trim((string) ($contact['name'] ?? ''));
+            $clientPhone = trim((string) ($contact['phone'] ?? ''));
+            if ($clientName !== '') {
+                $descriptionParts[] = 'Client: ' . $clientName;
+            }
+            if ($clientPhone !== '') {
+                $formatted = format_phone($clientPhone);
+                $descriptionParts[] = 'Phone: ' . ($formatted !== '—' ? $formatted : $clientPhone);
+            }
+        }
+
         if ($notes !== '') {
             $descriptionParts[] = $notes;
         }

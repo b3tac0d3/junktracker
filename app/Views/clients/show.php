@@ -146,7 +146,7 @@ $isInactive = $clientStatus === 'inactive' || (array_key_exists('is_active', $cl
             <button class="btn btn-primary dropdown-toggle w-100" type="button" data-bs-toggle="dropdown" aria-expanded="false">
                 <i class="fas fa-ellipsis-h me-2"></i>Actions
             </button>
-            <ul class="dropdown-menu dropdown-menu-end">
+            <ul class="dropdown-menu dropdown-menu-end jt-actions-menu">
                 <li>
                     <a class="dropdown-item" href="<?= e(url('/clients/' . (string) $clientId . '/edit' . detail_return_tab_query($activeTab))) ?>">
                         <i class="fas fa-pen me-2"></i>Edit Client

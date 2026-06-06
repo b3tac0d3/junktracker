@@ -294,9 +294,7 @@ $navNotifications = is_array($navNotifications ?? null) ? $navNotifications : ['
                                         <a class="nav-link jt-nav-sublink" href="<?= e(url('/clients')) ?>">Clients</a>
                                         <a class="nav-link jt-nav-sublink" href="<?= e(url('/estate-customers')) ?>">Estate Customers</a>
                                         <a class="nav-link jt-nav-sublink" href="<?= e(url('/networking')) ?>">Networking</a>
-                                        <?php if (\App\Models\ClientBoloProfile::isAvailable()): ?>
-                                            <a class="nav-link jt-nav-sublink" href="<?= e(url('/bolo')) ?>">BOLO</a>
-                                        <?php endif; ?>
+                                        <a class="nav-link jt-nav-sublink" href="<?= e(url('/subs')) ?>">Sub-Contractors</a>
                                     </nav>
                                 </div>
 
@@ -323,6 +321,9 @@ $navNotifications = is_array($navNotifications ?? null) ? $navNotifications : ['
                                         <a class="nav-link jt-nav-sublink" href="<?= e(url('/sales')) ?>">Sales</a>
                                         <a class="nav-link jt-nav-sublink" href="<?= e(url('/estate-sales')) ?>">Estate Sales</a>
                                         <a class="nav-link jt-nav-sublink" href="<?= e(url('/estate-sale-records')) ?>">Estate Sale Records</a>
+                                        <?php if (\App\Models\ClientBoloProfile::isAvailable()): ?>
+                                            <a class="nav-link jt-nav-sublink" href="<?= e(url('/bolo')) ?>">BOLO</a>
+                                        <?php endif; ?>
                                     </nav>
                                 </div>
 

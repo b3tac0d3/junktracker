@@ -111,9 +111,8 @@ $categoryOptions = array_values($categoryOptions);
                     class="form-control <?= $hasError('weight') ? 'is-invalid' : '' ?>"
                     value="<?= e((string) ($form['weight'] ?? '')) ?>"
                     placeholder="0"
-                    <?= $showDisposalWeight ? 'required' : '' ?>
                 />
-                <div class="form-text">Required for disposal expenses — total weight hauled from this job.</div>
+                <div class="form-text">Optional — total weight hauled from this job for disposal expenses.</div>
                 <?php if ($hasError('weight')): ?><div class="invalid-feedback d-block"><?= e($fieldError('weight')) ?></div><?php endif; ?>
             </div>
             <?php endif; ?>
@@ -201,7 +200,6 @@ $categoryOptions = array_values($categoryOptions);
         if (weightWrap && weightInput) {
             var showWeight = isDisposalCategory(category);
             weightWrap.classList.toggle('d-none', !showWeight);
-            weightInput.required = showWeight;
             if (!showWeight) {
                 weightInput.value = '';
             }

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Models\Expense;
+use App\Models\Subcontractor;
 use Core\Controller;
 
 final class ExpensesController extends Controller
@@ -55,12 +56,36 @@ final class ExpensesController extends Controller
     {
         require_financial_access();
 
+        $businessId = current_business_id();
+        $form = $this->defaultForm();
+        $pageHeading = 'Add General Expense';
+        $returnTo = trim((string) ($_GET['return_to'] ?? ''));
+        $preset = strtolower(trim((string) ($_GET['preset'] ?? '')));
+        $subcontractorId = (int) ($_GET['subcontractor_id'] ?? 0);
+
+        if ($preset === 'referral_fee' && $subcontractorId > 0 && Subcontractor::isAvailable()) {
+            $subcontractor = Subcontractor::findForBusiness($businessId, $subcontractorId);
+            if ($subcontractor !== null) {
+                $subName = trim((string) ($subcontractor['display_name'] ?? '')) ?: ('Sub #' . (string) $subcontractorId);
+                $form['category'] = Expense::referralFeeCategoryLabel($businessId);
+                $form['note'] = 'Referral fee — ' . $subName;
+                $pageHeading = 'Add Referral Fee';
+                if ($returnTo === '') {
+                    $returnTo = '/subs/' . (string) $subcontractorId . '?tab=earnings';
+                }
+            }
+        }
+
+        $cancelUrl = $returnTo !== '' ? url($returnTo) : url('/expenses');
+
         $this->render('expenses/form', [
-            'pageTitle' => 'Add General Expense',
+            'pageTitle' => $pageHeading,
+            'pageHeading' => $pageHeading,
             'actionUrl' => url('/expenses'),
-            'form' => $this->defaultForm(),
+            'form' => $form,
             'errors' => [],
-            'categoryOptions' => Expense::categoryOptions(current_business_id()),
+            'categoryOptions' => Expense::categoryOptions($businessId),
+            'cancelUrl' => $cancelUrl,
         ]);
     }
 
@@ -184,10 +209,11 @@ final class ExpensesController extends Controller
             return;
         }
 
-        $updated = Expense::updateForBusiness(current_business_id(), (int) ($expense['id'] ?? 0), $this->payloadForSave($form), auth_user_id() ?? 0);
+        $expenseId = (int) ($expense['id'] ?? 0);
+        $updated = Expense::updateForBusiness(current_business_id(), $expenseId, $this->payloadForSave($form), auth_user_id() ?? 0);
         if (!$updated) {
             flash('error', 'No changes were saved.');
-            redirect('/expenses/' . (string) ((int) ($expense['id'] ?? 0)) . '/edit');
+            redirect('/expenses/' . (string) $expenseId . '/edit');
         }
 
         audit('expense_updated', 'expenses', $expenseId);
@@ -214,10 +240,11 @@ final class ExpensesController extends Controller
             redirect('/expenses/' . (string) ((int) ($expense['id'] ?? 0)));
         }
 
-        $deleted = Expense::softDeleteForBusiness(current_business_id(), (int) ($expense['id'] ?? 0), auth_user_id() ?? 0);
+        $expenseId = (int) ($expense['id'] ?? 0);
+        $deleted = Expense::softDeleteForBusiness(current_business_id(), $expenseId, auth_user_id() ?? 0);
         if (!$deleted) {
             flash('error', 'Unable to delete expense.');
-            redirect('/expenses/' . (string) ((int) ($expense['id'] ?? 0)));
+            redirect('/expenses/' . (string) $expenseId);
         }
 
         audit('expense_deleted', 'expenses', $expenseId);

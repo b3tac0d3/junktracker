@@ -790,6 +790,59 @@ final class EventFeed
     }
 
     /**
+     * @param array<int, int> $clientIds
+     * @return array<int, array{name: string, phone: string}>
+     */
+    private static function clientContactsByClientIds(int $businessId, array $clientIds): array
+    {
+        $clientIds = array_values(array_unique(array_filter(array_map(static fn($v) => (int) $v, $clientIds), static fn($v) => $v > 0)));
+        if ($clientIds === [] || !SchemaInspector::hasTable('clients')) {
+            return [];
+        }
+
+        $nameSql = "COALESCE(NULLIF(TRIM(CONCAT_WS(' ', c.first_name, c.last_name)), ''), NULLIF(c.company_name, ''), CONCAT('Client #', c.id))";
+        $phoneSql = SchemaInspector::hasColumn('clients', 'phone') ? "COALESCE(c.phone, '')" : "''";
+        $placeholders = implode(',', array_fill(0, count($clientIds), '?'));
+        $params = $clientIds;
+        $where = ['c.id IN (' . $placeholders . ')'];
+        if (SchemaInspector::hasColumn('clients', 'business_id')) {
+            array_unshift($where, 'c.business_id = ?');
+            $params = array_merge([$businessId], $clientIds);
+        }
+        if (SchemaInspector::hasColumn('clients', 'deleted_at')) {
+            $where[] = 'c.deleted_at IS NULL';
+        }
+
+        $sql = "SELECT c.id, {$nameSql} AS client_name, {$phoneSql} AS client_phone
+                FROM clients c
+                WHERE " . implode(' AND ', $where);
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute($params);
+        $rows = $stmt->fetchAll();
+        if (!is_array($rows)) {
+            return [];
+        }
+
+        $out = [];
+        foreach ($rows as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $cid = (int) ($row['id'] ?? 0);
+            if ($cid <= 0) {
+                continue;
+            }
+            $out[$cid] = [
+                'name' => trim((string) ($row['client_name'] ?? '')),
+                'phone' => trim((string) ($row['client_phone'] ?? '')),
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
      * @param array<int, string> $types
      * @return array<int, array<string, mixed>>
      */
@@ -807,6 +860,7 @@ final class EventFeed
         }
 
         $jobIdsForNames = [];
+        $clientIdsForNames = [];
         foreach ($rows as $row) {
             if (!is_array($row)) {
                 continue;
@@ -815,9 +869,12 @@ final class EventFeed
             $linkId = (int) ($row['link_id'] ?? 0);
             if ($linkType === 'job' && $linkId > 0) {
                 $jobIdsForNames[] = $linkId;
+            } elseif ($linkType === 'client' && $linkId > 0) {
+                $clientIdsForNames[] = $linkId;
             }
         }
         $jobCustomerNames = self::jobClientNamesByJobIds($businessId, $jobIdsForNames);
+        $clientContacts = self::clientContactsByClientIds($businessId, $clientIdsForNames);
 
         $events = [];
         foreach ($rows as $row) {
@@ -857,6 +914,12 @@ final class EventFeed
                 if (is_array($jobClient)) {
                     $customerName = trim((string) ($jobClient['name'] ?? ''));
                     $customerPhone = trim((string) ($jobClient['phone'] ?? ''));
+                }
+            } elseif ($linkType === 'client' && $linkId > 0) {
+                $clientContact = $clientContacts[$linkId] ?? null;
+                if (is_array($clientContact)) {
+                    $customerName = trim((string) ($clientContact['name'] ?? ''));
+                    $customerPhone = trim((string) ($clientContact['phone'] ?? ''));
                 }
             }
 

@@ -97,6 +97,18 @@ function maps_directions_url_from_parts(array $parts): string
     return maps_directions_url(implode(', ', $normalized));
 }
 
+function maps_directions_url_between(string $origin, string $destination): string
+{
+    $origin = trim($origin);
+    $destination = trim($destination);
+    if ($origin === '' || $destination === '') {
+        return '';
+    }
+
+    return 'https://www.google.com/maps/dir/?api=1&origin=' . rawurlencode($origin)
+        . '&destination=' . rawurlencode($destination);
+}
+
 function asset(string $path = ''): string
 {
     $base = url('assets/' . ltrim($path, '/'));

@@ -6,6 +6,7 @@ namespace App\Controllers;
 
 use App\Models\Event;
 use App\Models\EventFeed;
+use App\Models\Job;
 use App\Services\AppointmentGmailNotify;
 use App\Services\GoogleCalendarSync;
 use Core\Controller;
@@ -54,6 +55,7 @@ final class EventsController extends Controller
             $type = 'appointment';
         }
 
+        $prefillClientId = (int) ($_GET['client_id'] ?? 0);
         $this->render('events/form', [
             'pageTitle' => $type === 'personal' ? 'Block Personal Time' : 'Add Event',
             'mode' => 'create',
@@ -66,8 +68,10 @@ final class EventsController extends Controller
                 'end_at' => calendar_slot_prefill_end_at($at, 60),
                 'all_day' => '0',
                 'notes' => '',
+                'client_id' => $prefillClientId > 0 ? (string) $prefillClientId : '',
             ],
             'errors' => [],
+            'clientOptions' => Job::clientOptions(current_business_id()),
         ]);
     }
 
@@ -89,16 +93,9 @@ final class EventsController extends Controller
                 'pageTitle' => 'Add Event',
                 'mode' => 'create',
                 'actionUrl' => url('/events/create'),
-                'form' => [
-                    'title' => trim((string) ($payload['title'] ?? '')),
-                    'type' => trim((string) ($payload['type'] ?? 'appointment')),
-                    'status' => trim((string) ($payload['status'] ?? 'scheduled')),
-                    'start_at' => trim((string) ($payload['start_at'] ?? '')),
-                    'end_at' => trim((string) ($payload['end_at'] ?? '')),
-                    'all_day' => trim((string) ($payload['all_day'] ?? '0')),
-                    'notes' => trim((string) ($payload['notes'] ?? '')),
-                ],
+                'form' => $this->formFromPayload($payload),
                 'errors' => $errors,
+                'clientOptions' => Job::clientOptions($businessId),
             ]);
             return;
         }
@@ -130,10 +127,14 @@ final class EventsController extends Controller
             return;
         }
 
+        $linkedClient = Event::linkedClientContact($businessId, $event);
+
         $this->render('events/show', [
             'pageTitle' => 'Event',
             'event' => $event,
             'canManageEvent' => $this->canManageEvents(),
+            'linkedClientName' => trim((string) ($linkedClient['name'] ?? '')),
+            'linkedClientPhone' => trim((string) ($linkedClient['phone'] ?? '')),
         ]);
     }
 
@@ -158,6 +159,7 @@ final class EventsController extends Controller
             'form' => $this->formFromEvent($event),
             'errors' => [],
             'eventId' => $id,
+            'clientOptions' => Job::clientOptions($businessId),
         ]);
     }
 
@@ -187,17 +189,10 @@ final class EventsController extends Controller
                 'mode' => 'edit',
                 'actionUrl' => url('/events/' . (string) $id . '/edit'),
                 'cancelUrl' => url('/events/' . (string) $id),
-                'form' => [
-                    'title' => trim((string) ($payload['title'] ?? '')),
-                    'type' => trim((string) ($payload['type'] ?? 'appointment')),
-                    'status' => trim((string) ($payload['status'] ?? 'scheduled')),
-                    'start_at' => trim((string) ($payload['start_at'] ?? '')),
-                    'end_at' => trim((string) ($payload['end_at'] ?? '')),
-                    'all_day' => trim((string) ($payload['all_day'] ?? '0')),
-                    'notes' => trim((string) ($payload['notes'] ?? '')),
-                ],
+                'form' => $this->formFromPayload($payload),
                 'errors' => $errors,
                 'eventId' => $id,
+                'clientOptions' => Job::clientOptions($businessId),
             ]);
             return;
         }
@@ -434,6 +429,30 @@ final class EventsController extends Controller
             'end_at' => trim((string) ($event['end_at'] ?? '')),
             'all_day' => (int) ($event['all_day'] ?? 0) === 1 ? '1' : '0',
             'notes' => trim((string) ($event['notes'] ?? '')),
+            'client_id' => strtolower(trim((string) ($event['link_type'] ?? ''))) === 'client'
+                ? (string) (int) ($event['link_id'] ?? 0)
+                : '',
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     * @return array<string, string>
+     */
+    private function formFromPayload(array $payload): array
+    {
+        $linkType = strtolower(trim((string) ($payload['link_type'] ?? '')));
+        $clientId = $linkType === 'client' ? (string) (int) ($payload['link_id'] ?? 0) : '';
+
+        return [
+            'title' => trim((string) ($payload['title'] ?? '')),
+            'type' => trim((string) ($payload['type'] ?? 'appointment')),
+            'status' => trim((string) ($payload['status'] ?? 'scheduled')),
+            'start_at' => trim((string) ($payload['start_at'] ?? '')),
+            'end_at' => trim((string) ($payload['end_at'] ?? '')),
+            'all_day' => trim((string) ($payload['all_day'] ?? '0')),
+            'notes' => trim((string) ($payload['notes'] ?? '')),
+            'client_id' => $clientId,
         ];
     }
 
@@ -455,6 +474,15 @@ final class EventsController extends Controller
 
     private function payloadFromPost(array $post): array
     {
+        $type = strtolower(trim((string) ($post['type'] ?? 'appointment')));
+        $clientId = (int) ($post['client_id'] ?? 0);
+        $linkType = null;
+        $linkId = null;
+        if ($type === 'appointment' && $clientId > 0) {
+            $linkType = 'client';
+            $linkId = $clientId;
+        }
+
         return [
             'title' => trim((string) ($post['title'] ?? '')),
             'type' => trim((string) ($post['type'] ?? 'appointment')),
@@ -463,6 +491,8 @@ final class EventsController extends Controller
             'end_at' => (string) ($post['end_at'] ?? ''),
             'all_day' => (string) ($post['all_day'] ?? '0'),
             'notes' => trim((string) ($post['notes'] ?? '')),
+            'link_type' => $linkType,
+            'link_id' => $linkId,
         ];
     }
 
