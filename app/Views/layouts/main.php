@@ -319,11 +319,11 @@ $navNotifications = is_array($navNotifications ?? null) ? $navNotifications : ['
                                 <div class="collapse" id="collapseNavSales" data-bs-parent="#sidenavAccordion">
                                     <nav class="sb-sidenav-menu-nested nav">
                                         <a class="nav-link jt-nav-sublink" href="<?= e(url('/sales')) ?>">Sales</a>
-                                        <a class="nav-link jt-nav-sublink" href="<?= e(url('/estate-sales')) ?>">Estate Sales</a>
-                                        <a class="nav-link jt-nav-sublink" href="<?= e(url('/estate-sale-records')) ?>">Estate Sale Records</a>
                                         <?php if (\App\Models\ClientBoloProfile::isAvailable()): ?>
                                             <a class="nav-link jt-nav-sublink" href="<?= e(url('/bolo')) ?>">BOLO</a>
                                         <?php endif; ?>
+                                        <a class="nav-link jt-nav-sublink" href="<?= e(url('/estate-sales')) ?>">Estate Sales</a>
+                                        <a class="nav-link jt-nav-sublink" href="<?= e(url('/estate-sale-records')) ?>">Estate Sale Records</a>
                                     </nav>
                                 </div>
 

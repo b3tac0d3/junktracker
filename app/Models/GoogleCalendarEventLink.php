@@ -136,4 +136,41 @@ final class GoogleCalendarEventLink
         );
         $stmt->execute(['user_id' => $userId]);
     }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    public static function allForUser(int $userId): array
+    {
+        self::ensureTable();
+        if ($userId <= 0 || !SchemaInspector::hasTable('google_calendar_event_links')) {
+            return [];
+        }
+
+        $stmt = Database::connection()->prepare(
+            'SELECT *
+             FROM google_calendar_event_links
+             WHERE user_id = :user_id
+             ORDER BY id ASC'
+        );
+        $stmt->execute(['user_id' => $userId]);
+        $rows = $stmt->fetchAll();
+
+        return is_array($rows) ? $rows : [];
+    }
+
+    public static function countForUser(int $userId): int
+    {
+        self::ensureTable();
+        if ($userId <= 0 || !SchemaInspector::hasTable('google_calendar_event_links')) {
+            return 0;
+        }
+
+        $stmt = Database::connection()->prepare(
+            'SELECT COUNT(*) FROM google_calendar_event_links WHERE user_id = :user_id'
+        );
+        $stmt->execute(['user_id' => $userId]);
+
+        return (int) $stmt->fetchColumn();
+    }
 }

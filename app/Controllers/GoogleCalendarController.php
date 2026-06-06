@@ -87,6 +87,49 @@ final class GoogleCalendarController extends Controller
         redirect('/settings');
     }
 
+    public function removeAllEvents(): void
+    {
+        require_auth();
+
+        if (!verify_csrf($_POST['csrf_token'] ?? null)) {
+            flash('error', 'Session expired. Please try again.');
+            redirect('/settings');
+        }
+
+        $userId = (int) (auth_user_id() ?? 0);
+        $result = GoogleCalendarSync::removeAllLinkedEvents($userId);
+
+        if (!$result['ok']) {
+            flash('error', (string) ($result['error'] ?? 'Unable to remove Google Calendar events.'));
+            redirect('/settings');
+        }
+
+        $removed = (int) ($result['removed'] ?? 0);
+        $failed = (int) ($result['failed'] ?? 0);
+        $errors = is_array($result['errors'] ?? null) ? $result['errors'] : [];
+
+        if ($removed === 0 && $failed === 0) {
+            flash('info', 'No synced Google Calendar events to remove.');
+        } elseif ($failed === 0) {
+            flash('success', 'Removed ' . (string) $removed . ' event(s) from Google Calendar.');
+        } elseif ($removed > 0) {
+            $message = 'Removed ' . (string) $removed . ' event(s) from Google Calendar, but '
+                . (string) $failed . ' could not be deleted.';
+            if ($errors !== []) {
+                $message .= ' ' . implode(' ', array_slice($errors, 0, 2));
+            }
+            flash('error', $message);
+        } else {
+            $message = 'Unable to remove synced events from Google Calendar.';
+            if ($errors !== []) {
+                $message .= ' ' . implode(' ', array_slice($errors, 0, 2));
+            }
+            flash('error', $message);
+        }
+
+        redirect('/settings');
+    }
+
     public function backfill(): void
     {
         require_auth();

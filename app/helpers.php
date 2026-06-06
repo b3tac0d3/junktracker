@@ -294,6 +294,7 @@ function require_auth(): void
         url('/settings/google-calendar/connect'),
         url('/settings/google-calendar/callback'),
         url('/settings/google-calendar/disconnect'),
+        url('/settings/google-calendar/remove-all-events'),
         url('/settings/google-calendar/backfill'),
         url('/settings/google-calendar/backfill-past'),
         url('/logout'),

@@ -54,6 +54,7 @@ $router->post('/settings/update', [SettingsController::class, 'update']);
 $router->get('/settings/google-calendar/connect', [GoogleCalendarController::class, 'connect']);
 $router->get('/settings/google-calendar/callback', [GoogleCalendarController::class, 'callback']);
 $router->post('/settings/google-calendar/disconnect', [GoogleCalendarController::class, 'disconnect']);
+$router->post('/settings/google-calendar/remove-all-events', [GoogleCalendarController::class, 'removeAllEvents']);
 $router->post('/settings/google-calendar/backfill', [GoogleCalendarController::class, 'backfill']);
 $router->post('/settings/google-calendar/backfill-past', [GoogleCalendarController::class, 'backfillPast']);
 $router->post('/settings/google-appointment-gmail', [SettingsController::class, 'updateGoogleAppointmentGmail']);

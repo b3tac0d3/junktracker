@@ -114,6 +114,58 @@ final class GoogleCalendarSync
     }
 
     /**
+     * Delete every JunkTracker-linked event from Google Calendar for this user.
+     *
+     * @return array{ok: bool, removed?: int, failed?: int, errors?: list<string>, error?: string}
+     */
+    public static function removeAllLinkedEvents(int $userId): array
+    {
+        if ($userId <= 0) {
+            return ['ok' => false, 'error' => 'Invalid user.'];
+        }
+
+        if (!GoogleCalendarConnection::isConnected($userId)) {
+            return ['ok' => false, 'error' => 'Connect Google Calendar first.'];
+        }
+
+        $accessToken = self::accessTokenForUser($userId);
+        if ($accessToken === '') {
+            return ['ok' => false, 'error' => 'Unable to obtain Google access token. Try connecting again.'];
+        }
+
+        $links = GoogleCalendarEventLink::allForUser($userId);
+        if ($links === []) {
+            return ['ok' => true, 'removed' => 0, 'failed' => 0, 'errors' => []];
+        }
+
+        $removed = 0;
+        $failed = 0;
+        $errors = [];
+
+        foreach ($links as $link) {
+            if (!is_array($link)) {
+                continue;
+            }
+
+            $deleteResult = self::deleteGoogleEventLink($userId, $link, $accessToken);
+            if ($deleteResult['ok']) {
+                $removed++;
+                continue;
+            }
+
+            $failed++;
+            $sourceType = trim((string) ($link['source_type'] ?? ''));
+            $sourceId = (int) ($link['source_id'] ?? 0);
+            $label = $sourceType !== '' && $sourceId > 0
+                ? ucfirst($sourceType) . ' #' . (string) $sourceId
+                : 'Linked event';
+            $errors[] = $label . ': ' . (string) ($deleteResult['error'] ?? 'Delete failed.');
+        }
+
+        return ['ok' => true, 'removed' => $removed, 'failed' => $failed, 'errors' => $errors];
+    }
+
+    /**
      * @return array{ok: bool, synced?: int, skipped?: int, errors?: list<string>, error?: string}
      */
     public static function backfillUpcoming(int $userId, int $businessId, int $days = 90): array
@@ -274,20 +326,42 @@ final class GoogleCalendarSync
             return;
         }
 
+        self::deleteGoogleEventLink($userId, $link, $accessToken);
+    }
+
+    /**
+     * @param array<string, mixed> $link
+     * @return array{ok: bool, error?: string}
+     */
+    private static function deleteGoogleEventLink(int $userId, array $link, string $accessToken): array
+    {
+        $sourceType = strtolower(trim((string) ($link['source_type'] ?? '')));
+        $sourceId = (int) ($link['source_id'] ?? 0);
+        if ($userId <= 0 || $sourceType === '' || $sourceId <= 0) {
+            return ['ok' => false, 'error' => 'Invalid link record.'];
+        }
+
         $calendarId = rawurlencode(trim((string) ($link['google_calendar_id'] ?? '')));
         $googleEventId = rawurlencode(trim((string) ($link['google_event_id'] ?? '')));
         if ($calendarId === '' || $googleEventId === '') {
             GoogleCalendarEventLink::delete($userId, $sourceType, $sourceId);
-            return;
+
+            return ['ok' => true];
         }
 
-        GoogleCalendarApi::request(
+        $response = GoogleCalendarApi::request(
             'DELETE',
             'https://www.googleapis.com/calendar/v3/calendars/' . $calendarId . '/events/' . $googleEventId,
             $accessToken
         );
 
-        GoogleCalendarEventLink::delete($userId, $sourceType, $sourceId);
+        if ($response['ok'] || (int) ($response['status'] ?? 0) === 404) {
+            GoogleCalendarEventLink::delete($userId, $sourceType, $sourceId);
+
+            return ['ok' => true];
+        }
+
+        return ['ok' => false, 'error' => (string) ($response['error'] ?? 'Google API delete failed.')];
     }
 
     /**

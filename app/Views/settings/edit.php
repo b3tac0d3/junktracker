@@ -114,6 +114,9 @@ $googleCalendarCalendarId = trim((string) ($googleCalendarCalendarId ?? 'primary
         $appointmentGmailNotifyTo = trim((string) ($appointmentGmailNotifyTo ?? ''));
         $appointmentGmailNotifyAvailable = (bool) ($appointmentGmailNotifyAvailable ?? false);
         ?>
+        <?php
+        $googleCalendarLinkedCount = (int) ($googleCalendarLinkedCount ?? 0);
+        ?>
         <?php if ($googleCalendarConfigured && $googleCalendarConnected): ?>
             <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
                 <div>
@@ -121,6 +124,9 @@ $googleCalendarCalendarId = trim((string) ($googleCalendarCalendarId ?? 'primary
                     <div class="small text-muted">
                         <?= e($googleCalendarEmail !== '' ? $googleCalendarEmail : 'Google account connected') ?>
                         · Calendar: <code><?= e($googleCalendarCalendarId) ?></code>
+                        <?php if ($googleCalendarLinkedCount > 0): ?>
+                            · <?= (string) $googleCalendarLinkedCount ?> synced event<?= $googleCalendarLinkedCount === 1 ? '' : 's' ?>
+                        <?php endif; ?>
                     </div>
                 </div>
                 <div class="d-flex flex-wrap gap-2 align-items-center">
@@ -138,7 +144,17 @@ $googleCalendarCalendarId = trim((string) ($googleCalendarCalendarId ?? 'primary
                         <input type="hidden" name="past_days" value="365">
                         <button type="submit" class="btn btn-outline-primary btn-sm">Sync past (365 days)</button>
                     </form>
-                    <form method="post" action="<?= e(url('/settings/google-calendar/disconnect')) ?>" onsubmit="return confirm('Disconnect Google? Calendar links and Gmail notifications will stop.');">
+                    <?php if ($googleCalendarLinkedCount > 0): ?>
+                        <form
+                            method="post"
+                            action="<?= e(url('/settings/google-calendar/remove-all-events')) ?>"
+                            onsubmit="return confirm('Remove all <?= (string) $googleCalendarLinkedCount ?> JunkTracker-synced event(s) from Google Calendar? This cannot be undone. JunkTracker appointments and jobs are not deleted.');"
+                        >
+                            <?= csrf_field() ?>
+                            <button type="submit" class="btn btn-outline-danger btn-sm">Remove all from Google</button>
+                        </form>
+                    <?php endif; ?>
+                    <form method="post" action="<?= e(url('/settings/google-calendar/disconnect')) ?>" onsubmit="return confirm('Disconnect Google? Calendar links and Gmail notifications will stop. Events already on Google Calendar are not removed.');">
                         <?= csrf_field() ?>
                         <button type="submit" class="btn btn-outline-secondary btn-sm">Disconnect</button>
                     </form>

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Controllers;
 
+use App\Models\GoogleCalendarEventLink;
 use App\Models\User;
 use App\Models\GoogleCalendarConnection;
 use App\Services\GoogleCalendarSync;
@@ -36,6 +37,7 @@ final class SettingsController extends Controller
             'googleCalendarConnected' => GoogleCalendarConnection::isConnected($userId),
             'googleCalendarEmail' => trim((string) ($googleConnection['google_account_email'] ?? '')),
             'googleCalendarCalendarId' => trim((string) ($googleConnection['calendar_id'] ?? 'primary')) ?: 'primary',
+            'googleCalendarLinkedCount' => GoogleCalendarEventLink::countForUser($userId),
             'appointmentGmailNotifyEnabled' => GoogleCalendarConnection::appointmentGmailNotifyEnabled($userId),
             'appointmentGmailNotifyTo' => trim((string) ($googleConnection['appointment_gmail_notify_to'] ?? '')),
             'appointmentGmailNotifyAvailable' => GoogleCalendarConnection::appointmentGmailNotifyAvailable(),
@@ -102,6 +104,7 @@ final class SettingsController extends Controller
                 'googleCalendarConnected' => GoogleCalendarConnection::isConnected($userId),
                 'googleCalendarEmail' => trim((string) ($googleConnection['google_account_email'] ?? '')),
                 'googleCalendarCalendarId' => trim((string) ($googleConnection['calendar_id'] ?? 'primary')) ?: 'primary',
+                'googleCalendarLinkedCount' => GoogleCalendarEventLink::countForUser($userId),
                 'appointmentGmailNotifyEnabled' => GoogleCalendarConnection::appointmentGmailNotifyEnabled($userId),
                 'appointmentGmailNotifyTo' => trim((string) ($googleConnection['appointment_gmail_notify_to'] ?? '')),
                 'appointmentGmailNotifyAvailable' => GoogleCalendarConnection::appointmentGmailNotifyAvailable(),
