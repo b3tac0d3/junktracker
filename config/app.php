@@ -28,7 +28,7 @@ if ($host !== '') {
 
 $config = [
     'name' => 'JunkTracker',
-    'version' => '1.12.1',
+    'version' => '1.12.2',
     // Beta-live deploys run on real hostnames: treat as production (mail, etc.). Localhost stays dev.
     'env' => $isLocalHost ? 'local' : 'production',
     'url' => $appUrl,
@@ -43,9 +43,10 @@ $config = [
     'debug' => $isLocalHost,
     /**
      * Short-lived server cache (APCu, else storage/cache) for nav notifications + dashboard summary.
+     * Bumped automatically when business data changes; this TTL is mainly for other users' browsers.
      * Set to 0 to disable. Max 3600.
      */
-    'cache_ttl_seconds' => 60,
+    'cache_ttl_seconds' => 30,
     /** Shared secret for /cron/daily-digest?key= — leave empty to disable remote calls */
     'cron_key' => (string) (getenv('JUNKTRACKER_CRON_KEY') ?: ''),
 ];

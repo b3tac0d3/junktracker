@@ -159,9 +159,11 @@ foreach ($statusOptionsRaw as $statusOptionRaw) {
                         <div class="task-row-check">
                             <input class="form-check-input task-done-checkbox" type="checkbox" value="1" data-task-id="<?= e((string) $taskId) ?>" <?= $isDone ? 'checked' : '' ?> aria-label="Mark complete or reopen">
                         </div>
-                        <a class="record-row-link flex-grow-1" href="<?= e(url('/tasks/' . (string) $taskId)) ?>">
+                        <div class="task-row-content flex-grow-1">
                             <div class="record-row-main">
-                                <h3 class="record-title-simple task-title-text<?= $isDone ? ' text-decoration-line-through text-muted' : '' ?>"><?= e($taskTitle) ?></h3>
+                                <h3 class="record-title-simple task-title-text<?= $isDone ? ' text-decoration-line-through text-muted' : '' ?>">
+                                    <a class="task-title-link" href="<?= e(url('/tasks/' . (string) $taskId)) ?>"><?= e($taskTitle) ?></a>
+                                </h3>
                                 <?php if ($clientName !== ''): ?>
                                     <div class="task-client-line muted small">
                                         <?php if ($clientId > 0): ?>
@@ -183,7 +185,7 @@ foreach ($statusOptionsRaw as $statusOptionRaw) {
                                     </span>
                                 </div>
                             </div>
-                        </a>
+                        </div>
                         <div class="dropdown task-row-menu">
                             <button
                                 class="btn btn-link task-row-menu-toggle"
@@ -492,9 +494,11 @@ window.addEventListener('DOMContentLoaded', () => {
                 <div class="task-row-check">
                     <input class="form-check-input task-done-checkbox" type="checkbox" value="1" data-task-id="${escapeHtml(String(id))}" aria-label="Mark complete or reopen"${statusKey === 'closed' ? ' checked' : ''}>
                 </div>
-                <a class="record-row-link flex-grow-1" href="${escapeHtml(href)}">
+                <div class="task-row-content flex-grow-1">
                     <div class="record-row-main">
-                        <h3 class="record-title-simple task-title-text${statusKey === 'closed' ? ' text-decoration-line-through text-muted' : ''}">${escapeHtml(titleText)}</h3>
+                        <h3 class="record-title-simple task-title-text${statusKey === 'closed' ? ' text-decoration-line-through text-muted' : ''}">
+                            <a class="task-title-link" href="${escapeHtml(href)}">${escapeHtml(titleText)}</a>
+                        </h3>
                         ${buildTaskClientLine(task)}
                         <div class="record-subline muted small">
                             <span>#${escapeHtml(String(id))}</span>
@@ -508,7 +512,7 @@ window.addEventListener('DOMContentLoaded', () => {
                             </span>
                         </div>
                     </div>
-                </a>
+                </div>
                 <div class="dropdown task-row-menu">
                     <button
                         class="btn btn-link task-row-menu-toggle"

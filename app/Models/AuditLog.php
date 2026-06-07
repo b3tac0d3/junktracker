@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use Core\AppCache;
 use Core\Database;
 
 final class AuditLog
@@ -32,6 +33,20 @@ final class AuditLog
             'entity_id' => $entityId,
             'metadata_json' => $meta === [] ? null : json_encode($meta, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
         ]);
+
+        if ($businessId !== null && $businessId > 0 && self::shouldInvalidateAppCache($action)) {
+            AppCache::bumpBusiness($businessId);
+        }
+    }
+
+    private static function shouldInvalidateAppCache(string $action): bool
+    {
+        static $skip = [
+            'user_login' => true,
+            'user_logout' => true,
+        ];
+
+        return !isset($skip[$action]);
     }
 
     /**

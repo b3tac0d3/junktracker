@@ -993,6 +993,34 @@ function audit(string $action, string $entity, ?int $entityId, array $meta = [])
     );
 }
 
+function google_calendar_sync_item(int $businessId, string $sourceType, int $sourceId): void
+{
+    if ($businessId <= 0 || $sourceId <= 0) {
+        return;
+    }
+
+    $userId = (int) (auth_user_id() ?? 0);
+    if ($userId <= 0) {
+        return;
+    }
+
+    \App\Services\GoogleCalendarSync::syncSource($userId, $businessId, $sourceType, $sourceId);
+}
+
+function google_calendar_remove_item(string $sourceType, int $sourceId): void
+{
+    if ($sourceId <= 0) {
+        return;
+    }
+
+    $userId = (int) (auth_user_id() ?? 0);
+    if ($userId <= 0) {
+        return;
+    }
+
+    \App\Services\GoogleCalendarSync::removeSource($userId, $sourceType, $sourceId);
+}
+
 function audit_action_label(string $action): string
 {
     static $labels = [

@@ -114,6 +114,7 @@ final class QuotesController extends Controller
             redirect('/quotes/create');
         }
         AuditLog::write('quote_created', 'quotes', $quoteId, $businessId, $actorUserId, []);
+        google_calendar_sync_item($businessId, 'quote', $quoteId);
         flash('success', 'Quote created.');
         redirect('/quotes/' . (string) $quoteId);
     }
@@ -215,6 +216,7 @@ final class QuotesController extends Controller
         $actorUserId = (int) (auth_user_id() ?? 0);
         Quote::update($businessId, $quoteId, $form, $actorUserId);
         AuditLog::write('quote_updated', 'quotes', $quoteId, $businessId, $actorUserId, []);
+        google_calendar_sync_item($businessId, 'quote', $quoteId);
         flash('success', 'Quote updated.');
         redirect('/quotes/' . (string) $quoteId);
     }
@@ -322,6 +324,7 @@ final class QuotesController extends Controller
                 'from_status' => $current,
                 'to_status' => $status,
             ]);
+            google_calendar_sync_item($businessId, 'quote', $quoteId);
             flash('success', 'Quote status updated.');
         } else {
             flash('error', 'Could not update status.');

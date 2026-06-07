@@ -302,6 +302,7 @@ window.addEventListener('DOMContentLoaded', () => {
     if (document.getElementById('jt-type-appt')?.checked) types.push('appointment');
     if (document.getElementById('jt-type-personal')?.checked) types.push('personal');
     if (document.getElementById('jt-type-cancel')?.checked) types.push('cancellation');
+    types.push('reminder', 'note', 'other');
     return types.join(',');
   };
 

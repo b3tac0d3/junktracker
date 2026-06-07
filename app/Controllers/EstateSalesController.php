@@ -218,6 +218,7 @@ final class EstateSalesController extends Controller
 
         flash('success', 'Estate sale added.');
         audit('estate_sale_created', 'estate_sales', $id, ['title' => trim((string) ($form['title'] ?? ''))]);
+        google_calendar_sync_item($businessId, 'estate_sale', $id);
         redirect('/estate-sales/' . (string) $id);
     }
 
@@ -755,6 +756,7 @@ final class EstateSalesController extends Controller
 
         EstateSale::update($businessId, $id, EstateSale::payloadFromForm($form), auth_user_id() ?? 0);
         audit('estate_sale_updated', 'estate_sales', $id);
+        google_calendar_sync_item($businessId, 'estate_sale', $id);
         flash('success', 'Estate sale updated.');
         redirect_to_detail('/estate-sales/' . (string) $id, request_detail_tab(['details', 'customers', 'sales', 'expenses', 'labor', 'metrics']));
     }
@@ -773,6 +775,7 @@ final class EstateSalesController extends Controller
         $actorId = (int) (auth_user_id() ?? 0);
         if (EstateSale::softDelete($businessId, $id, $actorId)) {
             audit('estate_sale_deleted', 'estate_sales', $id);
+            google_calendar_remove_item('estate_sale', $id);
             flash('success', 'Estate sale removed.');
         } else {
             flash('error', 'Could not remove estate sale.');

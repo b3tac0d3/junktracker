@@ -126,6 +126,7 @@ final class DeliveriesController extends Controller
 
         $st = strtolower(trim((string) ($form['status'] ?? '')));
         audit('delivery_created', 'deliveries', $id, ['status' => $st]);
+        google_calendar_sync_item($businessId, 'delivery', $id);
         if ($st === 'need_to_schedule') {
             flash('success', 'Delivery saved.');
         } elseif ($st === 'scheduled' || $st === 'completed') {
@@ -207,6 +208,7 @@ final class DeliveriesController extends Controller
         $actorId = (int) (auth_user_id() ?? 0);
         ClientDelivery::update($businessId, $id, $form, $actorId);
         audit('delivery_updated', 'deliveries', $id);
+        google_calendar_sync_item($businessId, 'delivery', $id);
         flash('success', 'Delivery updated.');
         redirect('/deliveries/' . (string) $id);
     }
@@ -225,6 +227,7 @@ final class DeliveriesController extends Controller
         $actorId = (int) (auth_user_id() ?? 0);
         if (ClientDelivery::softDelete($businessId, $id, $actorId)) {
             audit('delivery_deleted', 'deliveries', $id);
+            google_calendar_remove_item('delivery', $id);
             flash('success', 'Delivery removed.');
         } else {
             flash('error', 'Could not remove delivery.');

@@ -122,6 +122,7 @@ final class PurchaseQuotesController extends Controller
             redirect('/purchase-quotes/create');
         }
         AuditLog::write('purchase_quote_created', 'purchase_quotes', $purchaseQuoteId, $businessId, $actorUserId, []);
+        google_calendar_sync_item($businessId, 'purchase_quote', $purchaseQuoteId);
         flash('success', 'Purchase quote created.');
         redirect_to_detail('/purchase-quotes/' . (string) $purchaseQuoteId, request_detail_tab(['details', 'offers', 'contacts']));
     }
@@ -251,6 +252,7 @@ final class PurchaseQuotesController extends Controller
         $actorUserId = (int) (auth_user_id() ?? 0);
         PurchaseQuote::update($businessId, $purchaseQuoteId, $form, $actorUserId);
         AuditLog::write('purchase_quote_updated', 'purchase_quotes', $purchaseQuoteId, $businessId, $actorUserId, []);
+        google_calendar_sync_item($businessId, 'purchase_quote', $purchaseQuoteId);
         flash('success', 'Purchase quote updated.');
         redirect_to_detail('/purchase-quotes/' . (string) $purchaseQuoteId, request_detail_tab(['details', 'offers', 'contacts']));
     }

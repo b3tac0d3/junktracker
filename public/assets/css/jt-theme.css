@@ -1868,6 +1868,20 @@ a.admin-nav-tile:focus {
   cursor: pointer;
 }
 
+.task-row-content {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.task-title-link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.task-title-link:hover {
+  color: var(--jt-link-hover, #0d6efd);
+}
+
 .task-client-line {
   line-height: 1.3;
   margin-top: 0.1rem;

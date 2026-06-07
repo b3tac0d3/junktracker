@@ -5,9 +5,15 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Models\Event;
+use App\Models\EventFeed;
 use App\Models\GoogleCalendarConnection;
 use App\Models\GoogleCalendarEventLink;
 use App\Models\Job;
+use App\Models\ClientDelivery;
+use App\Models\Quote;
+use App\Models\PurchaseQuote;
+use App\Models\EstateSale;
+use App\Models\Task;
 use Core\GoogleCalendarApi;
 
 final class GoogleCalendarSync
@@ -203,22 +209,28 @@ final class GoogleCalendarSync
             return ['ok' => false, 'error' => 'Connect Google Calendar first.'];
         }
 
-        $rows = Event::range($businessId, $start, $end, []);
-
         $synced = 0;
         $skipped = 0;
         $errors = [];
+        $seen = [];
 
-        foreach ($rows as $row) {
-            if (!is_array($row)) {
+        foreach (EventFeed::googleSyncItemRefs($businessId, $start, $end) as $ref) {
+            if (!is_array($ref)) {
                 continue;
             }
-            $eventId = (int) ($row['id'] ?? 0);
-            if ($eventId <= 0) {
+            $sourceType = strtolower(trim((string) ($ref['source_type'] ?? '')));
+            $sourceId = (int) ($ref['source_id'] ?? 0);
+            if ($sourceType === '' || $sourceId <= 0) {
                 continue;
             }
 
-            $result = self::syncEventRecord($userId, $businessId, $row);
+            $dedupeKey = $sourceType . ':' . (string) $sourceId;
+            if (isset($seen[$dedupeKey])) {
+                continue;
+            }
+            $seen[$dedupeKey] = true;
+
+            $result = self::syncSourceRecord($userId, $businessId, $sourceType, $sourceId);
             if ($result['ok']) {
                 if (($result['action'] ?? '') === 'skip' || ($result['action'] ?? '') === 'removed') {
                     $skipped++;
@@ -228,30 +240,7 @@ final class GoogleCalendarSync
                 continue;
             }
 
-            $errors[] = 'Event #' . (string) $eventId . ': ' . (string) ($result['error'] ?? 'Sync failed.');
-        }
-
-        $jobs = Job::scheduledForCalendarSync($businessId, $start, $end);
-        foreach ($jobs as $row) {
-            if (!is_array($row)) {
-                continue;
-            }
-            $jobId = (int) ($row['id'] ?? 0);
-            if ($jobId <= 0) {
-                continue;
-            }
-
-            $result = self::syncJobRecord($userId, $businessId, $row);
-            if ($result['ok']) {
-                if (($result['action'] ?? '') === 'skip' || ($result['action'] ?? '') === 'removed') {
-                    $skipped++;
-                } else {
-                    $synced++;
-                }
-                continue;
-            }
-
-            $errors[] = 'Job #' . (string) $jobId . ': ' . (string) ($result['error'] ?? 'Sync failed.');
+            $errors[] = ucfirst($sourceType) . ' #' . (string) $sourceId . ': ' . (string) ($result['error'] ?? 'Sync failed.');
         }
 
         return [
@@ -260,6 +249,196 @@ final class GoogleCalendarSync
             'skipped' => $skipped,
             'errors' => $errors,
         ];
+    }
+
+    public static function syncSource(int $userId, int $businessId, string $sourceType, int $sourceId): void
+    {
+        if ($userId <= 0 || $businessId <= 0 || $sourceId <= 0) {
+            return;
+        }
+
+        if (!GoogleCalendarConnection::isConnected($userId)) {
+            return;
+        }
+
+        self::syncSourceRecord($userId, $businessId, strtolower(trim($sourceType)), $sourceId);
+    }
+
+    public static function removeSource(int $userId, string $sourceType, int $sourceId): void
+    {
+        self::removeLinkedRecord($userId, strtolower(trim($sourceType)), $sourceId);
+    }
+
+    public static function syncTask(int $userId, int $businessId, int $taskId): void
+    {
+        self::syncSource($userId, $businessId, 'task', $taskId);
+    }
+
+    public static function removeTask(int $userId, int $taskId): void
+    {
+        self::removeSource($userId, 'task', $taskId);
+    }
+
+    public static function syncDelivery(int $userId, int $businessId, int $deliveryId): void
+    {
+        self::syncSource($userId, $businessId, 'delivery', $deliveryId);
+    }
+
+    public static function removeDelivery(int $userId, int $deliveryId): void
+    {
+        self::removeSource($userId, 'delivery', $deliveryId);
+    }
+
+    public static function syncQuote(int $userId, int $businessId, int $quoteId): void
+    {
+        self::syncSource($userId, $businessId, 'quote', $quoteId);
+    }
+
+    public static function removeQuote(int $userId, int $quoteId): void
+    {
+        self::removeSource($userId, 'quote', $quoteId);
+    }
+
+    public static function syncPurchaseQuote(int $userId, int $businessId, int $purchaseQuoteId): void
+    {
+        self::syncSource($userId, $businessId, 'purchase_quote', $purchaseQuoteId);
+    }
+
+    public static function removePurchaseQuote(int $userId, int $purchaseQuoteId): void
+    {
+        self::removeSource($userId, 'purchase_quote', $purchaseQuoteId);
+    }
+
+    public static function syncEstateSale(int $userId, int $businessId, int $estateSaleId): void
+    {
+        self::syncSource($userId, $businessId, 'estate_sale', $estateSaleId);
+    }
+
+    public static function removeEstateSale(int $userId, int $estateSaleId): void
+    {
+        self::removeSource($userId, 'estate_sale', $estateSaleId);
+    }
+
+    /**
+     * @return array{ok: bool, action?: string, error?: string}
+     */
+    private static function syncSourceRecord(int $userId, int $businessId, string $sourceType, int $sourceId): array
+    {
+        return match ($sourceType) {
+            'event' => self::syncEventOrRemove($userId, $businessId, $sourceId),
+            'job' => self::syncJobOrRemove($userId, $businessId, $sourceId),
+            'task' => self::syncTaskOrRemove($userId, $businessId, $sourceId),
+            'delivery' => self::syncDeliveryOrRemove($userId, $businessId, $sourceId),
+            'quote' => self::syncQuoteOrRemove($userId, $businessId, $sourceId),
+            'purchase_quote' => self::syncPurchaseQuoteOrRemove($userId, $businessId, $sourceId),
+            'estate_sale' => self::syncEstateSaleOrRemove($userId, $businessId, $sourceId),
+            default => ['ok' => false, 'error' => 'Unsupported calendar source.'],
+        };
+    }
+
+    /**
+     * @return array{ok: bool, action?: string, error?: string}
+     */
+    private static function syncEventOrRemove(int $userId, int $businessId, int $sourceId): array
+    {
+        $event = Event::findForBusiness($businessId, $sourceId);
+        if ($event === null) {
+            self::removeEvent($userId, $sourceId);
+
+            return ['ok' => true, 'action' => 'removed'];
+        }
+
+        return self::syncEventRecord($userId, $businessId, $event);
+    }
+
+    /**
+     * @return array{ok: bool, action?: string, error?: string}
+     */
+    private static function syncJobOrRemove(int $userId, int $businessId, int $sourceId): array
+    {
+        $job = Job::findForBusiness($businessId, $sourceId);
+        if ($job === null) {
+            self::removeJob($userId, $sourceId);
+
+            return ['ok' => true, 'action' => 'removed'];
+        }
+
+        return self::syncJobRecord($userId, $businessId, $job);
+    }
+
+    /**
+     * @return array{ok: bool, action?: string, error?: string}
+     */
+    private static function syncTaskOrRemove(int $userId, int $businessId, int $sourceId): array
+    {
+        $task = Task::findForBusiness($businessId, $sourceId);
+        if ($task === null) {
+            self::removeTask($userId, $sourceId);
+
+            return ['ok' => true, 'action' => 'removed'];
+        }
+
+        return self::syncTaskRecord($userId, $businessId, $task);
+    }
+
+    /**
+     * @return array{ok: bool, action?: string, error?: string}
+     */
+    private static function syncDeliveryOrRemove(int $userId, int $businessId, int $sourceId): array
+    {
+        $delivery = ClientDelivery::findForBusiness($businessId, $sourceId);
+        if ($delivery === null) {
+            self::removeDelivery($userId, $sourceId);
+
+            return ['ok' => true, 'action' => 'removed'];
+        }
+
+        return self::syncDeliveryRecord($userId, $businessId, $delivery);
+    }
+
+    /**
+     * @return array{ok: bool, action?: string, error?: string}
+     */
+    private static function syncQuoteOrRemove(int $userId, int $businessId, int $sourceId): array
+    {
+        $quote = Quote::findForBusiness($businessId, $sourceId);
+        if ($quote === null) {
+            self::removeQuote($userId, $sourceId);
+
+            return ['ok' => true, 'action' => 'removed'];
+        }
+
+        return self::syncQuoteRecord($userId, $businessId, $quote);
+    }
+
+    /**
+     * @return array{ok: bool, action?: string, error?: string}
+     */
+    private static function syncPurchaseQuoteOrRemove(int $userId, int $businessId, int $sourceId): array
+    {
+        $quote = PurchaseQuote::findForBusiness($businessId, $sourceId);
+        if ($quote === null) {
+            self::removePurchaseQuote($userId, $sourceId);
+
+            return ['ok' => true, 'action' => 'removed'];
+        }
+
+        return self::syncPurchaseQuoteRecord($userId, $businessId, $quote);
+    }
+
+    /**
+     * @return array{ok: bool, action?: string, error?: string}
+     */
+    private static function syncEstateSaleOrRemove(int $userId, int $businessId, int $sourceId): array
+    {
+        $estateSale = EstateSale::findForBusiness($businessId, $sourceId);
+        if ($estateSale === null) {
+            self::removeEstateSale($userId, $sourceId);
+
+            return ['ok' => true, 'action' => 'removed'];
+        }
+
+        return self::syncEstateSaleRecord($userId, $businessId, $estateSale);
     }
 
     public static function syncEvent(int $userId, int $businessId, int $eventId): void
@@ -386,6 +565,116 @@ final class GoogleCalendarSync
     }
 
     /**
+     * @param array<string, mixed> $task
+     * @return array{ok: bool, action?: string, error?: string}
+     */
+    private static function syncTaskRecord(int $userId, int $businessId, array $task): array
+    {
+        $taskId = (int) ($task['id'] ?? 0);
+        if ($taskId <= 0) {
+            return ['ok' => false, 'error' => 'Invalid task id.'];
+        }
+
+        if (!self::shouldSyncTask($task)) {
+            self::removeTask($userId, $taskId);
+
+            return ['ok' => true, 'action' => 'removed'];
+        }
+
+        return self::pushLinkedRecord($userId, 'task', $taskId, self::googlePayloadFromTask($task, $businessId));
+    }
+
+    /**
+     * @param array<string, mixed> $delivery
+     * @return array{ok: bool, action?: string, error?: string}
+     */
+    private static function syncDeliveryRecord(int $userId, int $businessId, array $delivery): array
+    {
+        $deliveryId = (int) ($delivery['id'] ?? 0);
+        if ($deliveryId <= 0) {
+            return ['ok' => false, 'error' => 'Invalid delivery id.'];
+        }
+
+        if (!self::shouldSyncDelivery($delivery)) {
+            self::removeDelivery($userId, $deliveryId);
+
+            return ['ok' => true, 'action' => 'removed'];
+        }
+
+        return self::pushLinkedRecord($userId, 'delivery', $deliveryId, self::googlePayloadFromDelivery($delivery, $businessId));
+    }
+
+    /**
+     * @param array<string, mixed> $quote
+     * @return array{ok: bool, action?: string, error?: string}
+     */
+    private static function syncQuoteRecord(int $userId, int $businessId, array $quote): array
+    {
+        $quoteId = (int) ($quote['id'] ?? 0);
+        if ($quoteId <= 0) {
+            return ['ok' => false, 'error' => 'Invalid quote id.'];
+        }
+
+        if (!self::shouldSyncQuote($quote)) {
+            self::removeQuote($userId, $quoteId);
+
+            return ['ok' => true, 'action' => 'removed'];
+        }
+
+        return self::pushLinkedRecord($userId, 'quote', $quoteId, self::googlePayloadFromQuote($quote, $businessId));
+    }
+
+    /**
+     * @param array<string, mixed> $quote
+     * @return array{ok: bool, action?: string, error?: string}
+     */
+    private static function syncPurchaseQuoteRecord(int $userId, int $businessId, array $quote): array
+    {
+        $quoteId = (int) ($quote['id'] ?? 0);
+        if ($quoteId <= 0) {
+            return ['ok' => false, 'error' => 'Invalid purchase quote id.'];
+        }
+
+        if (!self::shouldSyncPurchaseQuote($quote)) {
+            self::removePurchaseQuote($userId, $quoteId);
+
+            return ['ok' => true, 'action' => 'removed'];
+        }
+
+        return self::pushLinkedRecord(
+            $userId,
+            'purchase_quote',
+            $quoteId,
+            self::googlePayloadFromPurchaseQuote($quote, $businessId)
+        );
+    }
+
+    /**
+     * @param array<string, mixed> $estateSale
+     * @return array{ok: bool, action?: string, error?: string}
+     */
+    private static function syncEstateSaleRecord(int $userId, int $businessId, array $estateSale): array
+    {
+        $estateSaleId = (int) ($estateSale['id'] ?? 0);
+        if ($estateSaleId <= 0) {
+            return ['ok' => false, 'error' => 'Invalid estate sale id.'];
+        }
+
+        if (!self::shouldSyncEstateSale($estateSale)) {
+            self::removeEstateSale($userId, $estateSaleId);
+
+            return ['ok' => true, 'action' => 'removed'];
+        }
+
+        return self::pushLinkedRecord(
+            $userId,
+            'estate_sale',
+            $estateSaleId,
+            self::googlePayloadFromEstateSale($estateSale, $businessId)
+        );
+    }
+
+    /**
      * @param array<string, mixed> $job
      */
     private static function shouldSyncJob(array $job): bool
@@ -474,6 +763,319 @@ final class GoogleCalendarSync
             ],
         ];
 
+        if ($location !== '') {
+            $payload['location'] = $location;
+        }
+
+        return $payload;
+    }
+
+    /**
+     * @param array<string, mixed> $task
+     */
+    private static function shouldSyncTask(array $task): bool
+    {
+        return trim((string) ($task['due_at'] ?? '')) !== '';
+    }
+
+    /**
+     * @param array<string, mixed> $delivery
+     */
+    private static function shouldSyncDelivery(array $delivery): bool
+    {
+        if (trim((string) ($delivery['scheduled_at'] ?? '')) === '') {
+            return false;
+        }
+
+        return strtolower(trim((string) ($delivery['status'] ?? ''))) !== 'cancelled';
+    }
+
+    /**
+     * @param array<string, mixed> $quote
+     */
+    private static function shouldSyncQuote(array $quote): bool
+    {
+        return trim((string) ($quote['next_follow_up_at'] ?? '')) !== '';
+    }
+
+    /**
+     * @param array<string, mixed> $quote
+     */
+    private static function shouldSyncPurchaseQuote(array $quote): bool
+    {
+        $followUpAt = trim((string) ($quote['next_follow_up_at'] ?? ''));
+        if ($followUpAt !== '') {
+            return true;
+        }
+
+        return trim((string) ($quote['contact_date'] ?? '')) !== '';
+    }
+
+    /**
+     * @param array<string, mixed> $estateSale
+     */
+    private static function shouldSyncEstateSale(array $estateSale): bool
+    {
+        if (trim((string) ($estateSale['start_at'] ?? '')) === '') {
+            return false;
+        }
+
+        return strtolower(trim((string) ($estateSale['status'] ?? ''))) !== 'cancelled';
+    }
+
+    /**
+     * @param array<string, mixed> $task
+     * @return array<string, mixed>
+     */
+    private static function googlePayloadFromTask(array $task, int $businessId): array
+    {
+        $taskId = (int) ($task['id'] ?? 0);
+        $title = Task::displayTitle($task);
+        $timezone = (string) config('app.timezone', 'America/New_York');
+        $startAt = trim((string) ($task['due_at'] ?? ''));
+        $status = ucfirst(str_replace('_', ' ', strtolower(trim((string) ($task['status'] ?? 'open')))));
+        $ownerName = trim((string) ($task['owner_name'] ?? ''));
+        $clientName = trim((string) ($task['client_name'] ?? ''));
+
+        $descriptionParts = ['Type: Task', 'Status: ' . $status];
+        if ($ownerName !== '') {
+            $descriptionParts[] = 'Owner: ' . $ownerName;
+        }
+        if ($clientName !== '') {
+            $descriptionParts[] = 'Client: ' . $clientName;
+        }
+        $descriptionParts[] = 'JunkTracker: ' . url('/tasks/' . (string) $taskId);
+
+        return [
+            'summary' => $title,
+            'description' => implode("\n\n", $descriptionParts),
+            'extendedProperties' => [
+                'private' => [
+                    'junktrackerKey' => 'task:' . (string) $taskId,
+                    'junktrackerBusinessId' => (string) $businessId,
+                ],
+            ],
+            'start' => [
+                'dateTime' => self::isoDateTime($startAt),
+                'timeZone' => $timezone,
+            ],
+            'end' => [
+                'dateTime' => self::isoDateTime(date('Y-m-d H:i:s', strtotime($startAt . ' +1 hour'))),
+                'timeZone' => $timezone,
+            ],
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $delivery
+     * @return array<string, mixed>
+     */
+    private static function googlePayloadFromDelivery(array $delivery, int $businessId): array
+    {
+        $deliveryId = (int) ($delivery['id'] ?? 0);
+        $clientName = trim((string) ($delivery['client_name'] ?? ''));
+        $title = $clientName !== '' ? $clientName : 'Delivery #' . (string) $deliveryId;
+        $timezone = (string) config('app.timezone', 'America/New_York');
+        $startAt = trim((string) ($delivery['scheduled_at'] ?? ''));
+        $endAt = trim((string) ($delivery['end_at'] ?? ''));
+        $status = ucfirst(str_replace('_', ' ', strtolower(trim((string) ($delivery['status'] ?? 'scheduled')))));
+        $location = self::formatAddress(
+            trim((string) ($delivery['address_line1'] ?? '')),
+            trim((string) ($delivery['address_line2'] ?? '')),
+            trim((string) ($delivery['city'] ?? '')),
+            trim((string) ($delivery['state'] ?? '')),
+            trim((string) ($delivery['postal_code'] ?? ''))
+        );
+        $notes = trim((string) ($delivery['notes'] ?? ''));
+
+        $descriptionParts = ['Type: Delivery', 'Status: ' . $status];
+        if ($clientName !== '') {
+            $descriptionParts[] = 'Client: ' . $clientName;
+        }
+        if ($location !== '') {
+            $descriptionParts[] = 'Address: ' . $location;
+        }
+        if ($notes !== '') {
+            $descriptionParts[] = $notes;
+        }
+        $descriptionParts[] = 'JunkTracker: ' . url('/deliveries/' . (string) $deliveryId);
+
+        $payload = [
+            'summary' => $title,
+            'description' => implode("\n\n", $descriptionParts),
+            'extendedProperties' => [
+                'private' => [
+                    'junktrackerKey' => 'delivery:' . (string) $deliveryId,
+                    'junktrackerBusinessId' => (string) $businessId,
+                ],
+            ],
+            'start' => [
+                'dateTime' => self::isoDateTime($startAt),
+                'timeZone' => $timezone,
+            ],
+            'end' => [
+                'dateTime' => self::isoDateTime($endAt !== '' ? $endAt : date('Y-m-d H:i:s', strtotime($startAt . ' +2 hours'))),
+                'timeZone' => $timezone,
+            ],
+        ];
+        if ($location !== '') {
+            $payload['location'] = $location;
+        }
+
+        return $payload;
+    }
+
+    /**
+     * @param array<string, mixed> $quote
+     * @return array<string, mixed>
+     */
+    private static function googlePayloadFromQuote(array $quote, int $businessId): array
+    {
+        $quoteId = (int) ($quote['id'] ?? 0);
+        $title = trim((string) ($quote['title'] ?? ''));
+        if ($title === '') {
+            $title = 'Quote #' . (string) $quoteId;
+        }
+        $timezone = (string) config('app.timezone', 'America/New_York');
+        $startAt = trim((string) ($quote['next_follow_up_at'] ?? ''));
+        $status = ucfirst(str_replace('_', ' ', strtolower(trim((string) ($quote['status'] ?? 'new')))));
+        $clientName = trim((string) ($quote['client_name'] ?? ''));
+        $clientPhone = trim((string) ($quote['client_phone'] ?? ''));
+
+        $descriptionParts = ['Type: Quote follow-up', 'Status: ' . $status];
+        if ($clientName !== '') {
+            $descriptionParts[] = 'Client: ' . $clientName;
+        }
+        if ($clientPhone !== '') {
+            $formatted = format_phone($clientPhone);
+            $descriptionParts[] = 'Phone: ' . ($formatted !== '—' ? $formatted : $clientPhone);
+        }
+        $descriptionParts[] = 'JunkTracker: ' . url('/quotes/' . (string) $quoteId);
+
+        return [
+            'summary' => $title,
+            'description' => implode("\n\n", $descriptionParts),
+            'extendedProperties' => [
+                'private' => [
+                    'junktrackerKey' => 'quote:' . (string) $quoteId,
+                    'junktrackerBusinessId' => (string) $businessId,
+                ],
+            ],
+            'start' => [
+                'dateTime' => self::isoDateTime($startAt),
+                'timeZone' => $timezone,
+            ],
+            'end' => [
+                'dateTime' => self::isoDateTime(date('Y-m-d H:i:s', strtotime($startAt . ' +1 hour'))),
+                'timeZone' => $timezone,
+            ],
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $quote
+     * @return array<string, mixed>
+     */
+    private static function googlePayloadFromPurchaseQuote(array $quote, int $businessId): array
+    {
+        $quoteId = (int) ($quote['id'] ?? 0);
+        $title = trim((string) ($quote['title'] ?? ''));
+        if ($title === '') {
+            $title = 'Purchase Quote #' . (string) $quoteId;
+        }
+        $timezone = (string) config('app.timezone', 'America/New_York');
+        $startAt = trim((string) ($quote['next_follow_up_at'] ?? ''));
+        if ($startAt === '') {
+            $contactDate = trim((string) ($quote['contact_date'] ?? ''));
+            if ($contactDate !== '') {
+                $startAt = $contactDate . ' 09:00:00';
+            }
+        }
+        $status = ucfirst(str_replace('_', ' ', strtolower(trim((string) ($quote['status'] ?? 'new')))));
+        $clientName = trim((string) ($quote['client_name'] ?? ''));
+        $clientPhone = trim((string) ($quote['client_phone'] ?? ''));
+
+        $descriptionParts = ['Type: Purchase quote follow-up', 'Status: ' . $status];
+        if ($clientName !== '') {
+            $descriptionParts[] = 'Client: ' . $clientName;
+        }
+        if ($clientPhone !== '') {
+            $formatted = format_phone($clientPhone);
+            $descriptionParts[] = 'Phone: ' . ($formatted !== '—' ? $formatted : $clientPhone);
+        }
+        $descriptionParts[] = 'JunkTracker: ' . url('/purchase-quotes/' . (string) $quoteId);
+
+        return [
+            'summary' => $title,
+            'description' => implode("\n\n", $descriptionParts),
+            'extendedProperties' => [
+                'private' => [
+                    'junktrackerKey' => 'purchase_quote:' . (string) $quoteId,
+                    'junktrackerBusinessId' => (string) $businessId,
+                ],
+            ],
+            'start' => [
+                'dateTime' => self::isoDateTime($startAt),
+                'timeZone' => $timezone,
+            ],
+            'end' => [
+                'dateTime' => self::isoDateTime(date('Y-m-d H:i:s', strtotime($startAt . ' +1 hour'))),
+                'timeZone' => $timezone,
+            ],
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $estateSale
+     * @return array<string, mixed>
+     */
+    private static function googlePayloadFromEstateSale(array $estateSale, int $businessId): array
+    {
+        $estateSaleId = (int) ($estateSale['id'] ?? 0);
+        $title = trim((string) ($estateSale['title'] ?? ''));
+        if ($title === '') {
+            $title = 'Estate Sale #' . (string) $estateSaleId;
+        }
+        $timezone = (string) config('app.timezone', 'America/New_York');
+        $startAt = trim((string) ($estateSale['start_at'] ?? ''));
+        $endAt = trim((string) ($estateSale['end_at'] ?? ''));
+        $status = ucfirst(str_replace('_', ' ', strtolower(trim((string) ($estateSale['status'] ?? 'scheduled')))));
+        $location = self::formatAddress(
+            trim((string) ($estateSale['address_line1'] ?? '')),
+            trim((string) ($estateSale['address_line2'] ?? '')),
+            trim((string) ($estateSale['city'] ?? '')),
+            trim((string) ($estateSale['state'] ?? '')),
+            trim((string) ($estateSale['postal_code'] ?? ''))
+        );
+        $notes = trim((string) ($estateSale['notes'] ?? ''));
+
+        $descriptionParts = ['Type: Estate sale', 'Status: ' . $status];
+        if ($location !== '') {
+            $descriptionParts[] = 'Address: ' . $location;
+        }
+        if ($notes !== '') {
+            $descriptionParts[] = $notes;
+        }
+        $descriptionParts[] = 'JunkTracker: ' . url('/estate-sales/' . (string) $estateSaleId);
+
+        $payload = [
+            'summary' => $title,
+            'description' => implode("\n\n", $descriptionParts),
+            'extendedProperties' => [
+                'private' => [
+                    'junktrackerKey' => 'estate_sale:' . (string) $estateSaleId,
+                    'junktrackerBusinessId' => (string) $businessId,
+                ],
+            ],
+            'start' => [
+                'dateTime' => self::isoDateTime($startAt),
+                'timeZone' => $timezone,
+            ],
+            'end' => [
+                'dateTime' => self::isoDateTime($endAt !== '' ? $endAt : date('Y-m-d H:i:s', strtotime($startAt . ' +4 hours'))),
+                'timeZone' => $timezone,
+            ],
+        ];
         if ($location !== '') {
             $payload['location'] = $location;
         }
@@ -584,27 +1186,26 @@ final class GoogleCalendarSync
     {
         $eventId = (int) ($event['id'] ?? 0);
         $title = trim((string) ($event['title'] ?? 'Event'));
-        $type = trim((string) ($event['type'] ?? 'appointment'));
+        $type = strtolower(trim((string) ($event['type'] ?? 'appointment')));
         $notes = trim((string) ($event['notes'] ?? ''));
         $allDay = (int) ($event['all_day'] ?? 0) === 1;
         $timezone = (string) config('app.timezone', 'America/New_York');
+        $summary = self::eventSummaryTitle($title, $type);
 
         $descriptionParts = [];
         if ($type !== '' && $type !== 'appointment') {
             $descriptionParts[] = 'Type: ' . ucfirst(str_replace('_', ' ', $type));
         }
 
-        if (strtolower($type) === 'appointment') {
-            $contact = Event::linkedClientContact($businessId, $event);
-            $clientName = trim((string) ($contact['name'] ?? ''));
-            $clientPhone = trim((string) ($contact['phone'] ?? ''));
-            if ($clientName !== '') {
-                $descriptionParts[] = 'Client: ' . $clientName;
-            }
-            if ($clientPhone !== '') {
-                $formatted = format_phone($clientPhone);
-                $descriptionParts[] = 'Phone: ' . ($formatted !== '—' ? $formatted : $clientPhone);
-            }
+        $contact = Event::linkedClientContact($businessId, $event);
+        $clientName = trim((string) ($contact['name'] ?? ''));
+        $clientPhone = trim((string) ($contact['phone'] ?? ''));
+        if ($clientName !== '') {
+            $descriptionParts[] = 'Client: ' . $clientName;
+        }
+        if ($clientPhone !== '') {
+            $formatted = format_phone($clientPhone);
+            $descriptionParts[] = 'Phone: ' . ($formatted !== '—' ? $formatted : $clientPhone);
         }
 
         if ($notes !== '') {
@@ -613,7 +1214,7 @@ final class GoogleCalendarSync
         $descriptionParts[] = 'JunkTracker: ' . url('/events/' . (string) $eventId);
 
         $payload = [
-            'summary' => $title,
+            'summary' => $summary,
             'description' => implode("\n\n", $descriptionParts),
             'extendedProperties' => [
                 'private' => [
@@ -646,6 +1247,34 @@ final class GoogleCalendarSync
         }
 
         return $payload;
+    }
+
+    private static function eventSummaryTitle(string $title, string $type): string
+    {
+        $title = trim($title);
+        $type = strtolower(trim($type));
+        if ($type === '' || $type === 'appointment') {
+            return $title !== '' ? $title : 'Appointment';
+        }
+
+        $typeLabel = match ($type) {
+            'personal' => 'Personal time',
+            'cancellation' => 'Cancellation',
+            'reminder' => 'Reminder',
+            'note' => 'Note',
+            'task' => 'Task',
+            default => ucfirst(str_replace('_', ' ', $type)),
+        };
+
+        if ($title === '' || strcasecmp($title, $typeLabel) === 0) {
+            return $typeLabel;
+        }
+
+        if (stripos($title, $typeLabel) === 0) {
+            return $title;
+        }
+
+        return $typeLabel . ': ' . $title;
     }
 
     private static function resolveAccessTokenForUser(int $userId): string

@@ -954,6 +954,56 @@ final class EventFeed
         return $events;
     }
 
+    /**
+     * Calendar items that should sync to Google (matches default Events calendar sources).
+     *
+     * @return list<array{source_type: string, source_id: int}>
+     */
+    public static function googleSyncItemRefs(int $businessId, string $start, string $end): array
+    {
+        $startNorm = self::normalizeIsoDateTime($start);
+        $endNorm = self::normalizeIsoDateTime($end);
+        if ($startNorm === null || $endNorm === null) {
+            $startNorm = date('Y-m-01 00:00:00');
+            $endNorm = date('Y-m-t 23:59:59');
+        }
+
+        $refs = [];
+        $append = static function (array $events, string $sourceType) use (&$refs): void {
+            foreach ($events as $event) {
+                if (!is_array($event)) {
+                    continue;
+                }
+                $feedId = trim((string) ($event['id'] ?? ''));
+                if ($feedId === '' || !str_contains($feedId, ':')) {
+                    continue;
+                }
+                [$prefix, $rawId] = explode(':', $feedId, 2);
+                if ($prefix !== $sourceType) {
+                    continue;
+                }
+                $sourceId = (int) $rawId;
+                if ($sourceId <= 0) {
+                    continue;
+                }
+                $refs[] = [
+                    'source_type' => $sourceType,
+                    'source_id' => $sourceId,
+                ];
+            }
+        };
+
+        $append(self::taskDueEvents($businessId, $startNorm, $endNorm, ''), 'task');
+        $append(self::jobScheduleEvents($businessId, $startNorm, $endNorm, ''), 'job');
+        $append(self::customEvents($businessId, $startNorm, $endNorm, [], ''), 'event');
+        $append(self::deliveryEvents($businessId, $startNorm, $endNorm, ''), 'delivery');
+        $append(self::quoteFollowUpEvents($businessId, $startNorm, $endNorm, ''), 'quote');
+        $append(self::purchaseQuoteFollowUpEvents($businessId, $startNorm, $endNorm, ''), 'purchase_quote');
+        $append(self::estateSaleEvents($businessId, $startNorm, $endNorm, ''), 'estate_sale');
+
+        return $refs;
+    }
+
     private static function toIso(string $value): string
     {
         $stamp = strtotime($value);

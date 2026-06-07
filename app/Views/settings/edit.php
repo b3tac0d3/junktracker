@@ -96,7 +96,7 @@ $googleCalendarCalendarId = trim((string) ($googleCalendarCalendarId ?? 'primary
     </div>
     <div class="card-body">
         <p class="small muted mb-3">
-            Connect Google to sync appointments to Calendar and optionally send Gmail updates when appointments are added, changed, or removed.
+            Connect Google to sync Events calendar items (appointments, personal time, jobs, tasks, deliveries, quotes, purchase quotes, estate sales) and optionally send Gmail updates when appointments change.
         </p>
 
         <?php if (!$googleCalendarConfigured): ?>

@@ -35,6 +35,43 @@ final class AppCache
         return $v !== '' ? substr(md5($v), 0, 8) : '0';
     }
 
+    /**
+     * Per-business generation counter — bump after mutations so dashboard/nav refresh immediately.
+     */
+    public static function businessGeneration(int $businessId): int
+    {
+        if ($businessId <= 0) {
+            return 0;
+        }
+
+        $key = 'bgen:' . $businessId;
+        $val = self::get($key);
+        if (is_int($val)) {
+            return $val;
+        }
+        if (is_numeric($val)) {
+            return (int) $val;
+        }
+
+        return 0;
+    }
+
+    public static function bumpBusiness(int $businessId): void
+    {
+        if ($businessId <= 0 || !self::enabled()) {
+            return;
+        }
+
+        $key = 'bgen:' . $businessId;
+        $gen = self::businessGeneration($businessId) + 1;
+        self::set($key, $gen, 86400 * 30);
+    }
+
+    public static function cacheKeySuffix(int $businessId): string
+    {
+        return self::versionSuffix() . ':' . (string) self::businessGeneration($businessId);
+    }
+
     public static function get(string $key): mixed
     {
         if (!self::enabled()) {

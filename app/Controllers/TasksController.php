@@ -118,6 +118,7 @@ final class TasksController extends Controller
 
         $taskId = Task::create($businessId, $this->payloadForSave($form), auth_user_id() ?? 0);
         audit('task_created', 'tasks', $taskId, ['title' => trim((string) ($form['title'] ?? ''))]);
+        google_calendar_sync_item($businessId, 'task', $taskId);
         flash('success', 'Task created.');
         redirect('/tasks/' . (string) $taskId);
     }
@@ -210,6 +211,7 @@ final class TasksController extends Controller
         }
 
         $summary = Task::statusSummary($businessId);
+        google_calendar_sync_item($businessId, 'task', $taskId);
 
         $accept = (string) ($_SERVER['HTTP_ACCEPT'] ?? '');
         if (stripos($accept, 'application/json') === false) {
@@ -403,6 +405,7 @@ final class TasksController extends Controller
 
         Task::update($businessId, $taskId, $this->payloadForSave($form), auth_user_id() ?? 0);
         audit('task_updated', 'tasks', $taskId);
+        google_calendar_sync_item($businessId, 'task', $taskId);
         flash('success', 'Task updated.');
         redirect('/tasks/' . (string) $taskId);
     }
