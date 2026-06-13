@@ -375,7 +375,6 @@ final class JobSubcontractorAssignment
         $totalSql = SchemaInspector::hasColumn('invoices', 'total')
             ? 'COALESCE(i.total, 0)'
             : (SchemaInspector::hasColumn('invoices', 'subtotal') ? 'COALESCE(i.subtotal, 0)' : '0');
-        $invoiceBusiness = SchemaInspector::hasColumn('invoices', 'business_id') ? 'i.business_id = a.business_id' : '1=1';
         $invoiceDeleted = SchemaInspector::hasColumn('invoices', 'deleted_at') ? 'i.deleted_at IS NULL' : '1=1';
         $invoiceType = SchemaInspector::hasColumn('invoices', 'type')
             ? "AND (LOWER(COALESCE(NULLIF(TRIM(i.type), ''), 'invoice')) = 'invoice')"
@@ -383,6 +382,8 @@ final class JobSubcontractorAssignment
         $invoiceStatus = SchemaInspector::hasColumn('invoices', 'status')
             ? "AND LOWER(COALESCE(i.status, '')) NOT IN ('cancelled','declined')"
             : '';
+
+        $invoiceBusinessSub = SchemaInspector::hasColumn('invoices', 'business_id') ? 'i.business_id = :invoice_business_id' : '1=1';
 
         $sql = 'SELECT
                     COUNT(*) AS item_count,
@@ -393,7 +394,7 @@ final class JobSubcontractorAssignment
                     SELECT i.job_id,
                            SUM(' . $totalSql . ') AS invoice_gross
                     FROM invoices i
-                    WHERE ' . (SchemaInspector::hasColumn('invoices', 'business_id') ? 'i.business_id = :business_id' : '1=1') . '
+                    WHERE ' . $invoiceBusinessSub . '
                       AND ' . $invoiceDeleted . '
                       ' . $invoiceType . '
                       ' . $invoiceStatus . '
@@ -406,6 +407,9 @@ final class JobSubcontractorAssignment
 
         $stmt = Database::connection()->prepare($sql);
         $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
+        if (SchemaInspector::hasColumn('invoices', 'business_id')) {
+            $stmt->bindValue(':invoice_business_id', $businessId, \PDO::PARAM_INT);
+        }
         $stmt->bindValue(':from_date', $fromDate);
         $stmt->bindValue(':to_date', $toDate);
         $stmt->execute();
