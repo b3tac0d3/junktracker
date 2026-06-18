@@ -207,7 +207,7 @@ final class AuthController extends Controller
         );
 
         if ($globalRole === 'site_admin' && current_business_id() <= 0) {
-            redirect('/site-admin/businesses');
+            redirect('/site-admin');
         }
 
         if (($sessionUser['workspace_role'] ?? '') === 'punch_only') {

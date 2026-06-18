@@ -4,6 +4,8 @@
 .release_tmp/
 public/uploads/business_logos/*
 !public/uploads/business_logos/.gitkeep
+public/uploads/dev_tracker/*
+!public/uploads/dev_tracker/.gitkeep
 storage/
 config/database.local.php
 config/app.local.php

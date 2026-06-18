@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Controllers;
 
+use App\Models\BusinessLocation;
 use App\Models\Employee;
 use Core\Controller;
 
@@ -40,6 +41,7 @@ final class AdminEmployeesController extends Controller
         require_business_role(['admin']);
 
         $businessId = current_business_id();
+        $locationContext = $this->locationFormContext($businessId);
 
         $this->render('admin/employees/form', [
             'pageTitle' => 'Add Employee',
@@ -48,6 +50,8 @@ final class AdminEmployeesController extends Controller
             'form' => $this->defaultForm(),
             'errors' => [],
             'userOptions' => Employee::businessUserOptions($businessId, '', 300),
+            'locationPickers' => $locationContext['locationPickers'],
+            'locationsAvailable' => $locationContext['locationsAvailable'],
         ]);
     }
 
@@ -63,7 +67,8 @@ final class AdminEmployeesController extends Controller
         $businessId = current_business_id();
         $form = $this->formFromPost($_POST);
         $userOptions = Employee::businessUserOptions($businessId, '', 500);
-        $errors = $this->validateForm($form, $userOptions, $businessId);
+        $locationContext = $this->locationFormContext($businessId);
+        $errors = $this->validateForm($form, $userOptions, $businessId, null, $locationContext);
 
         if ($errors !== []) {
             $this->render('admin/employees/form', [
@@ -73,11 +78,13 @@ final class AdminEmployeesController extends Controller
                 'form' => $form,
                 'errors' => $errors,
                 'userOptions' => $userOptions,
+                'locationPickers' => $locationContext['locationPickers'],
+                'locationsAvailable' => $locationContext['locationsAvailable'],
             ]);
             return;
         }
 
-        $employeeId = Employee::create($businessId, $this->payloadForSave($form), auth_user_id() ?? 0);
+        $employeeId = Employee::create($businessId, $this->payloadForSave($form, $businessId), auth_user_id() ?? 0);
         audit('employee_created', 'employees', $employeeId);
         flash('success', 'Employee added.');
         redirect('/admin/employees/' . (string) $employeeId);
@@ -101,9 +108,15 @@ final class AdminEmployeesController extends Controller
             return;
         }
 
+        $businessId = current_business_id();
+        $locationContext = $this->locationFormContext($businessId);
+        $operatingLocations = $this->resolvedOperatingLocations($businessId, $employee);
+
         $this->render('admin/employees/show', [
             'pageTitle' => 'Employee',
             'employee' => $employee,
+            'operatingLocations' => $operatingLocations,
+            'locationPickers' => $locationContext['locationPickers'],
         ]);
     }
 
@@ -126,6 +139,8 @@ final class AdminEmployeesController extends Controller
             return;
         }
 
+        $locationContext = $this->locationFormContext($businessId);
+
         $this->render('admin/employees/form', [
             'pageTitle' => 'Edit Employee',
             'mode' => 'edit',
@@ -134,6 +149,8 @@ final class AdminEmployeesController extends Controller
             'errors' => [],
             'userOptions' => Employee::businessUserOptions($businessId, '', 300),
             'employeeId' => $employeeId,
+            'locationPickers' => $locationContext['locationPickers'],
+            'locationsAvailable' => $locationContext['locationsAvailable'],
         ]);
     }
 
@@ -163,7 +180,8 @@ final class AdminEmployeesController extends Controller
 
         $form = $this->formFromPost($_POST);
         $userOptions = Employee::businessUserOptions($businessId, '', 500);
-        $errors = $this->validateForm($form, $userOptions, $businessId, $employeeId);
+        $locationContext = $this->locationFormContext($businessId);
+        $errors = $this->validateForm($form, $userOptions, $businessId, $employeeId, $locationContext);
 
         if ($errors !== []) {
             $this->render('admin/employees/form', [
@@ -174,11 +192,13 @@ final class AdminEmployeesController extends Controller
                 'errors' => $errors,
                 'userOptions' => $userOptions,
                 'employeeId' => $employeeId,
+                'locationPickers' => $locationContext['locationPickers'],
+                'locationsAvailable' => $locationContext['locationsAvailable'],
             ]);
             return;
         }
 
-        Employee::update($businessId, $employeeId, $this->payloadForSave($form), auth_user_id() ?? 0);
+        Employee::update($businessId, $employeeId, $this->payloadForSave($form, $businessId), auth_user_id() ?? 0);
         audit('employee_updated', 'employees', $employeeId);
         flash('success', 'Employee updated.');
         redirect('/admin/employees/' . (string) $employeeId);
@@ -197,6 +217,9 @@ final class AdminEmployeesController extends Controller
             'user_id' => '',
             'user_name' => '',
             'status' => 'active',
+            'default_store_location_id' => '',
+            'default_warehouse_location_id' => '',
+            'default_terminal_location_id' => '',
         ];
     }
 
@@ -213,6 +236,9 @@ final class AdminEmployeesController extends Controller
             'user_id' => (string) ((int) ($employee['user_id'] ?? 0)),
             'user_name' => trim((string) ($employee['linked_user_name'] ?? '')),
             'status' => trim((string) ($employee['status'] ?? 'active')),
+            'default_store_location_id' => (string) ((int) ($employee['default_store_location_id'] ?? 0)),
+            'default_warehouse_location_id' => (string) ((int) ($employee['default_warehouse_location_id'] ?? 0)),
+            'default_terminal_location_id' => (string) ((int) ($employee['default_terminal_location_id'] ?? 0)),
         ];
     }
 
@@ -229,10 +255,13 @@ final class AdminEmployeesController extends Controller
             'user_id' => trim((string) ($input['user_id'] ?? '')),
             'user_name' => trim((string) ($input['user_name'] ?? '')),
             'status' => trim((string) ($input['status'] ?? 'active')),
+            'default_store_location_id' => trim((string) ($input['default_store_location_id'] ?? '')),
+            'default_warehouse_location_id' => trim((string) ($input['default_warehouse_location_id'] ?? '')),
+            'default_terminal_location_id' => trim((string) ($input['default_terminal_location_id'] ?? '')),
         ];
     }
 
-    private function validateForm(array $form, array $userOptions, int $businessId, ?int $currentEmployeeId = null): array
+    private function validateForm(array $form, array $userOptions, int $businessId, ?int $currentEmployeeId = null, ?array $locationContext = null): array
     {
         $errors = [];
 
@@ -269,12 +298,36 @@ final class AdminEmployeesController extends Controller
             }
         }
 
+        $locationContext ??= $this->locationFormContext($businessId);
+        foreach ($locationContext['locationPickers'] as $picker) {
+            if (!is_array($picker)) {
+                continue;
+            }
+
+            $field = trim((string) ($picker['field'] ?? ''));
+            if ($field === '') {
+                continue;
+            }
+
+            $locationId = (int) ($form[$field] ?? 0);
+            if ($locationId <= 0) {
+                continue;
+            }
+
+            $options = is_array($picker['options'] ?? null) ? $picker['options'] : [];
+            $validIds = array_map(static fn (array $row): int => (int) ($row['id'] ?? 0), $options);
+            if (!in_array($locationId, $validIds, true)) {
+                $label = trim((string) ($picker['label'] ?? 'location'));
+                $errors[$field] = 'Choose a valid ' . strtolower($label) . ' location.';
+            }
+        }
+
         return $errors;
     }
 
-    private function payloadForSave(array $form): array
+    private function payloadForSave(array $form, int $businessId): array
     {
-        return [
+        $payload = [
             'first_name' => trim((string) ($form['first_name'] ?? '')),
             'last_name' => trim((string) ($form['last_name'] ?? '')),
             'suffix' => trim((string) ($form['suffix'] ?? '')),
@@ -285,5 +338,82 @@ final class AdminEmployeesController extends Controller
             'user_id' => (int) ($form['user_id'] ?? 0) > 0 ? (int) $form['user_id'] : null,
             'status' => 'active',
         ];
+
+        foreach ([
+            BusinessLocation::TYPE_STORE => 'default_store_location_id',
+            BusinessLocation::TYPE_WAREHOUSE => 'default_warehouse_location_id',
+            BusinessLocation::TYPE_TERMINAL => 'default_terminal_location_id',
+        ] as $type => $field) {
+            if (BusinessLocation::needsEmployeeDefaultPicker($businessId, $type)) {
+                $locationId = (int) ($form[$field] ?? 0);
+                $payload[$field] = $locationId > 0 ? $locationId : null;
+            } else {
+                $payload[$field] = null;
+            }
+        }
+
+        return $payload;
+    }
+
+    /**
+     * @return array{locationsAvailable: bool, locationPickers: list<array<string, mixed>>}
+     */
+    private function locationFormContext(int $businessId): array
+    {
+        if (!BusinessLocation::isAvailable()) {
+            return [
+                'locationsAvailable' => false,
+                'locationPickers' => [],
+            ];
+        }
+
+        $pickers = [];
+        foreach ([BusinessLocation::TYPE_STORE, BusinessLocation::TYPE_WAREHOUSE, BusinessLocation::TYPE_TERMINAL] as $type) {
+            if (!BusinessLocation::needsEmployeeDefaultPicker($businessId, $type)) {
+                continue;
+            }
+
+            $field = BusinessLocation::defaultColumnForType($type);
+            if ($field === null) {
+                continue;
+            }
+
+            $pickers[] = [
+                'type' => $type,
+                'label' => BusinessLocation::labelForType($type),
+                'field' => $field,
+                'options' => BusinessLocation::activeByType($businessId, $type),
+            ];
+        }
+
+        return [
+            'locationsAvailable' => true,
+            'locationPickers' => $pickers,
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $employee
+     * @return list<array<string, mixed>>
+     */
+    private function resolvedOperatingLocations(int $businessId, array $employee): array
+    {
+        if (!BusinessLocation::isAvailable()) {
+            return [];
+        }
+
+        $rows = [];
+        foreach ([BusinessLocation::TYPE_STORE, BusinessLocation::TYPE_WAREHOUSE, BusinessLocation::TYPE_TERMINAL] as $type) {
+            if (BusinessLocation::activeCountByType($businessId, $type) <= 0) {
+                continue;
+            }
+
+            $resolved = BusinessLocation::resolveForEmployee($businessId, $employee, $type);
+            $resolved['type_label'] = BusinessLocation::labelForType($type);
+            $resolved['needs_default_picker'] = BusinessLocation::needsEmployeeDefaultPicker($businessId, $type);
+            $rows[] = $resolved;
+        }
+
+        return $rows;
     }
 }

@@ -8,6 +8,7 @@ $hasNewsletter = (bool) ($hasNewsletter ?? false);
 $clientTypeOptions = is_array($clientTypeOptions ?? null) ? $clientTypeOptions : ['client', 'company', 'realtor', 'other'];
 $clientId = (int) ($clientId ?? 0);
 $returnTab = (string) ($returnTab ?? '');
+$openAddClientDataReminder = (bool) ($openAddClientDataReminder ?? false);
 $referralsSent = is_array($referralsSent ?? null) ? $referralsSent : [];
 $backUrl = $mode === 'edit' && $clientId > 0
     ? url(detail_path_with_tab('/clients/' . (string) $clientId, $returnTab))
@@ -256,6 +257,23 @@ if ($selectedState !== '' && !array_key_exists($selectedState, $stateOptions)) {
                         <option value="job" <?= $nextAction === 'job' ? 'selected' : '' ?>>Go to Add Job</option>
                         <option value="quote" <?= $nextAction === 'quote' ? 'selected' : '' ?>>Go to Add Quote</option>
                     </select>
+                </div>
+            <?php endif; ?>
+
+            <?php if ($mode === 'edit' && $openAddClientDataReminder): ?>
+                <div class="col-12">
+                    <div class="form-check">
+                        <input
+                            class="form-check-input"
+                            type="checkbox"
+                            id="client-complete-add-data"
+                            name="complete_add_client_data"
+                            value="1"
+                            <?= ((string) ($form['complete_add_client_data'] ?? '')) === '1' ? 'checked' : '' ?>
+                        />
+                        <label class="form-check-label" for="client-complete-add-data">Mark &ldquo;Add client data&rdquo; follow-up complete</label>
+                    </div>
+                    <div class="form-text">Checked by default the first time you edit after a quick add. Uncheck to save without clearing the dashboard reminder.</div>
                 </div>
             <?php endif; ?>
 

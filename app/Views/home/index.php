@@ -20,6 +20,7 @@ $mtdNetMinusPurchases = (float) ($summary['mtd_net_minus_purchases'] ?? 0);
 $ytdNetMinusPurchases = (float) ($summary['ytd_net_minus_purchases'] ?? 0);
 
 $myTasksDue = is_array($lists['my_tasks_due'] ?? null) ? $lists['my_tasks_due'] : [];
+$clientFollowUpReminders = is_array($lists['client_follow_up_reminders'] ?? null) ? $lists['client_follow_up_reminders'] : [];
 $pastDueSchedule = is_array($lists['past_due_schedule'] ?? null) ? $lists['past_due_schedule'] : [];
 $upcomingSchedule = is_array($lists['upcoming_schedule'] ?? null) ? $lists['upcoming_schedule'] : [];
 $threeMonthChart = is_array($summary['three_month_chart'] ?? null) ? $summary['three_month_chart'] : ['months' => []];
@@ -116,7 +117,58 @@ $nowTs = time();
         <h1><?= e($greeting) ?><?= $userFirstName !== '' ? ', ' . e($userFirstName) : '' ?></h1>
         <p class="muted mb-0"><?= e($todayLabel) ?> · <?= e($businessName) ?></p>
     </div>
+    <div class="jt-page-header-actions">
+        <a class="btn btn-primary" href="<?= e(url('/clients/quick-add')) ?>"><i class="fas fa-user-plus me-2"></i>Quick add client</a>
+    </div>
 </div>
+
+<?php if ($clientFollowUpReminders !== []): ?>
+<section class="card index-card shadow-sm dashboard-follow-ups-card">
+    <div class="card-header index-card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+        <div>
+            <strong class="fs-5"><i class="fas fa-clipboard-check me-2 jt-dashboard-icon--service" aria-hidden="true"></i>Client follow-ups</strong>
+            <div class="small text-muted">From quick add — complete when handled</div>
+        </div>
+        <a class="btn btn-sm btn-outline-secondary" href="<?= e(url('/clients/quick-add')) ?>">Quick add client</a>
+    </div>
+    <div class="card-body p-0">
+        <div class="simple-list-table dashboard-follow-ups-list">
+            <?php foreach ($clientFollowUpReminders as $reminder): ?>
+                <?php
+                if (!is_array($reminder)) {
+                    continue;
+                }
+                $reminderId = (int) ($reminder['id'] ?? 0);
+                $clientId = (int) ($reminder['client_id'] ?? 0);
+                $clientName = trim((string) ($reminder['client_name'] ?? ''));
+                if ($clientName === '') {
+                    $clientName = 'Client #' . (string) $clientId;
+                }
+                $reminderType = (string) ($reminder['reminder_type'] ?? '');
+                $reminderLabel = \App\Models\ClientFollowUpReminder::labelForType($reminderType);
+                $actionUrl = \App\Models\ClientFollowUpReminder::actionUrlForType($reminderType, $clientId);
+                ?>
+                <div class="simple-list-row dashboard-follow-up-row">
+                    <div class="dashboard-follow-up-main">
+                        <a class="simple-list-title text-decoration-none" href="<?= e($actionUrl) ?>"><?= e($reminderLabel) ?></a>
+                        <div class="simple-list-meta">
+                            <a class="text-decoration-none" href="<?= e(url('/clients/' . (string) $clientId)) ?>"><?= e($clientName) ?></a>
+                        </div>
+                    </div>
+                    <div class="dashboard-follow-up-actions d-flex flex-wrap align-items-center gap-2">
+                        <a class="btn btn-sm btn-outline-primary" href="<?= e($actionUrl) ?>">Open</a>
+                        <form method="post" action="<?= e(url('/client-follow-ups/' . (string) $reminderId . '/complete')) ?>" class="m-0">
+                            <?= csrf_field() ?>
+                            <input type="hidden" name="return_to" value="/">
+                            <button type="submit" class="btn btn-sm btn-outline-success">Done</button>
+                        </form>
+                    </div>
+                </div>
+            <?php endforeach; ?>
+        </div>
+    </div>
+</section>
+<?php endif; ?>
 
 <?php if ($canViewFinancials): ?>
 <div class="kpi-grid">

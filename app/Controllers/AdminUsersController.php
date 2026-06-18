@@ -20,13 +20,46 @@ final class AdminUsersController extends Controller
         if (!in_array($status, ['active', 'inactive', 'all'], true)) {
             $status = 'active';
         }
+        $scope = strtolower(trim((string) ($_GET['scope'] ?? '')));
         $perPage = pagination_per_page($_GET['per_page'] ?? null);
         $page = pagination_current_page($_GET['page'] ?? null);
 
         $isSiteAdminGlobal = $this->isGlobalSiteAdminContext();
         $businessId = current_business_id();
+        $canSearchAllCompanies = is_site_admin();
 
-        if ($isSiteAdminGlobal) {
+        if (!$canSearchAllCompanies) {
+            $scope = 'business';
+        } elseif ($scope === 'company_users') {
+            $scope = 'company_users';
+        } elseif ($isSiteAdminGlobal) {
+            $scope = 'site_admins';
+        } else {
+            $scope = 'business';
+        }
+
+        $membershipsByUser = [];
+
+        if ($scope === 'company_users') {
+            $totalRows = User::indexCountAllCompanyUsers($search, $status);
+            $totalPages = pagination_total_pages($totalRows, $perPage);
+            if ($page > $totalPages) {
+                $page = $totalPages;
+            }
+            $offset = pagination_offset($page, $perPage);
+            $users = User::indexListAllCompanyUsers($search, $status, $perPage, $offset);
+            $userIds = [];
+            foreach ($users as $userRow) {
+                if (!is_array($userRow)) {
+                    continue;
+                }
+                $userId = (int) ($userRow['id'] ?? 0);
+                if ($userId > 0) {
+                    $userIds[] = $userId;
+                }
+            }
+            $membershipsByUser = BusinessMembership::membershipsForUserIds($userIds);
+        } elseif ($isSiteAdminGlobal) {
             $totalRows = User::indexCountGlobal($search, $status);
             $totalPages = pagination_total_pages($totalRows, $perPage);
             if ($page > $totalPages) {
@@ -50,9 +83,12 @@ final class AdminUsersController extends Controller
             'pageTitle' => 'Users',
             'search' => $search,
             'status' => $status,
+            'scope' => $scope,
             'users' => $users,
+            'membershipsByUser' => $membershipsByUser,
             'pagination' => $pagination,
             'isSiteAdminGlobal' => $isSiteAdminGlobal,
+            'canSearchAllCompanies' => $canSearchAllCompanies,
         ]);
     }
 

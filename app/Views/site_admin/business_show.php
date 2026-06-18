@@ -22,7 +22,7 @@ $legal = trim((string) ($business['legal_name'] ?? ''));
                 <?= e($isActive ? 'Deactivate Company' : 'Reactivate Company') ?>
             </button>
         </form>
-        <a class="btn btn-outline-secondary" href="<?= e(url('/site-admin/businesses')) ?>">Back to Businesses</a>
+        <a class="btn btn-outline-secondary" href="<?= e(url('/site-admin/businesses')) ?>">Back to Directory</a>
     </div>
 </div>
 

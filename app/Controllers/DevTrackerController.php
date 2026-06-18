@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Controllers;
 
+use App\Models\Business;
 use App\Models\DevTrackerItem;
+use App\Models\DevTrackerLog;
 use Core\Controller;
 
 final class DevTrackerController extends Controller
@@ -14,35 +16,34 @@ final class DevTrackerController extends Controller
         $this->requireDevAccess();
 
         $search = trim((string) ($_GET['q'] ?? ''));
-        $statusFilter = strtolower(trim((string) ($_GET['status'] ?? 'active')));
+        $statusFilters = $this->indexStatusFiltersFromRequest();
         $type = strtolower(trim((string) ($_GET['type'] ?? '')));
         $priority = strtolower(trim((string) ($_GET['priority'] ?? '')));
-        $status = $statusFilter === 'active' ? '__active__' : $statusFilter;
 
         $perPage = pagination_per_page($_GET['per_page'] ?? null, 50);
         $page = pagination_current_page($_GET['page'] ?? null);
-        $totalRows = DevTrackerItem::indexCount($search, $status, $type, $priority);
+        $totalRows = DevTrackerItem::indexCount($search, $statusFilters, $type, $priority);
         $totalPages = pagination_total_pages($totalRows, $perPage);
         if ($page > $totalPages) {
             $page = $totalPages;
         }
         $offset = pagination_offset($page, $perPage);
 
-        $items = DevTrackerItem::indexList($search, $status, $type, $priority, $perPage, $offset);
+        $items = DevTrackerItem::indexList($search, $statusFilters, $type, $priority, $perPage, $offset);
 
         $this->render('dev_tracker/index', [
             'pageTitle' => 'Dev Tracker',
             'search' => $search,
-            'status' => $status,
+            'statusFilters' => $statusFilters,
             'type' => $type,
             'priority' => $priority,
-            'statusFilter' => $statusFilter,
             'items' => $items,
             'summary' => DevTrackerItem::statusSummary(),
             'pagination' => pagination_meta($page, $perPage, $totalRows, count($items)),
             'typeOptions' => DevTrackerItem::typeOptions(),
-            'statusOptions' => DevTrackerItem::statusOptions(),
+            'statusOptions' => DevTrackerItem::devStatusOptions(),
             'priorityOptions' => DevTrackerItem::priorityOptions(),
+            'pendingReviewCount' => DevTrackerItem::pendingReviewCount(),
         ]);
     }
 
@@ -93,6 +94,18 @@ final class DevTrackerController extends Controller
             redirect('/dev/create');
         }
 
+        $actorId = auth_user_id() ?? 0;
+        $screenshot = dev_tracker_store_screenshot($itemId, $_FILES['screenshot'] ?? null);
+        if ($screenshot['error'] !== null) {
+            flash('error', $screenshot['error']);
+            redirect('/dev/' . (string) $itemId);
+        }
+
+        DevTrackerLog::append($itemId, 'created', [
+            'body' => $form['notes'] !== '' ? $form['notes'] : $form['title'],
+            'screenshot_path' => $screenshot['path'],
+        ], $actorId);
+
         flash('success', 'Dev item added.');
         redirect('/dev/' . (string) $itemId);
     }
@@ -109,7 +122,9 @@ final class DevTrackerController extends Controller
         $this->render('dev_tracker/show', [
             'pageTitle' => 'Dev Item',
             'item' => $item,
-            'statusOptions' => DevTrackerItem::statusOptions(),
+            'logEntries' => DevTrackerLog::forItem((int) ($item['id'] ?? 0)),
+            'business' => (int) ($item['business_id'] ?? 0) > 0 ? Business::findById((int) ($item['business_id'] ?? 0)) : null,
+            'statusOptions' => DevTrackerItem::devStatusOptions(),
         ]);
     }
 
@@ -171,11 +186,148 @@ final class DevTrackerController extends Controller
 
         $updated = DevTrackerItem::update($itemId, $this->payloadForSave($form), auth_user_id() ?? 0);
         if ($updated) {
+            $this->logFieldChanges($item, $this->payloadForSave($form), auth_user_id() ?? 0);
             flash('success', 'Dev item updated.');
         } else {
             flash('error', 'Unable to update dev item.');
         }
 
+        redirect('/dev/' . (string) $itemId);
+    }
+
+    public function addLog(array $params): void
+    {
+        $this->requireDevAccess();
+
+        $itemId = (int) ($params['id'] ?? 0);
+        $item = DevTrackerItem::find($itemId);
+        if ($item === null) {
+            redirect('/dev');
+        }
+
+        if (!verify_csrf($_POST['csrf_token'] ?? null)) {
+            flash('error', 'Session expired. Please try again.');
+            redirect('/dev/' . (string) $itemId);
+        }
+
+        $body = trim((string) ($_POST['body'] ?? ''));
+        $screenshot = dev_tracker_store_screenshot($itemId, $_FILES['screenshot'] ?? null);
+        if ($screenshot['error'] !== null) {
+            flash('error', $screenshot['error']);
+            redirect('/dev/' . (string) $itemId);
+        }
+
+        if ($body === '' && $screenshot['path'] === null) {
+            flash('error', 'Add an update or attach a screenshot.');
+            redirect('/dev/' . (string) $itemId);
+        }
+
+        DevTrackerLog::append($itemId, 'comment', [
+            'body' => $body,
+            'screenshot_path' => $screenshot['path'],
+        ], auth_user_id() ?? 0);
+
+        flash('success', 'Update added to the bug log.');
+        redirect('/dev/' . (string) $itemId);
+    }
+
+    public function acceptSubmission(array $params): void
+    {
+        $this->requireDevAccess();
+
+        $itemId = (int) ($params['id'] ?? 0);
+        if ($itemId <= 0) {
+            redirect('/dev');
+        }
+
+        if (!verify_csrf($_POST['csrf_token'] ?? null)) {
+            flash('error', 'Session expired. Please try again.');
+            redirect('/dev/' . (string) $itemId);
+        }
+
+        $item = DevTrackerItem::find($itemId);
+        if ($item === null || !DevTrackerItem::isPendingSubmission($item)) {
+            flash('error', 'This submission is no longer pending review.');
+            redirect('/dev/' . (string) $itemId);
+        }
+
+        $status = strtolower(trim((string) ($_POST['status'] ?? '')));
+        if (!in_array($status, DevTrackerItem::devStatusOptions(), true)) {
+            $status = DevTrackerItem::defaultAcceptStatusForSubmission($item);
+        }
+        $note = trim((string) ($_POST['body'] ?? ''));
+        $actorId = auth_user_id() ?? 0;
+        $isUpdate = strtolower(trim((string) ($item['item_type'] ?? ''))) === 'update';
+
+        if (!DevTrackerItem::acceptSubmission($itemId, $actorId, $status)) {
+            flash('error', 'Unable to accept submission.');
+            redirect('/dev/' . (string) $itemId);
+        }
+
+        $screenshot = dev_tracker_store_screenshot($itemId, $_FILES['screenshot'] ?? null);
+        if ($screenshot['error'] !== null) {
+            flash('error', $screenshot['error']);
+            redirect('/dev/' . (string) $itemId);
+        }
+
+        DevTrackerLog::append($itemId, 'accepted', [
+            'body' => $note !== '' ? $note : ($isUpdate ? 'Accepted for a future release.' : 'Accepted as a tracked bug.'),
+            'status_from' => 'pending_review',
+            'status_to' => $status,
+            'screenshot_path' => $screenshot['path'],
+        ], $actorId);
+
+        flash('success', $isUpdate ? 'Update request accepted.' : 'Bug report accepted.');
+        redirect('/dev/' . (string) $itemId);
+    }
+
+    public function rejectSubmission(array $params): void
+    {
+        $this->requireDevAccess();
+
+        $itemId = (int) ($params['id'] ?? 0);
+        if ($itemId <= 0) {
+            redirect('/dev');
+        }
+
+        if (!verify_csrf($_POST['csrf_token'] ?? null)) {
+            flash('error', 'Session expired. Please try again.');
+            redirect('/dev/' . (string) $itemId);
+        }
+
+        $item = DevTrackerItem::find($itemId);
+        if ($item === null || !DevTrackerItem::isPendingSubmission($item)) {
+            flash('error', 'This submission is no longer pending review.');
+            redirect('/dev/' . (string) $itemId);
+        }
+
+        $note = trim((string) ($_POST['body'] ?? ''));
+        if ($note === '') {
+            flash('error', 'Add a reason when rejecting a report.');
+            redirect('/dev/' . (string) $itemId);
+        }
+
+        $actorId = auth_user_id() ?? 0;
+        $isUpdate = strtolower(trim((string) ($item['item_type'] ?? ''))) === 'update';
+        if (!DevTrackerItem::rejectSubmission($itemId, $actorId)) {
+            flash('error', 'Unable to reject submission.');
+            redirect('/dev/' . (string) $itemId);
+        }
+
+        $screenshot = dev_tracker_store_screenshot($itemId, $_FILES['screenshot'] ?? null);
+        if ($screenshot['error'] !== null) {
+            flash('error', $screenshot['error']);
+            redirect('/dev/' . (string) $itemId);
+        }
+
+        DevTrackerLog::append($itemId, 'rejected', [
+            'body' => $note,
+            'status_from' => 'pending_review',
+            'status_to' => 'wont_fix',
+            'screenshot_path' => $screenshot['path'],
+        ], $actorId);
+
+        flash('success', $isUpdate ? 'Update request declined.' : 'Bug report rejected.');
         redirect('/dev/' . (string) $itemId);
     }
 
@@ -194,16 +346,42 @@ final class DevTrackerController extends Controller
         }
 
         $status = strtolower(trim((string) ($_POST['status'] ?? '')));
-        if (!DevTrackerItem::isValidStatus($status)) {
+        if (!DevTrackerItem::isValidStatus($status) || $status === 'pending_review') {
             flash('error', 'Invalid status.');
             redirect('/dev');
         }
 
-        if (DevTrackerItem::updateStatus($itemId, $status, auth_user_id() ?? 0)) {
-            flash('success', 'Status updated.');
-        } else {
-            flash('error', 'Unable to update status.');
+        $item = DevTrackerItem::find($itemId);
+        if ($item === null) {
+            flash('error', 'Item not found.');
+            redirect('/dev');
         }
+
+        $previousStatus = trim((string) ($item['status'] ?? ''));
+        $body = trim((string) ($_POST['body'] ?? ''));
+        $actorId = auth_user_id() ?? 0;
+
+        if (!DevTrackerItem::updateStatus($itemId, $status, $actorId)) {
+            flash('error', 'Unable to update status.');
+            redirect('/dev');
+        }
+
+        $screenshot = dev_tracker_store_screenshot($itemId, $_FILES['screenshot'] ?? null);
+        if ($screenshot['error'] !== null) {
+            flash('error', $screenshot['error']);
+            redirect('/dev/' . (string) $itemId);
+        }
+
+        if ($previousStatus !== $status || $body !== '' || $screenshot['path'] !== null) {
+            DevTrackerLog::append($itemId, 'status_change', [
+                'body' => $body,
+                'status_from' => $previousStatus,
+                'status_to' => $status,
+                'screenshot_path' => $screenshot['path'],
+            ], $actorId);
+        }
+
+        flash('success', 'Status updated.');
 
         $returnTo = trim((string) ($_POST['return_to'] ?? ''));
         if ($returnTo !== '' && str_starts_with($returnTo, '/dev')) {
@@ -234,6 +412,31 @@ final class DevTrackerController extends Controller
         }
 
         redirect('/dev');
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function indexStatusFiltersFromRequest(): array
+    {
+        if (!array_key_exists('status', $_GET) && !isset($_GET['status_applied'])) {
+            return DevTrackerItem::defaultIndexStatusFilters();
+        }
+
+        if (isset($_GET['status_applied']) && !isset($_GET['status'])) {
+            return [];
+        }
+
+        $raw = $_GET['status'] ?? [];
+        if (is_string($raw)) {
+            return DevTrackerItem::normalizeIndexStatusFilters($raw);
+        }
+
+        if (is_array($raw)) {
+            return DevTrackerItem::normalizeIndexStatusFilters($raw);
+        }
+
+        return [];
     }
 
     private function requireDevAccess(): void
@@ -320,7 +523,7 @@ final class DevTrackerController extends Controller
             $errors['item_type'] = 'Choose a valid type.';
         }
 
-        if (!DevTrackerItem::isValidStatus($form['status'])) {
+        if (!in_array($form['status'], DevTrackerItem::devStatusOptions(), true)) {
             $errors['status'] = 'Choose a valid status.';
         }
 
@@ -350,5 +553,48 @@ final class DevTrackerController extends Controller
         }
 
         return $item;
+    }
+
+    /**
+     * @param array<string, mixed> $before
+     * @param array<string, mixed> $after
+     */
+    private function logFieldChanges(array $before, array $after, int $actorUserId): void
+    {
+        $itemId = (int) ($before['id'] ?? 0);
+        if ($itemId <= 0) {
+            return;
+        }
+
+        $changes = [];
+        foreach ([
+            'title' => 'Title',
+            'notes' => 'Notes',
+            'area' => 'Area',
+            'priority' => 'Priority',
+            'item_type' => 'Type',
+        ] as $field => $label) {
+            $oldValue = trim((string) ($before[$field] ?? ''));
+            $newValue = trim((string) ($after[$field] ?? ''));
+            if ($oldValue === $newValue) {
+                continue;
+            }
+            $changes[] = $label . ': ' . ($oldValue !== '' ? $oldValue : '—') . ' → ' . ($newValue !== '' ? $newValue : '—');
+        }
+
+        $oldStatus = trim((string) ($before['status'] ?? ''));
+        $newStatus = trim((string) ($after['status'] ?? ''));
+        if ($oldStatus !== $newStatus) {
+            DevTrackerLog::append($itemId, 'status_change', [
+                'status_from' => $oldStatus,
+                'status_to' => $newStatus,
+            ], $actorUserId);
+        }
+
+        if ($changes !== []) {
+            DevTrackerLog::append($itemId, 'updated', [
+                'body' => implode("\n", $changes),
+            ], $actorUserId);
+        }
     }
 }

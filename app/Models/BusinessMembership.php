@@ -45,6 +45,64 @@ final class BusinessMembership
         return is_array($rows) ? $rows : [];
     }
 
+    /**
+     * @param list<int> $userIds
+     * @return array<int, list<array<string, mixed>>>
+     */
+    public static function membershipsForUserIds(array $userIds): array
+    {
+        $userIds = array_values(array_unique(array_filter(array_map(
+            static fn ($id): int => (int) $id,
+            $userIds
+        ), static fn (int $id): bool => $id > 0)));
+
+        if ($userIds === []) {
+            return [];
+        }
+
+        $placeholders = [];
+        $params = [];
+        foreach ($userIds as $index => $userId) {
+            $key = 'user_id_' . (string) $index;
+            $placeholders[] = ':' . $key;
+            $params[$key] = $userId;
+        }
+
+        $stmt = Database::connection()->prepare(
+            'SELECT m.user_id,
+                    m.business_id,
+                    m.role,
+                    COALESCE(m.is_active, 1) AS membership_active,
+                    b.name AS business_name,
+                    COALESCE(b.is_active, 1) AS business_active
+             FROM business_user_memberships m
+             INNER JOIN businesses b ON b.id = m.business_id
+             WHERE m.user_id IN (' . implode(', ', $placeholders) . ')
+               AND m.deleted_at IS NULL
+               AND b.deleted_at IS NULL
+             ORDER BY b.name ASC, m.id ASC'
+        );
+        $stmt->execute($params);
+        $rows = $stmt->fetchAll();
+        if (!is_array($rows)) {
+            return [];
+        }
+
+        $grouped = [];
+        foreach ($rows as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $userId = (int) ($row['user_id'] ?? 0);
+            if ($userId <= 0) {
+                continue;
+            }
+            $grouped[$userId][] = $row;
+        }
+
+        return $grouped;
+    }
+
     public static function userHasBusiness(int $userId, int $businessId): bool
     {
         $stmt = Database::connection()->prepare(

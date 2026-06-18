@@ -21,7 +21,13 @@ $queryParams = array_merge(current_query_params([$pageParam, $perPageParam]), $f
 <div class="index-pagination d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-2 mb-3">
     <form method="get" action="<?= e(url($basePath)) ?>" class="d-flex align-items-center gap-2">
         <?php foreach ($queryParams as $name => $value): ?>
-            <input type="hidden" name="<?= e($name) ?>" value="<?= e($value) ?>">
+            <?php if (is_array($value)): ?>
+                <?php foreach ($value as $arrayValue): ?>
+                    <input type="hidden" name="<?= e($name) ?>[]" value="<?= e((string) $arrayValue) ?>">
+                <?php endforeach; ?>
+            <?php else: ?>
+                <input type="hidden" name="<?= e($name) ?>" value="<?= e($value) ?>">
+            <?php endif; ?>
         <?php endforeach; ?>
         <input type="hidden" name="<?= e($pageParam) ?>" value="1">
         <label class="small text-muted fw-semibold" for="index-per-page-<?= e($pageParam) ?>">Rows</label>

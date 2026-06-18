@@ -219,6 +219,9 @@ final class Employee
         $userNameSql = self::userNameSql('u');
         $suffixSql = SchemaInspector::hasColumn('employees', 'suffix') ? 'e.suffix' : "''";
         $noteSql = SchemaInspector::hasColumn('employees', 'note') ? 'e.note' : (SchemaInspector::hasColumn('employees', 'notes') ? 'e.notes' : 'NULL');
+        $defaultStoreSql = SchemaInspector::hasColumn('employees', 'default_store_location_id') ? 'e.default_store_location_id' : 'NULL';
+        $defaultWarehouseSql = SchemaInspector::hasColumn('employees', 'default_warehouse_location_id') ? 'e.default_warehouse_location_id' : 'NULL';
+        $defaultTerminalSql = SchemaInspector::hasColumn('employees', 'default_terminal_location_id') ? 'e.default_terminal_location_id' : 'NULL';
 
         $sql = "SELECT
                     e.id,
@@ -231,6 +234,9 @@ final class Employee
                     e.hourly_rate,
                     e.status,
                     e.user_id,
+                    {$defaultStoreSql} AS default_store_location_id,
+                    {$defaultWarehouseSql} AS default_warehouse_location_id,
+                    {$defaultTerminalSql} AS default_terminal_location_id,
                     {$noteSql} AS note,
                     e.created_at,
                     e.updated_at,
@@ -336,8 +342,9 @@ final class Employee
         if (SchemaInspector::hasColumn('employees', 'updated_by')) {
             $append('updated_by', ':updated_by', $actorUserId > 0 ? $actorUserId : null);
         }
+        self::appendDefaultLocationColumns($append, $payload);
 
-        $sql = 'INSERT INTO employees (' . implode(', ', $columns) . ')
+        $sql = 'INSERT INTO employees (' . implode(', ', $columns) . '))
                 VALUES (:' . implode(', :', array_keys($params)) . ')';
 
         $stmt = Database::connection()->prepare($sql);
@@ -390,6 +397,7 @@ final class Employee
             $assignments[] = 'updated_by = :updated_by';
             $params['updated_by'] = $actorUserId > 0 ? $actorUserId : null;
         }
+        self::applyDefaultLocationAssignments($assignments, $params, $payload);
 
         $sql = 'UPDATE employees
                 SET ' . implode(', ', $assignments) . ',
@@ -416,5 +424,49 @@ final class Employee
     private static function userNameSql(string $alias): string
     {
         return "COALESCE(NULLIF(TRIM(CONCAT_WS(' ', {$alias}.first_name, {$alias}.last_name)), ''), NULLIF({$alias}.email, ''), CONCAT('User #', {$alias}.id))";
+    }
+
+    /**
+     * @param callable(string, string, mixed): void $append
+     */
+    private static function appendDefaultLocationColumns(callable $append, array $payload): void
+    {
+        foreach (self::defaultLocationColumns() as $column) {
+            if (!SchemaInspector::hasColumn('employees', $column)) {
+                continue;
+            }
+
+            $value = $payload[$column] ?? null;
+            $append($column, ':' . $column, (is_int($value) && $value > 0) ? $value : null);
+        }
+    }
+
+    /**
+     * @param list<string> $assignments
+     * @param array<string, mixed> $params
+     */
+    private static function applyDefaultLocationAssignments(array &$assignments, array &$params, array $payload): void
+    {
+        foreach (self::defaultLocationColumns() as $column) {
+            if (!SchemaInspector::hasColumn('employees', $column)) {
+                continue;
+            }
+
+            $assignments[] = $column . ' = :' . $column;
+            $value = $payload[$column] ?? null;
+            $params[$column] = (is_int($value) && $value > 0) ? $value : null;
+        }
+    }
+
+    /**
+     * @return list<string>
+     */
+    private static function defaultLocationColumns(): array
+    {
+        return [
+            'default_store_location_id',
+            'default_warehouse_location_id',
+            'default_terminal_location_id',
+        ];
     }
 }

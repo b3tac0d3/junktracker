@@ -6,6 +6,8 @@ $appVersion = (string) config('app.version', '1.7.2');
 $workspaceRole = workspace_role();
 $businessId = current_business_id();
 $isGlobalSiteAdminContext = is_site_admin() && $businessId <= 0;
+$internalBarMode = internal_context_bar_mode();
+$hasInternalBar = $internalBarMode !== null;
 $isPunchOnlyWorkspace = !$publicPage && !$isGlobalSiteAdminContext && $workspaceRole === 'punch_only';
 $canAccessBusinessAdmin = !$isGlobalSiteAdminContext && (is_site_admin() || $workspaceRole === 'admin');
 $canManageUsers = is_site_admin() || (!$isGlobalSiteAdminContext && $workspaceRole === 'admin');
@@ -18,8 +20,15 @@ $navNotifications = is_array($navNotifications ?? null) ? $navNotifications : ['
 <head>
     <meta charset="utf-8" />
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, shrink-to-fit=no" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5, shrink-to-fit=no" />
     <meta name="robots" content="noindex, nofollow" />
+    <meta name="theme-color" content="#212529" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="JunkMetrix" />
+    <link rel="manifest" href="<?= e(url('/manifest.webmanifest')) ?>" />
+    <link rel="apple-touch-icon" href="<?= e(asset('icons/icon-192.png')) ?>" />
     <title><?= e($pageTitle) ?> - JunkTracker</title>
     <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
     <link rel="preconnect" href="https://use.fontawesome.com" crossorigin />
@@ -27,7 +36,7 @@ $navNotifications = is_array($navNotifications ?? null) ? $navNotifications : ['
     <link href="<?= e(asset('css/jt-theme.css')) ?>" rel="stylesheet" />
     <script src="https://use.fontawesome.com/releases/v6.3.0/js/all.js" crossorigin="anonymous"></script>
 </head>
-<body class="sb-nav-fixed<?= !$publicPage ? ' jt-app-authenticated' : '' ?>">
+<body class="sb-nav-fixed<?= !$publicPage ? ' jt-app-authenticated' : '' ?><?= $hasInternalBar ? ' jt-has-internal-bar jt-internal-bar-mode-' . e($internalBarMode) : '' ?>">
 <?php if ($publicPage): ?>
     <main class="container py-5">
         <?php if ($success = flash('success')): ?><div class="alert alert-success"><?= e($success) ?></div><?php endif; ?>
@@ -41,6 +50,9 @@ $navNotifications = is_array($navNotifications ?? null) ? $navNotifications : ['
         ?>
     </main>
 <?php else: ?>
+    <?php if ($hasInternalBar): ?>
+        <?php require base_path('app/Views/components/internal_context_bar.php'); ?>
+    <?php endif; ?>
     <nav class="sb-topnav navbar navbar-expand navbar-dark">
         <a class="navbar-brand ps-3" href="<?= e(url($isPunchOnlyWorkspace ? '/time-tracking/punch-board' : '/')) ?>">JunkTracker</a>
         <?php if (!$isPunchOnlyWorkspace): ?>
@@ -148,6 +160,7 @@ $navNotifications = is_array($navNotifications ?? null) ? $navNotifications : ['
                 $quickAddMenuItems = [
                     ['label' => 'Add Job', 'url' => url('/jobs/create'), 'icon' => 'fa-briefcase', 'color' => '#ea580c'],
                     ['label' => 'Add Client', 'url' => url('/clients/create'), 'icon' => 'fa-users', 'color' => '#2563eb'],
+                    ['label' => 'Quick Add Client', 'url' => url('/clients/quick-add'), 'icon' => 'fa-user-plus', 'color' => '#1d4ed8'],
                     ['label' => 'Add Quote', 'url' => url('/quotes/create'), 'icon' => 'fa-file-signature', 'color' => '#db2777'],
                     ['label' => 'Add Delivery', 'url' => url('/deliveries/create'), 'icon' => 'fa-truck', 'color' => '#0d9488'],
                     ['label' => 'Add Task', 'url' => url('/tasks'), 'icon' => 'fa-list-check', 'color' => '#16a34a'],
@@ -198,12 +211,13 @@ $navNotifications = is_array($navNotifications ?? null) ? $navNotifications : ['
             };
             $userMenuItems = [
                 ['label' => 'Settings', 'url' => url('/settings'), 'icon' => 'fa-gear', 'color' => '#64748b'],
+                ['label' => 'Release History', 'url' => url('/releases'), 'icon' => 'fa-clock-rotate-left', 'color' => '#0d9488'],
             ];
             if ($canManageUsers && !$isGlobalSiteAdminContext && !$isPunchOnlyWorkspace) {
                 $userMenuItems[] = ['label' => 'Manage Users', 'url' => url('/admin/users'), 'icon' => 'fa-users-gear', 'color' => '#2563eb'];
             }
             if (is_site_admin() && !$isPunchOnlyWorkspace) {
-                $userMenuItems[] = ['label' => 'Site Admin Dashboard', 'url' => url('/site-admin/businesses'), 'icon' => 'fa-shield-halved', 'color' => '#7c3aed'];
+                $userMenuItems[] = ['label' => 'Platform', 'url' => url('/site-admin'), 'icon' => 'fa-shield-halved', 'color' => '#7c3aed'];
                 $userMenuItems[] = ['label' => 'Dev Tracker', 'url' => url('/dev'), 'icon' => 'fa-code-branch', 'color' => '#ea580c'];
             }
             ?>
@@ -267,15 +281,21 @@ $navNotifications = is_array($navNotifications ?? null) ? $navNotifications : ['
                     <div class="sb-sidenav-menu">
                         <div class="nav">
                             <div class="sb-sidenav-menu-heading">Overview</div>
-                            <a class="nav-link" href="<?= e($isGlobalSiteAdminContext ? url('/site-admin/businesses') : url('/')) ?>">
+                            <a class="nav-link" href="<?= e($isGlobalSiteAdminContext ? url('/site-admin') : url('/')) ?>">
                                 <div class="sb-nav-link-icon"><i class="fas fa-gauge-high"></i></div>
-                                <?= e($isGlobalSiteAdminContext ? 'Site Admin Dashboard' : 'Dashboard') ?>
+                                <?= e($isGlobalSiteAdminContext ? 'Platform' : 'Dashboard') ?>
                             </a>
-                            <?php if ($isGlobalSiteAdminContext && $canManageUsers): ?>
-                                <a class="nav-link" href="<?= e(url('/admin/users')) ?>">
-                                    <div class="sb-nav-link-icon"><i class="fas fa-users-gear"></i></div>
-                                    Manage Users
+                            <?php if ($isGlobalSiteAdminContext): ?>
+                                <a class="nav-link" href="<?= e(url('/site-admin/businesses')) ?>">
+                                    <div class="sb-nav-link-icon"><i class="fas fa-building"></i></div>
+                                    Companies
                                 </a>
+                                <?php if ($canManageUsers): ?>
+                                    <a class="nav-link" href="<?= e(url('/admin/users?scope=company_users')) ?>">
+                                        <div class="sb-nav-link-icon"><i class="fas fa-users"></i></div>
+                                        Users
+                                    </a>
+                                <?php endif; ?>
                             <?php endif; ?>
 
                             <?php if (!$isGlobalSiteAdminContext): ?>
@@ -413,7 +433,9 @@ $navNotifications = is_array($navNotifications ?? null) ? $navNotifications : ['
                     <div class="sb-sidenav-footer">
                         <div class="small">Logged in as:</div>
                         <?= e((string) (($user['first_name'] ?? '') . ' ' . ($user['last_name'] ?? ''))) ?>
-                        <div class="small text-muted mt-1">v<?= e($appVersion) ?></div>
+                        <div class="small text-muted mt-1">
+                            <a href="<?= e(url('/releases')) ?>" class="text-muted text-decoration-none" title="Release history">v<?= e($appVersion) ?></a>
+                        </div>
                     </div>
                 </nav>
             </div>
@@ -435,7 +457,10 @@ $navNotifications = is_array($navNotifications ?? null) ? $navNotifications : ['
             </main>
             <footer class="py-3 mt-auto border-top">
                 <div class="container-fluid px-4">
-                    <div class="small text-muted">JunkTracker · v<?= e($appVersion) ?></div>
+                    <div class="small text-muted">
+                        JunkTracker ·
+                        <a href="<?= e(url('/releases')) ?>" class="text-muted text-decoration-none" title="Release history">v<?= e($appVersion) ?></a>
+                    </div>
                 </div>
             </footer>
         </div>
@@ -443,7 +468,17 @@ $navNotifications = is_array($navNotifications ?? null) ? $navNotifications : ['
 <?php endif; ?>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js" crossorigin="anonymous"></script>
+<?php require base_path('app/Views/components/image_lightbox.php'); ?>
 <script src="<?= e(asset('js/scripts.js')) ?>"></script>
 <script src="<?= e(asset('js/app.js')) ?>"></script>
+<?php if (!$publicPage): ?>
+<script>
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('<?= e(url('/sw.js')) ?>').catch(() => {});
+    });
+}
+</script>
+<?php endif; ?>
 </body>
 </html>

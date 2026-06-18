@@ -20,7 +20,7 @@ $employeeDisplayName = static function (array $row): string {
     return 'Employee #' . (string) ((int) ($row['id'] ?? 0));
 };
 ?>
-
+<div class="jt-punch-board">
 <div class="page-header d-flex flex-wrap align-items-end justify-content-between gap-2">
     <div>
         <h1><?= e($canManageEmployees ? 'Punch Board' : 'My Punch Clock') ?></h1>
@@ -234,3 +234,4 @@ $employeeDisplayName = static function (array $row): string {
         </div>
     </section>
 <?php endif; ?>
+</div>

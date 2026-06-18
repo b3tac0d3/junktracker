@@ -122,6 +122,8 @@ if ($linkedUserName === '' && $linkedUserId > 0 && isset($userNameMap[$linkedUse
                 <textarea id="employee-note" name="note" rows="4" class="form-control"><?= e((string) ($form['note'] ?? '')) ?></textarea>
             </div>
 
+            <?php require base_path('app/Views/components/employee_location_defaults.php'); ?>
+
             <div class="col-12 d-flex gap-2">
                 <button class="btn btn-primary" type="submit"><?= e($mode === 'edit' ? 'Save Changes' : 'Create Employee') ?></button>
                 <a class="btn btn-outline-secondary" href="<?= e($mode === 'edit' && isset($employeeId) ? url('/admin/employees/' . (string) ((int) $employeeId)) : url('/admin/employees')) ?>">Cancel</a>

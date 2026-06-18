@@ -8,10 +8,12 @@ use App\Models\Client;
 use App\Models\ClientBoloProfile;
 use App\Models\ClientContact;
 use App\Models\ClientFamilyMember;
+use App\Models\ClientFollowUpReminder;
 use App\Models\EstateSale;
 use App\Models\FormSelectValue;
 use App\Models\Quote;
 use App\Models\SchemaInspector;
+use Core\AppCache;
 use Core\Controller;
 
 final class ClientsController extends Controller
@@ -74,6 +76,144 @@ final class ClientsController extends Controller
             'clientId' => 0,
             'referralsSent' => [],
         ]);
+    }
+
+    public function quickAdd(): void
+    {
+        require_business_role(['general_user', 'admin']);
+
+        $this->render('clients/quick_add', [
+            'pageTitle' => 'Quick Add Client',
+            'actionUrl' => url('/clients/quick-add'),
+            'form' => $this->defaultQuickAddForm(),
+            'errors' => [],
+            'followUpOptions' => ClientFollowUpReminder::reminderTypeOptions(),
+        ]);
+    }
+
+    public function storeQuickAdd(): void
+    {
+        require_business_role(['general_user', 'admin']);
+
+        if (!verify_csrf($_POST['csrf_token'] ?? null)) {
+            flash('error', 'Session expired. Please try again.');
+            redirect('/clients/quick-add');
+        }
+
+        $businessId = current_business_id();
+        $form = $this->quickAddFormFromPost($_POST);
+        $errors = $this->validateQuickAddForm($form);
+        if ($errors !== []) {
+            $this->render('clients/quick_add', [
+                'pageTitle' => 'Quick Add Client',
+                'actionUrl' => url('/clients/quick-add'),
+                'form' => $form,
+                'errors' => $errors,
+                'followUpOptions' => ClientFollowUpReminder::reminderTypeOptions(),
+            ]);
+            return;
+        }
+
+        $nameParts = $this->parseQuickAddName($form['name']);
+        $payload = [
+            'first_name' => $nameParts['first_name'],
+            'last_name' => $nameParts['last_name'],
+            'company_name' => $nameParts['company_name'],
+            'client_type' => 'client',
+            'phone' => $form['phone'],
+            'primary_note' => $form['note'],
+            'status' => 'active',
+            'can_text' => $form['can_text'] === '1' ? 1 : 0,
+            'secondary_can_text' => 0,
+        ];
+
+        $duplicate = Client::findPotentialDuplicate($businessId, $payload);
+        if ($duplicate !== null) {
+            flash('warning', 'Possible duplicate detected. Opened the existing client instead.');
+            $clientId = (int) ($duplicate['id'] ?? 0);
+            if ($clientId > 0) {
+                $this->redirectToClient($clientId);
+            }
+            redirect('/clients');
+        }
+
+        $actorUserId = (int) (auth_user_id() ?? 0);
+        $clientId = Client::create($businessId, $payload, $actorUserId);
+        if ($clientId <= 0) {
+            flash('error', 'Unable to create client.');
+            redirect('/clients/quick-add');
+        }
+
+        if (ClientContact::isAvailable()) {
+            ClientContact::create(
+                $businessId,
+                $clientId,
+                [
+                    'contacted_at' => date('Y-m-d H:i:s'),
+                    'contact_type' => $form['contact_type'],
+                    'note' => $form['note'],
+                ],
+                $actorUserId
+            );
+        }
+
+        if (ClientFollowUpReminder::isAvailable() && $form['follow_up_reminders'] !== []) {
+            ClientFollowUpReminder::createManyForClient(
+                $businessId,
+                $clientId,
+                $form['follow_up_reminders'],
+                $actorUserId,
+                $actorUserId
+            );
+        }
+
+        audit('client_quick_add', 'clients', $clientId, [
+            'name' => $form['name'],
+            'follow_up_reminders' => $form['follow_up_reminders'],
+            'contact_type' => $form['contact_type'],
+        ]);
+        AppCache::bumpBusiness($businessId);
+
+        flash('success', 'Client added.');
+        $this->redirectToClient($clientId);
+    }
+
+    public function completeFollowUpReminder(array $params): void
+    {
+        require_business_role(['general_user', 'admin']);
+
+        $reminderId = (int) ($params['id'] ?? 0);
+        if ($reminderId <= 0) {
+            http_response_code(404);
+            $this->render('errors/404', ['pageTitle' => 'Not Found']);
+            return;
+        }
+
+        if (!verify_csrf($_POST['csrf_token'] ?? null)) {
+            flash('error', 'Session expired. Please try again.');
+            redirect('/');
+        }
+
+        if (!ClientFollowUpReminder::isAvailable()) {
+            flash('error', 'Follow-up reminders require the latest migration.');
+            redirect('/');
+        }
+
+        $businessId = current_business_id();
+        $actorUserId = (int) (auth_user_id() ?? 0);
+        $completed = ClientFollowUpReminder::complete($businessId, $reminderId, $actorUserId);
+        if ($completed) {
+            AppCache::bumpBusiness($businessId);
+            flash('success', 'Follow-up marked complete.');
+        } else {
+            flash('warning', 'Follow-up was not found or is already complete.');
+        }
+
+        $returnTo = trim((string) ($_POST['return_to'] ?? ''));
+        if ($returnTo !== '' && str_starts_with($returnTo, '/')) {
+            redirect($returnTo);
+        }
+        redirect('/');
     }
 
     public function referrerSearch(): void
@@ -186,11 +326,23 @@ final class ClientsController extends Controller
             $referralsSent = Client::referralsSentBy($businessId, $clientId, 100);
         }
 
+        $form = $this->formFromModel($client);
+        $openAddClientDataReminder = ClientFollowUpReminder::isAvailable()
+            ? ClientFollowUpReminder::openForClientByType($businessId, $clientId, ClientFollowUpReminder::TYPE_ADD_CLIENT_DATA)
+            : null;
+        if ($openAddClientDataReminder !== null) {
+            $form['complete_add_client_data'] = ClientFollowUpReminder::shouldAutoCheckCompleteOnEdit(
+                $businessId,
+                $clientId,
+                $openAddClientDataReminder
+            ) ? '1' : '';
+        }
+
         $this->render('clients/form', [
             'pageTitle' => 'Edit Client',
             'mode' => 'edit',
             'actionUrl' => url('/clients/' . (string) $clientId . '/update'),
-            'form' => $this->formFromModel($client),
+            'form' => $form,
             'errors' => [],
             'hasClientType' => SchemaInspector::hasColumn('clients', 'client_type'),
             'hasNewsletter' => SchemaInspector::hasColumn('clients', 'newsletter_subscribed'),
@@ -198,6 +350,7 @@ final class ClientsController extends Controller
             'clientId' => $clientId,
             'referralsSent' => $referralsSent,
             'returnTab' => request_detail_tab($this->clientAllowedTabs()),
+            'openAddClientDataReminder' => $openAddClientDataReminder !== null,
         ]);
     }
 
@@ -244,11 +397,49 @@ final class ClientsController extends Controller
                 'clientId' => $clientId,
                 'referralsSent' => $referralsSent,
                 'returnTab' => $this->clientReturnTab(),
+                'openAddClientDataReminder' => ClientFollowUpReminder::isAvailable()
+                    && ClientFollowUpReminder::openForClientByType(
+                        $businessId,
+                        $clientId,
+                        ClientFollowUpReminder::TYPE_ADD_CLIENT_DATA
+                    ) !== null,
             ]);
             return;
         }
 
-        Client::update($businessId, $clientId, $this->payloadForSave($form, false, $client), auth_user_id() ?? 0);
+        $actorUserId = (int) (auth_user_id() ?? 0);
+        Client::update($businessId, $clientId, $this->payloadForSave($form, false, $client), $actorUserId);
+
+        if (ClientFollowUpReminder::isAvailable()) {
+            $openAddClientDataReminder = ClientFollowUpReminder::openForClientByType(
+                $businessId,
+                $clientId,
+                ClientFollowUpReminder::TYPE_ADD_CLIENT_DATA
+            );
+            if ($openAddClientDataReminder !== null) {
+                $didFollowUpAction = false;
+                if (isset($_POST['complete_add_client_data'])) {
+                    if (ClientFollowUpReminder::completeOpenForClientByType(
+                        $businessId,
+                        $clientId,
+                        ClientFollowUpReminder::TYPE_ADD_CLIENT_DATA,
+                        $actorUserId
+                    )) {
+                        $didFollowUpAction = true;
+                    }
+                } elseif (ClientFollowUpReminder::dismissCompletePromptForClientByType(
+                    $businessId,
+                    $clientId,
+                    ClientFollowUpReminder::TYPE_ADD_CLIENT_DATA
+                )) {
+                    $didFollowUpAction = true;
+                }
+                if ($didFollowUpAction) {
+                    AppCache::bumpBusiness($businessId);
+                }
+            }
+        }
+
         audit('client_updated', 'clients', $clientId);
         flash('success', 'Client updated.');
         $this->redirectToClient($clientId);
@@ -966,6 +1157,7 @@ final class ClientsController extends Controller
             'newsletter_subscribed' => isset($input['newsletter_subscribed']) ? '1' : '0',
             'referred_by_client_id' => trim((string) ($input['referred_by_client_id'] ?? '')),
             'next_action' => strtolower(trim((string) ($input['next_action'] ?? ''))),
+            'complete_add_client_data' => isset($input['complete_add_client_data']) ? '1' : '',
         ];
     }
 
@@ -1207,6 +1399,94 @@ final class ClientsController extends Controller
             'contacted_at' => date('Y-m-d\\TH:i'),
             'contact_type' => 'call',
             'note' => '',
+        ];
+    }
+
+    /**
+     * @return array{name: string, phone: string, note: string, contact_type: string, can_text: string, follow_up_reminders: list<string>}
+     */
+    private function defaultQuickAddForm(): array
+    {
+        return [
+            'name' => '',
+            'phone' => '',
+            'note' => '',
+            'contact_type' => 'call',
+            'can_text' => '',
+            'follow_up_reminders' => [],
+        ];
+    }
+
+    /**
+     * @return array{name: string, phone: string, note: string, contact_type: string, can_text: string, follow_up_reminders: list<string>}
+     */
+    private function quickAddFormFromPost(array $input): array
+    {
+        $allowedTypes = ['call', 'text', 'email', 'in_person', 'other'];
+        $contactType = strtolower(trim((string) ($input['contact_type'] ?? 'call')));
+        if (!in_array($contactType, $allowedTypes, true)) {
+            $contactType = 'call';
+        }
+
+        $followUps = [];
+        $rawFollowUps = $input['follow_up_reminders'] ?? [];
+        if (is_string($rawFollowUps)) {
+            $rawFollowUps = [$rawFollowUps];
+        }
+        if (is_array($rawFollowUps)) {
+            $allowedFollowUps = array_keys(ClientFollowUpReminder::reminderTypeOptions());
+            foreach ($rawFollowUps as $value) {
+                $type = strtolower(trim((string) $value));
+                if (in_array($type, $allowedFollowUps, true)) {
+                    $followUps[] = $type;
+                }
+            }
+        }
+        $followUps = array_values(array_unique($followUps));
+
+        return [
+            'name' => trim((string) ($input['name'] ?? '')),
+            'phone' => trim((string) ($input['phone'] ?? '')),
+            'note' => trim((string) ($input['note'] ?? '')),
+            'contact_type' => $contactType,
+            'can_text' => isset($input['can_text']) ? '1' : '',
+            'follow_up_reminders' => $followUps,
+        ];
+    }
+
+    /**
+     * @param array{name: string, phone: string, note: string, contact_type: string, can_text: string, follow_up_reminders: list<string>} $form
+     * @return array<string, string>
+     */
+    private function validateQuickAddForm(array $form): array
+    {
+        $errors = [];
+        if ($form['name'] === '') {
+            $errors['name'] = 'Enter a client name.';
+        }
+
+        return $errors;
+    }
+
+    /**
+     * @return array{first_name: string, last_name: string, company_name: string}
+     */
+    private function parseQuickAddName(string $name): array
+    {
+        $name = trim($name);
+        if ($name === '') {
+            return ['first_name' => '', 'last_name' => '', 'company_name' => ''];
+        }
+
+        $parts = preg_split('/\s+/', $name, 2);
+        if (!is_array($parts) || count($parts) === 1) {
+            return ['first_name' => $name, 'last_name' => '', 'company_name' => ''];
+        }
+
+        return [
+            'first_name' => trim((string) $parts[0]),
+            'last_name' => trim((string) $parts[1]),
+            'company_name' => '',
         ];
     }
 

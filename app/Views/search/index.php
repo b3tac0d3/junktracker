@@ -230,6 +230,10 @@ $queryEncoded = rawurlencode($query);
                                         <a class="record-row-link" href="<?= e(url('/clients/' . (string) $clientId)) ?>">
                                             <div class="record-row-main">
                                                 <h3 class="record-title-simple"><?= e($displayName($client, 'Client #' . $clientId)) ?></h3>
+                                                <?php
+                                                $matchTypes = is_array($client['search_match_types'] ?? null) ? $client['search_match_types'] : [];
+                                                require base_path('app/Views/components/client_search_match_types.php');
+                                                ?>
                                             </div>
                                             <div class="record-row-fields record-row-fields-compact">
                                                 <div class="record-field">

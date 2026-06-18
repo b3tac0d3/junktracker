@@ -17,7 +17,7 @@ final class HomeController extends Controller
         require_auth();
 
         if (is_site_admin() && current_business_id() <= 0) {
-            redirect('/site-admin/businesses');
+            redirect('/site-admin');
         }
 
         if (workspace_role() === 'punch_only') {

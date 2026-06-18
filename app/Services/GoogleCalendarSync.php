@@ -8,10 +8,12 @@ use App\Models\Event;
 use App\Models\EventFeed;
 use App\Models\GoogleCalendarConnection;
 use App\Models\GoogleCalendarEventLink;
+use App\Models\Client;
 use App\Models\Job;
 use App\Models\ClientDelivery;
 use App\Models\Quote;
 use App\Models\PurchaseQuote;
+use App\Models\Purchase;
 use App\Models\EstateSale;
 use App\Models\Task;
 use Core\GoogleCalendarApi;
@@ -267,6 +269,26 @@ final class GoogleCalendarSync
     public static function removeSource(int $userId, string $sourceType, int $sourceId): void
     {
         self::removeLinkedRecord($userId, strtolower(trim($sourceType)), $sourceId);
+    }
+
+    /**
+     * Build the Google Calendar payload for a record without calling the API (offline verification).
+     *
+     * @param array<string, mixed> $record
+     * @return array<string, mixed>
+     */
+    public static function previewPayload(string $sourceType, array $record, int $businessId): array
+    {
+        return match (strtolower(trim($sourceType))) {
+            'event' => self::googlePayloadFromEvent($record, $businessId),
+            'job' => self::googlePayloadFromJob($record, $businessId),
+            'task' => self::googlePayloadFromTask($record, $businessId),
+            'delivery' => self::googlePayloadFromDelivery($record, $businessId),
+            'quote' => self::googlePayloadFromQuote($record, $businessId),
+            'purchase_quote' => self::googlePayloadFromPurchaseQuote($record, $businessId),
+            'estate_sale' => self::googlePayloadFromEstateSale($record, $businessId),
+            default => throw new \InvalidArgumentException('Unsupported Google Calendar source type: ' . $sourceType),
+        };
     }
 
     public static function syncTask(int $userId, int $businessId, int $taskId): void
@@ -714,13 +736,7 @@ final class GoogleCalendarSync
         $clientName = trim((string) ($job['client_name'] ?? ''));
         $clientPhone = trim((string) ($job['client_phone'] ?? ''));
         $notes = trim((string) ($job['notes'] ?? ''));
-        $location = self::formatAddress(
-            trim((string) ($job['address_line1'] ?? '')),
-            trim((string) ($job['address_line2'] ?? '')),
-            trim((string) ($job['city'] ?? '')),
-            trim((string) ($job['state'] ?? '')),
-            trim((string) ($job['postal_code'] ?? ''))
-        );
+        $location = self::addressFromRecord($job, $businessId);
 
         $descriptionParts = ['Status: ' . $status];
         if ($jobType !== '') {
@@ -836,6 +852,14 @@ final class GoogleCalendarSync
         $status = ucfirst(str_replace('_', ' ', strtolower(trim((string) ($task['status'] ?? 'open')))));
         $ownerName = trim((string) ($task['owner_name'] ?? ''));
         $clientName = trim((string) ($task['client_name'] ?? ''));
+        $location = self::addressFromLink(
+            $businessId,
+            (string) ($task['link_type'] ?? ''),
+            (int) ($task['link_id'] ?? 0)
+        );
+        if ($location === '' && (int) ($task['client_id'] ?? 0) > 0) {
+            $location = self::addressFromClient($businessId, (int) $task['client_id']);
+        }
 
         $descriptionParts = ['Type: Task', 'Status: ' . $status];
         if ($ownerName !== '') {
@@ -844,9 +868,12 @@ final class GoogleCalendarSync
         if ($clientName !== '') {
             $descriptionParts[] = 'Client: ' . $clientName;
         }
+        if ($location !== '') {
+            $descriptionParts[] = 'Address: ' . $location;
+        }
         $descriptionParts[] = 'JunkTracker: ' . url('/tasks/' . (string) $taskId);
 
-        return [
+        $payload = [
             'summary' => $title,
             'description' => implode("\n\n", $descriptionParts),
             'extendedProperties' => [
@@ -864,6 +891,11 @@ final class GoogleCalendarSync
                 'timeZone' => $timezone,
             ],
         ];
+        if ($location !== '') {
+            $payload['location'] = $location;
+        }
+
+        return $payload;
     }
 
     /**
@@ -879,13 +911,7 @@ final class GoogleCalendarSync
         $startAt = trim((string) ($delivery['scheduled_at'] ?? ''));
         $endAt = trim((string) ($delivery['end_at'] ?? ''));
         $status = ucfirst(str_replace('_', ' ', strtolower(trim((string) ($delivery['status'] ?? 'scheduled')))));
-        $location = self::formatAddress(
-            trim((string) ($delivery['address_line1'] ?? '')),
-            trim((string) ($delivery['address_line2'] ?? '')),
-            trim((string) ($delivery['city'] ?? '')),
-            trim((string) ($delivery['state'] ?? '')),
-            trim((string) ($delivery['postal_code'] ?? ''))
-        );
+        $location = self::addressFromRecord($delivery, $businessId);
         $notes = trim((string) ($delivery['notes'] ?? ''));
 
         $descriptionParts = ['Type: Delivery', 'Status: ' . $status];
@@ -941,6 +967,7 @@ final class GoogleCalendarSync
         $status = ucfirst(str_replace('_', ' ', strtolower(trim((string) ($quote['status'] ?? 'new')))));
         $clientName = trim((string) ($quote['client_name'] ?? ''));
         $clientPhone = trim((string) ($quote['client_phone'] ?? ''));
+        $location = self::addressFromRecord($quote, $businessId);
 
         $descriptionParts = ['Type: Quote follow-up', 'Status: ' . $status];
         if ($clientName !== '') {
@@ -950,9 +977,12 @@ final class GoogleCalendarSync
             $formatted = format_phone($clientPhone);
             $descriptionParts[] = 'Phone: ' . ($formatted !== '—' ? $formatted : $clientPhone);
         }
+        if ($location !== '') {
+            $descriptionParts[] = 'Address: ' . $location;
+        }
         $descriptionParts[] = 'JunkTracker: ' . url('/quotes/' . (string) $quoteId);
 
-        return [
+        $payload = [
             'summary' => $title,
             'description' => implode("\n\n", $descriptionParts),
             'extendedProperties' => [
@@ -970,6 +1000,11 @@ final class GoogleCalendarSync
                 'timeZone' => $timezone,
             ],
         ];
+        if ($location !== '') {
+            $payload['location'] = $location;
+        }
+
+        return $payload;
     }
 
     /**
@@ -994,6 +1029,7 @@ final class GoogleCalendarSync
         $status = ucfirst(str_replace('_', ' ', strtolower(trim((string) ($quote['status'] ?? 'new')))));
         $clientName = trim((string) ($quote['client_name'] ?? ''));
         $clientPhone = trim((string) ($quote['client_phone'] ?? ''));
+        $location = self::addressFromRecord($quote, $businessId);
 
         $descriptionParts = ['Type: Purchase quote follow-up', 'Status: ' . $status];
         if ($clientName !== '') {
@@ -1003,9 +1039,12 @@ final class GoogleCalendarSync
             $formatted = format_phone($clientPhone);
             $descriptionParts[] = 'Phone: ' . ($formatted !== '—' ? $formatted : $clientPhone);
         }
+        if ($location !== '') {
+            $descriptionParts[] = 'Address: ' . $location;
+        }
         $descriptionParts[] = 'JunkTracker: ' . url('/purchase-quotes/' . (string) $quoteId);
 
-        return [
+        $payload = [
             'summary' => $title,
             'description' => implode("\n\n", $descriptionParts),
             'extendedProperties' => [
@@ -1023,6 +1062,11 @@ final class GoogleCalendarSync
                 'timeZone' => $timezone,
             ],
         ];
+        if ($location !== '') {
+            $payload['location'] = $location;
+        }
+
+        return $payload;
     }
 
     /**
@@ -1040,13 +1084,7 @@ final class GoogleCalendarSync
         $startAt = trim((string) ($estateSale['start_at'] ?? ''));
         $endAt = trim((string) ($estateSale['end_at'] ?? ''));
         $status = ucfirst(str_replace('_', ' ', strtolower(trim((string) ($estateSale['status'] ?? 'scheduled')))));
-        $location = self::formatAddress(
-            trim((string) ($estateSale['address_line1'] ?? '')),
-            trim((string) ($estateSale['address_line2'] ?? '')),
-            trim((string) ($estateSale['city'] ?? '')),
-            trim((string) ($estateSale['state'] ?? '')),
-            trim((string) ($estateSale['postal_code'] ?? ''))
-        );
+        $location = self::addressFromRecord($estateSale, $businessId);
         $notes = trim((string) ($estateSale['notes'] ?? ''));
 
         $descriptionParts = ['Type: Estate sale', 'Status: ' . $status];
@@ -1099,6 +1137,81 @@ final class GoogleCalendarSync
         }
 
         return implode(', ', $parts);
+    }
+
+    /**
+     * @param array<string, mixed> $record
+     */
+    private static function addressFromRecord(array $record, int $businessId): string
+    {
+        $location = self::formatAddress(
+            trim((string) ($record['address_line1'] ?? '')),
+            trim((string) ($record['address_line2'] ?? '')),
+            trim((string) ($record['city'] ?? '')),
+            trim((string) ($record['state'] ?? '')),
+            trim((string) ($record['postal_code'] ?? ''))
+        );
+        if ($location !== '') {
+            return $location;
+        }
+
+        $clientId = (int) ($record['client_id'] ?? 0);
+        if ($clientId > 0 && $businessId > 0) {
+            return self::addressFromClient($businessId, $clientId);
+        }
+
+        return '';
+    }
+
+    private static function addressFromClient(int $businessId, int $clientId): string
+    {
+        if ($businessId <= 0 || $clientId <= 0) {
+            return '';
+        }
+
+        $client = Client::findForBusiness($businessId, $clientId);
+        if ($client === null) {
+            return '';
+        }
+
+        return self::formatAddress(
+            trim((string) ($client['address_line1'] ?? '')),
+            trim((string) ($client['address_line2'] ?? '')),
+            trim((string) ($client['city'] ?? '')),
+            trim((string) ($client['state'] ?? '')),
+            trim((string) ($client['postal_code'] ?? ''))
+        );
+    }
+
+    private static function addressFromLink(int $businessId, string $linkType, int $linkId): string
+    {
+        $linkType = strtolower(trim($linkType));
+        if ($businessId <= 0 || $linkId <= 0) {
+            return '';
+        }
+
+        if ($linkType === 'client') {
+            return self::addressFromClient($businessId, $linkId);
+        }
+
+        if ($linkType === 'job') {
+            $job = Job::findForBusiness($businessId, $linkId);
+
+            return $job !== null ? self::addressFromRecord($job, $businessId) : '';
+        }
+
+        if ($linkType === 'purchase') {
+            $purchase = Purchase::findForBusiness($businessId, $linkId);
+            if ($purchase === null) {
+                return '';
+            }
+
+            $clientId = (int) ($purchase['client_id'] ?? 0);
+
+            return $clientId > 0 ? self::addressFromClient($businessId, $clientId) : '';
+        }
+
+        return '';
     }
 
     /**
@@ -1207,6 +1320,14 @@ final class GoogleCalendarSync
             $formatted = format_phone($clientPhone);
             $descriptionParts[] = 'Phone: ' . ($formatted !== '—' ? $formatted : $clientPhone);
         }
+        $location = self::addressFromLink(
+            $businessId,
+            (string) ($event['link_type'] ?? ''),
+            (int) ($event['link_id'] ?? 0)
+        );
+        if ($location !== '') {
+            $descriptionParts[] = 'Address: ' . $location;
+        }
 
         if ($notes !== '') {
             $descriptionParts[] = $notes;
@@ -1244,6 +1365,10 @@ final class GoogleCalendarSync
                 'dateTime' => self::isoDateTime($endAt !== '' ? $endAt : date('Y-m-d H:i:s', strtotime($startAt . ' +1 hour'))),
                 'timeZone' => $timezone,
             ];
+        }
+
+        if ($location !== '') {
+            $payload['location'] = $location;
         }
 
         return $payload;

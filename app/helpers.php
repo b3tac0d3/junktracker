@@ -24,11 +24,13 @@ function config(string $key, mixed $default = null): mixed
         $database = require base_path('config/database.php');
         $mail = require base_path('config/mail.php');
         $google = require base_path('config/google.php');
+        $api = require base_path('config/api.php');
         $__appConfig = [
             'app' => $app,
             'database' => $database,
             'mail' => $mail,
             'google' => $google,
+            'api' => $api,
         ];
     }
 
@@ -202,6 +204,11 @@ function write_log_entry(string $channel, array $payload): void
 
 function auth_user(): ?array
 {
+    $apiUser = api_auth_user();
+    if ($apiUser !== null) {
+        return $apiUser;
+    }
+
     return isset($_SESSION['user']) && is_array($_SESSION['user']) ? $_SESSION['user'] : null;
 }
 
@@ -231,6 +238,66 @@ function is_site_admin(): bool
     return auth_role() === 'site_admin';
 }
 
+function request_path(): string
+{
+    $path = (string) parse_url((string) ($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_PATH);
+    $base = rtrim(dirname((string) ($_SERVER['SCRIPT_NAME'] ?? '/')), '/');
+    if ($base !== '/' && $base !== '' && str_starts_with($path, $base)) {
+        $path = substr($path, strlen($base)) ?: '/';
+    }
+
+    return $path === '' ? '/' : $path;
+}
+
+function is_dev_area(): bool
+{
+    $path = request_path();
+
+    return $path === '/dev' || str_starts_with($path, '/dev/');
+}
+
+function internal_context_bar_mode(): ?string
+{
+    if (!is_site_admin()) {
+        return null;
+    }
+
+    return is_dev_area() ? 'dev' : 'admin';
+}
+
+function current_business_label(): string
+{
+    static $cached = null;
+    if ($cached !== null) {
+        return $cached;
+    }
+
+    $businessId = current_business_id();
+    if ($businessId <= 0) {
+        $cached = '';
+        return '';
+    }
+
+    $business = \App\Models\Business::findById($businessId);
+    $cached = trim((string) ($business['name'] ?? ''));
+
+    return $cached;
+}
+
+function site_admin_context_label(): string
+{
+    $businessId = current_business_id();
+    if ($businessId <= 0) {
+        return 'Global site admin';
+    }
+
+    $name = current_business_label();
+    $businessPart = $name !== '' ? $name : ('Business #' . (string) $businessId);
+    $roleLabel = ucwords(str_replace('_', ' ', workspace_role()));
+
+    return $businessPart . ' · acting as ' . $roleLabel;
+}
+
 function workspace_role(): string
 {
     $user = auth_user();
@@ -249,6 +316,11 @@ function workspace_role(): string
 
 function current_business_id(): int
 {
+    $apiBusinessId = api_auth_business_id();
+    if ($apiBusinessId !== null) {
+        return $apiBusinessId;
+    }
+
     $active = (int) ($_SESSION['active_business_id'] ?? 0);
     if ($active > 0) {
         return $active;
@@ -647,7 +719,7 @@ function pagination_visible_pages(int $currentPage, int $totalPages, int $window
 }
 
 /**
- * @return array<string, string>
+ * @return array<string, mixed>
  */
 function current_query_params(array $remove = []): array
 {
@@ -664,6 +736,10 @@ function current_query_params(array $remove = []): array
         }
 
         if (is_array($value)) {
+            $clean[$key] = array_values(array_filter(array_map(
+                static fn ($item): string => trim((string) $item),
+                $value
+            ), static fn (string $item): bool => $item !== ''));
             continue;
         }
 
@@ -684,6 +760,14 @@ function query_with(array $overrides = [], array $remove = []): string
 
         if ($value === null || $value === '') {
             unset($params[$key]);
+            continue;
+        }
+
+        if (is_array($value)) {
+            $params[$key] = array_values(array_filter(array_map(
+                static fn ($item): string => trim((string) $item),
+                $value
+            ), static fn (string $item): bool => $item !== ''));
             continue;
         }
 
@@ -875,6 +959,93 @@ function business_logo_absolute_url(?array $business): ?string
     }
 
     return absolute_url($rel);
+}
+
+/**
+ * Public URL for a dev tracker screenshot stored under public/uploads/.
+ */
+function dev_tracker_screenshot_url(?string $relativePath): ?string
+{
+    $path = trim((string) $relativePath);
+    if ($path === '') {
+        return null;
+    }
+
+    $full = base_path('public/' . ltrim($path, '/'));
+    if (!is_file($full)) {
+        return null;
+    }
+
+    return url($path);
+}
+
+/**
+ * @return array{path: string|null, error: string|null}
+ */
+function dev_tracker_store_screenshot(int $itemId, ?array $upload): array
+{
+    if ($itemId <= 0) {
+        return ['path' => null, 'error' => 'Invalid item.'];
+    }
+
+    if (!is_array($upload)) {
+        return ['path' => null, 'error' => null];
+    }
+
+    $err = (int) ($upload['error'] ?? \UPLOAD_ERR_NO_FILE);
+    if ($err === \UPLOAD_ERR_NO_FILE) {
+        return ['path' => null, 'error' => null];
+    }
+    if ($err !== \UPLOAD_ERR_OK) {
+        return ['path' => null, 'error' => 'Screenshot upload failed. Try again.'];
+    }
+    if (($upload['size'] ?? 0) > 5242880) {
+        return ['path' => null, 'error' => 'Screenshot must be 5 MB or smaller.'];
+    }
+
+    $tmp = (string) ($upload['tmp_name'] ?? '');
+    if ($tmp === '' || !is_uploaded_file($tmp)) {
+        return ['path' => null, 'error' => 'Invalid screenshot upload.'];
+    }
+
+    $finfo = new \finfo(\FILEINFO_MIME_TYPE);
+    $mime = $finfo->file($tmp);
+    $map = [
+        'image/jpeg' => 'jpg',
+        'image/png' => 'png',
+        'image/gif' => 'gif',
+        'image/webp' => 'webp',
+    ];
+    if ($mime === false || !isset($map[$mime])) {
+        return ['path' => null, 'error' => 'Use PNG, JPG, GIF, or WebP for screenshots.'];
+    }
+
+    $dir = base_path('public/uploads/dev_tracker/' . (string) $itemId);
+    if (!is_dir($dir)) {
+        mkdir($dir, 0755, true);
+    }
+
+    $filename = bin2hex(random_bytes(16)) . '.' . $map[$mime];
+    $dest = $dir . '/' . $filename;
+    if (!move_uploaded_file($tmp, $dest)) {
+        return ['path' => null, 'error' => 'Could not save screenshot.'];
+    }
+
+    return ['path' => 'uploads/dev_tracker/' . (string) $itemId . '/' . $filename, 'error' => null];
+}
+
+function can_manage_bug_reports(): bool
+{
+    if (is_site_admin() && current_business_id() > 0) {
+        return true;
+    }
+
+    return workspace_role() === 'admin';
+}
+
+function can_review_bug_submissions(): bool
+{
+    return is_site_admin();
 }
 
 /**
@@ -1244,3 +1415,285 @@ function audit_metadata_summary(array $meta): string
 
     return implode(' · ', $parts);
 }
+
+/** @var array{user: array<string, mixed>, business_id: int}|null */
+$GLOBALS['__apiAuthContext'] = null;
+
+function api_set_auth_context(array $user, int $businessId): void
+{
+    $GLOBALS['__apiAuthContext'] = [
+        'user' => $user,
+        'business_id' => $businessId,
+    ];
+}
+
+function api_clear_auth_context(): void
+{
+    $GLOBALS['__apiAuthContext'] = null;
+}
+
+function api_auth_user(): ?array
+{
+    $ctx = $GLOBALS['__apiAuthContext'] ?? null;
+    if (!is_array($ctx) || !isset($ctx['user']) || !is_array($ctx['user'])) {
+        return null;
+    }
+
+    return $ctx['user'];
+}
+
+function api_auth_business_id(): ?int
+{
+    $ctx = $GLOBALS['__apiAuthContext'] ?? null;
+    if (!is_array($ctx) || !array_key_exists('business_id', $ctx)) {
+        return null;
+    }
+
+    $id = (int) $ctx['business_id'];
+    return $id >= 0 ? $id : null;
+}
+
+function api_is_request(): bool
+{
+    $path = request_path();
+    return str_starts_with($path, '/api/');
+}
+
+function api_handle_cors(): void
+{
+    $origin = trim((string) ($_SERVER['HTTP_ORIGIN'] ?? ''));
+    $allowed = config('api.cors_origins', []);
+    if (!is_array($allowed)) {
+        $allowed = [];
+    }
+
+    if ((string) config('app.env', 'production') === 'local' && $allowed === []) {
+        $allowed = ['*'];
+    }
+
+    $allowOrigin = '';
+    if ($origin !== '') {
+        if (in_array('*', $allowed, true)) {
+            $allowOrigin = '*';
+        } elseif (in_array($origin, $allowed, true)) {
+            $allowOrigin = $origin;
+        }
+    } elseif (in_array('*', $allowed, true)) {
+        $allowOrigin = '*';
+    }
+
+    if ($allowOrigin !== '') {
+        header('Access-Control-Allow-Origin: ' . $allowOrigin);
+        header('Vary: Origin');
+    }
+
+    header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
+    header('Access-Control-Allow-Headers: Authorization, Content-Type, Accept');
+    header('Access-Control-Max-Age: 86400');
+}
+
+function api_bearer_token(): ?string
+{
+    $header = trim((string) ($_SERVER['HTTP_AUTHORIZATION'] ?? $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ?? ''));
+    if ($header === '' && function_exists('getallheaders')) {
+        $headers = getallheaders();
+        if (is_array($headers)) {
+            foreach ($headers as $name => $value) {
+                if (strcasecmp((string) $name, 'Authorization') === 0) {
+                    $header = trim((string) $value);
+                    break;
+                }
+            }
+        }
+    }
+
+    if ($header === '') {
+        return null;
+    }
+
+    if (preg_match('/^Bearer\s+(\S+)$/i', $header, $matches) !== 1) {
+        return null;
+    }
+
+    $token = trim((string) ($matches[1] ?? ''));
+    return $token !== '' ? $token : null;
+}
+
+function api_authenticate_request(): bool
+{
+    api_clear_auth_context();
+
+    $plainToken = api_bearer_token();
+    if ($plainToken === null) {
+        return false;
+    }
+
+    $row = \App\Models\ApiToken::findValidAccessToken($plainToken);
+    if ($row === null) {
+        return false;
+    }
+
+    $userId = (int) ($row['user_id'] ?? 0);
+    if ($userId <= 0) {
+        return false;
+    }
+
+    $user = \App\Models\User::findById($userId);
+    if ($user === null) {
+        return false;
+    }
+
+    $globalRole = trim((string) ($user['role'] ?? 'general_user'));
+    $businessId = (int) ($row['business_id'] ?? 0);
+    $workspaceRole = $globalRole === 'site_admin' ? 'site_admin' : 'general_user';
+
+    if ($globalRole !== 'site_admin') {
+        if ($businessId <= 0) {
+            $membership = \App\Models\BusinessMembership::firstActiveMembership($userId);
+            if ($membership === null) {
+                return false;
+            }
+            $businessId = (int) ($membership['business_id'] ?? 0);
+            $workspaceRole = (string) ($membership['role'] ?? 'general_user');
+        } else {
+            $membership = \App\Models\BusinessMembership::findForBusiness($businessId, $userId);
+            if ($membership === null || trim((string) ($membership['deleted_at'] ?? '')) !== '' || (int) ($membership['is_active'] ?? 1) !== 1) {
+                return false;
+            }
+            $workspaceRole = (string) ($membership['role'] ?? 'general_user');
+        }
+    }
+
+    $sessionUser = [
+        'id' => $userId,
+        'email' => strtolower(trim((string) ($user['email'] ?? ''))),
+        'first_name' => (string) ($user['first_name'] ?? ''),
+        'last_name' => (string) ($user['last_name'] ?? ''),
+        'role' => $globalRole,
+        'must_change_password' => (int) ($user['must_change_password'] ?? 0) === 1,
+        'invitation_pending' => trim((string) ($user['invited_at'] ?? '')) !== ''
+            && trim((string) ($user['invitation_accepted_at'] ?? '')) === '',
+        'workspace_role' => $workspaceRole,
+        'business_id' => $businessId,
+    ];
+
+    if (!empty($sessionUser['must_change_password']) || !empty($sessionUser['invitation_pending'])) {
+        return false;
+    }
+
+    api_set_auth_context($sessionUser, $businessId);
+    \App\Models\ApiToken::touchLastUsed((int) ($row['id'] ?? 0));
+
+    return true;
+}
+
+/**
+ * @return array<string, mixed>
+ */
+function api_read_json_body(): array
+{
+    $raw = file_get_contents('php://input');
+    if (!is_string($raw) || trim($raw) === '') {
+        return [];
+    }
+
+    $decoded = json_decode($raw, true);
+    return is_array($decoded) ? $decoded : [];
+}
+
+/**
+ * @return array<string, bool>
+ */
+function business_default_module_flags(): array
+{
+    return [
+        'estate_sales' => true,
+        'purchases' => true,
+        'deliveries' => true,
+        'billing' => true,
+        'networking' => true,
+        'subcontractors' => true,
+    ];
+}
+
+/**
+ * @param array<string, mixed>|null $business
+ */
+function business_module_flags(?array $business = null): array
+{
+    $defaults = business_default_module_flags();
+    if ($business === null) {
+        $businessId = current_business_id();
+        if ($businessId <= 0) {
+            return $defaults;
+        }
+        $business = \App\Models\Business::findById($businessId);
+    }
+
+    if ($business === null) {
+        return $defaults;
+    }
+
+    $raw = $business['module_flags'] ?? null;
+    if (is_string($raw) && trim($raw) !== '') {
+        $decoded = json_decode($raw, true);
+        $raw = is_array($decoded) ? $decoded : null;
+    }
+
+    if (!is_array($raw)) {
+        return $defaults;
+    }
+
+    $merged = $defaults;
+    foreach ($raw as $key => $value) {
+        if (!is_string($key)) {
+            continue;
+        }
+        $merged[$key] = (bool) $value;
+    }
+
+    return $merged;
+}
+
+function business_module_enabled(string $module, ?array $business = null): bool
+{
+    $flags = business_module_flags($business);
+    return (bool) ($flags[$module] ?? true);
+}
+
+function business_job_label(?array $business = null): string
+{
+    if ($business === null) {
+        $businessId = current_business_id();
+        if ($businessId > 0) {
+            $business = \App\Models\Business::findById($businessId);
+        }
+    }
+
+    $label = trim((string) ($business['label_job'] ?? ''));
+    return $label !== '' ? $label : 'Job';
+}
+
+function release_note_plain_text(string $line): string
+{
+    $line = trim($line);
+    if ($line === '') {
+        return '';
+    }
+
+    $line = preg_replace('/\[([^\]]+)\]\([^)]+\)/', '$1', $line) ?? $line;
+    $line = preg_replace('/\*\*([^*]+)\*\*/', '$1', $line) ?? $line;
+    $line = preg_replace('/`([^`]+)`/', '$1', $line) ?? $line;
+
+    return trim($line);
+}
+
+function release_type_badge_class(string $type): string
+{
+    return match ($type) {
+        'fix' => 'text-bg-danger',
+        'patch' => 'text-bg-warning',
+        default => 'text-bg-primary',
+    };
+}
+

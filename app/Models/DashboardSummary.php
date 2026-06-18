@@ -17,7 +17,8 @@ final class DashboardSummary
             if (is_array($cached)
                 && isset($cached['sales'], $cached['estate_sales'], $cached['service'], $cached['lists'])
                 && array_key_exists('upcoming_schedule', $cached['lists'])
-                && array_key_exists('past_due_schedule', $cached['lists'])) {
+                && array_key_exists('past_due_schedule', $cached['lists'])
+                && array_key_exists('client_follow_up_reminders', $cached['lists'])) {
                 return $cached;
             }
         }
@@ -44,6 +45,7 @@ final class DashboardSummary
             'tasks' => self::tasksSummary($businessId, $ownerUserId),
             'three_month_chart' => self::lastThreeMonthsChart($businessId),
             'lists' => [
+                'client_follow_up_reminders' => ClientFollowUpReminder::openListForOwner($businessId, $ownerUserId, 20),
                 'my_tasks_due' => Task::dueListForOwner($businessId, $ownerUserId),
                 'past_due_schedule' => self::pastDueSchedule($businessId),
                 'upcoming_schedule' => self::upcomingSchedule($businessId),

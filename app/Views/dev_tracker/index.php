@@ -3,7 +3,7 @@
 use App\Models\DevTrackerItem;
 
 $search = trim((string) ($search ?? ''));
-$statusFilter = strtolower(trim((string) ($statusFilter ?? 'active')));
+$statusFilters = is_array($statusFilters ?? null) ? $statusFilters : DevTrackerItem::defaultIndexStatusFilters();
 $type = strtolower(trim((string) ($type ?? '')));
 $priority = strtolower(trim((string) ($priority ?? '')));
 $items = is_array($items ?? null) ? $items : [];
@@ -11,11 +11,13 @@ $summary = is_array($summary ?? null) ? $summary : [];
 $pagination = is_array($pagination ?? null) ? $pagination : pagination_meta(1, 50, count($items), count($items));
 $perPage = (int) ($pagination['per_page'] ?? 50);
 $typeOptions = is_array($typeOptions ?? null) ? $typeOptions : DevTrackerItem::typeOptions();
-$statusOptions = is_array($statusOptions ?? null) ? $statusOptions : DevTrackerItem::statusOptions();
+$statusOptions = is_array($statusOptions ?? null) ? $statusOptions : DevTrackerItem::devStatusOptions();
 $priorityOptions = is_array($priorityOptions ?? null) ? $priorityOptions : DevTrackerItem::priorityOptions();
+$pendingReviewCount = (int) ($pendingReviewCount ?? 0);
 
 $statusBadgeClass = static function (string $status): string {
     return match (strtolower(trim($status))) {
+        'pending_review' => 'text-bg-warning text-dark',
         'in_progress' => 'text-bg-primary',
         'testing' => 'text-bg-info',
         'triage' => 'text-bg-warning',
@@ -44,9 +46,18 @@ $priorityBadgeClass = static function (string $priority): string {
     };
 };
 
+$statusFilterOptions = DevTrackerItem::indexStatusFilterOptions();
+$statusFilterLabels = static function (string $status) use ($pendingReviewCount): string {
+    $label = DevTrackerItem::statusLabel($status);
+    if ($status === 'pending_review' && $pendingReviewCount > 0) {
+        return $label . ' (' . (string) $pendingReviewCount . ')';
+    }
+    return $label;
+};
+
 $activeCount = 0;
 foreach ($statusOptions as $statusOption) {
-    if (!in_array($statusOption, ['done', 'wont_fix'], true)) {
+    if (!in_array($statusOption, ['done', 'wont_fix', 'pending_review'], true)) {
         $activeCount += (int) ($summary[$statusOption] ?? 0);
     }
 }
@@ -68,6 +79,10 @@ foreach ($statusOptions as $statusOption) {
     <div class="card-body">
         <div class="record-row-fields record-row-fields-4 record-row-fields-mobile-2">
             <div class="record-field">
+                <span class="record-label">Pending Review</span>
+                <span class="record-value"><?= e((string) $pendingReviewCount) ?></span>
+            </div>
+            <div class="record-field">
                 <span class="record-label">Active</span>
                 <span class="record-value"><?= e((string) $activeCount) ?></span>
             </div>
@@ -79,6 +94,8 @@ foreach ($statusOptions as $statusOption) {
                 <span class="record-label">Testing</span>
                 <span class="record-value"><?= e((string) ((int) ($summary['testing'] ?? 0))) ?></span>
             </div>
+        </div>
+        <div class="record-row-fields record-row-fields-4 record-row-fields-mobile-2 mt-3">
             <div class="record-field">
                 <span class="record-label">Done</span>
                 <span class="record-value"><?= e((string) ((int) ($summary['done'] ?? 0))) ?></span>
@@ -95,19 +112,10 @@ foreach ($statusOptions as $statusOption) {
         <form method="get" action="<?= e(url('/dev')) ?>" class="row g-3 align-items-end">
             <input type="hidden" name="page" value="1">
             <input type="hidden" name="per_page" value="<?= e((string) $perPage) ?>">
+            <input type="hidden" name="status_applied" value="1">
             <div class="col-12 col-lg-4">
                 <label class="form-label fw-semibold" for="dev-search">Search</label>
                 <input id="dev-search" class="form-control" name="q" value="<?= e($search) ?>" placeholder="Title, notes, area, or id..." />
-            </div>
-            <div class="col-6 col-lg-2">
-                <label class="form-label fw-semibold" for="dev-status">Status</label>
-                <select id="dev-status" class="form-select" name="status">
-                    <option value="active" <?= $statusFilter === 'active' ? 'selected' : '' ?>>Active</option>
-                    <option value="all" <?= $statusFilter === 'all' ? 'selected' : '' ?>>All</option>
-                    <?php foreach ($statusOptions as $statusOption): ?>
-                        <option value="<?= e($statusOption) ?>" <?= $statusFilter === $statusOption ? 'selected' : '' ?>><?= e(DevTrackerItem::statusLabel($statusOption)) ?></option>
-                    <?php endforeach; ?>
-                </select>
             </div>
             <div class="col-6 col-lg-2">
                 <label class="form-label fw-semibold" for="dev-type">Type</label>
@@ -127,9 +135,30 @@ foreach ($statusOptions as $statusOption) {
                     <?php endforeach; ?>
                 </select>
             </div>
-            <div class="col-12 col-lg-2 d-grid d-lg-flex gap-2">
+            <div class="col-12 col-lg-4 d-grid d-lg-flex gap-2">
                 <button class="btn btn-primary flex-fill" type="submit">Apply</button>
                 <a class="btn btn-outline-secondary flex-fill" href="<?= e(url('/dev')) ?>">Clear</a>
+            </div>
+            <div class="col-12">
+                <div class="form-label fw-semibold">Status</div>
+                <div class="jt-dev-status-filters">
+                    <?php foreach ($statusFilterOptions as $statusOption): ?>
+                        <div class="form-check form-check-inline">
+                            <input
+                                class="form-check-input"
+                                type="checkbox"
+                                name="status[]"
+                                id="dev-status-<?= e($statusOption) ?>"
+                                value="<?= e($statusOption) ?>"
+                                <?= in_array($statusOption, $statusFilters, true) ? 'checked' : '' ?>
+                            />
+                            <label class="form-check-label" for="dev-status-<?= e($statusOption) ?>">
+                                <?= e($statusFilterLabels($statusOption)) ?>
+                            </label>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+                <div class="small muted mt-1">Select one or more statuses. Leave all unchecked to show everything.</div>
             </div>
         </form>
     </div>
@@ -208,10 +237,11 @@ foreach ($statusOptions as $statusOption) {
         $basePath = '/dev';
         $fixedQueryParams = array_filter([
             'q' => $search,
-            'status' => $statusFilter,
+            'status' => $statusFilters,
+            'status_applied' => '1',
             'type' => $type,
             'priority' => $priority,
-        ], static fn ($value): bool => $value !== '');
+        ], static fn ($value): bool => $value !== '' && $value !== []);
         require base_path('app/Views/components/index_pagination.php');
         ?>
     </div>

@@ -24,5 +24,12 @@ RewriteRule ^ - [L]
 # Map /assets/* to /public/assets/*
 RewriteRule ^assets/(.*)$ public/assets/$1 [L]
 
+# PWA shell
+RewriteRule ^manifest\.webmanifest$ public/manifest.webmanifest [L]
+RewriteRule ^sw\.js$ public/sw.js [L]
+
+# Map /uploads/* to /public/uploads/*
+RewriteRule ^uploads/(.*)$ public/uploads/$1 [L]
+
 # Route all other requests through the front controller
 RewriteRule ^ index.php [QSA,L]

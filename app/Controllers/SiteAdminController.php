@@ -6,15 +6,26 @@ namespace App\Controllers;
 
 use App\Models\Business;
 use App\Models\BusinessMembership;
+use App\Models\SiteAdminStats;
 use Core\Controller;
 
 final class SiteAdminController extends Controller
 {
+    public function dashboard(): void
+    {
+        require_role(['site_admin']);
+
+        $this->render('site_admin/dashboard', [
+            'pageTitle' => 'Platform Overview',
+            'stats' => SiteAdminStats::dashboardSnapshot(),
+        ]);
+    }
+
     public function businesses(): void
     {
         require_role(['site_admin']);
 
-        $this->render('site_admin/businesses', $this->businessesPageData());
+        $this->render('site_admin/businesses', $this->businessDirectoryPageData());
     }
 
     public function createBusiness(): void
@@ -240,10 +251,10 @@ final class SiteAdminController extends Controller
         $_SESSION['user']['workspace_role'] = 'site_admin';
 
         flash('success', 'Returned to global site admin view.');
-        redirect('/site-admin/businesses');
+        redirect('/site-admin');
     }
 
-    private function businessesPageData(): array
+    private function businessDirectoryPageData(): array
     {
         $query = trim((string) ($_GET['q'] ?? ''));
         $status = strtolower(trim((string) ($_GET['status'] ?? 'active')));
@@ -263,7 +274,7 @@ final class SiteAdminController extends Controller
         $pagination = pagination_meta($page, $perPage, $totalRows, count($businesses));
 
         return [
-            'pageTitle' => 'Select Business Workspace',
+            'pageTitle' => 'Companies',
             'businesses' => $businesses,
             'pagination' => $pagination,
             'query' => $query,
@@ -273,6 +284,7 @@ final class SiteAdminController extends Controller
                 'active' => Business::countForSiteAdmin('active'),
                 'inactive' => Business::countForSiteAdmin('inactive'),
             ],
+            'usersByBusiness' => SiteAdminStats::activeUsersByBusiness(),
         ];
     }
 

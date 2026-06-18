@@ -114,7 +114,15 @@ final class Client
         $stmt->execute();
 
         $rows = $stmt->fetchAll();
-        return is_array($rows) ? $rows : [];
+        if (!is_array($rows)) {
+            return [];
+        }
+
+        if ($query !== '') {
+            $rows = self::attachSearchMatchTypes($businessId, $query, $rows);
+        }
+
+        return $rows;
     }
 
     public static function indexCount(int $businessId, string $search = '', string $activeFilter = 'active'): int
@@ -191,6 +199,159 @@ final class Client
                   )
               )
         )";
+    }
+
+    /**
+     * @param list<array<string, mixed>> $rows
+     * @return list<array<string, mixed>>
+     */
+    private static function attachSearchMatchTypes(int $businessId, string $query, array $rows): array
+    {
+        $query = trim($query);
+        if ($query === '' || $rows === []) {
+            return $rows;
+        }
+
+        $clientIds = [];
+        foreach ($rows as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $clientId = (int) ($row['id'] ?? 0);
+            if ($clientId > 0) {
+                $clientIds[] = $clientId;
+            }
+        }
+
+        $boloTypes = self::boloSearchMatchTypesByClientIds($businessId, $query, $clientIds);
+        $queryLower = mb_strtolower($query);
+
+        foreach ($rows as &$row) {
+            if (!is_array($row)) {
+                continue;
+            }
+
+            $types = [];
+            $nameHaystack = mb_strtolower(trim(
+                trim((string) ($row['first_name'] ?? '')) . ' '
+                . trim((string) ($row['last_name'] ?? '')) . ' '
+                . trim((string) ($row['company_name'] ?? ''))
+            ));
+            if ($nameHaystack !== '' && mb_strpos($nameHaystack, $queryLower) !== false) {
+                $types[] = 'Name';
+            }
+
+            $phone = mb_strtolower(trim((string) ($row['phone'] ?? '')));
+            if ($phone !== '' && mb_strpos($phone, $queryLower) !== false) {
+                $types[] = 'Phone';
+            }
+
+            $city = mb_strtolower(trim((string) ($row['city'] ?? '')));
+            if ($city !== '' && mb_strpos($city, $queryLower) !== false) {
+                $types[] = 'City';
+            }
+
+            $clientId = (int) ($row['id'] ?? 0);
+            if ($clientId > 0 && isset($boloTypes[$clientId])) {
+                foreach ($boloTypes[$clientId] as $boloType) {
+                    $types[] = $boloType;
+                }
+            }
+
+            $row['search_match_types'] = array_values(array_unique($types));
+        }
+        unset($row);
+
+        return $rows;
+    }
+
+    /**
+     * @param list<int> $clientIds
+     * @return array<int, list<string>>
+     */
+    private static function boloSearchMatchTypesByClientIds(int $businessId, string $query, array $clientIds): array
+    {
+        if (!self::hasTable('client_bolo_profiles') || !self::hasTable('client_bolo_lines')) {
+            return [];
+        }
+
+        $clientIds = array_values(array_unique(array_filter(array_map('intval', $clientIds), static fn (int $id): bool => $id > 0)));
+        if ($businessId <= 0 || trim($query) === '' || $clientIds === []) {
+            return [];
+        }
+
+        $activeClause = self::hasColumn('client_bolo_profiles', 'is_active')
+            ? 'p.is_active = 1'
+            : '1 = 1';
+
+        $inPlaceholders = [];
+        $params = [
+            'business_id' => $businessId,
+            'q_like' => '%' . $query . '%',
+        ];
+        foreach ($clientIds as $index => $clientId) {
+            $key = 'client_id_' . (string) $index;
+            $inPlaceholders[] = ':' . $key;
+            $params[$key] = $clientId;
+        }
+        $inSql = implode(', ', $inPlaceholders);
+
+        $map = [];
+
+        $noteSql = "SELECT DISTINCT p.client_id
+                    FROM client_bolo_profiles p
+                    WHERE p.business_id = :business_id
+                      AND p.client_id IN ({$inSql})
+                      AND {$activeClause}
+                      AND COALESCE(p.notes, '') LIKE :q_like";
+        $stmt = Database::connection()->prepare($noteSql);
+        foreach ($params as $key => $value) {
+            $stmt->bindValue(':' . $key, $value, is_int($value) ? \PDO::PARAM_INT : \PDO::PARAM_STR);
+        }
+        $stmt->execute();
+        $noteRows = $stmt->fetchAll();
+        if (is_array($noteRows)) {
+            foreach ($noteRows as $noteRow) {
+                if (!is_array($noteRow)) {
+                    continue;
+                }
+                $clientId = (int) ($noteRow['client_id'] ?? 0);
+                if ($clientId > 0) {
+                    $map[$clientId][] = 'BOLO note';
+                }
+            }
+        }
+
+        $lineSql = "SELECT DISTINCT p.client_id
+                    FROM client_bolo_lines l
+                    INNER JOIN client_bolo_profiles p ON p.id = l.bolo_profile_id
+                    WHERE p.business_id = :business_id
+                      AND p.client_id IN ({$inSql})
+                      AND {$activeClause}
+                      AND l.item_text LIKE :q_like";
+        $stmt = Database::connection()->prepare($lineSql);
+        foreach ($params as $key => $value) {
+            $stmt->bindValue(':' . $key, $value, is_int($value) ? \PDO::PARAM_INT : \PDO::PARAM_STR);
+        }
+        $stmt->execute();
+        $lineRows = $stmt->fetchAll();
+        if (is_array($lineRows)) {
+            foreach ($lineRows as $lineRow) {
+                if (!is_array($lineRow)) {
+                    continue;
+                }
+                $clientId = (int) ($lineRow['client_id'] ?? 0);
+                if ($clientId > 0) {
+                    $map[$clientId][] = 'Line item';
+                }
+            }
+        }
+
+        foreach ($map as $clientId => $types) {
+            $map[$clientId] = array_values(array_unique($types));
+        }
+
+        return $map;
     }
 
     public static function searchOptions(int $businessId, string $query, int $limit = 8, int $excludeClientId = 0): array

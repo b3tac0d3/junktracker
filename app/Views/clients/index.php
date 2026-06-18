@@ -30,8 +30,9 @@ $clientDisplayName = static function (array $row): string {
         <h1>Clients</h1>
         <p class="muted">Client directory</p>
     </div>
-    <div>
-        <a class="btn btn-primary" href="<?= e(url('/clients/create')) ?>"><i class="fas fa-plus me-2"></i>Add Client</a>
+    <div class="d-flex flex-wrap gap-2">
+        <a class="btn btn-primary" href="<?= e(url('/clients/quick-add')) ?>"><i class="fas fa-bolt me-2"></i>Quick Add</a>
+        <a class="btn btn-outline-primary" href="<?= e(url('/clients/create')) ?>"><i class="fas fa-plus me-2"></i>Add Client</a>
     </div>
 </div>
 
@@ -111,6 +112,12 @@ $clientDisplayName = static function (array $row): string {
                                 <h3 class="record-title-simple"><?= e($clientDisplayName($client)) ?></h3>
                                 <?php if ($isInactive): ?>
                                     <span class="badge text-bg-secondary">Deactivated</span>
+                                <?php endif; ?>
+                                <?php if ($search !== ''): ?>
+                                    <?php
+                                    $matchTypes = is_array($client['search_match_types'] ?? null) ? $client['search_match_types'] : [];
+                                    require base_path('app/Views/components/client_search_match_types.php');
+                                    ?>
                                 <?php endif; ?>
                             </div>
                             <div class="record-row-fields record-row-fields-compact">

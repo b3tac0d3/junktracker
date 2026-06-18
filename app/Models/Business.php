@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Models;
 
 use Core\Database;
+use Core\SchemaInspector;
 
 final class Business
 {
@@ -119,6 +120,49 @@ final class Business
         return (int) $stmt->fetchColumn();
     }
 
+    /**
+     * @return list<array{id: int, name: string}>
+     */
+    public static function activeNamesForSwitcher(int $limit = 15): array
+    {
+        if (!SchemaInspector::hasTable('businesses')) {
+            return [];
+        }
+
+        $stmt = Database::connection()->prepare(
+            'SELECT id, name
+             FROM businesses
+             WHERE deleted_at IS NULL
+               AND is_active = 1
+             ORDER BY name ASC
+             LIMIT :row_limit'
+        );
+        $stmt->bindValue(':row_limit', max(1, min($limit, 50)), \PDO::PARAM_INT);
+        $stmt->execute();
+
+        $rows = $stmt->fetchAll();
+        if (!is_array($rows)) {
+            return [];
+        }
+
+        $businesses = [];
+        foreach ($rows as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $id = (int) ($row['id'] ?? 0);
+            if ($id <= 0) {
+                continue;
+            }
+            $businesses[] = [
+                'id' => $id,
+                'name' => trim((string) ($row['name'] ?? '')),
+            ];
+        }
+
+        return $businesses;
+    }
+
     public static function findById(int $id): ?array
     {
         if (!SchemaInspector::hasTable('businesses')) {
@@ -138,6 +182,8 @@ final class Business
         $estimateStartSql = SchemaInspector::hasColumn('businesses', 'estimate_number_start') ? 'estimate_number_start' : 'NULL';
         $invoiceStartSql = SchemaInspector::hasColumn('businesses', 'invoice_number_start') ? 'invoice_number_start' : 'NULL';
         $logoPathSql = SchemaInspector::hasColumn('businesses', 'logo_path') ? 'logo_path' : 'NULL';
+        $moduleFlagsSql = SchemaInspector::hasColumn('businesses', 'module_flags') ? 'module_flags' : 'NULL';
+        $labelJobSql = SchemaInspector::hasColumn('businesses', 'label_job') ? 'label_job' : "'Job'";
 
         $stmt = Database::connection()->prepare(
             "SELECT
@@ -165,6 +211,8 @@ final class Business
                 {$estimateStartSql} AS estimate_number_start,
                 {$invoiceStartSql} AS invoice_number_start,
                 {$logoPathSql} AS logo_path,
+                {$moduleFlagsSql} AS module_flags,
+                {$labelJobSql} AS label_job,
                 is_active
              FROM businesses
              WHERE id = :id

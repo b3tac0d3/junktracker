@@ -33,7 +33,7 @@ $hasError = static function (string $field) use ($errors): bool {
         <strong><i class="fas fa-clipboard-list me-2"></i>Details</strong>
     </div>
     <div class="card-body">
-        <form method="post" action="<?= e($actionUrl) ?>" class="row g-3">
+        <form method="post" action="<?= e($actionUrl) ?>" enctype="multipart/form-data" class="row g-3">
             <?= csrf_field() ?>
 
             <div class="col-12 col-lg-8">
@@ -76,7 +76,7 @@ $hasError = static function (string $field) use ($errors): bool {
             <div class="col-12 col-md-4">
                 <label class="form-label fw-semibold" for="dev-status">Status</label>
                 <select id="dev-status" name="status" class="form-select <?= $hasError('status') ? 'is-invalid' : '' ?>">
-                    <?php foreach (DevTrackerItem::statusOptions() as $statusOption): ?>
+                    <?php foreach (DevTrackerItem::devStatusOptions() as $statusOption): ?>
                         <option value="<?= e($statusOption) ?>" <?= strcasecmp((string) ($form['status'] ?? ''), $statusOption) === 0 ? 'selected' : '' ?>><?= e(DevTrackerItem::statusLabel($statusOption)) ?></option>
                     <?php endforeach; ?>
                 </select>
@@ -93,10 +93,18 @@ $hasError = static function (string $field) use ($errors): bool {
                 <?php if ($hasError('priority')): ?><div class="invalid-feedback d-block"><?= e($fieldError('priority')) ?></div><?php endif; ?>
             </div>
 
+            <?php if ($mode === 'create'): ?>
+            <div class="col-12 col-lg-8">
+                <label class="form-label fw-semibold" for="dev-screenshot">Screenshot</label>
+                <input id="dev-screenshot" type="file" name="screenshot" class="form-control" accept="image/png,image/jpeg,image/gif,image/webp" />
+                <div class="form-text">Optional. Attached to the first activity log entry.</div>
+            </div>
+            <?php endif; ?>
+
             <div class="col-12">
                 <label class="form-label fw-semibold" for="dev-notes">Notes</label>
                 <textarea id="dev-notes" name="notes" class="form-control" rows="12" placeholder="Steps to reproduce, progress updates, release notes, links..."><?= e((string) ($form['notes'] ?? '')) ?></textarea>
-                <div class="form-text">Use this as your running log — add timestamps or bullets as you go.</div>
+                <div class="form-text">Detailed changes are tracked in the activity log on the item page.</div>
             </div>
 
             <div class="col-12 d-flex gap-2">

@@ -99,7 +99,11 @@ $hasError = static function (string $field) use ($errors): bool {
 
             <div class="col-12 mt-1">
                 <hr class="my-1" />
-                <h3 class="h5 mb-2">Physical Address</h3>
+                <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+                    <h3 class="h5 mb-0">Base of Operations</h3>
+                    <a class="small" href="<?= e(url('/admin/business-locations')) ?>">Manage operating locations</a>
+                </div>
+                <p class="small muted mb-2">Primary company address used when no operating location is set or selected.</p>
             </div>
 
             <div class="col-12 col-lg-8">

@@ -1,5 +1,6 @@
 <?php
 $employee = is_array($employee ?? null) ? $employee : [];
+$operatingLocations = is_array($operatingLocations ?? null) ? $operatingLocations : [];
 $employeeId = (int) ($employee['id'] ?? 0);
 $linkedUserName = trim((string) ($employee['linked_user_name'] ?? ''));
 $linkedUserEmail = trim((string) ($employee['linked_user_email'] ?? ''));
@@ -40,6 +41,55 @@ if ($displayName === '') {
                     <span class="record-label">Employee Profile Name</span>
                     <span class="record-value"><?= e($employeeName !== '' ? $employeeName : '—') ?></span>
                 </div>
+            </div>
+        </div>
+    </section>
+<?php endif; ?>
+
+<?php if ($operatingLocations !== []): ?>
+    <section class="card index-card mb-3">
+        <div class="card-header index-card-header">
+            <strong><i class="fas fa-location-dot me-2"></i>Operating Locations</strong>
+        </div>
+        <div class="card-body">
+            <div class="record-list-simple">
+                <?php foreach ($operatingLocations as $location): ?>
+                    <?php
+                    if (!is_array($location)) {
+                        continue;
+                    }
+                    $source = trim((string) ($location['source'] ?? ''));
+                    $typeLabel = trim((string) ($location['type_label'] ?? ''));
+                    $name = trim((string) ($location['name'] ?? ''));
+                    $address = trim((string) ($location['formatted_address'] ?? ''));
+                    if ($address === '') {
+                        $address = \App\Models\BusinessLocation::formatAddress(
+                            trim((string) ($location['address_line1'] ?? '')),
+                            trim((string) ($location['address_line2'] ?? '')),
+                            trim((string) ($location['city'] ?? '')),
+                            trim((string) ($location['state'] ?? '')),
+                            trim((string) ($location['postal_code'] ?? ''))
+                        );
+                    }
+                    $sourceLabel = $source === 'base' ? 'Base of operations' : 'Assigned location';
+                    ?>
+                    <article class="record-row-simple">
+                        <div class="record-row-main">
+                            <h3 class="record-title-simple"><?= e($typeLabel !== '' ? $typeLabel : 'Location') ?></h3>
+                            <div class="record-subline small muted"><?= e($sourceLabel) ?></div>
+                        </div>
+                        <div class="record-row-fields record-row-fields-compact">
+                            <div class="record-field">
+                                <span class="record-label">Name</span>
+                                <span class="record-value"><?= e($name !== '' ? $name : '—') ?></span>
+                            </div>
+                            <div class="record-field">
+                                <span class="record-label">Address</span>
+                                <span class="record-value"><?= e($address !== '' ? $address : '—') ?></span>
+                            </div>
+                        </div>
+                    </article>
+                <?php endforeach; ?>
             </div>
         </div>
     </section>

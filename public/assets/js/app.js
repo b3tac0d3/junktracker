@@ -450,3 +450,36 @@ window.addEventListener('DOMContentLoaded', () => {
         });
     });
 });
+
+window.addEventListener('DOMContentLoaded', () => {
+    const modalEl = document.getElementById('jtImageLightbox');
+    if (!modalEl || typeof bootstrap === 'undefined') {
+        return;
+    }
+
+    const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+    const imageEl = document.getElementById('jtImageLightboxImage');
+    const captionEl = document.getElementById('jtImageLightboxCaption');
+    if (!imageEl || !captionEl) {
+        return;
+    }
+
+    document.addEventListener('click', (event) => {
+        const trigger = event.target.closest('[data-jt-lightbox-src]');
+        if (!trigger) {
+            return;
+        }
+
+        event.preventDefault();
+        imageEl.src = trigger.getAttribute('data-jt-lightbox-src') || '';
+        imageEl.alt = trigger.getAttribute('data-jt-lightbox-alt') || 'Screenshot';
+        captionEl.textContent = trigger.getAttribute('data-jt-lightbox-caption') || '';
+        modal.show();
+    });
+
+    modalEl.addEventListener('hidden.bs.modal', () => {
+        imageEl.src = '';
+        imageEl.alt = '';
+        captionEl.textContent = '';
+    });
+});

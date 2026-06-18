@@ -377,6 +377,103 @@ final class User
         return is_array($rows) ? $rows : [];
     }
 
+    public static function indexCountAllCompanyUsers(string $search = '', string $status = 'active'): int
+    {
+        $query = trim($search);
+        $status = self::normalizeUserIndexStatus($status);
+        $statusSql = self::companyUserStatusSql($status);
+
+        $sql = 'SELECT COUNT(DISTINCT u.id)
+                FROM users u
+                WHERE u.deleted_at IS NULL
+                  AND u.role <> \'site_admin\'
+                  AND EXISTS (
+                    SELECT 1
+                    FROM business_user_memberships m_any
+                    INNER JOIN businesses b_any ON b_any.id = m_any.business_id
+                    WHERE m_any.user_id = u.id
+                      AND m_any.deleted_at IS NULL
+                      AND b_any.deleted_at IS NULL
+                  )
+                  AND ' . $statusSql . '
+                  AND (
+                    :query = \'\'
+                    OR COALESCE(u.first_name, \'\') LIKE :query_like_1
+                    OR COALESCE(u.last_name, \'\') LIKE :query_like_2
+                    OR COALESCE(u.email, \'\') LIKE :query_like_3
+                    OR CAST(u.id AS CHAR) LIKE :query_like_4
+                  )';
+
+        $stmt = Database::connection()->prepare($sql);
+        $queryLike = '%' . $query . '%';
+        $stmt->bindValue(':query', $query);
+        $stmt->bindValue(':query_like_1', $queryLike);
+        $stmt->bindValue(':query_like_2', $queryLike);
+        $stmt->bindValue(':query_like_3', $queryLike);
+        $stmt->bindValue(':query_like_4', $queryLike);
+        $stmt->execute();
+
+        return (int) $stmt->fetchColumn();
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    public static function indexListAllCompanyUsers(string $search = '', string $status = 'active', int $limit = 25, int $offset = 0): array
+    {
+        $query = trim($search);
+        $status = self::normalizeUserIndexStatus($status);
+        $statusSql = self::companyUserStatusSql($status);
+
+        $sql = 'SELECT
+                    u.id,
+                    u.email,
+                    u.first_name,
+                    u.last_name,
+                    u.role,
+                    COALESCE(u.is_active, 1) AS is_active,
+                    ' . self::invitationSelectSql() . '
+                FROM users u
+                WHERE u.deleted_at IS NULL
+                  AND u.role <> \'site_admin\'
+                  AND EXISTS (
+                    SELECT 1
+                    FROM business_user_memberships m_any
+                    INNER JOIN businesses b_any ON b_any.id = m_any.business_id
+                    WHERE m_any.user_id = u.id
+                      AND m_any.deleted_at IS NULL
+                      AND b_any.deleted_at IS NULL
+                  )
+                  AND ' . $statusSql . '
+                  AND (
+                    :query = \'\'
+                    OR COALESCE(u.first_name, \'\') LIKE :query_like_1
+                    OR COALESCE(u.last_name, \'\') LIKE :query_like_2
+                    OR COALESCE(u.email, \'\') LIKE :query_like_3
+                    OR CAST(u.id AS CHAR) LIKE :query_like_4
+                  )
+                ORDER BY
+                    COALESCE(NULLIF(u.last_name, \'\'), u.email) ASC,
+                    COALESCE(NULLIF(u.first_name, \'\'), \'\') ASC,
+                    u.id DESC
+                LIMIT :row_limit
+                OFFSET :row_offset';
+
+        $stmt = Database::connection()->prepare($sql);
+        $queryLike = '%' . $query . '%';
+        $stmt->bindValue(':query', $query);
+        $stmt->bindValue(':query_like_1', $queryLike);
+        $stmt->bindValue(':query_like_2', $queryLike);
+        $stmt->bindValue(':query_like_3', $queryLike);
+        $stmt->bindValue(':query_like_4', $queryLike);
+        $stmt->bindValue(':row_limit', max(1, min($limit, 1000)), \PDO::PARAM_INT);
+        $stmt->bindValue(':row_offset', max(0, $offset), \PDO::PARAM_INT);
+        $stmt->execute();
+
+        $rows = $stmt->fetchAll();
+        return is_array($rows) ? $rows : [];
+    }
+
     public static function setActiveState(int $userId, bool $isActive, int $actorUserId): bool
     {
         $stmt = Database::connection()->prepare(
@@ -600,5 +697,32 @@ final class User
         }
 
         return 'invited_at AS invited_at, invitation_expires_at AS invitation_expires_at, invitation_accepted_at AS invitation_accepted_at';
+    }
+
+    private static function normalizeUserIndexStatus(string $status): string
+    {
+        $status = strtolower(trim($status));
+
+        return in_array($status, ['active', 'inactive', 'all'], true) ? $status : 'active';
+    }
+
+    private static function companyUserStatusSql(string $status): string
+    {
+        $activeMembershipExists = 'EXISTS (
+            SELECT 1
+            FROM business_user_memberships m_active
+            INNER JOIN businesses b_active ON b_active.id = m_active.business_id
+            WHERE m_active.user_id = u.id
+              AND m_active.deleted_at IS NULL
+              AND b_active.deleted_at IS NULL
+              AND COALESCE(m_active.is_active, 1) = 1
+              AND COALESCE(b_active.is_active, 1) = 1
+        )';
+
+        return match (self::normalizeUserIndexStatus($status)) {
+            'inactive' => '(COALESCE(u.is_active, 1) = 0 OR NOT ' . $activeMembershipExists . ')',
+            'all' => '1=1',
+            default => '(COALESCE(u.is_active, 1) = 1 AND ' . $activeMembershipExists . ')',
+        };
     }
 }
