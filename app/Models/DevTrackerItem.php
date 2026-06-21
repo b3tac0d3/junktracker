@@ -92,6 +92,54 @@ final class DevTrackerItem
             : 'Company Bug Report Review';
     }
 
+    /**
+     * @return array<string, string>
+     */
+    public static function submissionLabels(string $type): array
+    {
+        if (strtolower(trim($type)) === 'update') {
+            return [
+                'section' => 'Update Requests',
+                'section_singular' => 'Update Request',
+                'index_desc' => 'Request product updates for dev review and future releases.',
+                'create_title' => 'Request an Update',
+                'create_desc' => 'Your request goes to the dev team for review before it is scheduled for a release.',
+                'create_button' => 'Submit Request',
+                'create_icon' => 'fa-wrench',
+                'list_title' => 'Submitted Requests',
+                'list_empty' => 'No update requests yet.',
+                'notes_label' => 'Requested change',
+                'notes_placeholder' => 'Describe the update you want in a future release — workflow, UI, reports, etc.',
+                'notes_required' => 'Describe the requested update so devs can review it.',
+                'submit_success' => 'Update request submitted for dev review.',
+                'log_success' => 'Update added to the request log.',
+                'pending_alert' => 'This request is waiting for dev review.',
+                'accepted_alert' => 'Accepted by devs and queued for future release work',
+                'rejected_alert' => 'This request was reviewed and not accepted for the roadmap.',
+            ];
+        }
+
+        return [
+            'section' => 'Bug Reports',
+            'section_singular' => 'Bug Report',
+            'index_desc' => 'Submit issues for dev review.',
+            'create_title' => 'Report a Bug',
+            'create_desc' => 'Your report goes to the dev team for review before it enters the bug tracker.',
+            'create_button' => 'Submit for Review',
+            'create_icon' => 'fa-bug',
+            'list_title' => 'Submitted Reports',
+            'list_empty' => 'No bug reports yet.',
+            'notes_label' => 'Description',
+            'notes_placeholder' => 'What happened, what you expected, and steps to reproduce...',
+            'notes_required' => 'Describe the issue so devs can review it.',
+            'submit_success' => 'Bug report submitted for dev review.',
+            'log_success' => 'Update added to the bug log.',
+            'pending_alert' => 'This report is waiting for dev review.',
+            'accepted_alert' => 'Accepted by devs and tracked as bug',
+            'rejected_alert' => 'This report was reviewed and not accepted as a bug.',
+        ];
+    }
+
     public static function statusLabel(string $status): string
     {
         return match (strtolower(trim($status))) {
@@ -585,6 +633,83 @@ final class DevTrackerItem
         $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
         self::bindSearchParams($stmt, $query);
         if ($typeSql !== '') {
+            $stmt->bindValue(':item_type', $itemType);
+        }
+        $stmt->bindValue(':row_limit', max(1, min($limit, 500)), \PDO::PARAM_INT);
+        $stmt->bindValue(':row_offset', max(0, $offset), \PDO::PARAM_INT);
+        $stmt->execute();
+
+        $rows = $stmt->fetchAll();
+
+        return is_array($rows) ? $rows : [];
+    }
+
+    public static function companySubmissionsCountForBusiness(int $businessId, string $search = '', string $itemType = ''): int
+    {
+        if ($businessId <= 0 || !SchemaInspector::hasTable('dev_tracker_items') || !self::hasSubmissionColumns()) {
+            return 0;
+        }
+
+        $query = trim($search);
+        $itemType = strtolower(trim($itemType));
+        $typeSql = self::isCompanySubmissionType($itemType)
+            ? ' AND LOWER(item_type) = :item_type'
+            : " AND LOWER(item_type) IN ('bug', 'update')";
+        $sql = 'SELECT COUNT(*)
+                FROM dev_tracker_items
+                WHERE deleted_at IS NULL
+                  AND business_id = :business_id' . $typeSql . '
+                  AND ' . self::searchWhereSql();
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
+        self::bindSearchParams($stmt, $query);
+        if (self::isCompanySubmissionType($itemType)) {
+            $stmt->bindValue(':item_type', $itemType);
+        }
+        $stmt->execute();
+
+        return (int) $stmt->fetchColumn();
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    public static function companySubmissionsListForBusiness(int $businessId, string $search = '', string $itemType = '', int $limit = 25, int $offset = 0): array
+    {
+        if ($businessId <= 0 || !SchemaInspector::hasTable('dev_tracker_items') || !self::hasSubmissionColumns()) {
+            return [];
+        }
+
+        $query = trim($search);
+        $itemType = strtolower(trim($itemType));
+        $typeSql = self::isCompanySubmissionType($itemType)
+            ? ' AND LOWER(item_type) = :item_type'
+            : " AND LOWER(item_type) IN ('bug', 'update')";
+        $sql = 'SELECT
+                    id,
+                    item_type,
+                    title,
+                    status,
+                    priority,
+                    area,
+                    review_status,
+                    business_id,
+                    submitted_by,
+                    updated_at,
+                    created_at
+                FROM dev_tracker_items
+                WHERE deleted_at IS NULL
+                  AND business_id = :business_id' . $typeSql . '
+                  AND ' . self::searchWhereSql() . '
+                ORDER BY updated_at DESC, id DESC
+                LIMIT :row_limit
+                OFFSET :row_offset';
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->bindValue(':business_id', $businessId, \PDO::PARAM_INT);
+        self::bindSearchParams($stmt, $query);
+        if (self::isCompanySubmissionType($itemType)) {
             $stmt->bindValue(':item_type', $itemType);
         }
         $stmt->bindValue(':row_limit', max(1, min($limit, 500)), \PDO::PARAM_INT);

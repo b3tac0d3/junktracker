@@ -71,12 +71,15 @@ final class TasksController extends Controller
             $form['due_at'] = $prefillAt;
         }
         $requestedClientId = (int) ($_GET['client_id'] ?? 0);
+        $taskPreset = strtolower(trim((string) ($_GET['preset'] ?? 'follow_up')));
         if ($requestedClientId > 0) {
             $client = Client::findForBusiness($businessId, $requestedClientId);
             if ($client !== null) {
-                $form['title'] = 'Client Follow-Up';
                 $form['link_type'] = 'client';
                 $form['link_id'] = (string) $requestedClientId;
+                if ($taskPreset !== 'general') {
+                    $form['title'] = 'Client Follow-Up';
+                }
             }
         }
 

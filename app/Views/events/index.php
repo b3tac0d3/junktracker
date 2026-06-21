@@ -507,6 +507,21 @@ window.addEventListener('DOMContentLoaded', () => {
         typeWrap.classList.remove('d-none');
       }
 
+      const addressWrap = document.getElementById('jt-event-quickview-address-wrap');
+      const addressEl = document.getElementById('jt-event-quickview-address');
+      const eventAddress = String(ext.eventAddress || '').trim();
+      if (addressWrap && addressEl) {
+        if (eventAddress !== '') {
+          addressEl.textContent = eventAddress;
+          addressEl.setAttribute('href', 'https://maps.google.com/?q=' + encodeURIComponent(eventAddress));
+          addressWrap.classList.remove('d-none');
+        } else {
+          addressEl.textContent = '';
+          addressEl.setAttribute('href', '#');
+          addressWrap.classList.add('d-none');
+        }
+      }
+
       const start = arg.event.start;
       const end = arg.event.end;
       const fmt = (d) => {
@@ -671,6 +686,10 @@ window.addEventListener('DOMContentLoaded', () => {
             <div id="jt-event-quickview-phone-wrap" class="mb-2 d-none">
                 <div class="small text-uppercase text-muted fw-bold mb-1">Phone</div>
                 <a id="jt-event-quickview-phone" class="small" href="#" rel="noopener noreferrer"></a>
+            </div>
+            <div id="jt-event-quickview-address-wrap" class="mb-2 d-none">
+                <div class="small text-uppercase text-muted fw-bold mb-1">Address</div>
+                <a id="jt-event-quickview-address" class="small text-break" href="#" target="_blank" rel="noopener noreferrer"></a>
             </div>
             <div class="mb-2">
                 <div class="small text-uppercase text-muted fw-bold mb-1">When</div>

@@ -3353,3 +3353,8 @@ a.admin-nav-tile:focus {
   border: 0;
   padding: 0;
 }
+
+.quote-schedule-card--active {
+  border-color: var(--bs-primary) !important;
+  box-shadow: 0 0 0 1px rgba(var(--bs-primary-rgb), 0.15);
+}

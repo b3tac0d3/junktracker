@@ -250,13 +250,20 @@ if ($selectedState !== '' && !array_key_exists($selectedState, $stateOptions)) {
 
             <?php if ($mode === 'create'): ?>
                 <?php $nextAction = strtolower(trim((string) ($form['next_action'] ?? ''))); ?>
-                <div class="col-12 col-lg-4">
+                <div class="col-12 col-lg-6">
                     <label class="form-label fw-semibold" for="client-next-action">Next Step</label>
                     <select id="client-next-action" name="next_action" class="form-select">
                         <option value="" <?= $nextAction === '' ? 'selected' : '' ?>>No action</option>
                         <option value="job" <?= $nextAction === 'job' ? 'selected' : '' ?>>Go to Add Job</option>
                         <option value="quote" <?= $nextAction === 'quote' ? 'selected' : '' ?>>Go to Add Quote</option>
+                        <option value="purchase" <?= $nextAction === 'purchase' ? 'selected' : '' ?>>Go to Add Purchase</option>
+                        <option value="purchase_quote" <?= $nextAction === 'purchase_quote' ? 'selected' : '' ?>>Go to Add Purchase Quote</option>
+                        <option value="delivery" <?= $nextAction === 'delivery' ? 'selected' : '' ?>>Go to Add Delivery</option>
+                        <option value="follow_up" <?= in_array($nextAction, ['follow_up', 'task'], true) ? 'selected' : '' ?>>Add Follow-Up Task</option>
+                        <option value="general_task" <?= $nextAction === 'general_task' ? 'selected' : '' ?>>Add General Task</option>
+                        <option value="bolo" <?= $nextAction === 'bolo' ? 'selected' : '' ?>>Add BOLO</option>
                     </select>
+                    <div class="form-text">After saving, jump straight to the selected form with this client pre-filled.</div>
                 </div>
             <?php endif; ?>
 

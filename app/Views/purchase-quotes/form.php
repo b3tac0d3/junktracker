@@ -77,11 +77,10 @@ $hasError = static function (string $field) use ($errors): bool {
                 <?php if ($hasError('client_id')): ?><div class="invalid-feedback d-block"><?= e($fieldError('client_id')) ?></div><?php endif; ?>
             </div>
 
-            <div class="col-12 col-lg-6">
-                <label class="form-label fw-semibold" for="pq-follow-up">Follow-up Date &amp; Time</label>
-                <input id="pq-follow-up" type="datetime-local" name="next_follow_up_at" class="form-control <?= $hasError('next_follow_up_at') ? 'is-invalid' : '' ?>" value="<?= e((string) ($form['next_follow_up_at'] ?? '')) ?>" />
-                <?php if ($hasError('next_follow_up_at')): ?><div class="invalid-feedback d-block"><?= e($fieldError('next_follow_up_at')) ?></div><?php endif; ?>
-            </div>
+            <?php
+            $entityLabel = 'Purchase Quote';
+            require base_path('app/Views/components/quote_schedule_sections.php');
+            ?>
 
             <div class="col-12">
                 <label class="form-label fw-semibold" for="pq-notes">Notes</label>

@@ -11,7 +11,7 @@ use App\Controllers\AdminEmployeesController;
 use App\Controllers\AdminFormSelectValuesController;
 use App\Controllers\AdminInvoiceItemTypesController;
 use App\Controllers\AdminUsersController;
-use App\Controllers\BugReportsController;
+use App\Controllers\SupportLogsController;
 use App\Controllers\UpdateRequestsController;
 use App\Controllers\AdminExportController;
 use App\Controllers\BillingController;
@@ -370,6 +370,8 @@ $router->post('/admin/users/{id}/toggle-active', [AdminUsersController::class, '
 $router->post('/admin/users/{id}/resend-invite', [AdminUsersController::class, 'resendInvite']);
 $router->post('/admin/users/{id}/send-password-reset', [AdminUsersController::class, 'sendPasswordReset']);
 $router->post('/admin/users/{id}/auto-accept', [AdminUsersController::class, 'autoAccept']);
+$router->get('/admin/support-logs', [SupportLogsController::class, 'index']);
+$router->get('/admin/support-logs/{id}', [SupportLogsController::class, 'show']);
 $router->get('/admin/bug-reports', [BugReportsController::class, 'index']);
 $router->get('/admin/bug-reports/create', [BugReportsController::class, 'create']);
 $router->post('/admin/bug-reports', [BugReportsController::class, 'store']);

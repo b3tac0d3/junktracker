@@ -8,6 +8,7 @@ use App\Models\AuditLog;
 use App\Models\Client;
 use App\Models\FormSelectValue;
 use App\Models\Quote;
+use App\Services\QuoteSchedule;
 use Core\Controller;
 
 final class QuotesController extends Controller
@@ -50,10 +51,11 @@ final class QuotesController extends Controller
     {
         require_business_role(['general_user', 'admin']);
 
-        $form = $this->defaultForm();
+        $form = QuoteSchedule::enrichForDisplay($this->defaultForm());
         $prefillAt = calendar_slot_prefill_at();
         if ($prefillAt !== '') {
-            $form['next_follow_up_at'] = $prefillAt;
+            $form['schedule_type'] = QuoteSchedule::TYPE_MEETING;
+            $form['meeting_at'] = $prefillAt;
         }
         $businessId = current_business_id();
         $requestedClientId = (int) ($_GET['client_id'] ?? 0);
@@ -91,8 +93,8 @@ final class QuotesController extends Controller
         }
 
         $businessId = current_business_id();
-        $form = $this->formFromPost($_POST);
-        $errors = Quote::validate($form, $businessId);
+        $form = QuoteSchedule::applyMeetingDate($this->formFromPost($_POST));
+        $errors = array_merge(Quote::validate($form, $businessId), QuoteSchedule::validate($form));
         if ($errors !== []) {
             $this->render('quotes/form', [
                 'pageTitle' => 'Add Quote',
@@ -114,6 +116,14 @@ final class QuotesController extends Controller
             redirect('/quotes/create');
         }
         AuditLog::write('quote_created', 'quotes', $quoteId, $businessId, $actorUserId, []);
+        QuoteSchedule::maybeCreateFollowUpTask(
+            $businessId,
+            'quote',
+            $quoteId,
+            $form,
+            $actorUserId,
+            'Quote Follow-Up: ' . trim((string) ($form['title'] ?? ''))
+        );
         google_calendar_sync_item($businessId, 'quote', $quoteId);
         flash('success', 'Quote created.');
         redirect('/quotes/' . (string) $quoteId);
@@ -196,8 +206,8 @@ final class QuotesController extends Controller
             return;
         }
 
-        $form = $this->formFromPost($_POST);
-        $errors = Quote::validate($form, $businessId);
+        $form = QuoteSchedule::applyMeetingDate($this->formFromPost($_POST));
+        $errors = array_merge(Quote::validate($form, $businessId), QuoteSchedule::validate($form));
         if ($errors !== []) {
             $this->render('quotes/form', [
                 'pageTitle' => 'Edit Quote',
@@ -335,14 +345,13 @@ final class QuotesController extends Controller
 
     private function defaultForm(): array
     {
-        return [
+        return array_merge(QuoteSchedule::defaultFields(), [
             'client_id' => '',
             'client_name' => '',
             'title' => '',
             'status' => 'new',
             'service_type' => '',
             'notes' => '',
-            'next_follow_up_at' => '',
             'lost_reason' => '',
             'address_line1' => '',
             'address_line2' => '',
@@ -352,19 +361,18 @@ final class QuotesController extends Controller
             'converted_job_id' => '',
             'converted_estate_sale_id' => '',
             'converted_purchase_id' => '',
-        ];
+        ]);
     }
 
     private function formFromPost(array $input): array
     {
-        return [
+        return array_merge([
             'client_id' => trim((string) ($input['client_id'] ?? '')),
             'client_name' => trim((string) ($input['client_name'] ?? '')),
             'title' => trim((string) ($input['title'] ?? '')),
             'status' => strtolower(trim((string) ($input['status'] ?? 'new'))),
             'service_type' => trim((string) ($input['service_type'] ?? '')),
             'notes' => trim((string) ($input['notes'] ?? '')),
-            'next_follow_up_at' => trim((string) ($input['next_follow_up_at'] ?? '')),
             'lost_reason' => trim((string) ($input['lost_reason'] ?? '')),
             'address_line1' => trim((string) ($input['address_line1'] ?? '')),
             'address_line2' => trim((string) ($input['address_line2'] ?? '')),
@@ -374,18 +382,18 @@ final class QuotesController extends Controller
             'converted_job_id' => trim((string) ($input['converted_job_id'] ?? '')),
             'converted_estate_sale_id' => trim((string) ($input['converted_estate_sale_id'] ?? '')),
             'converted_purchase_id' => trim((string) ($input['converted_purchase_id'] ?? '')),
-        ];
+        ], QuoteSchedule::fieldsFromRequest($input));
     }
 
     private function formFromModel(array $quote): array
     {
-        return [
+        return QuoteSchedule::enrichForDisplay([
             'client_id' => (string) ((int) ($quote['client_id'] ?? 0)),
             'title' => trim((string) ($quote['title'] ?? '')),
             'status' => strtolower(trim((string) ($quote['status'] ?? 'new'))),
             'service_type' => trim((string) ($quote['service_type'] ?? '')),
             'notes' => trim((string) ($quote['notes'] ?? '')),
-            'next_follow_up_at' => $this->toInputDateTimeLocal((string) ($quote['next_follow_up_at'] ?? '')),
+            'next_follow_up_at' => trim((string) ($quote['next_follow_up_at'] ?? '')),
             'lost_reason' => trim((string) ($quote['lost_reason'] ?? '')),
             'address_line1' => trim((string) ($quote['address_line1'] ?? '')),
             'address_line2' => trim((string) ($quote['address_line2'] ?? '')),
@@ -395,17 +403,7 @@ final class QuotesController extends Controller
             'converted_job_id' => (string) ((int) ($quote['converted_job_id'] ?? 0)),
             'converted_estate_sale_id' => (string) ((int) ($quote['converted_estate_sale_id'] ?? 0)),
             'converted_purchase_id' => (string) ((int) ($quote['converted_purchase_id'] ?? 0)),
-        ];
-    }
-
-    private function toInputDateTimeLocal(string $value): string
-    {
-        $value = trim($value);
-        if ($value === '') {
-            return '';
-        }
-        $ts = strtotime($value);
-        return $ts === false ? '' : date('Y-m-d\TH:i', $ts);
+        ]);
     }
 }
 

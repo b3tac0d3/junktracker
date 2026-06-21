@@ -10,6 +10,7 @@ $business = is_array($business ?? null) ? $business : [];
 
 $itemId = (int) ($item['id'] ?? 0);
 $itemTitle = trim((string) ($item['title'] ?? ''));
+$itemType = strtolower(trim((string) ($item['item_type'] ?? '')));
 $itemArea = trim((string) ($item['area'] ?? ''));
 $itemStatus = trim((string) ($item['status'] ?? ''));
 $reviewStatus = trim((string) ($item['review_status'] ?? ''));
@@ -31,6 +32,9 @@ $createdLogLabel = DevTrackerItem::submissionCreatedLogLabel((string) ($item['it
     <div>
         <h1 class="d-flex flex-wrap align-items-center gap-2">
             <?= e($itemTitle) ?>
+            <?php if (DevTrackerItem::isCompanySubmissionType($itemType)): ?>
+                <span class="badge <?= e($itemType === 'update' ? 'text-bg-info' : 'text-bg-danger') ?> fs-6"><?= e(DevTrackerItem::typeLabel($itemType)) ?></span>
+            <?php endif; ?>
             <span class="badge <?= e($reviewBadgeClass) ?> fs-6"><?= e($reviewLabel) ?></span>
         </h1>
         <p class="muted mb-0">

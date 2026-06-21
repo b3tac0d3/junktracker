@@ -292,13 +292,29 @@ final class ClientsController extends Controller
         $clientId = Client::create($businessId, $this->payloadForSave($form, true, null), auth_user_id() ?? 0);
         audit('client_created', 'clients', $clientId, ['name' => trim(((string) ($form['first_name'] ?? '')) . ' ' . ((string) ($form['last_name'] ?? ''))) ?: ((string) ($form['company_name'] ?? ''))]);
         flash('success', 'Client created.');
-        $nextAction = strtolower(trim((string) ($form['next_action'] ?? '')));
-        if ($nextAction === 'job') {
-            redirect('/jobs/create?client_id=' . (string) $clientId);
+        $this->redirectAfterCreate($clientId, strtolower(trim((string) ($form['next_action'] ?? ''))));
+    }
+
+    private function redirectAfterCreate(int $clientId, string $nextAction): void
+    {
+        $clientQuery = '?client_id=' . (string) $clientId;
+
+        $redirectUrl = match ($nextAction) {
+            'job' => '/jobs/create' . $clientQuery,
+            'quote' => '/quotes/create' . $clientQuery,
+            'purchase' => '/purchases/create' . $clientQuery,
+            'purchase_quote' => '/purchase-quotes/create' . $clientQuery,
+            'delivery' => '/deliveries/create' . $clientQuery,
+            'follow_up', 'task' => '/tasks/create' . $clientQuery . '&preset=follow_up',
+            'general_task' => '/tasks/create' . $clientQuery . '&preset=general',
+            'bolo' => '/clients/' . (string) $clientId . '/bolo/edit',
+            default => '',
+        };
+
+        if ($redirectUrl !== '') {
+            redirect($redirectUrl);
         }
-        if ($nextAction === 'quote') {
-            redirect('/quotes/create?client_id=' . (string) $clientId);
-        }
+
         $this->redirectToClient($clientId);
     }
 

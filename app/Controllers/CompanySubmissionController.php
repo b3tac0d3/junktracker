@@ -20,47 +20,7 @@ abstract class CompanySubmissionController extends Controller
      */
     protected function submissionLabels(): array
     {
-        if ($this->submissionType() === 'update') {
-            return [
-                'section' => 'Update Requests',
-                'section_singular' => 'Update Request',
-                'index_desc' => 'Request product updates for dev review and future releases.',
-                'create_title' => 'Request an Update',
-                'create_desc' => 'Your request goes to the dev team for review before it is scheduled for a release.',
-                'create_button' => 'Submit Request',
-                'create_icon' => 'fa-wrench',
-                'list_title' => 'Submitted Requests',
-                'list_empty' => 'No update requests yet.',
-                'notes_label' => 'Requested change',
-                'notes_placeholder' => 'Describe the update you want in a future release — workflow, UI, reports, etc.',
-                'notes_required' => 'Describe the requested update so devs can review it.',
-                'submit_success' => 'Update request submitted for dev review.',
-                'log_success' => 'Update added to the request log.',
-                'pending_alert' => 'This request is waiting for dev review.',
-                'accepted_alert' => 'Accepted by devs and queued for future release work',
-                'rejected_alert' => 'This request was reviewed and not accepted for the roadmap.',
-            ];
-        }
-
-        return [
-            'section' => 'Bug Reports',
-            'section_singular' => 'Bug Report',
-            'index_desc' => 'Submit issues for dev review.',
-            'create_title' => 'Report a Bug',
-            'create_desc' => 'Your report goes to the dev team for review before it enters the bug tracker.',
-            'create_button' => 'Submit for Review',
-            'create_icon' => 'fa-bug',
-            'list_title' => 'Submitted Reports',
-            'list_empty' => 'No bug reports yet.',
-            'notes_label' => 'Description',
-            'notes_placeholder' => 'What happened, what you expected, and steps to reproduce...',
-            'notes_required' => 'Describe the issue so devs can review it.',
-            'submit_success' => 'Bug report submitted for dev review.',
-            'log_success' => 'Update added to the bug log.',
-            'pending_alert' => 'This report is waiting for dev review.',
-            'accepted_alert' => 'Accepted by devs and tracked as bug',
-            'rejected_alert' => 'This report was reviewed and not accepted as a bug.',
-        ];
+        return DevTrackerItem::submissionLabels($this->submissionType());
     }
 
     public function index(): void

@@ -674,6 +674,20 @@ final class Task
             $clientIdParts[] = 'task_purchase.client_id';
         }
 
+        if (SchemaInspector::hasTable('quotes') && SchemaInspector::hasColumn('quotes', 'client_id')) {
+            $quoteDeleted = SchemaInspector::hasColumn('quotes', 'deleted_at') ? 'AND task_quote.deleted_at IS NULL' : '';
+            $join .= " LEFT JOIN quotes task_quote ON task_quote.id = {$taskAlias}.link_id
+                AND LOWER(COALESCE({$taskAlias}.link_type, '')) = 'quote' {$quoteDeleted}";
+            $clientIdParts[] = 'task_quote.client_id';
+        }
+
+        if (SchemaInspector::hasTable('purchase_quotes') && SchemaInspector::hasColumn('purchase_quotes', 'client_id')) {
+            $pqDeleted = SchemaInspector::hasColumn('purchase_quotes', 'deleted_at') ? 'AND task_purchase_quote.deleted_at IS NULL' : '';
+            $join .= " LEFT JOIN purchase_quotes task_purchase_quote ON task_purchase_quote.id = {$taskAlias}.link_id
+                AND LOWER(COALESCE({$taskAlias}.link_type, '')) = 'purchase_quote' {$pqDeleted}";
+            $clientIdParts[] = 'task_purchase_quote.client_id';
+        }
+
         $resolvedClientId = 'COALESCE(' . implode(', ', $clientIdParts) . ')';
         $clientDeleted = SchemaInspector::hasColumn('clients', 'deleted_at') ? 'AND task_client.deleted_at IS NULL' : '';
         $clientBiz = SchemaInspector::hasColumn('clients', 'business_id') && SchemaInspector::hasColumn('tasks', 'business_id')

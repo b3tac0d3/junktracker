@@ -91,21 +91,12 @@
     <h2 class="admin-nav-section-title">System &amp; Support</h2>
     <div class="admin-nav-grid row g-3">
         <div class="col-12 col-sm-6 col-lg-3">
-            <a class="admin-nav-tile" href="<?= e(url('/admin/bug-reports')) ?>">
+            <a class="admin-nav-tile" href="<?= e(url('/admin/support-logs')) ?>">
                 <div class="admin-nav-tile-icon admin-nav-tile-icon--activity" aria-hidden="true">
-                    <i class="fas fa-bug"></i>
+                    <i class="fas fa-clock-rotate-left"></i>
                 </div>
-                <div class="admin-nav-tile-title">Bug Reports</div>
-                <p class="admin-nav-tile-desc">Submit issues for dev review with screenshots and a full activity log.</p>
-            </a>
-        </div>
-        <div class="col-12 col-sm-6 col-lg-3">
-            <a class="admin-nav-tile" href="<?= e(url('/admin/update-requests')) ?>">
-                <div class="admin-nav-tile-icon admin-nav-tile-icon--invoice-types" aria-hidden="true">
-                    <i class="fas fa-wrench"></i>
-                </div>
-                <div class="admin-nav-tile-title">Update Requests</div>
-                <p class="admin-nav-tile-desc">Request product changes for dev review and future releases.</p>
+                <div class="admin-nav-tile-title">Support Logs</div>
+                <p class="admin-nav-tile-desc">Browse bug reports and update requests — click any item for its full activity log.</p>
             </a>
         </div>
     </div>

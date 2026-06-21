@@ -63,14 +63,15 @@ final class EventFeed
             return [];
         }
 
+        $hasAddr1 = SchemaInspector::hasColumn('estate_sales', 'address_line1');
         $hasAddr2 = SchemaInspector::hasColumn('estate_sales', 'address_line2');
+        $addr1Or = $hasAddr1 ? ' OR COALESCE(es.address_line1, "") LIKE :q' : '';
         $addr2Or = $hasAddr2 ? ' OR COALESCE(es.address_line2, "") LIKE :q' : '';
 
         $searchWhere = $q !== ''
             ? 'AND (
-                COALESCE(es.title, "") LIKE :q
-                OR COALESCE(es.address_line1, "") LIKE :q'
-                . $addr2Or . '
+                COALESCE(es.title, "") LIKE :q'
+                . $addr1Or . $addr2Or . '
                 OR COALESCE(es.city, "") LIKE :q
                 OR COALESCE(es.notes, "") LIKE :q
                 OR CAST(es.id AS CHAR) LIKE :q
@@ -83,8 +84,7 @@ final class EventFeed
                     es.start_at,
                     es.end_at,
                     LOWER(es.status) AS status_key,
-                    es.city,
-                    es.state
+                    " . self::addressSelectColumns('estate_sales', 'es') . "
                 FROM estate_sales es
                 WHERE es.business_id = :business_id
                   AND es.deleted_at IS NULL
@@ -151,6 +151,7 @@ final class EventFeed
                 'editable' => false,
                 'extendedProps' => [
                     'customerName' => $location,
+                    'eventAddress' => self::resolveEventAddress($row),
                     'eventType' => 'Estate Sale',
                     'jtStatus' => $status,
                 ],
@@ -184,7 +185,9 @@ final class EventFeed
                     q.next_follow_up_at,
                     LOWER(COALESCE(q.status, 'new')) AS status_key,
                     COALESCE(NULLIF(TRIM(CONCAT_WS(' ', c.first_name, c.last_name)), ''), NULLIF(c.company_name, ''), CONCAT('Client #', c.id)) AS client_name,
-                    COALESCE(c.phone, '') AS client_phone
+                    COALESCE(c.phone, '') AS client_phone,
+                    " . self::addressSelectColumns('quotes', 'q') . ",
+                    " . self::addressSelectColumns('clients', 'c', 'client_') . "
                 FROM quotes q
                 INNER JOIN clients c ON c.id = q.client_id
                     AND c.business_id = q.business_id
@@ -250,6 +253,7 @@ final class EventFeed
                 'extendedProps' => [
                     'customerName' => $clientName,
                     'customerPhone' => $clientPhone,
+                    'eventAddress' => self::resolveEventAddress($row, '', 'client_'),
                     'eventType' => 'Quote',
                     'jtStatus' => $status,
                 ],
@@ -284,7 +288,8 @@ final class EventFeed
                     pq.contact_date,
                     LOWER(COALESCE(pq.status, 'new')) AS status_key,
                     COALESCE(NULLIF(TRIM(CONCAT_WS(' ', c.first_name, c.last_name)), ''), NULLIF(c.company_name, ''), CONCAT('Client #', c.id)) AS client_name,
-                    COALESCE(c.phone, '') AS client_phone
+                    COALESCE(c.phone, '') AS client_phone,
+                    " . self::addressSelectColumns('clients', 'c', 'client_') . "
                 FROM purchase_quotes pq
                 INNER JOIN clients c ON c.id = pq.client_id
                     AND c.business_id = pq.business_id
@@ -365,6 +370,7 @@ final class EventFeed
                 'extendedProps' => [
                     'customerName' => $clientName,
                     'customerPhone' => $clientPhone,
+                    'eventAddress' => self::eventAddressFromRow($row, 'client_'),
                     'eventType' => 'Purchase Quote',
                     'jtStatus' => $status,
                 ],
@@ -383,14 +389,15 @@ final class EventFeed
             return [];
         }
 
+        $hasDeliveryAddr1 = SchemaInspector::hasColumn('client_deliveries', 'address_line1');
         $hasDeliveryAddr2 = SchemaInspector::hasColumn('client_deliveries', 'address_line2');
+        $addr1Or = $hasDeliveryAddr1 ? ' OR COALESCE(d.address_line1, "") LIKE :q' : '';
         $addr2Or = $hasDeliveryAddr2 ? ' OR COALESCE(d.address_line2, "") LIKE :q' : '';
 
         $searchWhere = $q !== ''
             ? 'AND (
-                COALESCE(NULLIF(TRIM(CONCAT_WS(" ", c.first_name, c.last_name)), ""), NULLIF(c.company_name, ""), CONCAT("Client #", c.id)) LIKE :q
-                OR COALESCE(d.address_line1, "") LIKE :q'
-                . $addr2Or . '
+                COALESCE(NULLIF(TRIM(CONCAT_WS(" ", c.first_name, c.last_name)), ""), NULLIF(c.company_name, ""), CONCAT("Client #", c.id)) LIKE :q'
+                . $addr1Or . $addr2Or . '
                 OR COALESCE(d.notes, "") LIKE :q
             )'
             : '';
@@ -401,7 +408,9 @@ final class EventFeed
                     d.end_at,
                     LOWER(d.status) AS status_key,
                     COALESCE(NULLIF(TRIM(CONCAT_WS(' ', c.first_name, c.last_name)), ''), NULLIF(c.company_name, ''), CONCAT('Client #', c.id)) AS client_name,
-                    COALESCE(c.phone, '') AS client_phone
+                    COALESCE(c.phone, '') AS client_phone,
+                    " . self::addressSelectColumns('client_deliveries', 'd') . ",
+                    " . self::addressSelectColumns('clients', 'c', 'client_') . "
                 FROM client_deliveries d
                 INNER JOIN clients c ON c.id = d.client_id
                     AND c.business_id = d.business_id
@@ -467,6 +476,7 @@ final class EventFeed
                 'extendedProps' => [
                     'customerName' => $clientName,
                     'customerPhone' => $clientPhone,
+                    'eventAddress' => self::resolveEventAddress($row, '', 'client_'),
                     'eventType' => 'Delivery',
                     'jtStatus' => $status,
                 ],
@@ -509,13 +519,15 @@ final class EventFeed
         if ($q !== '' && $clientJoin['searchable']) {
             $searchWhere = "AND ({$titleSql} LIKE :q OR {$clientJoin['clientNameSql']} LIKE :q)";
         }
+        $hasClientJoin = trim($clientJoin['join']) !== '';
 
         $sql = "SELECT
                     t.id,
                     {$titleSql} AS title,
                     t.due_at,
                     {$statusSql} AS status_key,
-                    {$clientJoin['clientNameSql']} AS client_name
+                    {$clientJoin['clientNameSql']} AS client_name,
+                    " . ($hasClientJoin ? self::addressSelectColumns('clients', 'task_client', 'client_') : self::emptyAddressSelectColumns('client_')) . "
                 FROM tasks t
                 {$clientJoin['join']}
                 WHERE {$businessWhere}
@@ -581,6 +593,7 @@ final class EventFeed
                     'eventType' => 'Task',
                     'jtStatus' => $status,
                     'customerName' => $customerName,
+                    'eventAddress' => self::eventAddressFromRow($row, 'client_'),
                 ],
             ];
         }
@@ -637,6 +650,11 @@ final class EventFeed
                 : "AND ({$titleSql} LIKE :q)")
             : '';
 
+        $addressSelect = self::addressSelectColumns('jobs', 'j');
+        $clientAddressSelect = $joinClient
+            ? self::addressSelectColumns('clients', 'c', 'client_')
+            : self::emptyAddressSelectColumns('client_');
+
         $sql = "SELECT
                     j.id,
                     {$titleSql} AS title,
@@ -645,7 +663,9 @@ final class EventFeed
                     {$statusSql} AS status_key,
                     {$jobTypeSql} AS job_type_key,
                     {$clientNameSql} AS client_name,
-                    {$clientPhoneSql} AS client_phone
+                    {$clientPhoneSql} AS client_phone,
+                    {$addressSelect},
+                    {$clientAddressSelect}
                 FROM jobs j
                 {$joinSql}
                 WHERE {$businessWhere}
@@ -717,6 +737,7 @@ final class EventFeed
                 'extendedProps' => [
                     'customerName' => $customerName,
                     'customerPhone' => $customerPhone,
+                    'eventAddress' => self::resolveEventAddress($row, '', 'client_'),
                     'jobType' => $jobType,
                     'eventType' => $jobType === 'quote' ? 'Quote' : 'Job',
                     'jtStatus' => $status,
@@ -749,15 +770,21 @@ final class EventFeed
             : '';
         $joinSql = " LEFT JOIN clients c ON c.id = j.client_id {$bizMatch} {$joinDeleted}";
 
+        $jobAddressSelect = self::addressSelectColumns('jobs', 'j');
+        $clientAddressSelect = self::addressSelectColumns('clients', 'c', 'client_');
         $placeholders = implode(',', array_fill(0, count($jobIds), '?'));
         $hasBusiness = SchemaInspector::hasColumn('jobs', 'business_id');
-        $sql = "SELECT j.id, {$clientNameSql} AS client_name, COALESCE(c.phone, '') AS client_phone
+        $sql = "SELECT j.id, {$clientNameSql} AS client_name, COALESCE(c.phone, '') AS client_phone,
+                    {$clientAddressSelect},
+                    {$jobAddressSelect}
                 FROM jobs j
                 {$joinSql}
                 WHERE j.id IN ({$placeholders})";
         $params = $jobIds;
         if ($hasBusiness) {
-            $sql = "SELECT j.id, {$clientNameSql} AS client_name, COALESCE(c.phone, '') AS client_phone
+            $sql = "SELECT j.id, {$clientNameSql} AS client_name, COALESCE(c.phone, '') AS client_phone,
+                    {$clientAddressSelect},
+                    {$jobAddressSelect}
                     FROM jobs j
                     {$joinSql}
                     WHERE j.business_id = ? AND j.id IN ({$placeholders})";
@@ -783,6 +810,7 @@ final class EventFeed
             $out[$jid] = [
                 'name' => trim((string) ($row['client_name'] ?? '')),
                 'phone' => trim((string) ($row['client_phone'] ?? '')),
+                'address' => self::resolveEventAddress($row, '', 'client_'),
             ];
         }
 
@@ -813,7 +841,8 @@ final class EventFeed
             $where[] = 'c.deleted_at IS NULL';
         }
 
-        $sql = "SELECT c.id, {$nameSql} AS client_name, {$phoneSql} AS client_phone
+        $sql = "SELECT c.id, {$nameSql} AS client_name, {$phoneSql} AS client_phone,
+                    " . self::addressSelectColumns('clients', 'c', 'client_') . "
                 FROM clients c
                 WHERE " . implode(' AND ', $where);
 
@@ -836,6 +865,7 @@ final class EventFeed
             $out[$cid] = [
                 'name' => trim((string) ($row['client_name'] ?? '')),
                 'phone' => trim((string) ($row['client_phone'] ?? '')),
+                'address' => self::eventAddressFromRow($row, 'client_'),
             ];
         }
 
@@ -909,17 +939,20 @@ final class EventFeed
             $linkId = (int) ($row['link_id'] ?? 0);
             $customerName = '';
             $customerPhone = '';
+            $eventAddress = '';
             if ($linkType === 'job' && $linkId > 0) {
                 $jobClient = $jobCustomerNames[$linkId] ?? null;
                 if (is_array($jobClient)) {
                     $customerName = trim((string) ($jobClient['name'] ?? ''));
                     $customerPhone = trim((string) ($jobClient['phone'] ?? ''));
+                    $eventAddress = trim((string) ($jobClient['address'] ?? ''));
                 }
             } elseif ($linkType === 'client' && $linkId > 0) {
                 $clientContact = $clientContacts[$linkId] ?? null;
                 if (is_array($clientContact)) {
                     $customerName = trim((string) ($clientContact['name'] ?? ''));
                     $customerPhone = trim((string) ($clientContact['phone'] ?? ''));
+                    $eventAddress = trim((string) ($clientContact['address'] ?? ''));
                 }
             }
 
@@ -939,6 +972,7 @@ final class EventFeed
                     'jtId' => $id,
                     'customerName' => $customerName,
                     'customerPhone' => $customerPhone,
+                    'eventAddress' => $eventAddress,
                     'eventType' => match ($type) {
                         'appointment' => 'Appointment',
                         'cancellation' => 'Cancellation',
@@ -1011,6 +1045,68 @@ final class EventFeed
             return $value;
         }
         return date('c', $stamp);
+    }
+
+    private static function columnSelect(string $table, string $column, string $alias, string $asName): string
+    {
+        if (SchemaInspector::hasTable($table) && SchemaInspector::hasColumn($table, $column)) {
+            return "{$alias}.{$column} AS {$asName}";
+        }
+
+        return "'' AS {$asName}";
+    }
+
+    private static function addressSelectColumns(string $table, string $alias, string $asPrefix = ''): string
+    {
+        $fields = ['address_line1', 'address_line2', 'city', 'state', 'postal_code'];
+        $parts = [];
+        foreach ($fields as $field) {
+            $parts[] = self::columnSelect($table, $field, $alias, $asPrefix . $field);
+        }
+
+        return implode(",\n                    ", $parts);
+    }
+
+    private static function emptyAddressSelectColumns(string $asPrefix = ''): string
+    {
+        $fields = ['address_line1', 'address_line2', 'city', 'state', 'postal_code'];
+        $parts = [];
+        foreach ($fields as $field) {
+            $parts[] = "'' AS {$asPrefix}{$field}";
+        }
+
+        return implode(",\n                    ", $parts);
+    }
+
+    /**
+     * @param array<string, mixed> $row
+     */
+    private static function eventAddressFromRow(array $row, string $prefix = ''): string
+    {
+        return BusinessLocation::formatAddress(
+            trim((string) ($row[$prefix . 'address_line1'] ?? '')),
+            trim((string) ($row[$prefix . 'address_line2'] ?? '')),
+            trim((string) ($row[$prefix . 'city'] ?? '')),
+            trim((string) ($row[$prefix . 'state'] ?? '')),
+            trim((string) ($row[$prefix . 'postal_code'] ?? ''))
+        );
+    }
+
+    /**
+     * @param array<string, mixed> $row
+     */
+    private static function resolveEventAddress(array $row, string $primaryPrefix = '', string $fallbackPrefix = 'client_'): string
+    {
+        $address = self::eventAddressFromRow($row, $primaryPrefix);
+        if ($address !== '') {
+            return $address;
+        }
+
+        if ($fallbackPrefix === '') {
+            return '';
+        }
+
+        return self::eventAddressFromRow($row, $fallbackPrefix);
     }
 
     /**

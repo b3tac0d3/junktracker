@@ -10,6 +10,7 @@ use App\Models\FormSelectValue;
 use App\Models\PurchaseQuote;
 use App\Models\PurchaseQuoteContact;
 use App\Models\PurchaseQuoteOffer;
+use App\Services\QuoteSchedule;
 use Core\Controller;
 
 final class PurchaseQuotesController extends Controller
@@ -61,10 +62,11 @@ final class PurchaseQuotesController extends Controller
             redirect('/purchases');
         }
 
-        $form = $this->defaultForm();
+        $form = QuoteSchedule::enrichForDisplay($this->defaultForm());
         $prefillAt = calendar_slot_prefill_at();
         if ($prefillAt !== '') {
-            $form['next_follow_up_at'] = $prefillAt;
+            $form['schedule_type'] = QuoteSchedule::TYPE_MEETING;
+            $form['meeting_at'] = $prefillAt;
         }
         $businessId = current_business_id();
         $requestedClientId = (int) ($_GET['client_id'] ?? 0);
@@ -100,8 +102,8 @@ final class PurchaseQuotesController extends Controller
         }
 
         $businessId = current_business_id();
-        $form = $this->formFromPost($_POST);
-        $errors = PurchaseQuote::validate($form, $businessId);
+        $form = QuoteSchedule::applyMeetingDate($this->formFromPost($_POST));
+        $errors = array_merge(PurchaseQuote::validate($form, $businessId), QuoteSchedule::validate($form));
         if ($errors !== []) {
             $this->render('purchase-quotes/form', [
                 'pageTitle' => 'Add Purchase Quote',
@@ -122,6 +124,14 @@ final class PurchaseQuotesController extends Controller
             redirect('/purchase-quotes/create');
         }
         AuditLog::write('purchase_quote_created', 'purchase_quotes', $purchaseQuoteId, $businessId, $actorUserId, []);
+        QuoteSchedule::maybeCreateFollowUpTask(
+            $businessId,
+            'purchase_quote',
+            $purchaseQuoteId,
+            $form,
+            $actorUserId,
+            'Purchase Quote Follow-Up: ' . trim((string) ($form['title'] ?? ''))
+        );
         google_calendar_sync_item($businessId, 'purchase_quote', $purchaseQuoteId);
         flash('success', 'Purchase quote created.');
         redirect_to_detail('/purchase-quotes/' . (string) $purchaseQuoteId, request_detail_tab(['details', 'offers', 'contacts']));
@@ -230,11 +240,11 @@ final class PurchaseQuotesController extends Controller
             return;
         }
 
-        $form = $this->formFromPost($_POST);
+        $form = QuoteSchedule::applyMeetingDate($this->formFromPost($_POST));
         if (PurchaseQuote::hasConversion($purchaseQuote)) {
             $form['converted_purchase_id'] = (string) ((int) ($purchaseQuote['converted_purchase_id'] ?? 0));
         }
-        $errors = PurchaseQuote::validate($form, $businessId);
+        $errors = array_merge(PurchaseQuote::validate($form, $businessId), QuoteSchedule::validate($form));
         if ($errors !== []) {
             $this->render('purchase-quotes/form', [
                 'pageTitle' => 'Edit Purchase Quote',
@@ -429,56 +439,44 @@ final class PurchaseQuotesController extends Controller
 
     private function defaultForm(): array
     {
-        return [
+        return array_merge(QuoteSchedule::defaultFields(), [
             'client_id' => '',
             'client_name' => '',
             'title' => '',
             'status' => 'new',
             'contact_date' => date('Y-m-d'),
-            'next_follow_up_at' => '',
             'notes' => '',
             'lost_reason' => '',
             'converted_purchase_id' => '',
-        ];
+        ]);
     }
 
     private function formFromPost(array $input): array
     {
-        return [
+        return array_merge([
             'client_id' => trim((string) ($input['client_id'] ?? '')),
             'client_name' => trim((string) ($input['client_name'] ?? '')),
             'title' => trim((string) ($input['title'] ?? '')),
             'status' => strtolower(trim((string) ($input['status'] ?? 'new'))),
             'contact_date' => trim((string) ($input['contact_date'] ?? '')),
-            'next_follow_up_at' => trim((string) ($input['next_follow_up_at'] ?? '')),
             'notes' => trim((string) ($input['notes'] ?? '')),
             'lost_reason' => trim((string) ($input['lost_reason'] ?? '')),
             'converted_purchase_id' => trim((string) ($input['converted_purchase_id'] ?? '')),
-        ];
+        ], QuoteSchedule::fieldsFromRequest($input));
     }
 
     private function formFromModel(array $purchaseQuote): array
     {
-        return [
+        return QuoteSchedule::enrichForDisplay([
             'client_id' => (string) ((int) ($purchaseQuote['client_id'] ?? 0)),
             'title' => trim((string) ($purchaseQuote['title'] ?? '')),
             'status' => strtolower(trim((string) ($purchaseQuote['status'] ?? 'new'))),
             'contact_date' => $this->toInputDate((string) ($purchaseQuote['contact_date'] ?? '')),
-            'next_follow_up_at' => $this->toInputDateTimeLocal((string) ($purchaseQuote['next_follow_up_at'] ?? '')),
+            'next_follow_up_at' => trim((string) ($purchaseQuote['next_follow_up_at'] ?? '')),
             'notes' => trim((string) ($purchaseQuote['notes'] ?? '')),
             'lost_reason' => trim((string) ($purchaseQuote['lost_reason'] ?? '')),
             'converted_purchase_id' => (string) ((int) ($purchaseQuote['converted_purchase_id'] ?? 0)),
-        ];
-    }
-
-    private function toInputDateTimeLocal(string $value): string
-    {
-        $value = trim($value);
-        if ($value === '') {
-            return '';
-        }
-        $ts = strtotime($value);
-        return $ts === false ? '' : date('Y-m-d\TH:i', $ts);
+        ]);
     }
 
     private function toInputDate(string $value): string
