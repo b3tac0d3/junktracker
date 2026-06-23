@@ -1181,6 +1181,7 @@ final class Client
                     FROM events e
                     WHERE {$businessWhere}
                       {$deletedWhere}
+                      AND LOWER(COALESCE(e.type, '')) <> 'personal'
                       AND LOWER(COALESCE(e.link_type, '')) = 'client'
                       AND e.link_id IN ({$inClause})
                       AND e.start_at IS NOT NULL
@@ -1219,6 +1220,7 @@ final class Client
                             {$jobDeletedWhere}
                         WHERE {$businessWhere}
                           {$deletedWhere}
+                          AND LOWER(COALESCE(e.type, '')) <> 'personal'
                           AND {$jobBusinessWhere}
                           AND j.client_id IN ({$inClause})
                           AND e.start_at IS NOT NULL

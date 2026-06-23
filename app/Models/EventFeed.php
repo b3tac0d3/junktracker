@@ -9,6 +9,23 @@ use Core\Database;
 final class EventFeed
 {
     /**
+     * Personal-time blocks are calendar-only; exclude from dashboard/search metrics.
+     *
+     * @param array<string, mixed> $event
+     */
+    public static function isPersonalTimeEvent(array $event): bool
+    {
+        $props = is_array($event['extendedProps'] ?? null) ? $event['extendedProps'] : [];
+        $jtType = strtolower(trim((string) ($props['jtType'] ?? '')));
+        if ($jtType === 'personal') {
+            return true;
+        }
+
+        $eventType = strtolower(trim((string) ($props['eventType'] ?? '')));
+        return $eventType === 'personal' || $eventType === 'personal time';
+    }
+
+    /**
      * @return array<int, array<string, mixed>>
      */
     public static function range(int $businessId, string $start, string $end, array $filters = []): array
@@ -49,6 +66,13 @@ final class EventFeed
         }
         if (in_array('estate_sales', $sources, true)) {
             $events = array_merge($events, self::estateSaleEvents($businessId, $start, $end, $q));
+        }
+
+        if (!empty($filters['exclude_personal'])) {
+            $events = array_values(array_filter(
+                $events,
+                static fn (array $event): bool => !self::isPersonalTimeEvent($event)
+            ));
         }
 
         return $events;

@@ -578,7 +578,7 @@ final class DashboardSummary
         $nowTs = time();
         $start = date('Y-m-d 00:00:00', strtotime('-' . max(1, $lookbackDays) . ' days'));
         $end = date('Y-m-d 23:59:59');
-        $events = EventFeed::range($businessId, $start, $end, []);
+        $events = EventFeed::range($businessId, $start, $end, ['exclude_personal' => true]);
 
         $days = self::buildDashboardAgendaDays(
             $events,
@@ -813,7 +813,7 @@ final class DashboardSummary
         $nowTs = time();
         $start = date('Y-m-d 00:00:00');
         $end = date('Y-m-d 23:59:59', strtotime('+' . max(1, $lookaheadDays) . ' days'));
-        $events = EventFeed::range($businessId, $start, $end, []);
+        $events = EventFeed::range($businessId, $start, $end, ['exclude_personal' => true]);
 
         return self::buildDashboardAgendaDays(
             $events,
