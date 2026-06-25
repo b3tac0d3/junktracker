@@ -334,10 +334,12 @@ window.addEventListener('DOMContentLoaded', () => {
         emptyMessage: 'No jobs found',
         labelFromItem: (item) => String(item && item.title ? item.title : ''),
         metaFromItem: (item) => {
+            const status = String(item && item.status ? item.status : '').trim();
             const date = String(item && item.job_date ? item.job_date : '').trim();
             const client = String(item && item.client_name ? item.client_name : '').trim();
             const city = String(item && item.city ? item.city : '').trim();
-            return [date, client || city].filter(Boolean).join(' · ');
+            const statusLabel = status !== '' ? status.replace(/_/g, ' ') : '';
+            return [statusLabel, date, client || city].filter(Boolean).join(' · ');
         },
         onSelected: () => purchaseField.clear(),
     });

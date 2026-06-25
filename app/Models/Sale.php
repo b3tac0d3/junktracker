@@ -1135,6 +1135,7 @@ final class Sale
             ? 'j.title'
             : (SchemaInspector::hasColumn('jobs', 'name') ? 'j.name' : "CONCAT('Job #', j.id)");
         $citySql = SchemaInspector::hasColumn('jobs', 'city') ? 'j.city' : "''";
+        $statusSql = SchemaInspector::hasColumn('jobs', 'status') ? 'j.status' : "'pending'";
         $createdDateSql = SchemaInspector::hasColumn('jobs', 'created_at') ? 'DATE(j.created_at)' : 'NULL';
         $jobDateSql = SchemaInspector::hasColumn('jobs', 'scheduled_start_at')
             ? 'DATE(j.scheduled_start_at)'
@@ -1170,7 +1171,8 @@ final class Sale
                     COALESCE(NULLIF({$titleSql}, ''), CONCAT('Job #', j.id)) AS title,
                     {$citySql} AS city,
                     {$clientNameSql} AS client_name,
-                    {$jobDateSql} AS job_date
+                    {$jobDateSql} AS job_date,
+                    {$statusSql} AS status
                 FROM jobs j\n";
         if ($joins !== []) {
             $sql .= implode("\n", $joins) . "\n";

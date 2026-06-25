@@ -344,8 +344,8 @@ final class Employee
         }
         self::appendDefaultLocationColumns($append, $payload);
 
-        $sql = 'INSERT INTO employees (' . implode(', ', $columns) . '))
-                VALUES (:' . implode(', :', array_keys($params)) . ')';
+        $sql = 'INSERT INTO employees (' . implode(', ', $columns) . ')
+                VALUES (' . implode(', ', $placeholders) . ')';
 
         $stmt = Database::connection()->prepare($sql);
         $stmt->execute($params);

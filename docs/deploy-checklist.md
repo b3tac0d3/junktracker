@@ -2,8 +2,8 @@
 
 Short list to keep releases predictable. Pair with delta bundles from `scripts/build-live-release.sh` and version tags.
 
-**Latest release notes:** [releases/live-1.13.1.0.md](./releases/live-1.13.1.0.md) (personal time excluded from dashboard and client history).  
-**Earlier:** [releases/live-1.13.0.2.md](./releases/live-1.13.0.2.md), [releases/live-1.13.0.1.md](./releases/live-1.13.0.1.md), [releases/live-1.13.0.md](./releases/live-1.13.0.md), [releases/live-1.12.3.md](./releases/live-1.12.3.md), [releases/live-1.11.0.md](./releases/live-1.11.0.md) (personal time blocks, nav UI, Gmail notify toggle).
+**Latest release notes:** [releases/live-1.13.1.1.md](./releases/live-1.13.1.1.md) (employee create fix, past jobs in search with status).  
+**Earlier:** [releases/live-1.13.1.0.md](./releases/live-1.13.1.0.md), [releases/live-1.13.0.2.md](./releases/live-1.13.0.2.md), [releases/live-1.13.0.1.md](./releases/live-1.13.0.1.md), [releases/live-1.13.0.md](./releases/live-1.13.0.md), [releases/live-1.12.3.md](./releases/live-1.12.3.md), [releases/live-1.11.0.md](./releases/live-1.11.0.md) (personal time blocks, nav UI, Gmail notify toggle).
 
 ### Beta-live naming convention (standard)
 

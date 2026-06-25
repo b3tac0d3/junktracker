@@ -131,6 +131,15 @@ final class SearchController extends Controller
                         $historyClientIds[] = $historyClientId;
                     }
                 }
+                foreach ($results['jobs'] as $jobRow) {
+                    if (!is_array($jobRow)) {
+                        continue;
+                    }
+                    $historyClientId = (int) ($jobRow['client_id'] ?? 0);
+                    if ($historyClientId > 0) {
+                        $historyClientIds[] = $historyClientId;
+                    }
+                }
                 $clientAppointmentHistory = Client::appointmentHistoryByClientIds($historyBusinessId, $historyClientIds, 5);
             }
         }

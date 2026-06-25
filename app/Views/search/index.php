@@ -263,7 +263,7 @@ $queryEncoded = rawurlencode($query);
                 <section class="card index-card h-100">
                     <div class="card-header index-card-header d-flex align-items-center justify-content-between">
                         <strong><i class="fas fa-briefcase me-2"></i>Jobs</strong>
-                        <a class="small fw-semibold text-decoration-none" href="<?= e(url('/jobs?q=' . $queryEncoded)) ?>">Open Jobs</a>
+                        <a class="small fw-semibold text-decoration-none" href="<?= e(url('/jobs?q=' . $queryEncoded . '&status=')) ?>">Open Jobs</a>
                     </div>
                     <div class="card-body p-2 p-lg-3">
                         <?php if ($jobs === []): ?>
@@ -278,9 +278,10 @@ $queryEncoded = rawurlencode($query);
                                                 <h3 class="record-title-simple"><?= e(trim((string) ($job['title'] ?? '')) ?: ('Job #' . $jobId)) ?></h3>
                                             </div>
                                             <div class="record-row-fields record-row-fields-compact">
+                                                <?php $jobStatus = strtolower(trim((string) ($job['status'] ?? ''))); ?>
                                                 <div class="record-field">
                                                     <span class="record-label">Status</span>
-                                                    <span class="record-value"><?= e(ucfirst((string) ($job['status'] ?? ''))) ?></span>
+                                                    <span class="record-value text-capitalize"><?= e($jobStatus !== '' ? $jobStatus : '—') ?></span>
                                                 </div>
                                                 <div class="record-field">
                                                     <span class="record-label">Client</span>

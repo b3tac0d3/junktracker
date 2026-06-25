@@ -71,6 +71,7 @@ final class Client
         $orderBy = $sortMap[$sortBy] ?? $sortMap['name'];
 
         $boloMatch = self::boloSearchExistsSql();
+        $jobMatch = self::jobSearchExistsSql();
 
         $sql = "SELECT
                     c.id,
@@ -91,6 +92,7 @@ final class Client
                     OR COALESCE({$phoneSql}, '') LIKE :query_like_2
                     OR COALESCE({$citySql}, '') LIKE :query_like_3
                     {$boloMatch}
+                    {$jobMatch}
                   )
                 ORDER BY {$orderBy}
                 LIMIT :row_limit
@@ -108,6 +110,11 @@ final class Client
         if ($boloMatch !== '') {
             $stmt->bindValue(':query_like_4', $queryLike);
             $stmt->bindValue(':query_like_5', $queryLike);
+        }
+        if ($jobMatch !== '') {
+            $stmt->bindValue(':query_like_6', $queryLike);
+            $stmt->bindValue(':query_like_7', $queryLike);
+            $stmt->bindValue(':query_like_8', $queryLike);
         }
         $stmt->bindValue(':row_limit', max(1, min($limit, 1000)), \PDO::PARAM_INT);
         $stmt->bindValue(':row_offset', max(0, $offset), \PDO::PARAM_INT);
@@ -138,6 +145,7 @@ final class Client
         $activeWhere = self::activeFilterWhereSql($activeFilter);
 
         $boloMatch = self::boloSearchExistsSql();
+        $jobMatch = self::jobSearchExistsSql();
 
         $sql = "SELECT COUNT(*)
                 FROM clients c
@@ -150,6 +158,7 @@ final class Client
                     OR COALESCE({$phoneSql}, '') LIKE :query_like_2
                     OR COALESCE({$citySql}, '') LIKE :query_like_3
                     {$boloMatch}
+                    {$jobMatch}
                   )";
 
         $stmt = $pdo->prepare($sql);
@@ -165,9 +174,47 @@ final class Client
             $stmt->bindValue(':query_like_4', $queryLike);
             $stmt->bindValue(':query_like_5', $queryLike);
         }
+        if ($jobMatch !== '') {
+            $stmt->bindValue(':query_like_6', $queryLike);
+            $stmt->bindValue(':query_like_7', $queryLike);
+            $stmt->bindValue(':query_like_8', $queryLike);
+        }
         $stmt->execute();
 
         return (int) $stmt->fetchColumn();
+    }
+
+    /**
+     * Extra OR-clause for client directory / global search: match linked jobs (including past/complete).
+     * Uses unique placeholders :query_like_6 through :query_like_8.
+     */
+    private static function jobSearchExistsSql(): string
+    {
+        if (!self::hasTable('jobs') || !self::hasColumn('jobs', 'client_id')) {
+            return '';
+        }
+
+        $titleSql = self::hasColumn('jobs', 'title')
+            ? 'j.title'
+            : (self::hasColumn('jobs', 'name') ? 'j.name' : "CONCAT('Job #', j.id)");
+        $citySql = self::hasColumn('jobs', 'city') ? 'j.city' : "''";
+        $businessMatch = self::hasColumn('jobs', 'business_id') && self::hasColumn('clients', 'business_id')
+            ? 'AND j.business_id = c.business_id'
+            : '';
+        $deletedWhere = self::hasColumn('jobs', 'deleted_at') ? 'AND j.deleted_at IS NULL' : '';
+
+        return " OR EXISTS (
+            SELECT 1
+            FROM jobs j
+            WHERE j.client_id = c.id
+              {$businessMatch}
+              {$deletedWhere}
+              AND (
+                  COALESCE({$titleSql}, '') LIKE :query_like_6
+                  OR CAST(j.id AS CHAR) LIKE :query_like_7
+                  OR COALESCE({$citySql}, '') LIKE :query_like_8
+              )
+        )";
     }
 
     /**
@@ -224,6 +271,7 @@ final class Client
         }
 
         $boloTypes = self::boloSearchMatchTypesByClientIds($businessId, $query, $clientIds);
+        $jobMatchClientIds = self::jobSearchMatchClientIds($businessId, $query, $clientIds);
         $queryLower = mb_strtolower($query);
 
         foreach ($rows as &$row) {
@@ -256,6 +304,9 @@ final class Client
                 foreach ($boloTypes[$clientId] as $boloType) {
                     $types[] = $boloType;
                 }
+            }
+            if ($clientId > 0 && in_array($clientId, $jobMatchClientIds, true)) {
+                $types[] = 'Job';
             }
 
             $row['search_match_types'] = array_values(array_unique($types));
@@ -352,6 +403,78 @@ final class Client
         }
 
         return $map;
+    }
+
+    /**
+     * @param list<int> $clientIds
+     * @return list<int>
+     */
+    private static function jobSearchMatchClientIds(int $businessId, string $query, array $clientIds): array
+    {
+        if (!self::hasTable('jobs') || !self::hasColumn('jobs', 'client_id')) {
+            return [];
+        }
+
+        $query = trim($query);
+        $clientIds = array_values(array_unique(array_filter(array_map('intval', $clientIds), static fn (int $id): bool => $id > 0)));
+        if ($businessId <= 0 || $query === '' || $clientIds === []) {
+            return [];
+        }
+
+        $titleSql = self::hasColumn('jobs', 'title')
+            ? 'j.title'
+            : (self::hasColumn('jobs', 'name') ? 'j.name' : "CONCAT('Job #', j.id)");
+        $citySql = self::hasColumn('jobs', 'city') ? 'j.city' : "''";
+        $businessWhere = self::hasColumn('jobs', 'business_id') ? 'j.business_id = :business_id' : '1 = 1';
+        $deletedWhere = self::hasColumn('jobs', 'deleted_at') ? 'AND j.deleted_at IS NULL' : '';
+
+        $inPlaceholders = [];
+        $params = [
+            'business_id' => $businessId,
+            'q_like_1' => '%' . $query . '%',
+            'q_like_2' => '%' . $query . '%',
+            'q_like_3' => '%' . $query . '%',
+        ];
+        foreach ($clientIds as $index => $clientId) {
+            $key = 'client_id_' . (string) $index;
+            $inPlaceholders[] = ':' . $key;
+            $params[$key] = $clientId;
+        }
+        $inSql = implode(', ', $inPlaceholders);
+
+        $sql = "SELECT DISTINCT j.client_id
+                FROM jobs j
+                WHERE {$businessWhere}
+                  {$deletedWhere}
+                  AND j.client_id IN ({$inSql})
+                  AND (
+                      COALESCE({$titleSql}, '') LIKE :q_like_1
+                      OR CAST(j.id AS CHAR) LIKE :q_like_2
+                      OR COALESCE({$citySql}, '') LIKE :q_like_3
+                  )";
+
+        $stmt = Database::connection()->prepare($sql);
+        foreach ($params as $key => $value) {
+            $stmt->bindValue(':' . $key, $value, is_int($value) ? \PDO::PARAM_INT : \PDO::PARAM_STR);
+        }
+        $stmt->execute();
+        $rows = $stmt->fetchAll();
+        if (!is_array($rows)) {
+            return [];
+        }
+
+        $matched = [];
+        foreach ($rows as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $clientId = (int) ($row['client_id'] ?? 0);
+            if ($clientId > 0) {
+                $matched[] = $clientId;
+            }
+        }
+
+        return $matched;
     }
 
     public static function searchOptions(int $businessId, string $query, int $limit = 8, int $excludeClientId = 0): array
@@ -1064,7 +1187,7 @@ final class Client
      * Recent scheduled items for search / quick context: jobs, calendar events, quote follow-ups, deliveries.
      *
      * @param list<int> $clientIds
-     * @return array<int, list<array{at:string, kind:string, title:string, status:string, url:string}>>
+     * @return array<int, list<array{at:string, kind:string, kind_key:string, title:string, status:string, url:string}>>
      */
     public static function appointmentHistoryByClientIds(int $businessId, array $clientIds, int $limitPerClient = 5): array
     {
@@ -1117,6 +1240,7 @@ final class Client
                 $buckets[$clientId][] = [
                     'at' => $at,
                     'kind' => self::appointmentKindLabel($kind, (string) ($row['subtype'] ?? '')),
+                    'kind_key' => strtolower(trim($kind)),
                     'title' => $title,
                     'status' => strtolower(trim((string) ($row['status'] ?? ''))),
                     'url' => $urlBuilder($row),
@@ -1128,7 +1252,11 @@ final class Client
             $startSql = self::hasColumn('jobs', 'scheduled_start_at')
                 ? 'j.scheduled_start_at'
                 : (self::hasColumn('jobs', 'start_date') ? 'j.start_date' : null);
-            if ($startSql !== null) {
+            $createdAtSql = self::hasColumn('jobs', 'created_at') ? 'j.created_at' : null;
+            if ($startSql !== null || $createdAtSql !== null) {
+                $atSql = $startSql !== null && $createdAtSql !== null
+                    ? "COALESCE({$startSql}, {$createdAtSql})"
+                    : ($startSql ?? $createdAtSql);
                 $titleSql = self::hasColumn('jobs', 'title')
                     ? 'j.title'
                     : (self::hasColumn('jobs', 'name') ? 'j.name' : "CONCAT('Job #', j.id)");
@@ -1140,14 +1268,14 @@ final class Client
                             j.client_id,
                             j.id AS record_id,
                             {$titleSql} AS title,
-                            {$startSql} AS at,
+                            {$atSql} AS at,
                             {$statusSql} AS status
                         FROM jobs j
                         WHERE {$businessWhere}
                           AND j.client_id IN ({$inClause})
                           {$deletedWhere}
-                          AND {$startSql} IS NOT NULL
-                        ORDER BY {$startSql} DESC, j.id DESC
+                          AND {$atSql} IS NOT NULL
+                        ORDER BY {$atSql} DESC, j.id DESC
                         LIMIT 500";
 
                 $stmt = Database::connection()->prepare($sql);

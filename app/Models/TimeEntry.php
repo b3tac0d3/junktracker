@@ -585,6 +585,7 @@ final class TimeEntry
             ? 'j.title'
             : (SchemaInspector::hasColumn('jobs', 'name') ? 'j.name' : "CONCAT('Job #', j.id)");
         $citySql = SchemaInspector::hasColumn('jobs', 'city') ? 'j.city' : "''";
+        $statusSql = SchemaInspector::hasColumn('jobs', 'status') ? 'j.status' : "'pending'";
 
         $where = [];
         $where[] = SchemaInspector::hasColumn('jobs', 'business_id') ? 'j.business_id = :business_id' : '1=1';
@@ -599,7 +600,8 @@ final class TimeEntry
         $sql = "SELECT
                     j.id,
                     COALESCE(NULLIF({$titleSql}, ''), CONCAT('Job #', j.id)) AS title,
-                    {$citySql} AS city
+                    {$citySql} AS city,
+                    {$statusSql} AS status
                 FROM jobs j
                 WHERE " . implode(' AND ', $where) . '
                 ORDER BY j.id DESC

@@ -18,8 +18,12 @@ if ($clientId <= 0 || $rows === []) {
             $appointmentAt = format_datetime((string) ($appointment['at'] ?? ''));
             $appointmentKind = trim((string) ($appointment['kind'] ?? 'Appointment'));
             $appointmentTitle = trim((string) ($appointment['title'] ?? ''));
+            $appointmentKindKey = strtolower(trim((string) ($appointment['kind_key'] ?? '')));
             $appointmentStatus = strtolower(trim((string) ($appointment['status'] ?? '')));
-            $statusSuffix = $appointmentStatus === 'cancelled' ? ' · Cancelled' : '';
+            $statusSuffix = '';
+            if ($appointmentStatus !== '' && ($appointmentKindKey === 'job' || $appointmentStatus !== 'pending')) {
+                $statusSuffix = ' · ' . ucwords(str_replace('_', ' ', $appointmentStatus));
+            }
             ?>
             <li class="jt-client-appointment-history-item py-1">
                 <?php if ($appointmentUrl !== ''): ?>

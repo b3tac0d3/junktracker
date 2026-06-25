@@ -419,12 +419,14 @@ window.addEventListener('DOMContentLoaded', () => {
             }
 
             const city = String(item.city || '').trim();
+            const status = String(item.status || '').trim().replace(/_/g, ' ');
             const row = document.createElement('button');
             row.type = 'button';
             row.className = 'client-suggestion-item';
             row.innerHTML = '<span class="client-suggestion-name"></span><span class="client-suggestion-meta"></span>';
             row.querySelector('.client-suggestion-name').textContent = title;
-            row.querySelector('.client-suggestion-meta').textContent = city !== '' ? city : ('Job #' + String(id));
+            const metaParts = [status, city !== '' ? city : ('Job #' + String(id))].filter(Boolean);
+            row.querySelector('.client-suggestion-meta').textContent = metaParts.join(' · ');
             row.addEventListener('click', () => {
                 jobIdInput.value = String(id);
                 jobInput.value = title;

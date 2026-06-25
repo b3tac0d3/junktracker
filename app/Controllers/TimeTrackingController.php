@@ -566,6 +566,7 @@ final class TimeTrackingController extends Controller
                 'id' => $id,
                 'title' => (string) ($item['title'] ?? ('Job #' . (string) $id)),
                 'city' => (string) ($item['city'] ?? ''),
+                'status' => strtolower(trim((string) ($item['status'] ?? ''))),
             ];
         }
 

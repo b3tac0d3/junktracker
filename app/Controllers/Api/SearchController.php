@@ -18,7 +18,7 @@ final class SearchController extends ApiController
         $q = trim((string) ($_GET['q'] ?? ''));
         $limit = min(max((int) ($_GET['limit'] ?? 20), 1), 50);
 
-        $jobs = Job::indexList($businessId, $q, 'active', '', $limit, 0);
+        $jobs = Job::indexList($businessId, $q, '', '', $limit, 0);
         $results = [];
         foreach ($jobs as $job) {
             if (!is_array($job)) {

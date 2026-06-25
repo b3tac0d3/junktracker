@@ -180,6 +180,7 @@ final class SalesController extends Controller
                 'city' => trim((string) ($item['city'] ?? '')),
                 'client_name' => trim((string) ($item['client_name'] ?? '')),
                 'job_date' => $jobDate,
+                'status' => strtolower(trim((string) ($item['status'] ?? ''))),
             ];
         }
 
